@@ -60,7 +60,7 @@ prism/
 - `apps/control-panel/`：操作台、模板、静态资源和测试
 - `packages/screener/`：扫描、AI 二筛、午盘确认、候选生命周期、消息生成
 - `data/history/`：真实归档产物，包括 `ai_history/`、`quality_gates/`、`cron_logs/`、`reports/`、`command_brief/`、`daily_snapshots/`
-- `docs/architecture/system.md`：完整开源仓的简要架构说明
+- `docs/architecture/system.md`：更完整的公开仓架构说明
 
 ## 系统流程图
 
@@ -82,6 +82,8 @@ generate_feishu_message.py]
 ```
 
 这张图展示的是公开版 Prism 的主运行链路，强调的是从触发工作流到生成判断、报告以及脱敏归档的核心路径。
+
+如果你想顺着这条主链路继续看模块边界和数据边界，可以直接看 [docs/architecture/system.md](docs/architecture/system.md)。
 
 ## 典型工作流
 
@@ -157,7 +159,7 @@ python3 scripts/scrub-secrets.py
 
 Prism 当前采用 monorepo 结构，把真实控制台、真实工作流和历史产物放在同一个公开代码库里，方便一次性理解系统全貌。
 
-如果你想看更短的架构摘要，可以直接看 [docs/architecture/system.md](docs/architecture/system.md)。
+如果你想看更正式一点的架构说明，包括模块边界、运行链路和公开数据模型，可以直接看 [docs/architecture/system.md](docs/architecture/system.md)。
 
 ## 当前阶段
 

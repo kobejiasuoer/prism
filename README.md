@@ -60,7 +60,7 @@ Important directories:
 - `apps/control-panel/`: operator-facing product surface, templates, static assets, tests
 - `packages/screener/`: scan, AI screening, midday verification, lifecycle tracking, and message generation
 - `data/history/`: archived real outputs including `ai_history/`, `quality_gates/`, `cron_logs/`, `reports/`, `command_brief/`, and `daily_snapshots/`
-- `docs/architecture/system.md`: concise architecture overview for the full-source repo
+- `docs/architecture/system.md`: fuller architecture walkthrough for the full-source repo
 
 ## System Flow
 
@@ -82,6 +82,8 @@ Scrubbed Artifacts]
 ```
 
 This diagram shows the main operating loop of the public Prism repository. It focuses on the primary path that turns workflow triggers into decisions, reports, and scrubbed historical artifacts.
+
+For a fuller architectural walkthrough, see [docs/architecture/system.md](docs/architecture/system.md).
 
 ## Typical Flow
 
@@ -157,7 +159,7 @@ Latest migration verification passed in the public repo before release.
 
 Prism is currently a monorepo. It keeps the real app structure together so that readers can understand how the interface, workflows, and historical artifacts connect.
 
-If you want a shorter architecture overview, see [docs/architecture/system.md](docs/architecture/system.md).
+For a fuller architectural walkthrough of component boundaries, runtime flow, and the public data model, see [docs/architecture/system.md](docs/architecture/system.md).
 
 ## Current State
 
