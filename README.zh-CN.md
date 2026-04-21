@@ -2,36 +2,153 @@
 
 English version: [README.md](README.md)
 
-
 Prism 是一个完整开源的 AI Native 投研系统。
 
 这个仓库公开 Prism 的真实控制台页面、真实工作流逻辑、真实 prompt、真实参数和真实历史运行产物。
 
 它只排除密钥、登录态、代理凭证和隐私敏感痕迹。
 
-## 范围
+## 为什么要有这个仓库
 
-这个仓库包含 Prism 的真实系统，包括：
+很多开源投研仓库只公开 demo，或者只公开零散脚本。Prism 的目标不一样，它公开的是一个 AI Native 投研系统的真实运行形态。
 
-- 控制台前端页面
-- 选股与 review 工作流
-- 报告生成逻辑
-- prompt、阈值和真实判断规则
-- 经过 secret/privacy scrub 的历史运行产物
+这个仓库想回答的不是“某个脚本怎么写”，而是：
 
-## 目录
+- 控制台如何触发工作流
+- 筛选器如何逐步收敛候选股票
+- AI 二筛和午盘确认如何进一步约束判断
+- 报告和运行产物如何生成
+- 历史产物如何在脱敏后保留下来
 
-- `apps/control-panel/`：基于 FastAPI + Jinja 的控制台
-- `packages/screener/`：真实选股与复核工作流
-- `data/history/`：脱敏后的历史运行产物与日志
-- `scripts/scrub-secrets.py`：机械化隐私清洗脚本
+## 这里公开了什么
 
-## 验证
+这个仓库公开的是 Prism 的真实公共版本，包括：
+
+- 基于 FastAPI + Jinja 的控制台前端
+- 真实的选股与复核工作流脚本
+- 真实使用中的 prompt、阈值和判断规则
+- 报告生成逻辑与消息格式化逻辑
+- 脱敏后的历史运行产物、日志、简报和快照
+
+## 这里没有公开什么
+
+Prism 选择完整开源，但不会泄露秘密。
+
+这个仓库**不会**公开：
+
+- API key、token、cookie、webhook
+- 登录态和浏览器会话痕迹
+- 代理凭证和私有接口地址
+- 个人接收人标识
+- 脱敏前的本机绝对路径
+
+## 仓库结构
+
+```text
+prism/
+├── apps/control-panel/        # FastAPI + Jinja 控制台
+├── packages/screener/         # 真实选股 / 复核工作流
+├── data/history/              # 脱敏后的历史运行产物
+├── docs/architecture/         # 系统结构说明
+├── scripts/scrub-secrets.py   # 机械化脱敏脚本
+├── tests/                     # 仓库级验证
+└── README.md                  # 英文 README
+```
+
+几个重要目录：
+
+- `apps/control-panel/`：操作台、模板、静态资源和测试
+- `packages/screener/`：扫描、AI 二筛、午盘确认、候选生命周期、消息生成
+- `data/history/`：真实归档产物，包括 `ai_history/`、`quality_gates/`、`cron_logs/`、`reports/`、`command_brief/`、`daily_snapshots/`
+- `docs/architecture/system.md`：完整开源仓的简要架构说明
+
+## 典型工作流
+
+可以把 Prism 的运行主链路理解成这样：
+
+1. 控制台或 shell 脚本触发一个工作流。
+2. `scan.py` 生成候选股票池。
+3. `ai_screening.py` 进一步压缩成 shortlist，并附带判断上下文。
+4. `midday_verify.py` 在午盘重新验证晨间结论。
+5. `candidate_lifecycle.py` 跟踪进入、升级、降级和退出。
+6. `generate_feishu_message.py` 负责把结果整理成操作报告。
+7. 产物和日志在脱敏后保留到 `data/history/`。
+
+## 快速开始
+
+先创建虚拟环境，并安装控制台依赖和测试工具：
 
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
+python -m pip install -r apps/control-panel/requirements.txt
 python -m pip install pytest
+```
+
+运行测试：
+
+```bash
+pytest -q
+```
+
+运行脱敏检查：
+
+```bash
+python3 scripts/scrub-secrets.py
+```
+
+如果你想本地看控制台，可以从 `apps/control-panel/app.py` 启动 FastAPI 应用。
+
+## 数据与脱敏模型
+
+这个仓库包含的不是示例数据，而是真实运行后的历史产物。这是 Prism 开源边界的一部分，而不是附赠演示素材。
+
+当前公开的历史桶包括：
+
+- `data/history/ai_history/`：AI 二筛归档快照
+- `data/history/quality_gates/`：质量闸门和校验结果
+- `data/history/cron_logs/`：工作流执行日志
+- `data/history/stale_outputs/`：被新产物替换但保留审计价值的旧结果
+- `data/history/reports/`：生成出来的 Markdown / 文本报告
+- `data/history/command_brief/`：控制台决策简报 JSON
+- `data/history/control_panel_runs/`：控制台任务运行元数据与日志
+- `data/history/daily_snapshots/`：决策所引用的自选股快照输入
+
+在公开前，仓库会通过 `scripts/scrub-secrets.py` 做机械化脱敏，主要处理：
+
+- 本机路径
+- 代理地址
+- 用户接收人标识
+- 需要人工复查的敏感标记
+
+## 当前验证状态
+
+公共仓当前使用下面两条命令做验证：
+
+```bash
 pytest -q
 python3 scripts/scrub-secrets.py
 ```
+
+最近一次公开迁移发布前，这两项验证都已通过。
+
+## 架构说明
+
+Prism 当前采用 monorepo 结构，把真实控制台、真实工作流和历史产物放在同一个公开代码库里，方便一次性理解系统全貌。
+
+如果你想看更短的架构摘要，可以直接看 [docs/architecture/system.md](docs/architecture/system.md)。
+
+## 当前阶段
+
+这个仓库对应的是 Prism 的第一个完整公开版本。
+
+当前重点是：
+
+- 公开真实系统，而不是保留一个演示壳子
+- 保留工作流透明度
+- 让脱敏过程尽量机械化、可复查
+- 先把仓库公开完整，再逐步做后续模块化整理
+
+## License
+
+Prism 使用 [LICENSE](LICENSE) 中提供的许可证。
