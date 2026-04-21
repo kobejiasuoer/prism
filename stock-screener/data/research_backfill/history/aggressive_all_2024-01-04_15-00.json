@@ -1,0 +1,573 @@
+{
+  "timestamp": "2024-01-04 15:00:00",
+  "pool": "aggressive",
+  "pool_label": "进攻型池(中证500+沪深300)",
+  "stage1_count": 12,
+  "stage2_count": 12,
+  "market_regime": {
+    "score": 0,
+    "label": "偏谨慎",
+    "regime": "defensive",
+    "attack_ok": false,
+    "summary": "强势扩散不够，今天更适合精选观察，不适合激进追高。",
+    "basis": "pool",
+    "sample_size": 499,
+    "metrics": {
+      "positive_ratio": 0.246,
+      "avg_change_pct": -0.73,
+      "avg_turnover": 0.51,
+      "strong_ratio": 0.012
+    },
+    "candidate_view": {
+      "score": 6,
+      "label": "进攻环境较强",
+      "regime": "aggressive",
+      "attack_ok": true,
+      "summary": "市场活跃度和强势股占比都不错，可正常做进攻型观察。",
+      "basis": "candidate",
+      "sample_size": 12,
+      "metrics": {
+        "positive_ratio": 0.917,
+        "avg_change_pct": 3.13,
+        "avg_turnover": 1.63,
+        "strong_ratio": 0.417
+      }
+    },
+    "candidate_score_gap": 6,
+    "candidate_gap_note": "候选口径明显更强，说明入围票强于整体股票池，别把候选强度误读成真实环境。",
+    "execution_gate": {
+      "status": "off",
+      "label": "进攻阀门关闭",
+      "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+      "position_cap": "0成",
+      "allow_new_positions": false,
+      "allow_handoff": false,
+      "allowed_setups": [],
+      "risk_flags": [
+        "赚钱效应不足",
+        "平均涨幅偏弱",
+        "强势股占比过低",
+        "流动性一般"
+      ]
+    }
+  },
+  "market_themes": {
+    "top_theme": "其他",
+    "summary": "今日主线不够集中，更像轮动市，适合精选个股。 主线持续性：热度衰减（7分）。",
+    "themes": [
+      {
+        "theme": "其他",
+        "score": 46.27,
+        "count": 12,
+        "weighted_count": 16.03,
+        "leader_codes": [
+          "九安医疗(002432)",
+          "兖矿能源(600188)",
+          "中材国际(600970)"
+        ],
+        "persistence": {
+          "score": 7,
+          "label": "热度衰减",
+          "summary": "主题权重回落；主题分提升；龙头切换较快",
+          "trend": "down",
+          "leader_stability": 0.0
+        },
+        "metrics": {
+          "count_score": 25,
+          "leader_score": 25,
+          "capital_score": 0.77,
+          "structure_score": 11,
+          "purity_score": 2.5,
+          "persistence_score": 7,
+          "total_flow_yi": 4.64,
+          "avg_flow_yi": 0.39,
+          "preferred_ratio": 0.27,
+          "keep_ratio": 0.84,
+          "hot_ratio": 0.15
+        }
+      }
+    ]
+  },
+  "replay_meta": {
+    "mode": "research_eod_backfill",
+    "trade_date": "2024-01-04",
+    "assumptions": [
+      "历史价格使用东方财富日线K线回放",
+      "历史资金流暂用价格量能代理，不等同真实东方财富日频资金流",
+      "基本面暂用当前快照近似，不等同严格历史披露时点",
+      "股票池暂用当前可取到的池子近似，不等同严格历史成分股"
+    ],
+    "universe_meta": {
+      "pool": "aggressive",
+      "pool_label": "进攻型池(中证500+沪深300)",
+      "universe_size": 594,
+      "hs300_count": 248,
+      "zz500_count": 369,
+      "warnings": []
+    }
+  },
+  "strategies": {
+    "conservative": [],
+    "growth": [
+      {
+        "code": "002432",
+        "name": "九安医疗",
+        "price": 41.86,
+        "change_pct": 10.13,
+        "score": 115.05,
+        "scores": {
+          "technical": 51,
+          "capital": 30,
+          "fundamental": 6,
+          "emotion": 20
+        },
+        "signals": [
+          "均线强多头",
+          "强放量",
+          "强势拉升",
+          "接近突破",
+          "主力流入23193.9亿",
+          "连续5日流入",
+          "PE偏低(16.6)",
+          "高位高潮"
+        ],
+        "capital_flow": {
+          "today": 231939020.52,
+          "trend": "连续5日流入",
+          "5day_total": 256070076
+        },
+        "fundamentals": {
+          "pe_ttm": 16.59,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 351.43,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "高位大涨，次日分歧风险",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 38.32,
+          "ma10": 37.65,
+          "ma20": 37.4,
+          "high20": 41.86,
+          "low20": 35.17,
+          "position_20d": 1.0
+        },
+        "amount_yi": 19.3,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 11,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 16,
+          "tags": [
+            "高换手",
+            "涨幅强",
+            "资金配合",
+            "连续5日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 5,
+          "style_text": "九安医疗"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ],
+    "rebound": [],
+    "hot": [
+      {
+        "code": "002432",
+        "name": "九安医疗",
+        "price": 41.86,
+        "change_pct": 10.13,
+        "score": 115.05,
+        "scores": {
+          "technical": 51,
+          "capital": 30,
+          "fundamental": 6,
+          "emotion": 20
+        },
+        "signals": [
+          "均线强多头",
+          "强放量",
+          "强势拉升",
+          "接近突破",
+          "主力流入23193.9亿",
+          "连续5日流入",
+          "PE偏低(16.6)",
+          "高位高潮"
+        ],
+        "capital_flow": {
+          "today": 231939020.52,
+          "trend": "连续5日流入",
+          "5day_total": 256070076
+        },
+        "fundamentals": {
+          "pe_ttm": 16.59,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 351.43,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "高位大涨，次日分歧风险",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 38.32,
+          "ma10": 37.65,
+          "ma20": 37.4,
+          "high20": 41.86,
+          "low20": 35.17,
+          "position_20d": 1.0
+        },
+        "amount_yi": 19.3,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 11,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 16,
+          "tags": [
+            "高换手",
+            "涨幅强",
+            "资金配合",
+            "连续5日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 5,
+          "style_text": "九安医疗"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ],
+    "combined": [
+      {
+        "code": "002432",
+        "name": "九安医疗",
+        "price": 41.86,
+        "change_pct": 10.13,
+        "score": 115.05,
+        "scores": {
+          "technical": 51,
+          "capital": 30,
+          "fundamental": 6,
+          "emotion": 20
+        },
+        "signals": [
+          "均线强多头",
+          "强放量",
+          "强势拉升",
+          "接近突破",
+          "主力流入23193.9亿",
+          "连续5日流入",
+          "PE偏低(16.6)",
+          "高位高潮"
+        ],
+        "capital_flow": {
+          "today": 231939020.52,
+          "trend": "连续5日流入",
+          "5day_total": 256070076
+        },
+        "fundamentals": {
+          "pe_ttm": 16.59,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 351.43,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "高位大涨，次日分歧风险",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 38.32,
+          "ma10": 37.65,
+          "ma20": 37.4,
+          "high20": 41.86,
+          "low20": 35.17,
+          "position_20d": 1.0
+        },
+        "amount_yi": 19.3,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 11,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 16,
+          "tags": [
+            "高换手",
+            "涨幅强",
+            "资金配合",
+            "连续5日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 5,
+          "style_text": "九安医疗"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "002261",
+        "name": "拓维信息",
+        "price": 15.17,
+        "change_pct": 2.29,
+        "score": 75.35,
+        "scores": {
+          "technical": 30,
+          "capital": 21,
+          "fundamental": 0,
+          "emotion": 11
+        },
+        "signals": [
+          "均线多头",
+          "强放量",
+          "主力流入4977.7亿"
+        ],
+        "capital_flow": {
+          "today": 49777132.97,
+          "trend": "连续2日流入",
+          "5day_total": 79979214
+        },
+        "fundamentals": {
+          "pe_ttm": 328.03,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 458.58,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "估值偏高",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 14.91,
+          "ma10": 14.81,
+          "ma20": 15.57,
+          "high20": 17.09,
+          "low20": 14.11,
+          "position_20d": 0.356
+        },
+        "amount_yi": 10.0,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "偏好行业:信息",
+            "资金配合",
+            "连续2日流入",
+            "估值压制"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": true,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "name:信息 | 拓维信息"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "000932",
+        "name": "华菱钢铁",
+        "price": 5.3,
+        "change_pct": 3.11,
+        "score": 66.5,
+        "scores": {
+          "technical": 23,
+          "capital": 27,
+          "fundamental": 6,
+          "emotion": 7
+        },
+        "signals": [
+          "均线多头",
+          "接近突破",
+          "主力流入3549.5亿",
+          "连续3日流入",
+          "PE偏低(13.2)"
+        ],
+        "capital_flow": {
+          "today": 35495131.19,
+          "trend": "连续3日流入",
+          "5day_total": 79788909
+        },
+        "fundamentals": {
+          "pe_ttm": 13.2,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 344.69,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 5.01,
+          "ma10": 4.91,
+          "ma20": 4.95,
+          "high20": 5.33,
+          "low20": 4.68,
+          "position_20d": 0.954
+        },
+        "amount_yi": 5.8,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "downgrade",
+          "bias_score": 1,
+          "tags": [
+            "周期观察:钢",
+            "换手不足",
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ],
+          "reason": "有一定进攻信号，但不够纯粹，降级观察。",
+          "is_preferred": false,
+          "is_cyclical_soft": true,
+          "consecutive_inflows": 3,
+          "style_text": "name:钢 | 华菱钢铁"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "603087",
+        "name": "甘李药业",
+        "price": 49.72,
+        "change_pct": 1.1,
+        "score": 44.25,
+        "scores": {
+          "technical": 14,
+          "capital": 23,
+          "fundamental": 1,
+          "emotion": 4
+        },
+        "signals": [
+          "低位反弹",
+          "主力流入1456.6亿",
+          "资金反转"
+        ],
+        "capital_flow": {
+          "today": 14565758.04,
+          "trend": "由负转正",
+          "5day_total": 2921650
+        },
+        "fundamentals": {
+          "pe_ttm": 36.11,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 393.98,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "低位活跃反弹",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 50.07,
+          "ma10": 50.15,
+          "ma20": 51.36,
+          "high20": 59.49,
+          "low20": 47.38,
+          "position_20d": 0.193
+        },
+        "amount_yi": 5.2,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "downgrade",
+          "bias_score": -1,
+          "tags": [
+            "换手不足",
+            "资金修复",
+            "资金配合",
+            "单日流入",
+            "仍在低位"
+          ],
+          "reason": "有一定进攻信号，但不够纯粹，降级观察。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 1,
+          "style_text": "甘李药业"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ]
+  }
+}

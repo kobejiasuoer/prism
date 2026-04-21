@@ -1,0 +1,17 @@
+{
+  "checked_at": "2026-04-17 15:39:08",
+  "mode": "watchlist",
+  "validation_status": "ok",
+  "errors": [],
+  "warnings": [],
+  "paths": {
+    "message": "external/stock-analyzer/reports/analysis-summary-2026-04-17.txt",
+    "report": "",
+    "generator": "<redacted-path>"
+  },
+  "expected_timestamp": "2026-04-17 15:39:07",
+  "stats": {
+    "stock_count": 5,
+    "report_sections": 5
+  }
+}

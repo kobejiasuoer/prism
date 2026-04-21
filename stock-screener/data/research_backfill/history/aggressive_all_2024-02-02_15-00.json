@@ -1,0 +1,114 @@
+{
+  "timestamp": "2024-02-02 15:00:00",
+  "pool": "aggressive",
+  "pool_label": "进攻型池(中证500+沪深300)",
+  "stage1_count": 1,
+  "stage2_count": 1,
+  "market_regime": {
+    "score": 0,
+    "label": "偏谨慎",
+    "regime": "defensive",
+    "attack_ok": false,
+    "summary": "强势扩散不够，今天更适合精选观察，不适合激进追高。",
+    "basis": "pool",
+    "sample_size": 455,
+    "metrics": {
+      "positive_ratio": 0.187,
+      "avg_change_pct": -2.14,
+      "avg_turnover": 0.66,
+      "strong_ratio": 0.004
+    },
+    "candidate_view": {
+      "score": 2,
+      "label": "偏谨慎",
+      "regime": "defensive",
+      "attack_ok": false,
+      "summary": "强势扩散不够，今天更适合精选观察，不适合激进追高。",
+      "basis": "candidate",
+      "sample_size": 1,
+      "metrics": {
+        "positive_ratio": 0.0,
+        "avg_change_pct": -8.67,
+        "avg_turnover": 6.79,
+        "strong_ratio": 0.0
+      }
+    },
+    "candidate_score_gap": 2,
+    "candidate_gap_note": "候选口径明显更强，说明入围票强于整体股票池，别把候选强度误读成真实环境。",
+    "execution_gate": {
+      "status": "off",
+      "label": "进攻阀门关闭",
+      "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+      "position_cap": "0成",
+      "allow_new_positions": false,
+      "allow_handoff": false,
+      "allowed_setups": [],
+      "risk_flags": [
+        "赚钱效应不足",
+        "平均涨幅偏弱",
+        "强势股占比过低",
+        "流动性一般"
+      ]
+    }
+  },
+  "market_themes": {
+    "top_theme": "光伏链",
+    "summary": "今日主线不够集中，更像轮动市，适合精选个股。 主线持续性：一日游风险（0分）。",
+    "themes": [
+      {
+        "theme": "光伏链",
+        "score": 34.96,
+        "count": 1,
+        "weighted_count": 0.6,
+        "leader_codes": [
+          "TCL中环(002129)"
+        ],
+        "persistence": {
+          "score": 0,
+          "label": "一日游风险",
+          "summary": "主题权重回落；主题分回落；龙头切换较快",
+          "trend": "down",
+          "leader_stability": 0.0
+        },
+        "metrics": {
+          "count_score": 25,
+          "leader_score": 8.46,
+          "capital_score": 0.0,
+          "structure_score": 0,
+          "purity_score": 1.5,
+          "persistence_score": 0,
+          "total_flow_yi": -2.86,
+          "avg_flow_yi": -2.86,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 0.0,
+          "hot_ratio": 0.0
+        }
+      }
+    ]
+  },
+  "replay_meta": {
+    "mode": "research_eod_backfill",
+    "trade_date": "2024-02-02",
+    "assumptions": [
+      "历史价格使用东方财富日线K线回放",
+      "历史资金流暂用价格量能代理，不等同真实东方财富日频资金流",
+      "基本面暂用当前快照近似，不等同严格历史披露时点",
+      "股票池暂用当前可取到的池子近似，不等同严格历史成分股"
+    ],
+    "universe_meta": {
+      "pool": "aggressive",
+      "pool_label": "进攻型池(中证500+沪深300)",
+      "universe_size": 594,
+      "hs300_count": 248,
+      "zz500_count": 369,
+      "warnings": []
+    }
+  },
+  "strategies": {
+    "conservative": [],
+    "growth": [],
+    "rebound": [],
+    "hot": [],
+    "combined": []
+  }
+}

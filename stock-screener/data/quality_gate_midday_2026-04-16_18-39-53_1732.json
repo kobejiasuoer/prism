@@ -1,0 +1,18 @@
+{
+  "checked_at": "2026-04-16 18:39:54",
+  "mode": "screener",
+  "validation_status": "ok",
+  "errors": [],
+  "warnings": [],
+  "paths": {
+    "message": "/var/folders/fp/2rkpp8kj2ms23w902367z9s40000gn/T/tmp.VQ0ILALDbX/midday.txt",
+    "report": "/var/folders/fp/2rkpp8kj2ms23w902367z9s40000gn/T/tmp.VQ0ILALDbX/midday.md",
+    "generator": "packages/screener/generate_feishu_message.py"
+  },
+  "expected_timestamp": "2026-04-16 16:58:29",
+  "stats": {
+    "fresh_candidates": 3,
+    "confirmed": 1,
+    "downgraded": 1
+  }
+}

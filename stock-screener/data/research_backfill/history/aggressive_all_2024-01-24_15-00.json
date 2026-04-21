@@ -1,0 +1,1387 @@
+{
+  "timestamp": "2024-01-24 15:00:00",
+  "pool": "aggressive",
+  "pool_label": "进攻型池(中证500+沪深300)",
+  "stage1_count": 30,
+  "stage2_count": 30,
+  "market_regime": {
+    "score": 6,
+    "label": "进攻环境较强",
+    "regime": "aggressive",
+    "attack_ok": true,
+    "summary": "市场活跃度和强势股占比都不错，可正常做进攻型观察。",
+    "basis": "pool",
+    "sample_size": 500,
+    "metrics": {
+      "positive_ratio": 0.816,
+      "avg_change_pct": 1.99,
+      "avg_turnover": 0.67,
+      "strong_ratio": 0.274
+    },
+    "candidate_view": {
+      "score": 6,
+      "label": "进攻环境较强",
+      "regime": "aggressive",
+      "attack_ok": true,
+      "summary": "市场活跃度和强势股占比都不错，可正常做进攻型观察。",
+      "basis": "candidate",
+      "sample_size": 30,
+      "metrics": {
+        "positive_ratio": 1.0,
+        "avg_change_pct": 6.79,
+        "avg_turnover": 1.84,
+        "strong_ratio": 1.0
+      }
+    },
+    "candidate_score_gap": 0,
+    "candidate_gap_note": "候选口径与整体股票池接近，可把候选强度当作环境的辅助参考。",
+    "execution_gate": {
+      "status": "on",
+      "label": "进攻阀门开启",
+      "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+      "position_cap": "0.5-1成试错",
+      "allow_new_positions": true,
+      "allow_handoff": true,
+      "allowed_setups": [
+        "leader_continuation",
+        "breakout_follow",
+        "pullback_continuation",
+        "low_reversal"
+      ],
+      "risk_flags": [
+        "流动性一般"
+      ]
+    }
+  },
+  "market_themes": {
+    "top_theme": "其他",
+    "summary": "今日主线不够集中，更像轮动市，适合精选个股。 主线持续性：持续增强（17分）。",
+    "themes": [
+      {
+        "theme": "其他",
+        "score": 51.83,
+        "count": 30,
+        "weighted_count": 45.08,
+        "leader_codes": [
+          "国盛证券(002670)",
+          "湘财股份(600095)",
+          "财达证券(600906)"
+        ],
+        "persistence": {
+          "score": 17,
+          "label": "持续增强",
+          "summary": "主题权重增强；主题分提升；龙头部分延续",
+          "trend": "up",
+          "leader_stability": 0.33
+        },
+        "metrics": {
+          "count_score": 25,
+          "leader_score": 25,
+          "capital_score": 4.48,
+          "structure_score": 15,
+          "purity_score": 2.5,
+          "persistence_score": 17,
+          "total_flow_yi": 27.55,
+          "avg_flow_yi": 0.92,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 0.97,
+          "hot_ratio": 0.72
+        }
+      }
+    ]
+  },
+  "replay_meta": {
+    "mode": "research_eod_backfill",
+    "trade_date": "2024-01-24",
+    "assumptions": [
+      "历史价格使用东方财富日线K线回放",
+      "历史资金流暂用价格量能代理，不等同真实东方财富日频资金流",
+      "基本面暂用当前快照近似，不等同严格历史披露时点",
+      "股票池暂用当前可取到的池子近似，不等同严格历史成分股"
+    ],
+    "universe_meta": {
+      "pool": "aggressive",
+      "pool_label": "进攻型池(中证500+沪深300)",
+      "universe_size": 594,
+      "hs300_count": 248,
+      "zz500_count": 369,
+      "warnings": []
+    }
+  },
+  "strategies": {
+    "conservative": [],
+    "growth": [
+      {
+        "code": "600095",
+        "name": "湘财股份",
+        "price": 8.09,
+        "change_pct": 3.06,
+        "score": 97.9,
+        "scores": {
+          "technical": 40,
+          "capital": 27,
+          "fundamental": 1,
+          "emotion": 13
+        },
+        "signals": [
+          "均线强多头",
+          "放量",
+          "接近突破",
+          "主力流入5992.5亿",
+          "连续3日流入"
+        ],
+        "capital_flow": {
+          "today": 59924761.67,
+          "trend": "连续3日流入",
+          "5day_total": 169591469
+        },
+        "fundamentals": {
+          "pe_ttm": 57.78,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 268.19,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 7.81,
+          "ma10": 7.52,
+          "ma20": 7.4,
+          "high20": 8.22,
+          "low20": 6.93,
+          "position_20d": 0.899
+        },
+        "amount_yi": 9.4,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "湘财股份"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "600906",
+        "name": "财达证券",
+        "price": 7.72,
+        "change_pct": 4.04,
+        "score": 92.35,
+        "scores": {
+          "technical": 40,
+          "capital": 21,
+          "fundamental": 4,
+          "emotion": 13
+        },
+        "signals": [
+          "均线强多头",
+          "放量",
+          "接近突破",
+          "主力流入6893.5亿",
+          "PE合理(23.6)"
+        ],
+        "capital_flow": {
+          "today": 68934525.01,
+          "trend": "连续2日流入",
+          "5day_total": 115489723
+        },
+        "fundamentals": {
+          "pe_ttm": 23.61,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 208.98,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 7.35,
+          "ma10": 7.18,
+          "ma20": 7.15,
+          "high20": 7.96,
+          "low20": 6.82,
+          "position_20d": 0.789
+        },
+        "amount_yi": 8.0,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "财达证券"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "601099",
+        "name": "太平洋",
+        "price": 3.49,
+        "change_pct": 6.73,
+        "score": 86.95,
+        "scores": {
+          "technical": 31,
+          "capital": 21,
+          "fundamental": 0,
+          "emotion": 20
+        },
+        "signals": [
+          "站上MA5",
+          "放量",
+          "主力流入20431.7亿"
+        ],
+        "capital_flow": {
+          "today": 204317048.04,
+          "trend": "连续2日流入",
+          "5day_total": 194407625
+        },
+        "fundamentals": {
+          "pe_ttm": 79.3,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 259.7,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 3.33,
+          "ma10": 3.4,
+          "ma20": 3.5,
+          "high20": 3.8,
+          "low20": 3.11,
+          "position_20d": 0.551
+        },
+        "amount_yi": 17.0,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 14,
+          "tags": [
+            "高换手",
+            "涨幅强",
+            "资金配合",
+            "连续2日流入"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "太平洋"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ],
+    "rebound": [],
+    "hot": [
+      {
+        "code": "002670",
+        "name": "国盛证券",
+        "price": 11.47,
+        "change_pct": 7.1,
+        "score": 103.9,
+        "scores": {
+          "technical": 45,
+          "capital": 27,
+          "fundamental": -5,
+          "emotion": 20
+        },
+        "signals": [
+          "均线强多头",
+          "强势拉升",
+          "接近突破",
+          "主力流入21410.6亿",
+          "连续3日流入",
+          "PE偏高(86.9)",
+          "高位偏热",
+          "放量偏热"
+        ],
+        "capital_flow": {
+          "today": 214106141.16,
+          "trend": "连续3日流入",
+          "5day_total": 491173445
+        },
+        "fundamentals": {
+          "pe_ttm": 86.94,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 280.59,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "估值偏高",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 10.42,
+          "ma10": 9.94,
+          "ma20": 9.53,
+          "high20": 11.78,
+          "low20": 8.59,
+          "position_20d": 0.903
+        },
+        "amount_yi": 17.8,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 5,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 12,
+          "tags": [
+            "高换手",
+            "涨幅强",
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "国盛证券"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "600095",
+        "name": "湘财股份",
+        "price": 8.09,
+        "change_pct": 3.06,
+        "score": 97.9,
+        "scores": {
+          "technical": 40,
+          "capital": 27,
+          "fundamental": 1,
+          "emotion": 13
+        },
+        "signals": [
+          "均线强多头",
+          "放量",
+          "接近突破",
+          "主力流入5992.5亿",
+          "连续3日流入"
+        ],
+        "capital_flow": {
+          "today": 59924761.67,
+          "trend": "连续3日流入",
+          "5day_total": 169591469
+        },
+        "fundamentals": {
+          "pe_ttm": 57.78,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 268.19,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 7.81,
+          "ma10": 7.52,
+          "ma20": 7.4,
+          "high20": 8.22,
+          "low20": 6.93,
+          "position_20d": 0.899
+        },
+        "amount_yi": 9.4,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "湘财股份"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "600906",
+        "name": "财达证券",
+        "price": 7.72,
+        "change_pct": 4.04,
+        "score": 92.35,
+        "scores": {
+          "technical": 40,
+          "capital": 21,
+          "fundamental": 4,
+          "emotion": 13
+        },
+        "signals": [
+          "均线强多头",
+          "放量",
+          "接近突破",
+          "主力流入6893.5亿",
+          "PE合理(23.6)"
+        ],
+        "capital_flow": {
+          "today": 68934525.01,
+          "trend": "连续2日流入",
+          "5day_total": 115489723
+        },
+        "fundamentals": {
+          "pe_ttm": 23.61,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 208.98,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 7.35,
+          "ma10": 7.18,
+          "ma20": 7.15,
+          "high20": 7.96,
+          "low20": 6.82,
+          "position_20d": 0.789
+        },
+        "amount_yi": 8.0,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "财达证券"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "601099",
+        "name": "太平洋",
+        "price": 3.49,
+        "change_pct": 6.73,
+        "score": 86.95,
+        "scores": {
+          "technical": 31,
+          "capital": 21,
+          "fundamental": 0,
+          "emotion": 20
+        },
+        "signals": [
+          "站上MA5",
+          "放量",
+          "主力流入20431.7亿"
+        ],
+        "capital_flow": {
+          "today": 204317048.04,
+          "trend": "连续2日流入",
+          "5day_total": 194407625
+        },
+        "fundamentals": {
+          "pe_ttm": 79.3,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 259.7,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 3.33,
+          "ma10": 3.4,
+          "ma20": 3.5,
+          "high20": 3.8,
+          "low20": 3.11,
+          "position_20d": 0.551
+        },
+        "amount_yi": 17.0,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 14,
+          "tags": [
+            "高换手",
+            "涨幅强",
+            "资金配合",
+            "连续2日流入"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "太平洋"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ],
+    "combined": [
+      {
+        "code": "002670",
+        "name": "国盛证券",
+        "price": 11.47,
+        "change_pct": 7.1,
+        "score": 103.9,
+        "scores": {
+          "technical": 45,
+          "capital": 27,
+          "fundamental": -5,
+          "emotion": 20
+        },
+        "signals": [
+          "均线强多头",
+          "强势拉升",
+          "接近突破",
+          "主力流入21410.6亿",
+          "连续3日流入",
+          "PE偏高(86.9)",
+          "高位偏热",
+          "放量偏热"
+        ],
+        "capital_flow": {
+          "today": 214106141.16,
+          "trend": "连续3日流入",
+          "5day_total": 491173445
+        },
+        "fundamentals": {
+          "pe_ttm": 86.94,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 280.59,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "估值偏高",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 10.42,
+          "ma10": 9.94,
+          "ma20": 9.53,
+          "high20": 11.78,
+          "low20": 8.59,
+          "position_20d": 0.903
+        },
+        "amount_yi": 17.8,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 5,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 12,
+          "tags": [
+            "高换手",
+            "涨幅强",
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "国盛证券"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "600095",
+        "name": "湘财股份",
+        "price": 8.09,
+        "change_pct": 3.06,
+        "score": 97.9,
+        "scores": {
+          "technical": 40,
+          "capital": 27,
+          "fundamental": 1,
+          "emotion": 13
+        },
+        "signals": [
+          "均线强多头",
+          "放量",
+          "接近突破",
+          "主力流入5992.5亿",
+          "连续3日流入"
+        ],
+        "capital_flow": {
+          "today": 59924761.67,
+          "trend": "连续3日流入",
+          "5day_total": 169591469
+        },
+        "fundamentals": {
+          "pe_ttm": 57.78,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 268.19,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 7.81,
+          "ma10": 7.52,
+          "ma20": 7.4,
+          "high20": 8.22,
+          "low20": 6.93,
+          "position_20d": 0.899
+        },
+        "amount_yi": 9.4,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "湘财股份"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "600906",
+        "name": "财达证券",
+        "price": 7.72,
+        "change_pct": 4.04,
+        "score": 92.35,
+        "scores": {
+          "technical": 40,
+          "capital": 21,
+          "fundamental": 4,
+          "emotion": 13
+        },
+        "signals": [
+          "均线强多头",
+          "放量",
+          "接近突破",
+          "主力流入6893.5亿",
+          "PE合理(23.6)"
+        ],
+        "capital_flow": {
+          "today": 68934525.01,
+          "trend": "连续2日流入",
+          "5day_total": 115489723
+        },
+        "fundamentals": {
+          "pe_ttm": 23.61,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 208.98,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 7.35,
+          "ma10": 7.18,
+          "ma20": 7.15,
+          "high20": 7.96,
+          "low20": 6.82,
+          "position_20d": 0.789
+        },
+        "amount_yi": 8.0,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "财达证券"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "601099",
+        "name": "太平洋",
+        "price": 3.49,
+        "change_pct": 6.73,
+        "score": 86.95,
+        "scores": {
+          "technical": 31,
+          "capital": 21,
+          "fundamental": 0,
+          "emotion": 20
+        },
+        "signals": [
+          "站上MA5",
+          "放量",
+          "主力流入20431.7亿"
+        ],
+        "capital_flow": {
+          "today": 204317048.04,
+          "trend": "连续2日流入",
+          "5day_total": 194407625
+        },
+        "fundamentals": {
+          "pe_ttm": 79.3,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 259.7,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 3.33,
+          "ma10": 3.4,
+          "ma20": 3.5,
+          "high20": 3.8,
+          "low20": 3.11,
+          "position_20d": 0.551
+        },
+        "amount_yi": 17.0,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 14,
+          "tags": [
+            "高换手",
+            "涨幅强",
+            "资金配合",
+            "连续2日流入"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "太平洋"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "002926",
+        "name": "华西证券",
+        "price": 7.87,
+        "change_pct": 5.07,
+        "score": 84.8,
+        "scores": {
+          "technical": 34,
+          "capital": 21,
+          "fundamental": 6,
+          "emotion": 12
+        },
+        "signals": [
+          "均线多头",
+          "放量",
+          "接近突破",
+          "主力流入4790.8亿",
+          "PE偏低(16.0)"
+        ],
+        "capital_flow": {
+          "today": 47908372.46,
+          "trend": "连续2日流入",
+          "5day_total": 69613755
+        },
+        "fundamentals": {
+          "pe_ttm": 16.02,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 226.28,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 7.47,
+          "ma10": 7.36,
+          "ma20": 7.39,
+          "high20": 7.92,
+          "low20": 6.97,
+          "position_20d": 0.947
+        },
+        "amount_yi": 4.7,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 9,
+          "tags": [
+            "低换手脉冲",
+            "涨幅强",
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "华西证券"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "601059",
+        "name": "信达证券",
+        "price": 18.77,
+        "change_pct": 4.86,
+        "score": 84.75,
+        "scores": {
+          "technical": 30,
+          "capital": 27,
+          "fundamental": 4,
+          "emotion": 11
+        },
+        "signals": [
+          "均线多头",
+          "接近突破",
+          "主力流入15986.3亿",
+          "连续3日流入",
+          "PE合理(28.9)"
+        ],
+        "capital_flow": {
+          "today": 159862696.77,
+          "trend": "连续3日流入",
+          "5day_total": 365582024
+        },
+        "fundamentals": {
+          "pe_ttm": 28.94,
+          "pb": 2.6,
+          "roe": null,
+          "margin": null,
+          "total_mv": 548.07,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 17.58,
+          "ma10": 17.01,
+          "ma20": 17.09,
+          "high20": 19.65,
+          "low20": 16.01,
+          "position_20d": 0.758
+        },
+        "amount_yi": 14.8,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "信达证券"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "601788",
+        "name": "光大证券",
+        "price": 15.4,
+        "change_pct": 10.39,
+        "score": 84.35,
+        "scores": {
+          "technical": 39,
+          "capital": 21,
+          "fundamental": 6,
+          "emotion": 14
+        },
+        "signals": [
+          "均线多头",
+          "强放量",
+          "强势拉升",
+          "接近突破",
+          "主力流入16095.0亿",
+          "PE偏低(19.3)",
+          "高位高潮",
+          "涨停退潮风险"
+        ],
+        "capital_flow": {
+          "today": 160950428.1,
+          "trend": "连续2日流入",
+          "5day_total": 173581236
+        },
+        "fundamentals": {
+          "pe_ttm": 19.28,
+          "pb": 1.18,
+          "roe": null,
+          "margin": null,
+          "total_mv": 717.9,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "高位大涨，次日分歧风险",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 14.17,
+          "ma10": 14.03,
+          "ma20": 14.24,
+          "high20": 15.4,
+          "low20": 13.36,
+          "position_20d": 1.0
+        },
+        "amount_yi": 13.4,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 9,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 9,
+          "tags": [
+            "低换手脉冲",
+            "涨幅强",
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "光大证券"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "000951",
+        "name": "中国重汽",
+        "price": 12.78,
+        "change_pct": 9.79,
+        "score": 82.1,
+        "scores": {
+          "technical": 34,
+          "capital": 21,
+          "fundamental": 6,
+          "emotion": 14
+        },
+        "signals": [
+          "站上MA5",
+          "强放量",
+          "强势拉升",
+          "接近突破",
+          "主力流入6840.9亿",
+          "PE偏低(16.6)",
+          "高位偏热",
+          "追高风险"
+        ],
+        "capital_flow": {
+          "today": 68409263.82,
+          "trend": "连续2日流入",
+          "5day_total": 53279582
+        },
+        "fundamentals": {
+          "pe_ttm": 16.55,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 275.62,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "高位大涨，次日分歧风险",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 11.99,
+          "ma10": 12.23,
+          "ma20": 12.16,
+          "high20": 13.13,
+          "low20": 11.08,
+          "position_20d": 0.829
+        },
+        "amount_yi": 5.7,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 5,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 9,
+          "tags": [
+            "低换手脉冲",
+            "涨幅强",
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "中国重汽"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "000563",
+        "name": "陕国投A",
+        "price": 2.95,
+        "change_pct": 9.26,
+        "score": 77.6,
+        "scores": {
+          "technical": 32,
+          "capital": 21,
+          "fundamental": 6,
+          "emotion": 14
+        },
+        "signals": [
+          "站上MA5",
+          "强放量",
+          "强势拉升",
+          "接近突破",
+          "主力流入5090.7亿",
+          "PE偏低(12.1)",
+          "高位高潮",
+          "追高风险"
+        ],
+        "capital_flow": {
+          "today": 50907119.76,
+          "trend": "连续2日流入",
+          "5day_total": 40158901
+        },
+        "fundamentals": {
+          "pe_ttm": 12.1,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 173.36,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "高位大涨，次日分歧风险",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 2.77,
+          "ma10": 2.79,
+          "ma20": 2.81,
+          "high20": 2.99,
+          "low20": 2.59,
+          "position_20d": 0.9
+        },
+        "amount_yi": 4.2,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 7,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 9,
+          "tags": [
+            "低换手脉冲",
+            "涨幅强",
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "陕国投A"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "002085",
+        "name": "万丰奥威",
+        "price": 5.27,
+        "change_pct": 4.77,
+        "score": 74.0,
+        "scores": {
+          "technical": 29,
+          "capital": 21,
+          "fundamental": 4,
+          "emotion": 9
+        },
+        "signals": [
+          "站上MA5",
+          "强放量",
+          "接近突破",
+          "主力流入5655.8亿",
+          "PE合理(31.1)"
+        ],
+        "capital_flow": {
+          "today": 56558340.15,
+          "trend": "连续2日流入",
+          "5day_total": 50613764
+        },
+        "fundamentals": {
+          "pe_ttm": 31.06,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 301.93,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 4.95,
+          "ma10": 4.96,
+          "ma20": 4.68,
+          "high20": 5.39,
+          "low20": 4.13,
+          "position_20d": 0.905
+        },
+        "amount_yi": 6.2,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 5,
+          "tags": [
+            "低换手脉冲",
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "万丰奥威"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ]
+  }
+}

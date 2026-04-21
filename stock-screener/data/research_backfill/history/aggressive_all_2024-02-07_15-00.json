@@ -1,0 +1,1426 @@
+{
+  "timestamp": "2024-02-07 15:00:00",
+  "pool": "aggressive",
+  "pool_label": "进攻型池(中证500+沪深300)",
+  "stage1_count": 30,
+  "stage2_count": 30,
+  "market_regime": {
+    "score": 6,
+    "label": "进攻环境较强",
+    "regime": "aggressive",
+    "attack_ok": true,
+    "summary": "市场活跃度和强势股占比都不错，可正常做进攻型观察。",
+    "basis": "pool",
+    "sample_size": 455,
+    "metrics": {
+      "positive_ratio": 0.853,
+      "avg_change_pct": 3.55,
+      "avg_turnover": 0.96,
+      "strong_ratio": 0.486
+    },
+    "candidate_view": {
+      "score": 6,
+      "label": "进攻环境较强",
+      "regime": "aggressive",
+      "attack_ok": true,
+      "summary": "市场活跃度和强势股占比都不错，可正常做进攻型观察。",
+      "basis": "candidate",
+      "sample_size": 30,
+      "metrics": {
+        "positive_ratio": 0.967,
+        "avg_change_pct": 9.06,
+        "avg_turnover": 1.51,
+        "strong_ratio": 0.967
+      }
+    },
+    "candidate_score_gap": 0,
+    "candidate_gap_note": "候选口径与整体股票池接近，可把候选强度当作环境的辅助参考。",
+    "execution_gate": {
+      "status": "on",
+      "label": "进攻阀门开启",
+      "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+      "position_cap": "0.5-1成试错",
+      "allow_new_positions": true,
+      "allow_handoff": true,
+      "allowed_setups": [
+        "leader_continuation",
+        "breakout_follow",
+        "pullback_continuation",
+        "low_reversal"
+      ],
+      "risk_flags": [
+        "流动性一般"
+      ]
+    }
+  },
+  "market_themes": {
+    "top_theme": "有色资源链",
+    "summary": "今日主线不够集中，更像轮动市，适合精选个股。 主线持续性：热度衰减（7分）。",
+    "themes": [
+      {
+        "theme": "有色资源链",
+        "score": 38.12,
+        "count": 1,
+        "weighted_count": 1.42,
+        "leader_codes": [
+          "北方稀土(600111)"
+        ],
+        "persistence": {
+          "score": 7,
+          "label": "热度衰减",
+          "summary": "更多依赖当前截面强度，历史延续性一般",
+          "trend": "neutral",
+          "leader_stability": 0.0
+        },
+        "metrics": {
+          "count_score": 2.38,
+          "leader_score": 20.24,
+          "capital_score": 0.5,
+          "structure_score": 0,
+          "purity_score": 15,
+          "persistence_score": 7,
+          "total_flow_yi": 2.09,
+          "avg_flow_yi": 2.09,
+          "preferred_ratio": 1.0,
+          "keep_ratio": 1.0,
+          "hot_ratio": 1.0
+        }
+      },
+      {
+        "theme": "电网设备链",
+        "score": 29.94,
+        "count": 1,
+        "weighted_count": 1.37,
+        "leader_codes": [
+          "许继电气(000400)"
+        ],
+        "persistence": {
+          "score": 5,
+          "label": "热度衰减",
+          "summary": "更多依赖当前截面强度，历史延续性一般",
+          "trend": "neutral",
+          "leader_stability": 0.0
+        },
+        "metrics": {
+          "count_score": 2.29,
+          "leader_score": 19.45,
+          "capital_score": 0.2,
+          "structure_score": 0,
+          "purity_score": 8.0,
+          "persistence_score": 5,
+          "total_flow_yi": 0.83,
+          "avg_flow_yi": 0.83,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 1.0,
+          "hot_ratio": 1.0
+        }
+      },
+      {
+        "theme": "军工链",
+        "score": 29.8,
+        "count": 1,
+        "weighted_count": 1.28,
+        "leader_codes": [
+          "中航高科(600862)"
+        ],
+        "persistence": {
+          "score": 5,
+          "label": "热度衰减",
+          "summary": "更多依赖当前截面强度，历史延续性一般",
+          "trend": "neutral",
+          "leader_stability": 0.0
+        },
+        "metrics": {
+          "count_score": 2.14,
+          "leader_score": 18.04,
+          "capital_score": 0.12,
+          "structure_score": 0,
+          "purity_score": 9.5,
+          "persistence_score": 5,
+          "total_flow_yi": 0.48,
+          "avg_flow_yi": 0.48,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 1.0,
+          "hot_ratio": 1.0
+        }
+      },
+      {
+        "theme": "其他",
+        "score": 49.08,
+        "count": 27,
+        "weighted_count": 37.68,
+        "leader_codes": [
+          "西部证券(002673)",
+          "三美股份(603379)",
+          "太阳纸业(002078)"
+        ],
+        "persistence": {
+          "score": 17,
+          "label": "持续增强",
+          "summary": "主题权重增强；主题分提升；龙头部分延续",
+          "trend": "up",
+          "leader_stability": 0.33
+        },
+        "metrics": {
+          "count_score": 25,
+          "leader_score": 23.46,
+          "capital_score": 2.2,
+          "structure_score": 15,
+          "purity_score": 2.5,
+          "persistence_score": 17,
+          "total_flow_yi": 13.49,
+          "avg_flow_yi": 0.5,
+          "preferred_ratio": 0.08,
+          "keep_ratio": 0.98,
+          "hot_ratio": 0.98
+        }
+      }
+    ]
+  },
+  "replay_meta": {
+    "mode": "research_eod_backfill",
+    "trade_date": "2024-02-07",
+    "assumptions": [
+      "历史价格使用东方财富日线K线回放",
+      "历史资金流暂用价格量能代理，不等同真实东方财富日频资金流",
+      "基本面暂用当前快照近似，不等同严格历史披露时点",
+      "股票池暂用当前可取到的池子近似，不等同严格历史成分股"
+    ],
+    "universe_meta": {
+      "pool": "aggressive",
+      "pool_label": "进攻型池(中证500+沪深300)",
+      "universe_size": 594,
+      "hs300_count": 248,
+      "zz500_count": 369,
+      "warnings": []
+    }
+  },
+  "strategies": {
+    "conservative": [],
+    "growth": [
+      {
+        "code": "002673",
+        "name": "西部证券",
+        "price": 6.21,
+        "change_pct": 5.79,
+        "score": 90.65,
+        "scores": {
+          "technical": 35,
+          "capital": 21,
+          "fundamental": 6,
+          "emotion": 16
+        },
+        "signals": [
+          "站上MA5",
+          "强放量",
+          "接近突破",
+          "主力流入15429.1亿",
+          "PE偏低(18.7)"
+        ],
+        "capital_flow": {
+          "today": 154291289.7,
+          "trend": "连续2日流入",
+          "5day_total": 178692659
+        },
+        "fundamentals": {
+          "pe_ttm": 18.71,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 328.07,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 5.72,
+          "ma10": 5.82,
+          "ma20": 5.81,
+          "high20": 6.48,
+          "low20": 5.22,
+          "position_20d": 0.786
+        },
+        "amount_yi": 13.8,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 16,
+          "tags": [
+            "高换手",
+            "涨幅强",
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "西部证券"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "000009",
+        "name": "中国宝安",
+        "price": 12.02,
+        "change_pct": 9.97,
+        "score": 85.15,
+        "scores": {
+          "technical": 37,
+          "capital": 21,
+          "fundamental": 0,
+          "emotion": 18
+        },
+        "signals": [
+          "站上MA5",
+          "强放量",
+          "强势拉升",
+          "接近突破",
+          "主力流入12409.6亿",
+          "高位偏热",
+          "涨停退潮风险"
+        ],
+        "capital_flow": {
+          "today": 124096302.72,
+          "trend": "连续2日流入",
+          "5day_total": 123903900
+        },
+        "fundamentals": {
+          "pe_ttm": 60.51,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 228.52,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 10.75,
+          "ma10": 11.11,
+          "ma20": 11.29,
+          "high20": 12.71,
+          "low20": 9.74,
+          "position_20d": 0.768
+        },
+        "amount_yi": 10.3,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 7,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 16,
+          "tags": [
+            "高换手",
+            "涨幅强",
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "中国宝安"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "000400",
+        "name": "许继电气",
+        "price": 21.13,
+        "change_pct": 9.82,
+        "score": 74.8,
+        "scores": {
+          "technical": 34,
+          "capital": 21,
+          "fundamental": 0,
+          "emotion": 14
+        },
+        "signals": [
+          "站上MA5",
+          "强放量",
+          "强势拉升",
+          "接近突破",
+          "主力流入8253.2亿",
+          "高位高潮",
+          "涨停退潮风险"
+        ],
+        "capital_flow": {
+          "today": 82531650.6,
+          "trend": "连续2日流入",
+          "5day_total": 58411174
+        },
+        "fundamentals": {
+          "pe_ttm": 60.17,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 267.29,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "高位大涨，次日分歧风险",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 19.0,
+          "ma10": 19.39,
+          "ma20": 19.78,
+          "high20": 21.2,
+          "low20": 16.77,
+          "position_20d": 0.984
+        },
+        "amount_yi": 6.9,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 9,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 12,
+          "tags": [
+            "涨幅强",
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "许继电气"
+        },
+        "theme": "电网设备链",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ],
+    "rebound": [],
+    "hot": [
+      {
+        "code": "002673",
+        "name": "西部证券",
+        "price": 6.21,
+        "change_pct": 5.79,
+        "score": 90.65,
+        "scores": {
+          "technical": 35,
+          "capital": 21,
+          "fundamental": 6,
+          "emotion": 16
+        },
+        "signals": [
+          "站上MA5",
+          "强放量",
+          "接近突破",
+          "主力流入15429.1亿",
+          "PE偏低(18.7)"
+        ],
+        "capital_flow": {
+          "today": 154291289.7,
+          "trend": "连续2日流入",
+          "5day_total": 178692659
+        },
+        "fundamentals": {
+          "pe_ttm": 18.71,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 328.07,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 5.72,
+          "ma10": 5.82,
+          "ma20": 5.81,
+          "high20": 6.48,
+          "low20": 5.22,
+          "position_20d": 0.786
+        },
+        "amount_yi": 13.8,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 16,
+          "tags": [
+            "高换手",
+            "涨幅强",
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "西部证券"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "000009",
+        "name": "中国宝安",
+        "price": 12.02,
+        "change_pct": 9.97,
+        "score": 85.15,
+        "scores": {
+          "technical": 37,
+          "capital": 21,
+          "fundamental": 0,
+          "emotion": 18
+        },
+        "signals": [
+          "站上MA5",
+          "强放量",
+          "强势拉升",
+          "接近突破",
+          "主力流入12409.6亿",
+          "高位偏热",
+          "涨停退潮风险"
+        ],
+        "capital_flow": {
+          "today": 124096302.72,
+          "trend": "连续2日流入",
+          "5day_total": 123903900
+        },
+        "fundamentals": {
+          "pe_ttm": 60.51,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 228.52,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 10.75,
+          "ma10": 11.11,
+          "ma20": 11.29,
+          "high20": 12.71,
+          "low20": 9.74,
+          "position_20d": 0.768
+        },
+        "amount_yi": 10.3,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 7,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 16,
+          "tags": [
+            "高换手",
+            "涨幅强",
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "中国宝安"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "000723",
+        "name": "美锦能源",
+        "price": 5.68,
+        "change_pct": 10.08,
+        "score": 77.1,
+        "scores": {
+          "technical": 30,
+          "capital": 21,
+          "fundamental": 0,
+          "emotion": 16
+        },
+        "signals": [
+          "站上MA5",
+          "强放量",
+          "强势拉升",
+          "主力流入7703.7亿",
+          "涨停退潮风险"
+        ],
+        "capital_flow": {
+          "today": 77037282.0,
+          "trend": "连续2日流入",
+          "5day_total": 46187695
+        },
+        "fundamentals": {
+          "pe_ttm": -20.65,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 203.0,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 5.14,
+          "ma10": 5.39,
+          "ma20": 5.68,
+          "high20": 6.52,
+          "low20": 4.58,
+          "position_20d": 0.567
+        },
+        "amount_yi": 6.4,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 4,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 16,
+          "tags": [
+            "偏好行业:能源",
+            "涨幅强",
+            "资金配合",
+            "连续2日流入"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": true,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "name:能源 | 美锦能源"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ],
+    "combined": [
+      {
+        "code": "002673",
+        "name": "西部证券",
+        "price": 6.21,
+        "change_pct": 5.79,
+        "score": 90.65,
+        "scores": {
+          "technical": 35,
+          "capital": 21,
+          "fundamental": 6,
+          "emotion": 16
+        },
+        "signals": [
+          "站上MA5",
+          "强放量",
+          "接近突破",
+          "主力流入15429.1亿",
+          "PE偏低(18.7)"
+        ],
+        "capital_flow": {
+          "today": 154291289.7,
+          "trend": "连续2日流入",
+          "5day_total": 178692659
+        },
+        "fundamentals": {
+          "pe_ttm": 18.71,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 328.07,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 5.72,
+          "ma10": 5.82,
+          "ma20": 5.81,
+          "high20": 6.48,
+          "low20": 5.22,
+          "position_20d": 0.786
+        },
+        "amount_yi": 13.8,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 16,
+          "tags": [
+            "高换手",
+            "涨幅强",
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "西部证券"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "603379",
+        "name": "三美股份",
+        "price": 37.18,
+        "change_pct": 10.29,
+        "score": 90.5,
+        "scores": {
+          "technical": 40,
+          "capital": 27,
+          "fundamental": 6,
+          "emotion": 12
+        },
+        "signals": [
+          "均线强多头",
+          "强放量",
+          "强势拉升",
+          "接近突破",
+          "主力流入5260.8亿",
+          "连续3日流入",
+          "PE偏低(17.8)",
+          "高位高潮"
+        ],
+        "capital_flow": {
+          "today": 52608404.16,
+          "trend": "连续3日流入",
+          "5day_total": 73687599
+        },
+        "fundamentals": {
+          "pe_ttm": 17.75,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 376.6,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "高位大涨，次日分歧风险",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 33.69,
+          "ma10": 33.02,
+          "ma20": 32.0,
+          "high20": 37.18,
+          "low20": 28.75,
+          "position_20d": 1.0
+        },
+        "amount_yi": 4.4,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 9,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "换手不足",
+            "涨幅强",
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "三美股份"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "002078",
+        "name": "太阳纸业",
+        "price": 13.0,
+        "change_pct": 8.06,
+        "score": 87.5,
+        "scores": {
+          "technical": 36,
+          "capital": 27,
+          "fundamental": 6,
+          "emotion": 12
+        },
+        "signals": [
+          "均线强多头",
+          "强势拉升",
+          "接近突破",
+          "主力流入7118.6亿",
+          "连续3日流入",
+          "PE偏低(12.5)",
+          "高位高潮",
+          "追高风险"
+        ],
+        "capital_flow": {
+          "today": 71186433.36,
+          "trend": "连续3日流入",
+          "5day_total": 113289061
+        },
+        "fundamentals": {
+          "pe_ttm": 12.52,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 406.88,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "高位大涨，次日分歧风险",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 11.85,
+          "ma10": 11.73,
+          "ma20": 11.64,
+          "high20": 13.07,
+          "low20": 10.66,
+          "position_20d": 0.971
+        },
+        "amount_yi": 5.9,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 7,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "换手不足",
+            "涨幅强",
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "太阳纸业"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "000009",
+        "name": "中国宝安",
+        "price": 12.02,
+        "change_pct": 9.97,
+        "score": 85.15,
+        "scores": {
+          "technical": 37,
+          "capital": 21,
+          "fundamental": 0,
+          "emotion": 18
+        },
+        "signals": [
+          "站上MA5",
+          "强放量",
+          "强势拉升",
+          "接近突破",
+          "主力流入12409.6亿",
+          "高位偏热",
+          "涨停退潮风险"
+        ],
+        "capital_flow": {
+          "today": 124096302.72,
+          "trend": "连续2日流入",
+          "5day_total": 123903900
+        },
+        "fundamentals": {
+          "pe_ttm": 60.51,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 228.52,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 10.75,
+          "ma10": 11.11,
+          "ma20": 11.29,
+          "high20": 12.71,
+          "low20": 9.74,
+          "position_20d": 0.768
+        },
+        "amount_yi": 10.3,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 7,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 16,
+          "tags": [
+            "高换手",
+            "涨幅强",
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "中国宝安"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "600563",
+        "name": "法拉电子",
+        "price": 104.5,
+        "change_pct": 9.6,
+        "score": 81.4,
+        "scores": {
+          "technical": 32,
+          "capital": 27,
+          "fundamental": 4,
+          "emotion": 12
+        },
+        "signals": [
+          "均线多头",
+          "强势拉升",
+          "接近突破",
+          "主力流入6508.2亿",
+          "连续3日流入",
+          "PE合理(23.3)",
+          "高位高潮",
+          "追高风险"
+        ],
+        "capital_flow": {
+          "today": 65082273.48,
+          "trend": "连续3日流入",
+          "5day_total": 148568167
+        },
+        "fundamentals": {
+          "pe_ttm": 23.26,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 277.25,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "高位大涨，次日分歧风险",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 92.21,
+          "ma10": 89.24,
+          "ma20": 90.48,
+          "high20": 105.29,
+          "low20": 79.78,
+          "position_20d": 0.969
+        },
+        "amount_yi": 5.4,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 7,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 15,
+          "tags": [
+            "偏好行业:电子",
+            "低换手脉冲",
+            "涨幅强",
+            "资金配合",
+            "连续3日流入"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": true,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "name:电子 | 法拉电子"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "603087",
+        "name": "甘李药业",
+        "price": 37.63,
+        "change_pct": 8.38,
+        "score": 80.4,
+        "scores": {
+          "technical": 29,
+          "capital": 21,
+          "fundamental": 1,
+          "emotion": 16
+        },
+        "signals": [
+          "站上MA5",
+          "强放量",
+          "强势拉升",
+          "主力流入10992.4亿"
+        ],
+        "capital_flow": {
+          "today": 109924012.47,
+          "trend": "连续2日流入",
+          "5day_total": 64845555
+        },
+        "fundamentals": {
+          "pe_ttm": 36.11,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 393.98,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 34.42,
+          "ma10": 36.08,
+          "ma20": 38.9,
+          "high20": 44.88,
+          "low20": 30.41,
+          "position_20d": 0.499
+        },
+        "amount_yi": 9.2,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 7,
+          "tags": [
+            "低换手脉冲",
+            "涨幅强",
+            "资金配合",
+            "连续2日流入"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "甘李药业"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "000723",
+        "name": "美锦能源",
+        "price": 5.68,
+        "change_pct": 10.08,
+        "score": 77.1,
+        "scores": {
+          "technical": 30,
+          "capital": 21,
+          "fundamental": 0,
+          "emotion": 16
+        },
+        "signals": [
+          "站上MA5",
+          "强放量",
+          "强势拉升",
+          "主力流入7703.7亿",
+          "涨停退潮风险"
+        ],
+        "capital_flow": {
+          "today": 77037282.0,
+          "trend": "连续2日流入",
+          "5day_total": 46187695
+        },
+        "fundamentals": {
+          "pe_ttm": -20.65,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 203.0,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 5.14,
+          "ma10": 5.39,
+          "ma20": 5.68,
+          "high20": 6.52,
+          "low20": 4.58,
+          "position_20d": 0.567
+        },
+        "amount_yi": 6.4,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 4,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 16,
+          "tags": [
+            "偏好行业:能源",
+            "涨幅强",
+            "资金配合",
+            "连续2日流入"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": true,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "name:能源 | 美锦能源"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "000400",
+        "name": "许继电气",
+        "price": 21.13,
+        "change_pct": 9.82,
+        "score": 74.8,
+        "scores": {
+          "technical": 34,
+          "capital": 21,
+          "fundamental": 0,
+          "emotion": 14
+        },
+        "signals": [
+          "站上MA5",
+          "强放量",
+          "强势拉升",
+          "接近突破",
+          "主力流入8253.2亿",
+          "高位高潮",
+          "涨停退潮风险"
+        ],
+        "capital_flow": {
+          "today": 82531650.6,
+          "trend": "连续2日流入",
+          "5day_total": 58411174
+        },
+        "fundamentals": {
+          "pe_ttm": 60.17,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 267.29,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "高位大涨，次日分歧风险",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 19.0,
+          "ma10": 19.39,
+          "ma20": 19.78,
+          "high20": 21.2,
+          "low20": 16.77,
+          "position_20d": 0.984
+        },
+        "amount_yi": 6.9,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 9,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 12,
+          "tags": [
+            "涨幅强",
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "许继电气"
+        },
+        "theme": "电网设备链",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "000783",
+        "name": "长江证券",
+        "price": 5.18,
+        "change_pct": 8.82,
+        "score": 72.8,
+        "scores": {
+          "technical": 30,
+          "capital": 21,
+          "fundamental": 6,
+          "emotion": 12
+        },
+        "signals": [
+          "站上MA5",
+          "放量",
+          "强势拉升",
+          "接近突破",
+          "主力流入8850.0亿",
+          "PE偏低(9.0)",
+          "高位高潮",
+          "追高风险"
+        ],
+        "capital_flow": {
+          "today": 88500120.0,
+          "trend": "连续2日流入",
+          "5day_total": 100715167
+        },
+        "fundamentals": {
+          "pe_ttm": 9.0,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 404.8,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "高位大涨，次日分歧风险",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 4.66,
+          "ma10": 4.74,
+          "ma20": 4.76,
+          "high20": 5.23,
+          "low20": 4.2,
+          "position_20d": 0.951
+        },
+        "amount_yi": 7.4,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 7,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 9,
+          "tags": [
+            "低换手脉冲",
+            "涨幅强",
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "长江证券"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "600535",
+        "name": "天士力",
+        "price": 15.04,
+        "change_pct": 8.59,
+        "score": 72.1,
+        "scores": {
+          "technical": 26,
+          "capital": 21,
+          "fundamental": 6,
+          "emotion": 14
+        },
+        "signals": [
+          "站上MA5",
+          "强势拉升",
+          "接近突破",
+          "主力流入5219.8亿",
+          "PE偏低(19.4)",
+          "高位偏热",
+          "追高风险"
+        ],
+        "capital_flow": {
+          "today": 52198288.02,
+          "trend": "连续2日流入",
+          "5day_total": 58751995
+        },
+        "fundamentals": {
+          "pe_ttm": 19.36,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 213.93,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "高位大涨，次日分歧风险",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 13.59,
+          "ma10": 13.85,
+          "ma20": 14.33,
+          "high20": 15.67,
+          "low20": 11.95,
+          "position_20d": 0.831
+        },
+        "amount_yi": 4.3,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 5,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 9,
+          "tags": [
+            "低换手脉冲",
+            "涨幅强",
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "天士力"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ]
+  }
+}

@@ -1,0 +1,105 @@
+{
+  "timestamp": "2026-04-14 13:46:08",
+  "source_morning_timestamp": "2026-04-13 22:34:54",
+  "source_scan_timestamp": "2026-04-13 22:34:54",
+  "verified_against_scan_timestamp": "2026-04-14 13:46:06",
+  "target_codes": [
+    "600010",
+    "002648",
+    "000792",
+    "002271"
+  ],
+  "confirmed": [],
+  "downgraded": [
+    {
+      "code": "600010",
+      "name": "包钢股份",
+      "tier": "B",
+      "morning_score": 102.25,
+      "status": "downgraded",
+      "reason": "当前扫描未再出现，强度未延续",
+      "details": [
+        "盘中未进入最新候选，视为承接不足"
+      ]
+    },
+    {
+      "code": "002648",
+      "name": "卫星化学",
+      "tier": "B",
+      "morning_score": 85.9,
+      "status": "downgraded",
+      "reason": "当前扫描未再出现，强度未延续",
+      "details": [
+        "盘中未进入最新候选，视为承接不足"
+      ]
+    },
+    {
+      "code": "000792",
+      "name": "盐湖股份",
+      "tier": "B",
+      "morning_score": 80.15,
+      "status": "downgraded",
+      "reason": "当前扫描未再出现，强度未延续",
+      "details": [
+        "盘中未进入最新候选，视为承接不足"
+      ]
+    },
+    {
+      "code": "002271",
+      "name": "东方雨虹",
+      "tier": "B",
+      "morning_score": 78.7,
+      "status": "downgraded",
+      "reason": "当前扫描未再出现，强度未延续",
+      "details": [
+        "盘中未进入最新候选，视为承接不足"
+      ]
+    }
+  ],
+  "items": [
+    {
+      "code": "600010",
+      "name": "包钢股份",
+      "tier": "B",
+      "morning_score": 102.25,
+      "status": "downgraded",
+      "reason": "当前扫描未再出现，强度未延续",
+      "details": [
+        "盘中未进入最新候选，视为承接不足"
+      ]
+    },
+    {
+      "code": "002648",
+      "name": "卫星化学",
+      "tier": "B",
+      "morning_score": 85.9,
+      "status": "downgraded",
+      "reason": "当前扫描未再出现，强度未延续",
+      "details": [
+        "盘中未进入最新候选，视为承接不足"
+      ]
+    },
+    {
+      "code": "000792",
+      "name": "盐湖股份",
+      "tier": "B",
+      "morning_score": 80.15,
+      "status": "downgraded",
+      "reason": "当前扫描未再出现，强度未延续",
+      "details": [
+        "盘中未进入最新候选，视为承接不足"
+      ]
+    },
+    {
+      "code": "002271",
+      "name": "东方雨虹",
+      "tier": "B",
+      "morning_score": 78.7,
+      "status": "downgraded",
+      "reason": "当前扫描未再出现，强度未延续",
+      "details": [
+        "盘中未进入最新候选，视为承接不足"
+      ]
+    }
+  ]
+}

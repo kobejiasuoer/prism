@@ -1,0 +1,923 @@
+{
+  "timestamp": "2024-01-19 15:00:00",
+  "pool": "aggressive",
+  "pool_label": "进攻型池(中证500+沪深300)",
+  "stage1_count": 18,
+  "stage2_count": 18,
+  "market_regime": {
+    "score": 0,
+    "label": "偏谨慎",
+    "regime": "defensive",
+    "attack_ok": false,
+    "summary": "强势扩散不够，今天更适合精选观察，不适合激进追高。",
+    "basis": "pool",
+    "sample_size": 500,
+    "metrics": {
+      "positive_ratio": 0.27,
+      "avg_change_pct": -0.68,
+      "avg_turnover": 0.52,
+      "strong_ratio": 0.016
+    },
+    "candidate_view": {
+      "score": 7,
+      "label": "进攻环境较强",
+      "regime": "aggressive",
+      "attack_ok": true,
+      "summary": "市场活跃度和强势股占比都不错，可正常做进攻型观察。",
+      "basis": "candidate",
+      "sample_size": 18,
+      "metrics": {
+        "positive_ratio": 0.667,
+        "avg_change_pct": 1.81,
+        "avg_turnover": 2.83,
+        "strong_ratio": 0.389
+      }
+    },
+    "candidate_score_gap": 7,
+    "candidate_gap_note": "候选口径明显更强，说明入围票强于整体股票池，别把候选强度误读成真实环境。",
+    "execution_gate": {
+      "status": "off",
+      "label": "进攻阀门关闭",
+      "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+      "position_cap": "0成",
+      "allow_new_positions": false,
+      "allow_handoff": false,
+      "allowed_setups": [],
+      "risk_flags": [
+        "赚钱效应不足",
+        "平均涨幅偏弱",
+        "强势股占比过低",
+        "流动性一般"
+      ]
+    }
+  },
+  "market_themes": {
+    "top_theme": "游戏传媒链",
+    "summary": "今日主线较清晰，主攻方向偏 游戏传媒链。 主线持续性：强势延续（13分）。",
+    "themes": [
+      {
+        "theme": "游戏传媒链",
+        "score": 58.19,
+        "count": 2,
+        "weighted_count": 4.48,
+        "leader_codes": [
+          "恺英网络(002517)",
+          "三七互娱(002555)"
+        ],
+        "persistence": {
+          "score": 13,
+          "label": "强势延续",
+          "summary": "主题权重增强；主题分提升；龙头部分延续",
+          "trend": "up",
+          "leader_stability": 0.5
+        },
+        "metrics": {
+          "count_score": 15.84,
+          "leader_score": 24.69,
+          "capital_score": 0.66,
+          "structure_score": 9,
+          "purity_score": 8.0,
+          "persistence_score": 13,
+          "total_flow_yi": 3.29,
+          "avg_flow_yi": 1.65,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 1.0,
+          "hot_ratio": 1.0
+        }
+      },
+      {
+        "theme": "其他",
+        "score": 44.83,
+        "count": 9,
+        "weighted_count": 9.09,
+        "leader_codes": [
+          "通富微电(002156)",
+          "华西证券(002926)",
+          "星宇股份(601799)"
+        ],
+        "persistence": {
+          "score": 8,
+          "label": "延续但分化",
+          "summary": "主题权重回落；主题分提升；龙头切换较快",
+          "trend": "up",
+          "leader_stability": 0.0
+        },
+        "metrics": {
+          "count_score": 25,
+          "leader_score": 19.44,
+          "capital_score": 0.33,
+          "structure_score": 15,
+          "purity_score": 2.5,
+          "persistence_score": 8,
+          "total_flow_yi": 1.95,
+          "avg_flow_yi": 0.22,
+          "preferred_ratio": 0.19,
+          "keep_ratio": 0.67,
+          "hot_ratio": 0.28
+        }
+      },
+      {
+        "theme": "光伏链",
+        "score": 39.04,
+        "count": 4,
+        "weighted_count": 2.85,
+        "leader_codes": [
+          "晶澳科技(002459)",
+          "TCL中环(002129)",
+          "爱旭股份(600732)"
+        ],
+        "persistence": {
+          "score": 6,
+          "label": "热度衰减",
+          "summary": "主题权重回落；主题分回落；龙头稳定",
+          "trend": "down",
+          "leader_stability": 0.67
+        },
+        "metrics": {
+          "count_score": 10.07,
+          "leader_score": 12.47,
+          "capital_score": 0.0,
+          "structure_score": 15,
+          "purity_score": 1.5,
+          "persistence_score": 6,
+          "total_flow_yi": -4.11,
+          "avg_flow_yi": -1.03,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 0.0,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "AI信息链",
+        "score": 35.8,
+        "count": 1,
+        "weighted_count": 1.26,
+        "leader_codes": [
+          "浪潮信息(000977)"
+        ],
+        "persistence": {
+          "score": 7,
+          "label": "热度衰减",
+          "summary": "主题权重回落；主题分回落；龙头部分延续",
+          "trend": "down",
+          "leader_stability": 1.0
+        },
+        "metrics": {
+          "count_score": 4.44,
+          "leader_score": 17.73,
+          "capital_score": 0.13,
+          "structure_score": 0,
+          "purity_score": 13.5,
+          "persistence_score": 7,
+          "total_flow_yi": 0.54,
+          "avg_flow_yi": 0.54,
+          "preferred_ratio": 1.0,
+          "keep_ratio": 1.0,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "AI硬件链",
+        "score": 28.15,
+        "count": 1,
+        "weighted_count": 1.2,
+        "leader_codes": [
+          "工业富联(601138)"
+        ],
+        "persistence": {
+          "score": 5,
+          "label": "热度衰减",
+          "summary": "主题权重回落；主题分回落；龙头部分延续",
+          "trend": "down",
+          "leader_stability": 1.0
+        },
+        "metrics": {
+          "count_score": 4.26,
+          "leader_score": 16.91,
+          "capital_score": 0.48,
+          "structure_score": 0,
+          "purity_score": 6.5,
+          "persistence_score": 5,
+          "total_flow_yi": 1.98,
+          "avg_flow_yi": 1.98,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 1.0,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "消费电子链",
+        "score": 19.04,
+        "count": 1,
+        "weighted_count": 0.92,
+        "leader_codes": [
+          "立讯精密(002475)"
+        ],
+        "persistence": {
+          "score": 11,
+          "label": "延续但分化",
+          "summary": "主题权重增强；主题分提升；龙头部分延续",
+          "trend": "up",
+          "leader_stability": 1.0
+        },
+        "metrics": {
+          "count_score": 3.26,
+          "leader_score": 15.61,
+          "capital_score": 0.17,
+          "structure_score": 0,
+          "purity_score": 0.0,
+          "persistence_score": 11,
+          "total_flow_yi": 0.7,
+          "avg_flow_yi": 0.7,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 0.0,
+          "hot_ratio": 0.0
+        }
+      }
+    ]
+  },
+  "replay_meta": {
+    "mode": "research_eod_backfill",
+    "trade_date": "2024-01-19",
+    "assumptions": [
+      "历史价格使用东方财富日线K线回放",
+      "历史资金流暂用价格量能代理，不等同真实东方财富日频资金流",
+      "基本面暂用当前快照近似，不等同严格历史披露时点",
+      "股票池暂用当前可取到的池子近似，不等同严格历史成分股"
+    ],
+    "universe_meta": {
+      "pool": "aggressive",
+      "pool_label": "进攻型池(中证500+沪深300)",
+      "universe_size": 594,
+      "hs300_count": 248,
+      "zz500_count": 369,
+      "warnings": []
+    }
+  },
+  "strategies": {
+    "conservative": [],
+    "growth": [
+      {
+        "code": "002517",
+        "name": "恺英网络",
+        "price": 10.67,
+        "change_pct": 7.56,
+        "score": 95.45,
+        "scores": {
+          "technical": 37,
+          "capital": 21,
+          "fundamental": 6,
+          "emotion": 18
+        },
+        "signals": [
+          "均线多头",
+          "强放量",
+          "强势拉升",
+          "主力流入16432.7亿",
+          "PE偏低(18.3)"
+        ],
+        "capital_flow": {
+          "today": 164327245.74,
+          "trend": "连续2日流入",
+          "5day_total": 159642592
+        },
+        "fundamentals": {
+          "pe_ttm": 18.28,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 385.84,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 10.03,
+          "ma10": 10.02,
+          "ma20": 10.16,
+          "high20": 11.82,
+          "low20": 9.48,
+          "position_20d": 0.509
+        },
+        "amount_yi": 13.7,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 10,
+          "tags": [
+            "涨幅强",
+            "资金配合",
+            "连续2日流入"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "恺英网络"
+        },
+        "theme": "游戏传媒链",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ],
+    "rebound": [],
+    "hot": [
+      {
+        "code": "002517",
+        "name": "恺英网络",
+        "price": 10.67,
+        "change_pct": 7.56,
+        "score": 95.45,
+        "scores": {
+          "technical": 37,
+          "capital": 21,
+          "fundamental": 6,
+          "emotion": 18
+        },
+        "signals": [
+          "均线多头",
+          "强放量",
+          "强势拉升",
+          "主力流入16432.7亿",
+          "PE偏低(18.3)"
+        ],
+        "capital_flow": {
+          "today": 164327245.74,
+          "trend": "连续2日流入",
+          "5day_total": 159642592
+        },
+        "fundamentals": {
+          "pe_ttm": 18.28,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 385.84,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 10.03,
+          "ma10": 10.02,
+          "ma20": 10.16,
+          "high20": 11.82,
+          "low20": 9.48,
+          "position_20d": 0.509
+        },
+        "amount_yi": 13.7,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 10,
+          "tags": [
+            "涨幅强",
+            "资金配合",
+            "连续2日流入"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "恺英网络"
+        },
+        "theme": "游戏传媒链",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "002555",
+        "name": "三七互娱",
+        "price": 16.89,
+        "change_pct": 5.43,
+        "score": 92.95,
+        "scores": {
+          "technical": 35,
+          "capital": 21,
+          "fundamental": 6,
+          "emotion": 18
+        },
+        "signals": [
+          "站上MA5",
+          "放量",
+          "低位反弹",
+          "主力流入16485.1亿",
+          "PE偏低(16.0)"
+        ],
+        "capital_flow": {
+          "today": 164851119.18,
+          "trend": "连续2日流入",
+          "5day_total": 228519216
+        },
+        "fundamentals": {
+          "pe_ttm": 16.01,
+          "pb": 3.72,
+          "roe": null,
+          "margin": null,
+          "total_mv": 500.41,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "低位活跃反弹",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 16.04,
+          "ma10": 16.07,
+          "ma20": 16.55,
+          "high20": 21.01,
+          "low20": 15.22,
+          "position_20d": 0.288
+        },
+        "amount_yi": 16.5,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "涨幅强",
+            "资金配合",
+            "连续2日流入",
+            "仍在低位"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "三七互娱"
+        },
+        "theme": "游戏传媒链",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ],
+    "combined": [
+      {
+        "code": "002517",
+        "name": "恺英网络",
+        "price": 10.67,
+        "change_pct": 7.56,
+        "score": 95.45,
+        "scores": {
+          "technical": 37,
+          "capital": 21,
+          "fundamental": 6,
+          "emotion": 18
+        },
+        "signals": [
+          "均线多头",
+          "强放量",
+          "强势拉升",
+          "主力流入16432.7亿",
+          "PE偏低(18.3)"
+        ],
+        "capital_flow": {
+          "today": 164327245.74,
+          "trend": "连续2日流入",
+          "5day_total": 159642592
+        },
+        "fundamentals": {
+          "pe_ttm": 18.28,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 385.84,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 10.03,
+          "ma10": 10.02,
+          "ma20": 10.16,
+          "high20": 11.82,
+          "low20": 9.48,
+          "position_20d": 0.509
+        },
+        "amount_yi": 13.7,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 10,
+          "tags": [
+            "涨幅强",
+            "资金配合",
+            "连续2日流入"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "恺英网络"
+        },
+        "theme": "游戏传媒链",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "002555",
+        "name": "三七互娱",
+        "price": 16.89,
+        "change_pct": 5.43,
+        "score": 92.95,
+        "scores": {
+          "technical": 35,
+          "capital": 21,
+          "fundamental": 6,
+          "emotion": 18
+        },
+        "signals": [
+          "站上MA5",
+          "放量",
+          "低位反弹",
+          "主力流入16485.1亿",
+          "PE偏低(16.0)"
+        ],
+        "capital_flow": {
+          "today": 164851119.18,
+          "trend": "连续2日流入",
+          "5day_total": 228519216
+        },
+        "fundamentals": {
+          "pe_ttm": 16.01,
+          "pb": 3.72,
+          "roe": null,
+          "margin": null,
+          "total_mv": 500.41,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "低位活跃反弹",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 16.04,
+          "ma10": 16.07,
+          "ma20": 16.55,
+          "high20": 21.01,
+          "low20": 15.22,
+          "position_20d": 0.288
+        },
+        "amount_yi": 16.5,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "涨幅强",
+            "资金配合",
+            "连续2日流入",
+            "仍在低位"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "三七互娱"
+        },
+        "theme": "游戏传媒链",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "002156",
+        "name": "通富微电",
+        "price": 21.96,
+        "change_pct": 5.37,
+        "score": 77.75,
+        "scores": {
+          "technical": 31,
+          "capital": 21,
+          "fundamental": 0,
+          "emotion": 12
+        },
+        "signals": [
+          "均线多头",
+          "强放量",
+          "主力流入12564.1亿"
+        ],
+        "capital_flow": {
+          "today": 125640827.11,
+          "trend": "连续2日流入",
+          "5day_total": 185746152
+        },
+        "fundamentals": {
+          "pe_ttm": 62.16,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 713.12,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 21.08,
+          "ma10": 20.76,
+          "ma20": 21.45,
+          "high20": 23.44,
+          "low20": 19.97,
+          "position_20d": 0.573
+        },
+        "amount_yi": 12.0,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 6,
+          "tags": [
+            "换手不足",
+            "涨幅强",
+            "资金配合",
+            "连续2日流入"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "通富微电"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "000977",
+        "name": "浪潮信息",
+        "price": 31.51,
+        "change_pct": 0.38,
+        "score": 68.2,
+        "scores": {
+          "technical": 19,
+          "capital": 27,
+          "fundamental": 1,
+          "emotion": 10
+        },
+        "signals": [
+          "均线多头",
+          "主力流入5353.3亿",
+          "连续3日流入"
+        ],
+        "capital_flow": {
+          "today": 53533075.68,
+          "trend": "连续3日流入",
+          "5day_total": 346742201
+        },
+        "fundamentals": {
+          "pe_ttm": 41.92,
+          "pb": 4.65,
+          "roe": null,
+          "margin": null,
+          "total_mv": 1011.49,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 30.53,
+          "ma10": 30.11,
+          "ma20": 30.95,
+          "high20": 33.79,
+          "low20": 28.51,
+          "position_20d": 0.568
+        },
+        "amount_yi": 26.8,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 9,
+          "tags": [
+            "偏好行业:信息",
+            "涨幅弱",
+            "资金配合",
+            "连续3日流入"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": true,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "name:信息 | 浪潮信息"
+        },
+        "theme": "AI信息链",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "002624",
+        "name": "完美世界",
+        "price": 10.06,
+        "change_pct": 1.72,
+        "score": 51.85,
+        "scores": {
+          "technical": 22,
+          "capital": 21,
+          "fundamental": 1,
+          "emotion": 4
+        },
+        "signals": [
+          "站上MA5",
+          "放量",
+          "低位反弹",
+          "主力流入2061.8亿"
+        ],
+        "capital_flow": {
+          "today": 20617518.42,
+          "trend": "连续2日流入",
+          "5day_total": -17762744
+        },
+        "fundamentals": {
+          "pe_ttm": 42.22,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 374.61,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "低位活跃反弹",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 10.01,
+          "ma10": 10.23,
+          "ma20": 10.59,
+          "high20": 12.65,
+          "low20": 9.53,
+          "position_20d": 0.17
+        },
+        "amount_yi": 5.2,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "downgrade",
+          "bias_score": 0,
+          "tags": [
+            "换手不足",
+            "资金配合",
+            "连续2日流入",
+            "仍在低位"
+          ],
+          "reason": "有一定进攻信号，但不够纯粹，降级观察。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "完美世界"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "600906",
+        "name": "财达证券",
+        "price": 7.24,
+        "change_pct": 1.4,
+        "score": 57.0,
+        "scores": {
+          "technical": 20,
+          "capital": 21,
+          "fundamental": 4,
+          "emotion": 4
+        },
+        "signals": [
+          "均线多头",
+          "放量",
+          "主力流入1351.9亿",
+          "PE合理(23.6)"
+        ],
+        "capital_flow": {
+          "today": 13518782.46,
+          "trend": "连续2日流入",
+          "5day_total": 27962070
+        },
+        "fundamentals": {
+          "pe_ttm": 23.61,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 208.98,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 7.1,
+          "ma10": 7.03,
+          "ma20": 7.09,
+          "high20": 7.42,
+          "low20": 6.82,
+          "position_20d": 0.7
+        },
+        "amount_yi": 4.0,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 7,
+          "tags": [
+            "资金配合",
+            "连续2日流入",
+            "趋势中高位"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "财达证券"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ]
+  }
+}

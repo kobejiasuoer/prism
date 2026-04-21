@@ -1,0 +1,190 @@
+{
+  "timestamp": "2026-04-16 13:46:15",
+  "validation_status": "ok",
+  "validation_errors": [],
+  "source_morning_timestamp": "2026-04-16 10:31:13",
+  "source_scan_timestamp": "2026-04-16 10:31:13",
+  "verified_against_scan_timestamp": "2026-04-16 13:46:05",
+  "target_codes": [
+    "002756",
+    "000657"
+  ],
+  "confirmed": [
+    {
+      "code": "000657",
+      "name": "中钨高新",
+      "tier": "B",
+      "morning_score": 62.5,
+      "status": "confirmed",
+      "reason": "涨幅仍保持为正",
+      "details": [
+        "涨幅仍保持为正",
+        "主力资金仍在配合",
+        "成交额仍在可执行区间",
+        "较晨间维持或改善（分数 +10.00）",
+        "短线反转结构仍在"
+      ],
+      "snapshot": {
+        "setup_type": "low_reversal",
+        "setup_label": "低位反转",
+        "price": 51.9,
+        "change_pct": 10.0,
+        "change_delta": 6.57,
+        "amount_yi": 60.4,
+        "score": 72.5,
+        "score_delta": 10.0,
+        "capital_trend": "今日流入",
+        "flow_today_yi": 11.3,
+        "morning_theme": "",
+        "current_theme": "",
+        "theme_in_play": false,
+        "active_themes": [
+          "新能源链"
+        ],
+        "pullback_level": 48.72,
+        "trigger_level": 55.2,
+        "invalidate_level": 48.2,
+        "ma5": 48.72,
+        "ma10": 48.2,
+        "ma20": 48.86,
+        "confirmation_label": "承接良好",
+        "positives": [
+          "涨幅仍保持为正",
+          "主力资金仍在配合",
+          "成交额仍在可执行区间"
+        ]
+      }
+    }
+  ],
+  "downgraded": [
+    {
+      "code": "002756",
+      "name": "永兴材料",
+      "tier": "B",
+      "morning_score": 61.2,
+      "status": "downgraded",
+      "reason": "盘中综合得分掉到 70 以下",
+      "details": [
+        "盘中综合得分掉到 70 以下"
+      ],
+      "snapshot": {
+        "setup_type": "pullback_continuation",
+        "setup_label": "回踩接力",
+        "price": 78.76,
+        "change_pct": 4.08,
+        "change_delta": 0.99,
+        "amount_yi": 11.5,
+        "score": 66.0,
+        "score_delta": 4.8,
+        "capital_trend": "今日流入",
+        "flow_today_yi": 1.06,
+        "morning_theme": "",
+        "current_theme": "",
+        "theme_in_play": false,
+        "active_themes": [
+          "新能源链"
+        ],
+        "pullback_level": 74.27,
+        "trigger_level": 82.88,
+        "invalidate_level": 73.5,
+        "ma5": 74.27,
+        "ma10": 73.5,
+        "ma20": 71.71,
+        "confirmation_label": "承接失效",
+        "positives": [
+          "涨幅仍保持为正",
+          "主力资金仍在配合",
+          "成交额仍在可执行区间"
+        ]
+      }
+    }
+  ],
+  "items": [
+    {
+      "code": "002756",
+      "name": "永兴材料",
+      "tier": "B",
+      "morning_score": 61.2,
+      "status": "downgraded",
+      "reason": "盘中综合得分掉到 70 以下",
+      "details": [
+        "盘中综合得分掉到 70 以下"
+      ],
+      "snapshot": {
+        "setup_type": "pullback_continuation",
+        "setup_label": "回踩接力",
+        "price": 78.76,
+        "change_pct": 4.08,
+        "change_delta": 0.99,
+        "amount_yi": 11.5,
+        "score": 66.0,
+        "score_delta": 4.8,
+        "capital_trend": "今日流入",
+        "flow_today_yi": 1.06,
+        "morning_theme": "",
+        "current_theme": "",
+        "theme_in_play": false,
+        "active_themes": [
+          "新能源链"
+        ],
+        "pullback_level": 74.27,
+        "trigger_level": 82.88,
+        "invalidate_level": 73.5,
+        "ma5": 74.27,
+        "ma10": 73.5,
+        "ma20": 71.71,
+        "confirmation_label": "承接失效",
+        "positives": [
+          "涨幅仍保持为正",
+          "主力资金仍在配合",
+          "成交额仍在可执行区间"
+        ]
+      }
+    },
+    {
+      "code": "000657",
+      "name": "中钨高新",
+      "tier": "B",
+      "morning_score": 62.5,
+      "status": "confirmed",
+      "reason": "涨幅仍保持为正",
+      "details": [
+        "涨幅仍保持为正",
+        "主力资金仍在配合",
+        "成交额仍在可执行区间",
+        "较晨间维持或改善（分数 +10.00）",
+        "短线反转结构仍在"
+      ],
+      "snapshot": {
+        "setup_type": "low_reversal",
+        "setup_label": "低位反转",
+        "price": 51.9,
+        "change_pct": 10.0,
+        "change_delta": 6.57,
+        "amount_yi": 60.4,
+        "score": 72.5,
+        "score_delta": 10.0,
+        "capital_trend": "今日流入",
+        "flow_today_yi": 11.3,
+        "morning_theme": "",
+        "current_theme": "",
+        "theme_in_play": false,
+        "active_themes": [
+          "新能源链"
+        ],
+        "pullback_level": 48.72,
+        "trigger_level": 55.2,
+        "invalidate_level": 48.2,
+        "ma5": 48.72,
+        "ma10": 48.2,
+        "ma20": 48.86,
+        "confirmation_label": "承接良好",
+        "positives": [
+          "涨幅仍保持为正",
+          "主力资金仍在配合",
+          "成交额仍在可执行区间"
+        ]
+      }
+    }
+  ]
+}

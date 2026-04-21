@@ -1,0 +1,4383 @@
+{
+  "timestamp": "2024-01-24 15:00:00",
+  "source_scan_timestamp": "2024-01-24 15:00:00",
+  "pool": "aggressive",
+  "pool_label": "进攻型池(中证500+沪深300)",
+  "market_regime": {
+    "score": 6,
+    "label": "进攻环境较强",
+    "regime": "aggressive",
+    "attack_ok": true,
+    "summary": "市场活跃度和强势股占比都不错，可正常做进攻型观察。",
+    "basis": "pool",
+    "sample_size": 500,
+    "metrics": {
+      "positive_ratio": 0.816,
+      "avg_change_pct": 1.99,
+      "avg_turnover": 0.67,
+      "strong_ratio": 0.274
+    },
+    "candidate_view": {
+      "score": 6,
+      "label": "进攻环境较强",
+      "regime": "aggressive",
+      "attack_ok": true,
+      "summary": "市场活跃度和强势股占比都不错，可正常做进攻型观察。",
+      "basis": "candidate",
+      "sample_size": 30,
+      "metrics": {
+        "positive_ratio": 1.0,
+        "avg_change_pct": 6.79,
+        "avg_turnover": 1.84,
+        "strong_ratio": 1.0
+      }
+    },
+    "candidate_score_gap": 0,
+    "candidate_gap_note": "候选口径与整体股票池接近，可把候选强度当作环境的辅助参考。",
+    "execution_gate": {
+      "status": "on",
+      "label": "进攻阀门开启",
+      "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+      "position_cap": "0.5-1成试错",
+      "allow_new_positions": true,
+      "allow_handoff": true,
+      "allowed_setups": [
+        "leader_continuation",
+        "breakout_follow",
+        "pullback_continuation",
+        "low_reversal"
+      ],
+      "risk_flags": [
+        "流动性一般"
+      ]
+    }
+  },
+  "market_themes": {
+    "top_theme": "其他",
+    "summary": "今日主线不够集中，更像轮动市，适合精选个股。 主线持续性：持续增强（17分）。",
+    "themes": [
+      {
+        "theme": "其他",
+        "score": 51.83,
+        "count": 30,
+        "weighted_count": 45.08,
+        "leader_codes": [
+          "国盛证券(002670)",
+          "湘财股份(600095)",
+          "财达证券(600906)"
+        ],
+        "persistence": {
+          "score": 17,
+          "label": "持续增强",
+          "summary": "主题权重增强；主题分提升；龙头部分延续",
+          "trend": "up",
+          "leader_stability": 0.33
+        },
+        "metrics": {
+          "count_score": 25,
+          "leader_score": 25,
+          "capital_score": 4.48,
+          "structure_score": 15,
+          "purity_score": 2.5,
+          "persistence_score": 17,
+          "total_flow_yi": 27.55,
+          "avg_flow_yi": 0.92,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 0.97,
+          "hot_ratio": 0.72
+        }
+      }
+    ]
+  },
+  "screening_rules_applied": [
+    "保留 scan.py 已筛出的进攻型候选，按策略分别做二次过滤",
+    "成交额不足或底层 attack_profile 已淘汰的股票，直接排除",
+    "估值过热且盈利偏弱的股票，直接排除或降级观察",
+    "资金延续性不足、短线过热、进攻纯度一般的股票，降级观察",
+    "根据 market_regime 做攻守切换：弱势日压制进攻型通过率，中性日避免满仓追高",
+    "跨策略去重后生成 shortlist，并给出建议送 analyzer 的前 3"
+  ],
+  "strategies": {
+    "conservative": {
+      "label": "稳健",
+      "original_count": 0,
+      "selected_count": 0,
+      "approved_count": 0,
+      "caution_count": 0,
+      "excluded_count": 0,
+      "selected_stocks": [],
+      "top_stocks": [],
+      "excluded_stocks": []
+    },
+    "growth": {
+      "label": "成长",
+      "original_count": 3,
+      "selected_count": 3,
+      "approved_count": 3,
+      "caution_count": 0,
+      "excluded_count": 0,
+      "selected_stocks": [
+        {
+          "code": "600095",
+          "name": "湘财股份",
+          "score": 97.9,
+          "change_pct": 3.06,
+          "amount_yi": 9.4,
+          "theme": "其他",
+          "signals": [
+            "均线强多头",
+            "放量",
+            "接近突破",
+            "主力流入5992.5亿",
+            "连续3日流入"
+          ],
+          "strategy": "growth",
+          "strategy_label": "成长",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续3日流入",
+            "flow_today_yi": 0.6,
+            "consistency_score": 7,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 8.22 上方再试，若回踩 7.81 不破可候补。",
+            "avoid": "高开高走但量能跟不上时不追。",
+            "invalidate": "跌回 7.52 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 8.22,
+              "pullback": 7.81,
+              "invalidate": 7.52
+            }
+          },
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续3日流入",
+            "today_yi": 0.6,
+            "five_day_total_yi": 1.7
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 8,
+            "tags": [
+              "资金配合",
+              "连续3日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 57.78,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "600906",
+          "name": "财达证券",
+          "score": 92.35,
+          "change_pct": 4.04,
+          "amount_yi": 8.0,
+          "theme": "其他",
+          "signals": [
+            "均线强多头",
+            "放量",
+            "接近突破",
+            "主力流入6893.5亿",
+            "PE合理(23.6)"
+          ],
+          "strategy": "growth",
+          "strategy_label": "成长",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 0.69,
+            "consistency_score": 8,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 7.96 上方再试，若回踩 7.35 不破可候补。",
+            "avoid": "高开高走但量能跟不上时不追。",
+            "invalidate": "跌回 7.18 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 7.96,
+              "pullback": 7.35,
+              "invalidate": 7.18
+            }
+          },
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 0.69,
+            "five_day_total_yi": 1.15
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 8,
+            "tags": [
+              "资金配合",
+              "连续2日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 23.61,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "601099",
+          "name": "太平洋",
+          "score": 86.95,
+          "change_pct": 6.73,
+          "amount_yi": 17.0,
+          "theme": "其他",
+          "signals": [
+            "站上MA5",
+            "放量",
+            "主力流入20431.7亿"
+          ],
+          "strategy": "growth",
+          "strategy_label": "成长",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 2.04,
+            "consistency_score": 7,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "pullback_continuation",
+          "setup_label": "回踩接力",
+          "setup_summary": "趋势未坏但不适合追涨，优先看回踩承接后的接力点。",
+          "entry_plan": {
+            "action": "优先等回踩承接，不追已经发散的阳线。",
+            "trigger": "回踩 3.33 一带不破，且资金继续为正，再考虑进场。",
+            "avoid": "脱离支撑过远时不追。",
+            "invalidate": "跌破 3.40 或主题明显转弱就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 3.8,
+              "pullback": 3.33,
+              "invalidate": 3.4
+            }
+          },
+          "entry_reason": "资金驱动走强 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 2.04,
+            "five_day_total_yi": 1.94
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 14,
+            "tags": [
+              "高换手",
+              "涨幅强",
+              "资金配合",
+              "连续2日流入"
+            ]
+          },
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 79.3,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        }
+      ],
+      "top_stocks": [
+        {
+          "code": "600095",
+          "name": "湘财股份",
+          "score": 97.9,
+          "change_pct": 3.06,
+          "amount_yi": 9.4,
+          "theme": "其他",
+          "signals": [
+            "均线强多头",
+            "放量",
+            "接近突破",
+            "主力流入5992.5亿",
+            "连续3日流入"
+          ],
+          "strategy": "growth",
+          "strategy_label": "成长",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续3日流入",
+            "flow_today_yi": 0.6,
+            "consistency_score": 7,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 8.22 上方再试，若回踩 7.81 不破可候补。",
+            "avoid": "高开高走但量能跟不上时不追。",
+            "invalidate": "跌回 7.52 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 8.22,
+              "pullback": 7.81,
+              "invalidate": 7.52
+            }
+          },
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续3日流入",
+            "today_yi": 0.6,
+            "five_day_total_yi": 1.7
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 8,
+            "tags": [
+              "资金配合",
+              "连续3日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 57.78,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "600906",
+          "name": "财达证券",
+          "score": 92.35,
+          "change_pct": 4.04,
+          "amount_yi": 8.0,
+          "theme": "其他",
+          "signals": [
+            "均线强多头",
+            "放量",
+            "接近突破",
+            "主力流入6893.5亿",
+            "PE合理(23.6)"
+          ],
+          "strategy": "growth",
+          "strategy_label": "成长",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 0.69,
+            "consistency_score": 8,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 7.96 上方再试，若回踩 7.35 不破可候补。",
+            "avoid": "高开高走但量能跟不上时不追。",
+            "invalidate": "跌回 7.18 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 7.96,
+              "pullback": 7.35,
+              "invalidate": 7.18
+            }
+          },
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 0.69,
+            "five_day_total_yi": 1.15
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 8,
+            "tags": [
+              "资金配合",
+              "连续2日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 23.61,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "601099",
+          "name": "太平洋",
+          "score": 86.95,
+          "change_pct": 6.73,
+          "amount_yi": 17.0,
+          "theme": "其他",
+          "signals": [
+            "站上MA5",
+            "放量",
+            "主力流入20431.7亿"
+          ],
+          "strategy": "growth",
+          "strategy_label": "成长",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 2.04,
+            "consistency_score": 7,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "pullback_continuation",
+          "setup_label": "回踩接力",
+          "setup_summary": "趋势未坏但不适合追涨，优先看回踩承接后的接力点。",
+          "entry_plan": {
+            "action": "优先等回踩承接，不追已经发散的阳线。",
+            "trigger": "回踩 3.33 一带不破，且资金继续为正，再考虑进场。",
+            "avoid": "脱离支撑过远时不追。",
+            "invalidate": "跌破 3.40 或主题明显转弱就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 3.8,
+              "pullback": 3.33,
+              "invalidate": 3.4
+            }
+          },
+          "entry_reason": "资金驱动走强 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 2.04,
+            "five_day_total_yi": 1.94
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 14,
+            "tags": [
+              "高换手",
+              "涨幅强",
+              "资金配合",
+              "连续2日流入"
+            ]
+          },
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 79.3,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        }
+      ],
+      "excluded_stocks": []
+    },
+    "rebound": {
+      "label": "反弹",
+      "original_count": 0,
+      "selected_count": 0,
+      "approved_count": 0,
+      "caution_count": 0,
+      "excluded_count": 0,
+      "selected_stocks": [],
+      "top_stocks": [],
+      "excluded_stocks": []
+    },
+    "hot": {
+      "label": "热门",
+      "original_count": 4,
+      "selected_count": 4,
+      "approved_count": 3,
+      "caution_count": 1,
+      "excluded_count": 0,
+      "selected_stocks": [
+        {
+          "code": "600095",
+          "name": "湘财股份",
+          "score": 97.9,
+          "change_pct": 3.06,
+          "amount_yi": 9.4,
+          "theme": "其他",
+          "signals": [
+            "均线强多头",
+            "放量",
+            "接近突破",
+            "主力流入5992.5亿",
+            "连续3日流入"
+          ],
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续3日流入",
+            "flow_today_yi": 0.6,
+            "consistency_score": 7,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 8.22 上方再试，若回踩 7.81 不破可候补。",
+            "avoid": "高开高走但量能跟不上时不追。",
+            "invalidate": "跌回 7.52 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 8.22,
+              "pullback": 7.81,
+              "invalidate": 7.52
+            }
+          },
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续3日流入",
+            "today_yi": 0.6,
+            "five_day_total_yi": 1.7
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 8,
+            "tags": [
+              "资金配合",
+              "连续3日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 57.78,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "600906",
+          "name": "财达证券",
+          "score": 92.35,
+          "change_pct": 4.04,
+          "amount_yi": 8.0,
+          "theme": "其他",
+          "signals": [
+            "均线强多头",
+            "放量",
+            "接近突破",
+            "主力流入6893.5亿",
+            "PE合理(23.6)"
+          ],
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 0.69,
+            "consistency_score": 8,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 7.96 上方再试，若回踩 7.35 不破可候补。",
+            "avoid": "高开高走但量能跟不上时不追。",
+            "invalidate": "跌回 7.18 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 7.96,
+              "pullback": 7.35,
+              "invalidate": 7.18
+            }
+          },
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 0.69,
+            "five_day_total_yi": 1.15
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 8,
+            "tags": [
+              "资金配合",
+              "连续2日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 23.61,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "601099",
+          "name": "太平洋",
+          "score": 86.95,
+          "change_pct": 6.73,
+          "amount_yi": 17.0,
+          "theme": "其他",
+          "signals": [
+            "站上MA5",
+            "放量",
+            "主力流入20431.7亿"
+          ],
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 2.04,
+            "consistency_score": 7,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "pullback_continuation",
+          "setup_label": "回踩接力",
+          "setup_summary": "趋势未坏但不适合追涨，优先看回踩承接后的接力点。",
+          "entry_plan": {
+            "action": "优先等回踩承接，不追已经发散的阳线。",
+            "trigger": "回踩 3.33 一带不破，且资金继续为正，再考虑进场。",
+            "avoid": "脱离支撑过远时不追。",
+            "invalidate": "跌破 3.40 或主题明显转弱就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 3.8,
+              "pullback": 3.33,
+              "invalidate": 3.4
+            }
+          },
+          "entry_reason": "资金驱动走强 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 2.04,
+            "five_day_total_yi": 1.94
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 14,
+            "tags": [
+              "高换手",
+              "涨幅强",
+              "资金配合",
+              "连续2日流入"
+            ]
+          },
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 79.3,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "002670",
+          "name": "国盛证券",
+          "score": 103.9,
+          "change_pct": 7.1,
+          "amount_yi": 17.8,
+          "theme": "其他",
+          "signals": [
+            "均线强多头",
+            "强势拉升",
+            "接近突破",
+            "主力流入21410.6亿",
+            "连续3日流入"
+          ],
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "screening": {
+            "status": "caution",
+            "reason": "短线偏热，提防冲高回落",
+            "notes": [
+              "短线偏热，提防冲高回落",
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [
+              "短线偏热，提防冲高回落"
+            ],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "连续3日流入",
+            "flow_today_yi": 2.14,
+            "consistency_score": 4,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 11.78 上方再试，若回踩 10.42 不破可候补。",
+            "avoid": "情绪偏热，第一波拉高不追，优先等换手后的二次机会。",
+            "invalidate": "跌回 9.94 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 11.78,
+              "pullback": 10.42,
+              "invalidate": 9.94
+            }
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "估值偏高",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续3日流入",
+            "today_yi": 2.14,
+            "five_day_total_yi": 4.91
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 12,
+            "tags": [
+              "高换手",
+              "涨幅强",
+              "资金配合",
+              "连续3日流入"
+            ]
+          },
+          "consistency": {
+            "score": 4,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 86.94,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        }
+      ],
+      "top_stocks": [
+        {
+          "code": "600095",
+          "name": "湘财股份",
+          "score": 97.9,
+          "change_pct": 3.06,
+          "amount_yi": 9.4,
+          "theme": "其他",
+          "signals": [
+            "均线强多头",
+            "放量",
+            "接近突破",
+            "主力流入5992.5亿",
+            "连续3日流入"
+          ],
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续3日流入",
+            "flow_today_yi": 0.6,
+            "consistency_score": 7,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 8.22 上方再试，若回踩 7.81 不破可候补。",
+            "avoid": "高开高走但量能跟不上时不追。",
+            "invalidate": "跌回 7.52 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 8.22,
+              "pullback": 7.81,
+              "invalidate": 7.52
+            }
+          },
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续3日流入",
+            "today_yi": 0.6,
+            "five_day_total_yi": 1.7
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 8,
+            "tags": [
+              "资金配合",
+              "连续3日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 57.78,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "600906",
+          "name": "财达证券",
+          "score": 92.35,
+          "change_pct": 4.04,
+          "amount_yi": 8.0,
+          "theme": "其他",
+          "signals": [
+            "均线强多头",
+            "放量",
+            "接近突破",
+            "主力流入6893.5亿",
+            "PE合理(23.6)"
+          ],
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 0.69,
+            "consistency_score": 8,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 7.96 上方再试，若回踩 7.35 不破可候补。",
+            "avoid": "高开高走但量能跟不上时不追。",
+            "invalidate": "跌回 7.18 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 7.96,
+              "pullback": 7.35,
+              "invalidate": 7.18
+            }
+          },
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 0.69,
+            "five_day_total_yi": 1.15
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 8,
+            "tags": [
+              "资金配合",
+              "连续2日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 23.61,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "601099",
+          "name": "太平洋",
+          "score": 86.95,
+          "change_pct": 6.73,
+          "amount_yi": 17.0,
+          "theme": "其他",
+          "signals": [
+            "站上MA5",
+            "放量",
+            "主力流入20431.7亿"
+          ],
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 2.04,
+            "consistency_score": 7,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "pullback_continuation",
+          "setup_label": "回踩接力",
+          "setup_summary": "趋势未坏但不适合追涨，优先看回踩承接后的接力点。",
+          "entry_plan": {
+            "action": "优先等回踩承接，不追已经发散的阳线。",
+            "trigger": "回踩 3.33 一带不破，且资金继续为正，再考虑进场。",
+            "avoid": "脱离支撑过远时不追。",
+            "invalidate": "跌破 3.40 或主题明显转弱就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 3.8,
+              "pullback": 3.33,
+              "invalidate": 3.4
+            }
+          },
+          "entry_reason": "资金驱动走强 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 2.04,
+            "five_day_total_yi": 1.94
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 14,
+            "tags": [
+              "高换手",
+              "涨幅强",
+              "资金配合",
+              "连续2日流入"
+            ]
+          },
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 79.3,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "002670",
+          "name": "国盛证券",
+          "score": 103.9,
+          "change_pct": 7.1,
+          "amount_yi": 17.8,
+          "theme": "其他",
+          "signals": [
+            "均线强多头",
+            "强势拉升",
+            "接近突破",
+            "主力流入21410.6亿",
+            "连续3日流入"
+          ],
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "screening": {
+            "status": "caution",
+            "reason": "短线偏热，提防冲高回落",
+            "notes": [
+              "短线偏热，提防冲高回落",
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [
+              "短线偏热，提防冲高回落"
+            ],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "连续3日流入",
+            "flow_today_yi": 2.14,
+            "consistency_score": 4,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 11.78 上方再试，若回踩 10.42 不破可候补。",
+            "avoid": "情绪偏热，第一波拉高不追，优先等换手后的二次机会。",
+            "invalidate": "跌回 9.94 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 11.78,
+              "pullback": 10.42,
+              "invalidate": 9.94
+            }
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "估值偏高",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续3日流入",
+            "today_yi": 2.14,
+            "five_day_total_yi": 4.91
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 12,
+            "tags": [
+              "高换手",
+              "涨幅强",
+              "资金配合",
+              "连续3日流入"
+            ]
+          },
+          "consistency": {
+            "score": 4,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 86.94,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        }
+      ],
+      "excluded_stocks": []
+    },
+    "combined": {
+      "label": "综合",
+      "original_count": 10,
+      "selected_count": 10,
+      "approved_count": 6,
+      "caution_count": 4,
+      "excluded_count": 0,
+      "selected_stocks": [
+        {
+          "code": "600095",
+          "name": "湘财股份",
+          "score": 97.9,
+          "change_pct": 3.06,
+          "amount_yi": 9.4,
+          "theme": "其他",
+          "signals": [
+            "均线强多头",
+            "放量",
+            "接近突破",
+            "主力流入5992.5亿",
+            "连续3日流入"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续3日流入",
+            "flow_today_yi": 0.6,
+            "consistency_score": 7,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 8.22 上方再试，若回踩 7.81 不破可候补。",
+            "avoid": "高开高走但量能跟不上时不追。",
+            "invalidate": "跌回 7.52 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 8.22,
+              "pullback": 7.81,
+              "invalidate": 7.52
+            }
+          },
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续3日流入",
+            "today_yi": 0.6,
+            "five_day_total_yi": 1.7
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 8,
+            "tags": [
+              "资金配合",
+              "连续3日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 57.78,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "600906",
+          "name": "财达证券",
+          "score": 92.35,
+          "change_pct": 4.04,
+          "amount_yi": 8.0,
+          "theme": "其他",
+          "signals": [
+            "均线强多头",
+            "放量",
+            "接近突破",
+            "主力流入6893.5亿",
+            "PE合理(23.6)"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 0.69,
+            "consistency_score": 8,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 7.96 上方再试，若回踩 7.35 不破可候补。",
+            "avoid": "高开高走但量能跟不上时不追。",
+            "invalidate": "跌回 7.18 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 7.96,
+              "pullback": 7.35,
+              "invalidate": 7.18
+            }
+          },
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 0.69,
+            "five_day_total_yi": 1.15
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 8,
+            "tags": [
+              "资金配合",
+              "连续2日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 23.61,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "601099",
+          "name": "太平洋",
+          "score": 86.95,
+          "change_pct": 6.73,
+          "amount_yi": 17.0,
+          "theme": "其他",
+          "signals": [
+            "站上MA5",
+            "放量",
+            "主力流入20431.7亿"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 2.04,
+            "consistency_score": 7,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "pullback_continuation",
+          "setup_label": "回踩接力",
+          "setup_summary": "趋势未坏但不适合追涨，优先看回踩承接后的接力点。",
+          "entry_plan": {
+            "action": "优先等回踩承接，不追已经发散的阳线。",
+            "trigger": "回踩 3.33 一带不破，且资金继续为正，再考虑进场。",
+            "avoid": "脱离支撑过远时不追。",
+            "invalidate": "跌破 3.40 或主题明显转弱就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 3.8,
+              "pullback": 3.33,
+              "invalidate": 3.4
+            }
+          },
+          "entry_reason": "资金驱动走强 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 2.04,
+            "five_day_total_yi": 1.94
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 14,
+            "tags": [
+              "高换手",
+              "涨幅强",
+              "资金配合",
+              "连续2日流入"
+            ]
+          },
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 79.3,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "002926",
+          "name": "华西证券",
+          "score": 84.8,
+          "change_pct": 5.07,
+          "amount_yi": 4.7,
+          "theme": "其他",
+          "signals": [
+            "均线多头",
+            "放量",
+            "接近突破",
+            "主力流入4790.8亿",
+            "PE偏低(16.0)"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "approved",
+            "reason": "主力资金仍为净流入",
+            "notes": [
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 0.48,
+            "consistency_score": 7,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "进攻风格匹配",
+              "估值盈利匹配尚可"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 7.92 上方再试，若回踩 7.47 不破可候补。",
+            "avoid": "高开高走但量能跟不上时不追。",
+            "invalidate": "跌回 7.36 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 7.92,
+              "pullback": 7.47,
+              "invalidate": 7.36
+            }
+          },
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 0.48,
+            "five_day_total_yi": 0.7
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 9,
+            "tags": [
+              "低换手脉冲",
+              "涨幅强",
+              "资金配合",
+              "连续2日流入"
+            ]
+          },
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "进攻风格匹配",
+              "估值盈利匹配尚可"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 16.02,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "601059",
+          "name": "信达证券",
+          "score": 84.75,
+          "change_pct": 4.86,
+          "amount_yi": 14.8,
+          "theme": "其他",
+          "signals": [
+            "均线多头",
+            "接近突破",
+            "主力流入15986.3亿",
+            "连续3日流入",
+            "PE合理(28.9)"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续3日流入",
+            "flow_today_yi": 1.6,
+            "consistency_score": 8,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 19.65 上方再试，若回踩 17.58 不破可候补。",
+            "avoid": "高开高走但量能跟不上时不追。",
+            "invalidate": "跌回 17.01 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 19.65,
+              "pullback": 17.58,
+              "invalidate": 17.01
+            }
+          },
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续3日流入",
+            "today_yi": 1.6,
+            "five_day_total_yi": 3.66
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 8,
+            "tags": [
+              "资金配合",
+              "连续3日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 28.94,
+            "roe": null,
+            "pb": 2.6,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "002085",
+          "name": "万丰奥威",
+          "score": 74.0,
+          "change_pct": 4.77,
+          "amount_yi": 6.2,
+          "theme": "其他",
+          "signals": [
+            "站上MA5",
+            "强放量",
+            "接近突破",
+            "主力流入5655.8亿",
+            "PE合理(31.1)"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "approved",
+            "reason": "主力资金仍为净流入",
+            "notes": [
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 0.57,
+            "consistency_score": 7,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "进攻风格匹配",
+              "估值盈利匹配尚可"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 5.39 上方再试，若回踩 4.95 不破可候补。",
+            "avoid": "高开高走但量能跟不上时不追。",
+            "invalidate": "跌回 4.96 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 5.39,
+              "pullback": 4.95,
+              "invalidate": 4.96
+            }
+          },
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 0.57,
+            "five_day_total_yi": 0.51
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 5,
+            "tags": [
+              "低换手脉冲",
+              "资金配合",
+              "连续2日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "进攻风格匹配",
+              "估值盈利匹配尚可"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 31.06,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "002670",
+          "name": "国盛证券",
+          "score": 103.9,
+          "change_pct": 7.1,
+          "amount_yi": 17.8,
+          "theme": "其他",
+          "signals": [
+            "均线强多头",
+            "强势拉升",
+            "接近突破",
+            "主力流入21410.6亿",
+            "连续3日流入"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "caution",
+            "reason": "短线偏热，提防冲高回落",
+            "notes": [
+              "短线偏热，提防冲高回落",
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [
+              "短线偏热，提防冲高回落"
+            ],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "连续3日流入",
+            "flow_today_yi": 2.14,
+            "consistency_score": 4,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 11.78 上方再试，若回踩 10.42 不破可候补。",
+            "avoid": "情绪偏热，第一波拉高不追，优先等换手后的二次机会。",
+            "invalidate": "跌回 9.94 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 11.78,
+              "pullback": 10.42,
+              "invalidate": 9.94
+            }
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "估值偏高",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续3日流入",
+            "today_yi": 2.14,
+            "five_day_total_yi": 4.91
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 12,
+            "tags": [
+              "高换手",
+              "涨幅强",
+              "资金配合",
+              "连续3日流入"
+            ]
+          },
+          "consistency": {
+            "score": 4,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 86.94,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "601788",
+          "name": "光大证券",
+          "score": 84.35,
+          "change_pct": 10.39,
+          "amount_yi": 13.4,
+          "theme": "其他",
+          "signals": [
+            "均线多头",
+            "强放量",
+            "强势拉升",
+            "接近突破",
+            "主力流入16095.0亿"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "caution",
+            "reason": "情绪过热，提防次日冲高回落",
+            "notes": [
+              "情绪过热，提防次日冲高回落",
+              "接近或已触及涨停，次日分歧风险高",
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [
+              "情绪过热，提防次日冲高回落",
+              "接近或已触及涨停，次日分歧风险高"
+            ],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 1.61,
+            "consistency_score": 5,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 15.40 上方再试，若回踩 14.17 不破可候补。",
+            "avoid": "情绪偏热，第一波拉高不追，优先等换手后的二次机会。",
+            "invalidate": "跌回 14.03 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 15.4,
+              "pullback": 14.17,
+              "invalidate": 14.03
+            }
+          },
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "高位大涨，次日分歧风险",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 1.61,
+            "five_day_total_yi": 1.74
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 9,
+            "tags": [
+              "低换手脉冲",
+              "涨幅强",
+              "资金配合",
+              "连续2日流入"
+            ]
+          },
+          "consistency": {
+            "score": 5,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 19.28,
+            "roe": null,
+            "pb": 1.18,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "000951",
+          "name": "中国重汽",
+          "score": 82.1,
+          "change_pct": 9.79,
+          "amount_yi": 5.7,
+          "theme": "其他",
+          "signals": [
+            "站上MA5",
+            "强放量",
+            "强势拉升",
+            "接近突破",
+            "主力流入6840.9亿"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "caution",
+            "reason": "短线偏热，提防冲高回落",
+            "notes": [
+              "短线偏热，提防冲高回落",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [
+              "短线偏热，提防冲高回落"
+            ],
+            "positive_signals": [
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 0.68,
+            "consistency_score": 6,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "进攻风格匹配",
+              "估值盈利匹配尚可"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 13.13 上方再试，若回踩 11.99 不破可候补。",
+            "avoid": "情绪偏热，第一波拉高不追，优先等换手后的二次机会。",
+            "invalidate": "跌回 12.23 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 13.13,
+              "pullback": 11.99,
+              "invalidate": 12.23
+            }
+          },
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "高位大涨，次日分歧风险",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 0.68,
+            "five_day_total_yi": 0.53
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 9,
+            "tags": [
+              "低换手脉冲",
+              "涨幅强",
+              "资金配合",
+              "连续2日流入"
+            ]
+          },
+          "consistency": {
+            "score": 6,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "进攻风格匹配",
+              "估值盈利匹配尚可"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 16.55,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "000563",
+          "name": "陕国投A",
+          "score": 77.6,
+          "change_pct": 9.26,
+          "amount_yi": 4.2,
+          "theme": "其他",
+          "signals": [
+            "站上MA5",
+            "强放量",
+            "强势拉升",
+            "接近突破",
+            "主力流入5090.7亿"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "caution",
+            "reason": "情绪过热，提防次日冲高回落",
+            "notes": [
+              "情绪过热，提防次日冲高回落",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [
+              "情绪过热，提防次日冲高回落"
+            ],
+            "positive_signals": [
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 0.51,
+            "consistency_score": 5,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "进攻风格匹配",
+              "估值盈利匹配尚可"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 2.99 上方再试，若回踩 2.77 不破可候补。",
+            "avoid": "情绪偏热，第一波拉高不追，优先等换手后的二次机会。",
+            "invalidate": "跌回 2.79 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 2.99,
+              "pullback": 2.77,
+              "invalidate": 2.79
+            }
+          },
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "高位大涨，次日分歧风险",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 0.51,
+            "five_day_total_yi": 0.4
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 9,
+            "tags": [
+              "低换手脉冲",
+              "涨幅强",
+              "资金配合",
+              "连续2日流入"
+            ]
+          },
+          "consistency": {
+            "score": 5,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "进攻风格匹配",
+              "估值盈利匹配尚可"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 12.1,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        }
+      ],
+      "top_stocks": [
+        {
+          "code": "600095",
+          "name": "湘财股份",
+          "score": 97.9,
+          "change_pct": 3.06,
+          "amount_yi": 9.4,
+          "theme": "其他",
+          "signals": [
+            "均线强多头",
+            "放量",
+            "接近突破",
+            "主力流入5992.5亿",
+            "连续3日流入"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续3日流入",
+            "flow_today_yi": 0.6,
+            "consistency_score": 7,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 8.22 上方再试，若回踩 7.81 不破可候补。",
+            "avoid": "高开高走但量能跟不上时不追。",
+            "invalidate": "跌回 7.52 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 8.22,
+              "pullback": 7.81,
+              "invalidate": 7.52
+            }
+          },
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续3日流入",
+            "today_yi": 0.6,
+            "five_day_total_yi": 1.7
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 8,
+            "tags": [
+              "资金配合",
+              "连续3日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 57.78,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "600906",
+          "name": "财达证券",
+          "score": 92.35,
+          "change_pct": 4.04,
+          "amount_yi": 8.0,
+          "theme": "其他",
+          "signals": [
+            "均线强多头",
+            "放量",
+            "接近突破",
+            "主力流入6893.5亿",
+            "PE合理(23.6)"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 0.69,
+            "consistency_score": 8,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 7.96 上方再试，若回踩 7.35 不破可候补。",
+            "avoid": "高开高走但量能跟不上时不追。",
+            "invalidate": "跌回 7.18 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 7.96,
+              "pullback": 7.35,
+              "invalidate": 7.18
+            }
+          },
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 0.69,
+            "five_day_total_yi": 1.15
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 8,
+            "tags": [
+              "资金配合",
+              "连续2日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 23.61,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "601099",
+          "name": "太平洋",
+          "score": 86.95,
+          "change_pct": 6.73,
+          "amount_yi": 17.0,
+          "theme": "其他",
+          "signals": [
+            "站上MA5",
+            "放量",
+            "主力流入20431.7亿"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 2.04,
+            "consistency_score": 7,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "pullback_continuation",
+          "setup_label": "回踩接力",
+          "setup_summary": "趋势未坏但不适合追涨，优先看回踩承接后的接力点。",
+          "entry_plan": {
+            "action": "优先等回踩承接，不追已经发散的阳线。",
+            "trigger": "回踩 3.33 一带不破，且资金继续为正，再考虑进场。",
+            "avoid": "脱离支撑过远时不追。",
+            "invalidate": "跌破 3.40 或主题明显转弱就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 3.8,
+              "pullback": 3.33,
+              "invalidate": 3.4
+            }
+          },
+          "entry_reason": "资金驱动走强 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 2.04,
+            "five_day_total_yi": 1.94
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 14,
+            "tags": [
+              "高换手",
+              "涨幅强",
+              "资金配合",
+              "连续2日流入"
+            ]
+          },
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 79.3,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "002926",
+          "name": "华西证券",
+          "score": 84.8,
+          "change_pct": 5.07,
+          "amount_yi": 4.7,
+          "theme": "其他",
+          "signals": [
+            "均线多头",
+            "放量",
+            "接近突破",
+            "主力流入4790.8亿",
+            "PE偏低(16.0)"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "approved",
+            "reason": "主力资金仍为净流入",
+            "notes": [
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 0.48,
+            "consistency_score": 7,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "进攻风格匹配",
+              "估值盈利匹配尚可"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 7.92 上方再试，若回踩 7.47 不破可候补。",
+            "avoid": "高开高走但量能跟不上时不追。",
+            "invalidate": "跌回 7.36 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 7.92,
+              "pullback": 7.47,
+              "invalidate": 7.36
+            }
+          },
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 0.48,
+            "five_day_total_yi": 0.7
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 9,
+            "tags": [
+              "低换手脉冲",
+              "涨幅强",
+              "资金配合",
+              "连续2日流入"
+            ]
+          },
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "进攻风格匹配",
+              "估值盈利匹配尚可"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 16.02,
+            "roe": null,
+            "pb": null,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        },
+        {
+          "code": "601059",
+          "name": "信达证券",
+          "score": 84.75,
+          "change_pct": 4.86,
+          "amount_yi": 14.8,
+          "theme": "其他",
+          "signals": [
+            "均线多头",
+            "接近突破",
+            "主力流入15986.3亿",
+            "连续3日流入",
+            "PE合理(28.9)"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续3日流入",
+            "flow_today_yi": 1.6,
+            "consistency_score": 8,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ],
+            "execution_gate_status": "on"
+          },
+          "setup_type": "breakout_follow",
+          "setup_label": "突破跟随",
+          "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+          "entry_plan": {
+            "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+            "trigger": "放量站稳 19.65 上方再试，若回踩 17.58 不破可候补。",
+            "avoid": "高开高走但量能跟不上时不追。",
+            "invalidate": "跌回 17.01 下方或主力转负就取消。",
+            "sizing": "",
+            "levels": {
+              "trigger": 19.65,
+              "pullback": 17.58,
+              "invalidate": 17.01
+            }
+          },
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续3日流入",
+            "today_yi": 1.6,
+            "five_day_total_yi": 3.66
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 8,
+            "tags": [
+              "资金配合",
+              "连续3日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 28.94,
+            "roe": null,
+            "pb": 2.6,
+            "net_profit": null
+          },
+          "notice_risk_tags": [],
+          "execution_gate": {
+            "status": "on",
+            "label": "进攻阀门开启",
+            "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+            "position_cap": "0.5-1成试错"
+          }
+        }
+      ],
+      "excluded_stocks": []
+    }
+  },
+  "shortlist": [
+    {
+      "code": "600095",
+      "name": "湘财股份",
+      "best_score": 97.9,
+      "change_pct": 3.06,
+      "amount_yi": 9.4,
+      "strategy_hits": [
+        "growth",
+        "hot",
+        "combined"
+      ],
+      "strategy_labels": [
+        "成长",
+        "热门",
+        "综合"
+      ],
+      "themes": [
+        "其他"
+      ],
+      "entry_reason": "趋势突破+资金配合",
+      "main_risk": "留意次日承接强度",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "signals": [
+        "均线强多头",
+        "放量",
+        "接近突破",
+        "主力流入5992.5亿",
+        "连续3日流入"
+      ],
+      "setup_type": "breakout_follow",
+      "setup_label": "突破跟随",
+      "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+      "entry_plan": {
+        "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+        "trigger": "放量站稳 8.22 上方再试，若回踩 7.81 不破可候补。",
+        "avoid": "高开高走但量能跟不上时不追。",
+        "invalidate": "跌回 7.52 下方或主力转负就取消。",
+        "sizing": "0.5-1成试错",
+        "levels": {
+          "trigger": 8.22,
+          "pullback": 7.81,
+          "invalidate": 7.52
+        }
+      },
+      "screening_reasons": [
+        "成交额充足"
+      ],
+      "capital_flow": {
+        "trend": "连续3日流入",
+        "today_yi": 0.6,
+        "five_day_total_yi": 1.7
+      },
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 8,
+        "tags": [
+          "资金配合",
+          "连续3日流入",
+          "趋势突破区"
+        ]
+      },
+      "fundamentals": {
+        "pe_ttm": 57.78,
+        "roe": null,
+        "pb": null,
+        "net_profit": null
+      },
+      "consistency": {
+        "score": 7,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "流动性支持",
+          "进攻风格匹配"
+        ]
+      },
+      "variants": [
+        {
+          "strategy": "growth",
+          "strategy_label": "成长",
+          "score": 97.9,
+          "status": "approved",
+          "reason": "成交额充足",
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        },
+        {
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "score": 97.9,
+          "status": "approved",
+          "reason": "成交额充足",
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        },
+        {
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "score": 97.9,
+          "status": "approved",
+          "reason": "成交额充足",
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        }
+      ],
+      "screening_status": "approved",
+      "screening_note": "成交额充足",
+      "strategy_count": 3,
+      "approved_hits": 3,
+      "caution_hits": 0,
+      "priority_score": 126.4,
+      "tier": "A",
+      "tier_note": "可直接送 analyzer",
+      "tier_rank": 3,
+      "execution_gate": {
+        "status": "on",
+        "label": "进攻阀门开启",
+        "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+        "position_cap": "0.5-1成试错"
+      }
+    },
+    {
+      "code": "600906",
+      "name": "财达证券",
+      "best_score": 92.35,
+      "change_pct": 4.04,
+      "amount_yi": 8.0,
+      "strategy_hits": [
+        "growth",
+        "hot",
+        "combined"
+      ],
+      "strategy_labels": [
+        "成长",
+        "热门",
+        "综合"
+      ],
+      "themes": [
+        "其他"
+      ],
+      "entry_reason": "趋势突破+资金配合",
+      "main_risk": "留意次日承接强度",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "signals": [
+        "均线强多头",
+        "放量",
+        "接近突破",
+        "主力流入6893.5亿",
+        "PE合理(23.6)"
+      ],
+      "setup_type": "breakout_follow",
+      "setup_label": "突破跟随",
+      "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+      "entry_plan": {
+        "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+        "trigger": "放量站稳 7.96 上方再试，若回踩 7.35 不破可候补。",
+        "avoid": "高开高走但量能跟不上时不追。",
+        "invalidate": "跌回 7.18 下方或主力转负就取消。",
+        "sizing": "0.5-1成试错",
+        "levels": {
+          "trigger": 7.96,
+          "pullback": 7.35,
+          "invalidate": 7.18
+        }
+      },
+      "screening_reasons": [
+        "成交额充足"
+      ],
+      "capital_flow": {
+        "trend": "连续2日流入",
+        "today_yi": 0.69,
+        "five_day_total_yi": 1.15
+      },
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 8,
+        "tags": [
+          "资金配合",
+          "连续2日流入",
+          "趋势突破区"
+        ]
+      },
+      "fundamentals": {
+        "pe_ttm": 23.61,
+        "roe": null,
+        "pb": null,
+        "net_profit": null
+      },
+      "consistency": {
+        "score": 8,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "流动性支持",
+          "进攻风格匹配"
+        ]
+      },
+      "variants": [
+        {
+          "strategy": "growth",
+          "strategy_label": "成长",
+          "score": 92.35,
+          "status": "approved",
+          "reason": "成交额充足",
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        },
+        {
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "score": 92.35,
+          "status": "approved",
+          "reason": "成交额充足",
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        },
+        {
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "score": 92.35,
+          "status": "approved",
+          "reason": "成交额充足",
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        }
+      ],
+      "screening_status": "approved",
+      "screening_note": "成交额充足",
+      "strategy_count": 3,
+      "approved_hits": 3,
+      "caution_hits": 0,
+      "priority_score": 122.35,
+      "tier": "A",
+      "tier_note": "可直接送 analyzer",
+      "tier_rank": 3,
+      "execution_gate": {
+        "status": "on",
+        "label": "进攻阀门开启",
+        "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+        "position_cap": "0.5-1成试错"
+      }
+    },
+    {
+      "code": "601099",
+      "name": "太平洋",
+      "best_score": 86.95,
+      "change_pct": 6.73,
+      "amount_yi": 17.0,
+      "strategy_hits": [
+        "growth",
+        "hot",
+        "combined"
+      ],
+      "strategy_labels": [
+        "成长",
+        "热门",
+        "综合"
+      ],
+      "themes": [
+        "其他"
+      ],
+      "entry_reason": "资金驱动走强 + 换手充分",
+      "main_risk": "留意次日承接强度",
+      "watch_condition": "继续放量上攻再确认；主力资金别转负",
+      "signals": [
+        "站上MA5",
+        "放量",
+        "主力流入20431.7亿"
+      ],
+      "setup_type": "pullback_continuation",
+      "setup_label": "回踩接力",
+      "setup_summary": "趋势未坏但不适合追涨，优先看回踩承接后的接力点。",
+      "entry_plan": {
+        "action": "优先等回踩承接，不追已经发散的阳线。",
+        "trigger": "回踩 3.33 一带不破，且资金继续为正，再考虑进场。",
+        "avoid": "脱离支撑过远时不追。",
+        "invalidate": "跌破 3.40 或主题明显转弱就取消。",
+        "sizing": "0.5-1成试错",
+        "levels": {
+          "trigger": 3.8,
+          "pullback": 3.33,
+          "invalidate": 3.4
+        }
+      },
+      "screening_reasons": [
+        "成交额充足"
+      ],
+      "capital_flow": {
+        "trend": "连续2日流入",
+        "today_yi": 2.04,
+        "five_day_total_yi": 1.94
+      },
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 14,
+        "tags": [
+          "高换手",
+          "涨幅强",
+          "资金配合",
+          "连续2日流入"
+        ]
+      },
+      "fundamentals": {
+        "pe_ttm": 79.3,
+        "roe": null,
+        "pb": null,
+        "net_profit": null
+      },
+      "consistency": {
+        "score": 7,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "流动性支持",
+          "进攻风格匹配"
+        ]
+      },
+      "variants": [
+        {
+          "strategy": "growth",
+          "strategy_label": "成长",
+          "score": 86.95,
+          "status": "approved",
+          "reason": "成交额充足",
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        },
+        {
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "score": 86.95,
+          "status": "approved",
+          "reason": "成交额充足",
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        },
+        {
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "score": 86.95,
+          "status": "approved",
+          "reason": "成交额充足",
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        }
+      ],
+      "screening_status": "approved",
+      "screening_note": "成交额充足",
+      "strategy_count": 3,
+      "approved_hits": 3,
+      "caution_hits": 0,
+      "priority_score": 115.45,
+      "tier": "A",
+      "tier_note": "可直接送 analyzer",
+      "tier_rank": 3,
+      "execution_gate": {
+        "status": "on",
+        "label": "进攻阀门开启",
+        "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+        "position_cap": "0.5-1成试错"
+      }
+    },
+    {
+      "code": "601059",
+      "name": "信达证券",
+      "best_score": 84.75,
+      "change_pct": 4.86,
+      "amount_yi": 14.8,
+      "strategy_hits": [
+        "combined"
+      ],
+      "strategy_labels": [
+        "综合"
+      ],
+      "themes": [
+        "其他"
+      ],
+      "entry_reason": "趋势突破+资金配合",
+      "main_risk": "留意次日承接强度",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "signals": [
+        "均线多头",
+        "接近突破",
+        "主力流入15986.3亿",
+        "连续3日流入",
+        "PE合理(28.9)"
+      ],
+      "setup_type": "breakout_follow",
+      "setup_label": "突破跟随",
+      "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+      "entry_plan": {
+        "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+        "trigger": "放量站稳 19.65 上方再试，若回踩 17.58 不破可候补。",
+        "avoid": "高开高走但量能跟不上时不追。",
+        "invalidate": "跌回 17.01 下方或主力转负就取消。",
+        "sizing": "0.5成以内",
+        "levels": {
+          "trigger": 19.65,
+          "pullback": 17.58,
+          "invalidate": 17.01
+        }
+      },
+      "screening_reasons": [
+        "成交额充足"
+      ],
+      "capital_flow": {
+        "trend": "连续3日流入",
+        "today_yi": 1.6,
+        "five_day_total_yi": 3.66
+      },
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 8,
+        "tags": [
+          "资金配合",
+          "连续3日流入",
+          "趋势突破区"
+        ]
+      },
+      "fundamentals": {
+        "pe_ttm": 28.94,
+        "roe": null,
+        "pb": 2.6,
+        "net_profit": null
+      },
+      "consistency": {
+        "score": 8,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "流动性支持",
+          "进攻风格匹配"
+        ]
+      },
+      "variants": [
+        {
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "score": 84.75,
+          "status": "approved",
+          "reason": "成交额充足",
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        }
+      ],
+      "screening_status": "approved",
+      "screening_note": "成交额充足",
+      "strategy_count": 1,
+      "approved_hits": 1,
+      "caution_hits": 0,
+      "priority_score": 102.75,
+      "tier": "B",
+      "tier_note": "通过二筛，建议盘中确认后再跟",
+      "tier_rank": 2,
+      "execution_gate": {
+        "status": "on",
+        "label": "进攻阀门开启",
+        "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+        "position_cap": "0.5-1成试错"
+      }
+    },
+    {
+      "code": "002926",
+      "name": "华西证券",
+      "best_score": 84.8,
+      "change_pct": 5.07,
+      "amount_yi": 4.7,
+      "strategy_hits": [
+        "combined"
+      ],
+      "strategy_labels": [
+        "综合"
+      ],
+      "themes": [
+        "其他"
+      ],
+      "entry_reason": "趋势突破+资金配合",
+      "main_risk": "留意次日承接强度",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "signals": [
+        "均线多头",
+        "放量",
+        "接近突破",
+        "主力流入4790.8亿",
+        "PE偏低(16.0)"
+      ],
+      "setup_type": "breakout_follow",
+      "setup_label": "突破跟随",
+      "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+      "entry_plan": {
+        "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+        "trigger": "放量站稳 7.92 上方再试，若回踩 7.47 不破可候补。",
+        "avoid": "高开高走但量能跟不上时不追。",
+        "invalidate": "跌回 7.36 下方或主力转负就取消。",
+        "sizing": "0.5成以内",
+        "levels": {
+          "trigger": 7.92,
+          "pullback": 7.47,
+          "invalidate": 7.36
+        }
+      },
+      "screening_reasons": [
+        "主力资金仍为净流入"
+      ],
+      "capital_flow": {
+        "trend": "连续2日流入",
+        "today_yi": 0.48,
+        "five_day_total_yi": 0.7
+      },
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 9,
+        "tags": [
+          "低换手脉冲",
+          "涨幅强",
+          "资金配合",
+          "连续2日流入"
+        ]
+      },
+      "fundamentals": {
+        "pe_ttm": 16.02,
+        "roe": null,
+        "pb": null,
+        "net_profit": null
+      },
+      "consistency": {
+        "score": 7,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "进攻风格匹配",
+          "估值盈利匹配尚可"
+        ]
+      },
+      "variants": [
+        {
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "score": 84.8,
+          "status": "approved",
+          "reason": "主力资金仍为净流入",
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "进攻风格匹配",
+              "估值盈利匹配尚可"
+            ]
+          }
+        }
+      ],
+      "screening_status": "approved",
+      "screening_note": "主力资金仍为净流入",
+      "strategy_count": 1,
+      "approved_hits": 1,
+      "caution_hits": 0,
+      "priority_score": 101.3,
+      "tier": "B",
+      "tier_note": "通过二筛，建议盘中确认后再跟",
+      "tier_rank": 2,
+      "execution_gate": {
+        "status": "on",
+        "label": "进攻阀门开启",
+        "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+        "position_cap": "0.5-1成试错"
+      }
+    },
+    {
+      "code": "002085",
+      "name": "万丰奥威",
+      "best_score": 74.0,
+      "change_pct": 4.77,
+      "amount_yi": 6.2,
+      "strategy_hits": [
+        "combined"
+      ],
+      "strategy_labels": [
+        "综合"
+      ],
+      "themes": [
+        "其他"
+      ],
+      "entry_reason": "趋势突破+资金配合",
+      "main_risk": "留意次日承接强度",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "signals": [
+        "站上MA5",
+        "强放量",
+        "接近突破",
+        "主力流入5655.8亿",
+        "PE合理(31.1)"
+      ],
+      "setup_type": "breakout_follow",
+      "setup_label": "突破跟随",
+      "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+      "entry_plan": {
+        "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+        "trigger": "放量站稳 5.39 上方再试，若回踩 4.95 不破可候补。",
+        "avoid": "高开高走但量能跟不上时不追。",
+        "invalidate": "跌回 4.96 下方或主力转负就取消。",
+        "sizing": "0.5成以内",
+        "levels": {
+          "trigger": 5.39,
+          "pullback": 4.95,
+          "invalidate": 4.96
+        }
+      },
+      "screening_reasons": [
+        "主力资金仍为净流入"
+      ],
+      "capital_flow": {
+        "trend": "连续2日流入",
+        "today_yi": 0.57,
+        "five_day_total_yi": 0.51
+      },
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 5,
+        "tags": [
+          "低换手脉冲",
+          "资金配合",
+          "连续2日流入",
+          "趋势突破区"
+        ]
+      },
+      "fundamentals": {
+        "pe_ttm": 31.06,
+        "roe": null,
+        "pb": null,
+        "net_profit": null
+      },
+      "consistency": {
+        "score": 7,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "进攻风格匹配",
+          "估值盈利匹配尚可"
+        ]
+      },
+      "variants": [
+        {
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "score": 74.0,
+          "status": "approved",
+          "reason": "主力资金仍为净流入",
+          "consistency": {
+            "score": 7,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "进攻风格匹配",
+              "估值盈利匹配尚可"
+            ]
+          }
+        }
+      ],
+      "screening_status": "approved",
+      "screening_note": "主力资金仍为净流入",
+      "strategy_count": 1,
+      "approved_hits": 1,
+      "caution_hits": 0,
+      "priority_score": 90.5,
+      "tier": "B",
+      "tier_note": "通过二筛，建议盘中确认后再跟",
+      "tier_rank": 2,
+      "execution_gate": {
+        "status": "on",
+        "label": "进攻阀门开启",
+        "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+        "position_cap": "0.5-1成试错"
+      }
+    },
+    {
+      "code": "002670",
+      "name": "国盛证券",
+      "best_score": 103.9,
+      "change_pct": 7.1,
+      "amount_yi": 17.8,
+      "strategy_hits": [
+        "hot",
+        "combined"
+      ],
+      "strategy_labels": [
+        "热门",
+        "综合"
+      ],
+      "themes": [
+        "其他"
+      ],
+      "entry_reason": "趋势突破+资金配合 + 换手充分",
+      "main_risk": "估值偏高",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "signals": [
+        "均线强多头",
+        "强势拉升",
+        "接近突破",
+        "主力流入21410.6亿",
+        "连续3日流入"
+      ],
+      "setup_type": "breakout_follow",
+      "setup_label": "突破跟随",
+      "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+      "entry_plan": {
+        "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+        "trigger": "放量站稳 11.78 上方再试，若回踩 10.42 不破可候补。",
+        "avoid": "情绪偏热，第一波拉高不追，优先等换手后的二次机会。",
+        "invalidate": "跌回 9.94 下方或主力转负就取消。",
+        "sizing": "先不开新仓",
+        "levels": {
+          "trigger": 11.78,
+          "pullback": 10.42,
+          "invalidate": 9.94
+        }
+      },
+      "screening_reasons": [
+        "短线偏热，提防冲高回落"
+      ],
+      "capital_flow": {
+        "trend": "连续3日流入",
+        "today_yi": 2.14,
+        "five_day_total_yi": 4.91
+      },
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 12,
+        "tags": [
+          "高换手",
+          "涨幅强",
+          "资金配合",
+          "连续3日流入"
+        ]
+      },
+      "fundamentals": {
+        "pe_ttm": 86.94,
+        "roe": null,
+        "pb": null,
+        "net_profit": null
+      },
+      "consistency": {
+        "score": 4,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "估值与盈利错配",
+          "资金同向",
+          "流动性支持"
+        ]
+      },
+      "variants": [
+        {
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "score": 103.9,
+          "status": "caution",
+          "reason": "短线偏热，提防冲高回落",
+          "consistency": {
+            "score": 4,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ]
+          }
+        },
+        {
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "score": 103.9,
+          "status": "caution",
+          "reason": "短线偏热，提防冲高回落",
+          "consistency": {
+            "score": 4,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ]
+          }
+        }
+      ],
+      "screening_status": "caution",
+      "screening_note": "短线偏热，提防冲高回落",
+      "strategy_count": 2,
+      "approved_hits": 0,
+      "caution_hits": 2,
+      "priority_score": 117.9,
+      "tier": "C",
+      "tier_note": "仅观察，不建议直接执行",
+      "tier_rank": 1,
+      "execution_gate": {
+        "status": "on",
+        "label": "进攻阀门开启",
+        "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+        "position_cap": "0.5-1成试错"
+      }
+    },
+    {
+      "code": "601788",
+      "name": "光大证券",
+      "best_score": 84.35,
+      "change_pct": 10.39,
+      "amount_yi": 13.4,
+      "strategy_hits": [
+        "combined"
+      ],
+      "strategy_labels": [
+        "综合"
+      ],
+      "themes": [
+        "其他"
+      ],
+      "entry_reason": "趋势突破+资金配合",
+      "main_risk": "高位大涨，次日分歧风险",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "signals": [
+        "均线多头",
+        "强放量",
+        "强势拉升",
+        "接近突破",
+        "主力流入16095.0亿"
+      ],
+      "setup_type": "breakout_follow",
+      "setup_label": "突破跟随",
+      "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+      "entry_plan": {
+        "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+        "trigger": "放量站稳 15.40 上方再试，若回踩 14.17 不破可候补。",
+        "avoid": "情绪偏热，第一波拉高不追，优先等换手后的二次机会。",
+        "invalidate": "跌回 14.03 下方或主力转负就取消。",
+        "sizing": "先不开新仓",
+        "levels": {
+          "trigger": 15.4,
+          "pullback": 14.17,
+          "invalidate": 14.03
+        }
+      },
+      "screening_reasons": [
+        "情绪过热，提防次日冲高回落"
+      ],
+      "capital_flow": {
+        "trend": "连续2日流入",
+        "today_yi": 1.61,
+        "five_day_total_yi": 1.74
+      },
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 9,
+        "tags": [
+          "低换手脉冲",
+          "涨幅强",
+          "资金配合",
+          "连续2日流入"
+        ]
+      },
+      "fundamentals": {
+        "pe_ttm": 19.28,
+        "roe": null,
+        "pb": 1.18,
+        "net_profit": null
+      },
+      "consistency": {
+        "score": 5,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "流动性支持",
+          "进攻风格匹配"
+        ]
+      },
+      "variants": [
+        {
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "score": 84.35,
+          "status": "caution",
+          "reason": "情绪过热，提防次日冲高回落",
+          "consistency": {
+            "score": 5,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        }
+      ],
+      "screening_status": "caution",
+      "screening_note": "情绪过热，提防次日冲高回落",
+      "strategy_count": 1,
+      "approved_hits": 0,
+      "caution_hits": 1,
+      "priority_score": 95.85,
+      "tier": "C",
+      "tier_note": "仅观察，不建议直接执行",
+      "tier_rank": 1,
+      "execution_gate": {
+        "status": "on",
+        "label": "进攻阀门开启",
+        "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+        "position_cap": "0.5-1成试错"
+      }
+    },
+    {
+      "code": "000951",
+      "name": "中国重汽",
+      "best_score": 82.1,
+      "change_pct": 9.79,
+      "amount_yi": 5.7,
+      "strategy_hits": [
+        "combined"
+      ],
+      "strategy_labels": [
+        "综合"
+      ],
+      "themes": [
+        "其他"
+      ],
+      "entry_reason": "趋势突破+资金配合",
+      "main_risk": "高位大涨，次日分歧风险",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "signals": [
+        "站上MA5",
+        "强放量",
+        "强势拉升",
+        "接近突破",
+        "主力流入6840.9亿"
+      ],
+      "setup_type": "breakout_follow",
+      "setup_label": "突破跟随",
+      "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+      "entry_plan": {
+        "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+        "trigger": "放量站稳 13.13 上方再试，若回踩 11.99 不破可候补。",
+        "avoid": "情绪偏热，第一波拉高不追，优先等换手后的二次机会。",
+        "invalidate": "跌回 12.23 下方或主力转负就取消。",
+        "sizing": "先不开新仓",
+        "levels": {
+          "trigger": 13.13,
+          "pullback": 11.99,
+          "invalidate": 12.23
+        }
+      },
+      "screening_reasons": [
+        "短线偏热，提防冲高回落"
+      ],
+      "capital_flow": {
+        "trend": "连续2日流入",
+        "today_yi": 0.68,
+        "five_day_total_yi": 0.53
+      },
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 9,
+        "tags": [
+          "低换手脉冲",
+          "涨幅强",
+          "资金配合",
+          "连续2日流入"
+        ]
+      },
+      "fundamentals": {
+        "pe_ttm": 16.55,
+        "roe": null,
+        "pb": null,
+        "net_profit": null
+      },
+      "consistency": {
+        "score": 6,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "进攻风格匹配",
+          "估值盈利匹配尚可"
+        ]
+      },
+      "variants": [
+        {
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "score": 82.1,
+          "status": "caution",
+          "reason": "短线偏热，提防冲高回落",
+          "consistency": {
+            "score": 6,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "进攻风格匹配",
+              "估值盈利匹配尚可"
+            ]
+          }
+        }
+      ],
+      "screening_status": "caution",
+      "screening_note": "短线偏热，提防冲高回落",
+      "strategy_count": 1,
+      "approved_hits": 0,
+      "caution_hits": 1,
+      "priority_score": 95.1,
+      "tier": "C",
+      "tier_note": "仅观察，不建议直接执行",
+      "tier_rank": 1,
+      "execution_gate": {
+        "status": "on",
+        "label": "进攻阀门开启",
+        "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+        "position_cap": "0.5-1成试错"
+      }
+    },
+    {
+      "code": "000563",
+      "name": "陕国投A",
+      "best_score": 77.6,
+      "change_pct": 9.26,
+      "amount_yi": 4.2,
+      "strategy_hits": [
+        "combined"
+      ],
+      "strategy_labels": [
+        "综合"
+      ],
+      "themes": [
+        "其他"
+      ],
+      "entry_reason": "趋势突破+资金配合",
+      "main_risk": "高位大涨，次日分歧风险",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "signals": [
+        "站上MA5",
+        "强放量",
+        "强势拉升",
+        "接近突破",
+        "主力流入5090.7亿"
+      ],
+      "setup_type": "breakout_follow",
+      "setup_label": "突破跟随",
+      "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+      "entry_plan": {
+        "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+        "trigger": "放量站稳 2.99 上方再试，若回踩 2.77 不破可候补。",
+        "avoid": "情绪偏热，第一波拉高不追，优先等换手后的二次机会。",
+        "invalidate": "跌回 2.79 下方或主力转负就取消。",
+        "sizing": "先不开新仓",
+        "levels": {
+          "trigger": 2.99,
+          "pullback": 2.77,
+          "invalidate": 2.79
+        }
+      },
+      "screening_reasons": [
+        "情绪过热，提防次日冲高回落"
+      ],
+      "capital_flow": {
+        "trend": "连续2日流入",
+        "today_yi": 0.51,
+        "five_day_total_yi": 0.4
+      },
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 9,
+        "tags": [
+          "低换手脉冲",
+          "涨幅强",
+          "资金配合",
+          "连续2日流入"
+        ]
+      },
+      "fundamentals": {
+        "pe_ttm": 12.1,
+        "roe": null,
+        "pb": null,
+        "net_profit": null
+      },
+      "consistency": {
+        "score": 5,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "进攻风格匹配",
+          "估值盈利匹配尚可"
+        ]
+      },
+      "variants": [
+        {
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "score": 77.6,
+          "status": "caution",
+          "reason": "情绪过热，提防次日冲高回落",
+          "consistency": {
+            "score": 5,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "进攻风格匹配",
+              "估值盈利匹配尚可"
+            ]
+          }
+        }
+      ],
+      "screening_status": "caution",
+      "screening_note": "情绪过热，提防次日冲高回落",
+      "strategy_count": 1,
+      "approved_hits": 0,
+      "caution_hits": 1,
+      "priority_score": 89.1,
+      "tier": "C",
+      "tier_note": "仅观察，不建议直接执行",
+      "tier_rank": 1,
+      "execution_gate": {
+        "status": "on",
+        "label": "进攻阀门开启",
+        "summary": "环境允许进攻，但仍以轻仓试错为主，不做满仓进攻。",
+        "position_cap": "0.5-1成试错"
+      }
+    }
+  ],
+  "analyzer_candidates": [
+    {
+      "code": "600095",
+      "name": "湘财股份",
+      "best_score": 97.9,
+      "strategy_labels": [
+        "成长",
+        "热门",
+        "综合"
+      ],
+      "reason": "趋势突破+资金配合",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "tier": "A",
+      "consistency": {
+        "score": 7,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "流动性支持",
+          "进攻风格匹配"
+        ]
+      },
+      "theme": "其他",
+      "main_risk": "留意次日承接强度",
+      "setup_label": "突破跟随",
+      "entry_plan": {
+        "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+        "trigger": "放量站稳 8.22 上方再试，若回踩 7.81 不破可候补。",
+        "avoid": "高开高走但量能跟不上时不追。",
+        "invalidate": "跌回 7.52 下方或主力转负就取消。",
+        "sizing": "0.5-1成试错",
+        "levels": {
+          "trigger": 8.22,
+          "pullback": 7.81,
+          "invalidate": 7.52
+        }
+      }
+    },
+    {
+      "code": "600906",
+      "name": "财达证券",
+      "best_score": 92.35,
+      "strategy_labels": [
+        "成长",
+        "热门",
+        "综合"
+      ],
+      "reason": "趋势突破+资金配合",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "tier": "A",
+      "consistency": {
+        "score": 8,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "流动性支持",
+          "进攻风格匹配"
+        ]
+      },
+      "theme": "其他",
+      "main_risk": "留意次日承接强度",
+      "setup_label": "突破跟随",
+      "entry_plan": {
+        "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+        "trigger": "放量站稳 7.96 上方再试，若回踩 7.35 不破可候补。",
+        "avoid": "高开高走但量能跟不上时不追。",
+        "invalidate": "跌回 7.18 下方或主力转负就取消。",
+        "sizing": "0.5-1成试错",
+        "levels": {
+          "trigger": 7.96,
+          "pullback": 7.35,
+          "invalidate": 7.18
+        }
+      }
+    },
+    {
+      "code": "601099",
+      "name": "太平洋",
+      "best_score": 86.95,
+      "strategy_labels": [
+        "成长",
+        "热门",
+        "综合"
+      ],
+      "reason": "资金驱动走强 + 换手充分",
+      "watch_condition": "继续放量上攻再确认；主力资金别转负",
+      "tier": "A",
+      "consistency": {
+        "score": 7,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "流动性支持",
+          "进攻风格匹配"
+        ]
+      },
+      "theme": "其他",
+      "main_risk": "留意次日承接强度",
+      "setup_label": "回踩接力",
+      "entry_plan": {
+        "action": "优先等回踩承接，不追已经发散的阳线。",
+        "trigger": "回踩 3.33 一带不破，且资金继续为正，再考虑进场。",
+        "avoid": "脱离支撑过远时不追。",
+        "invalidate": "跌破 3.40 或主题明显转弱就取消。",
+        "sizing": "0.5-1成试错",
+        "levels": {
+          "trigger": 3.8,
+          "pullback": 3.33,
+          "invalidate": 3.4
+        }
+      }
+    }
+  ],
+  "screening_summary": {
+    "total_candidates": 17,
+    "unique_candidates": 10,
+    "shortlisted_count": 10,
+    "approved_count": 6,
+    "caution_count": 4,
+    "excluded_count": 0,
+    "tier_a_count": 3,
+    "tier_b_count": 3,
+    "tier_c_count": 4,
+    "execution_gate_status": "on"
+  },
+  "replay_meta": {
+    "mode": "research_eod_backfill",
+    "trade_date": "2024-01-24",
+    "assumptions": [
+      "历史价格使用东方财富日线K线回放",
+      "历史资金流暂用价格量能代理，不等同真实东方财富日频资金流",
+      "基本面暂用当前快照近似，不等同严格历史披露时点",
+      "股票池暂用当前可取到的池子近似，不等同严格历史成分股"
+    ],
+    "universe_meta": {
+      "pool": "aggressive",
+      "pool_label": "进攻型池(中证500+沪深300)",
+      "universe_size": 594,
+      "hs300_count": 248,
+      "zz500_count": 369,
+      "warnings": []
+    }
+  }
+}

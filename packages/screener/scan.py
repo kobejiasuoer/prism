@@ -12,8 +12,8 @@ import urllib.request as _ureq
 # 无代理 opener（新浪等直连）
 _NO_PROXY_OPENER = _ureq.build_opener(_ureq.ProxyHandler({}))
 # 走 Clash 代理 opener（东方财富等需要代理的接口）
-_PROXY = 'http://127.0.0.1:7897'
-_PROXY_OPENER = _ureq.build_opener(_ureq.ProxyHandler({'http': _PROXY, 'https': _PROXY}))
+_PROXY = os.environ.get('PRISM_PROXY_URL', '')
+_PROXY_OPENER = _ureq.build_opener(_ureq.ProxyHandler({'http': _PROXY, 'https': _PROXY})) if _PROXY else _NO_PROXY_OPENER
 
 # 默认直连
 _ureq.install_opener(_NO_PROXY_OPENER)

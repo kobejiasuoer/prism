@@ -1,0 +1,472 @@
+{
+  "timestamp": "2024-01-17 15:00:00",
+  "pool": "aggressive",
+  "pool_label": "进攻型池(中证500+沪深300)",
+  "stage1_count": 7,
+  "stage2_count": 7,
+  "market_regime": {
+    "score": 0,
+    "label": "偏谨慎",
+    "regime": "defensive",
+    "attack_ok": false,
+    "summary": "强势扩散不够，今天更适合精选观察，不适合激进追高。",
+    "basis": "pool",
+    "sample_size": 500,
+    "metrics": {
+      "positive_ratio": 0.03,
+      "avg_change_pct": -2.26,
+      "avg_turnover": 0.48,
+      "strong_ratio": 0.0
+    },
+    "candidate_view": {
+      "score": 0,
+      "label": "偏谨慎",
+      "regime": "defensive",
+      "attack_ok": false,
+      "summary": "强势扩散不够，今天更适合精选观察，不适合激进追高。",
+      "basis": "candidate",
+      "sample_size": 7,
+      "metrics": {
+        "positive_ratio": 0.429,
+        "avg_change_pct": -1.22,
+        "avg_turnover": 1.79,
+        "strong_ratio": 0.0
+      }
+    },
+    "candidate_score_gap": 0,
+    "candidate_gap_note": "候选口径与整体股票池接近，可把候选强度当作环境的辅助参考。",
+    "execution_gate": {
+      "status": "off",
+      "label": "进攻阀门关闭",
+      "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+      "position_cap": "0成",
+      "allow_new_positions": false,
+      "allow_handoff": false,
+      "allowed_setups": [],
+      "risk_flags": [
+        "赚钱效应不足",
+        "平均涨幅偏弱",
+        "强势股占比过低",
+        "流动性一般"
+      ]
+    }
+  },
+  "market_themes": {
+    "top_theme": "AI信息链",
+    "summary": "今日主线不够集中，更像轮动市，适合精选个股。 主线持续性：强势延续（13分）。",
+    "themes": [
+      {
+        "theme": "AI信息链",
+        "score": 49.68,
+        "count": 1,
+        "weighted_count": 1.51,
+        "leader_codes": [
+          "浪潮信息(000977)"
+        ],
+        "persistence": {
+          "score": 13,
+          "label": "强势延续",
+          "summary": "主题权重增强；主题分提升；龙头切换较快",
+          "trend": "up",
+          "leader_stability": 0.0
+        },
+        "metrics": {
+          "count_score": 14.26,
+          "leader_score": 21.68,
+          "capital_score": 0.24,
+          "structure_score": 0,
+          "purity_score": 13.5,
+          "persistence_score": 13,
+          "total_flow_yi": 1.01,
+          "avg_flow_yi": 1.01,
+          "preferred_ratio": 1.0,
+          "keep_ratio": 1.0,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "其他",
+        "score": 42.97,
+        "count": 5,
+        "weighted_count": 5.3,
+        "leader_codes": [
+          "中联重科(000157)",
+          "国盛证券(002670)",
+          "东航物流(601156)"
+        ],
+        "persistence": {
+          "score": 7,
+          "label": "热度衰减",
+          "summary": "主题权重回落；主题分提升；龙头切换较快",
+          "trend": "up",
+          "leader_stability": 0.0
+        },
+        "metrics": {
+          "count_score": 25,
+          "leader_score": 21.18,
+          "capital_score": 0.0,
+          "structure_score": 11,
+          "purity_score": 2.5,
+          "persistence_score": 7,
+          "total_flow_yi": -0.12,
+          "avg_flow_yi": -0.02,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 0.58,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "消费电子链",
+        "score": 12.91,
+        "count": 1,
+        "weighted_count": 0.6,
+        "leader_codes": [
+          "立讯精密(002475)"
+        ],
+        "persistence": {
+          "score": 3,
+          "label": "一日游风险",
+          "summary": "更多依赖当前截面强度，历史延续性一般",
+          "trend": "neutral",
+          "leader_stability": 0.0
+        },
+        "metrics": {
+          "count_score": 5.67,
+          "leader_score": 7.24,
+          "capital_score": 0.0,
+          "structure_score": 0,
+          "purity_score": 0.0,
+          "persistence_score": 3,
+          "total_flow_yi": -3.33,
+          "avg_flow_yi": -3.33,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 0.0,
+          "hot_ratio": 0.0
+        }
+      }
+    ]
+  },
+  "replay_meta": {
+    "mode": "research_eod_backfill",
+    "trade_date": "2024-01-17",
+    "assumptions": [
+      "历史价格使用东方财富日线K线回放",
+      "历史资金流暂用价格量能代理，不等同真实东方财富日频资金流",
+      "基本面暂用当前快照近似，不等同严格历史披露时点",
+      "股票池暂用当前可取到的池子近似，不等同严格历史成分股"
+    ],
+    "universe_meta": {
+      "pool": "aggressive",
+      "pool_label": "进攻型池(中证500+沪深300)",
+      "universe_size": 594,
+      "hs300_count": 248,
+      "zz500_count": 369,
+      "warnings": []
+    }
+  },
+  "strategies": {
+    "conservative": [],
+    "growth": [],
+    "rebound": [
+      {
+        "code": "000977",
+        "name": "浪潮信息",
+        "price": 30.21,
+        "change_pct": 1.72,
+        "score": 83.4,
+        "scores": {
+          "technical": 35,
+          "capital": 23,
+          "fundamental": 1,
+          "emotion": 10
+        },
+        "signals": [
+          "均线多头",
+          "强放量",
+          "低位反弹",
+          "主力流入10102.6亿",
+          "资金反转"
+        ],
+        "capital_flow": {
+          "today": 101026462.19,
+          "trend": "由负转正",
+          "5day_total": 153427242
+        },
+        "fundamentals": {
+          "pe_ttm": 41.92,
+          "pb": 4.65,
+          "roe": null,
+          "margin": null,
+          "total_mv": 1011.49,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "低位活跃反弹",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 30.02,
+          "ma10": 29.89,
+          "ma20": 31.1,
+          "high20": 34.51,
+          "low20": 28.51,
+          "position_20d": 0.283
+        },
+        "amount_yi": 25.8,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 9,
+          "tags": [
+            "偏好行业:信息",
+            "资金修复",
+            "资金配合",
+            "单日流入",
+            "仍在低位"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": true,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 1,
+          "style_text": "name:信息 | 浪潮信息"
+        },
+        "theme": "AI信息链",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ],
+    "hot": [],
+    "combined": [
+      {
+        "code": "000977",
+        "name": "浪潮信息",
+        "price": 30.21,
+        "change_pct": 1.72,
+        "score": 83.4,
+        "scores": {
+          "technical": 35,
+          "capital": 23,
+          "fundamental": 1,
+          "emotion": 10
+        },
+        "signals": [
+          "均线多头",
+          "强放量",
+          "低位反弹",
+          "主力流入10102.6亿",
+          "资金反转"
+        ],
+        "capital_flow": {
+          "today": 101026462.19,
+          "trend": "由负转正",
+          "5day_total": 153427242
+        },
+        "fundamentals": {
+          "pe_ttm": 41.92,
+          "pb": 4.65,
+          "roe": null,
+          "margin": null,
+          "total_mv": 1011.49,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "低位活跃反弹",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 30.02,
+          "ma10": 29.89,
+          "ma20": 31.1,
+          "high20": 34.51,
+          "low20": 28.51,
+          "position_20d": 0.283
+        },
+        "amount_yi": 25.8,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 9,
+          "tags": [
+            "偏好行业:信息",
+            "资金修复",
+            "资金配合",
+            "单日流入",
+            "仍在低位"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": true,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 1,
+          "style_text": "name:信息 | 浪潮信息"
+        },
+        "theme": "AI信息链",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "002670",
+        "name": "国盛证券",
+        "price": 9.8,
+        "change_pct": 0.0,
+        "score": 59.1,
+        "scores": {
+          "technical": 21,
+          "capital": 27,
+          "fundamental": -5,
+          "emotion": 8
+        },
+        "signals": [
+          "均线强多头",
+          "主力流入1866.0亿",
+          "连续3日流入",
+          "PE偏高(86.9)"
+        ],
+        "capital_flow": {
+          "today": 18659777.58,
+          "trend": "连续3日流入",
+          "5day_total": 171839154
+        },
+        "fundamentals": {
+          "pe_ttm": 86.94,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 280.59,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "估值偏高",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 9.45,
+          "ma10": 9.23,
+          "ma20": 9.12,
+          "high20": 10.15,
+          "low20": 8.58,
+          "position_20d": 0.777
+        },
+        "amount_yi": 9.3,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "downgrade",
+          "bias_score": 1,
+          "tags": [
+            "涨幅弱",
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区",
+            "估值压制"
+          ],
+          "reason": "有一定进攻信号，但不够纯粹，降级观察。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "国盛证券"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "601156",
+        "name": "东航物流",
+        "price": 15.37,
+        "change_pct": 1.05,
+        "score": 62.8,
+        "scores": {
+          "technical": 18,
+          "capital": 27,
+          "fundamental": 6,
+          "emotion": 4
+        },
+        "signals": [
+          "均线强多头",
+          "主力流入1453.0亿",
+          "连续3日流入",
+          "PE偏低(10.2)"
+        ],
+        "capital_flow": {
+          "today": 14530340.53,
+          "trend": "连续3日流入",
+          "5day_total": 95652951
+        },
+        "fundamentals": {
+          "pe_ttm": 10.24,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 275.28,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 14.54,
+          "ma10": 14.17,
+          "ma20": 14.14,
+          "high20": 15.87,
+          "low20": 13.52,
+          "position_20d": 0.787
+        },
+        "amount_yi": 5.1,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "东航物流"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ]
+  }
+}

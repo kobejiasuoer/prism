@@ -1,0 +1,1026 @@
+{
+  "timestamp": "2024-02-21 15:00:00",
+  "pool": "aggressive",
+  "pool_label": "进攻型池(中证500+沪深300)",
+  "stage1_count": 30,
+  "stage2_count": 30,
+  "market_regime": {
+    "score": 2,
+    "label": "偏谨慎",
+    "regime": "defensive",
+    "attack_ok": false,
+    "summary": "强势扩散不够，今天更适合精选观察，不适合激进追高。",
+    "basis": "pool",
+    "sample_size": 455,
+    "metrics": {
+      "positive_ratio": 0.618,
+      "avg_change_pct": 0.78,
+      "avg_turnover": 0.81,
+      "strong_ratio": 0.125
+    },
+    "candidate_view": {
+      "score": 6,
+      "label": "进攻环境较强",
+      "regime": "aggressive",
+      "attack_ok": true,
+      "summary": "市场活跃度和强势股占比都不错，可正常做进攻型观察。",
+      "basis": "candidate",
+      "sample_size": 30,
+      "metrics": {
+        "positive_ratio": 1.0,
+        "avg_change_pct": 5.59,
+        "avg_turnover": 1.33,
+        "strong_ratio": 0.933
+      }
+    },
+    "candidate_score_gap": 4,
+    "candidate_gap_note": "候选口径明显更强，说明入围票强于整体股票池，别把候选强度误读成真实环境。",
+    "execution_gate": {
+      "status": "off",
+      "label": "进攻阀门关闭",
+      "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+      "position_cap": "0成",
+      "allow_new_positions": false,
+      "allow_handoff": false,
+      "allowed_setups": [],
+      "risk_flags": [
+        "流动性一般"
+      ]
+    }
+  },
+  "market_themes": {
+    "top_theme": "建材链",
+    "summary": "今日偏双主线：主攻 建材链，次主线 化工材料链。 主线持续性：热度衰减（5分）。",
+    "themes": [
+      {
+        "theme": "建材链",
+        "score": 35.17,
+        "count": 1,
+        "weighted_count": 2.22,
+        "leader_codes": [
+          "东方雨虹(002271)"
+        ],
+        "persistence": {
+          "score": 5,
+          "label": "热度衰减",
+          "summary": "更多依赖当前截面强度，历史延续性一般",
+          "trend": "neutral",
+          "leader_stability": 0.0
+        },
+        "metrics": {
+          "count_score": 2.74,
+          "leader_score": 24.13,
+          "capital_score": 0.3,
+          "structure_score": 0,
+          "purity_score": 8.0,
+          "persistence_score": 5,
+          "total_flow_yi": 1.26,
+          "avg_flow_yi": 1.26,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 1.0,
+          "hot_ratio": 1.0
+        }
+      },
+      {
+        "theme": "化工材料链",
+        "score": 33.16,
+        "count": 1,
+        "weighted_count": 2.31,
+        "leader_codes": [
+          "万华化学(600309)"
+        ],
+        "persistence": {
+          "score": 6,
+          "label": "热度衰减",
+          "summary": "龙头切换较快",
+          "trend": "neutral",
+          "leader_stability": 0.0
+        },
+        "metrics": {
+          "count_score": 2.85,
+          "leader_score": 25,
+          "capital_score": 0.31,
+          "structure_score": 0,
+          "purity_score": 5.0,
+          "persistence_score": 6,
+          "total_flow_yi": 1.31,
+          "avg_flow_yi": 1.31,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 1.0,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "光伏链",
+        "score": 32.83,
+        "count": 1,
+        "weighted_count": 1.49,
+        "leader_codes": [
+          "德业股份(605117)"
+        ],
+        "persistence": {
+          "score": 1,
+          "label": "一日游风险",
+          "summary": "主题权重回落；龙头切换较快",
+          "trend": "down",
+          "leader_stability": 0.0
+        },
+        "metrics": {
+          "count_score": 1.83,
+          "leader_score": 21.31,
+          "capital_score": 0.19,
+          "structure_score": 0,
+          "purity_score": 9.5,
+          "persistence_score": 1,
+          "total_flow_yi": 0.78,
+          "avg_flow_yi": 0.78,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 1.0,
+          "hot_ratio": 1.0
+        }
+      },
+      {
+        "theme": "其他",
+        "score": 53.77,
+        "count": 27,
+        "weighted_count": 50.69,
+        "leader_codes": [
+          "平安银行(000001)",
+          "五 粮 液(000858)",
+          "山西汾酒(600809)"
+        ],
+        "persistence": {
+          "score": 16,
+          "label": "持续增强",
+          "summary": "主题权重增强；主题分提升；龙头切换较快",
+          "trend": "up",
+          "leader_stability": 0.0
+        },
+        "metrics": {
+          "count_score": 25,
+          "leader_score": 25,
+          "capital_score": 7.18,
+          "structure_score": 15,
+          "purity_score": 2.5,
+          "persistence_score": 16,
+          "total_flow_yi": 44.03,
+          "avg_flow_yi": 1.63,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 0.77,
+          "hot_ratio": 0.58
+        }
+      }
+    ]
+  },
+  "replay_meta": {
+    "mode": "research_eod_backfill",
+    "trade_date": "2024-02-21",
+    "assumptions": [
+      "历史价格使用东方财富日线K线回放",
+      "历史资金流暂用价格量能代理，不等同真实东方财富日频资金流",
+      "基本面暂用当前快照近似，不等同严格历史披露时点",
+      "股票池暂用当前可取到的池子近似，不等同严格历史成分股"
+    ],
+    "universe_meta": {
+      "pool": "aggressive",
+      "pool_label": "进攻型池(中证500+沪深300)",
+      "universe_size": 594,
+      "hs300_count": 248,
+      "zz500_count": 369,
+      "warnings": []
+    }
+  },
+  "strategies": {
+    "conservative": [],
+    "growth": [
+      {
+        "code": "002271",
+        "name": "东方雨虹",
+        "price": 14.29,
+        "change_pct": 7.93,
+        "score": 92.8,
+        "scores": {
+          "technical": 41,
+          "capital": 23,
+          "fundamental": 1,
+          "emotion": 16
+        },
+        "signals": [
+          "均线多头",
+          "强放量",
+          "强势拉升",
+          "接近突破",
+          "主力流入12570.6亿",
+          "资金反转",
+          "高位偏热",
+          "追高风险"
+        ],
+        "capital_flow": {
+          "today": 125706109.5,
+          "trend": "由负转正",
+          "5day_total": 160032548
+        },
+        "fundamentals": {
+          "pe_ttm": 36.0,
+          "pb": 1.87,
+          "roe": null,
+          "margin": null,
+          "total_mv": 388.64,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 13.58,
+          "ma10": 13.13,
+          "ma20": 13.54,
+          "high20": 15.02,
+          "low20": 11.63,
+          "position_20d": 0.785
+        },
+        "amount_yi": 10.5,
+        "source_pool": "hs300+zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 5,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 11,
+          "tags": [
+            "资金修复",
+            "涨幅强",
+            "资金配合",
+            "单日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 1,
+          "style_text": "东方雨虹"
+        },
+        "theme": "建材链",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "603589",
+        "name": "口子窖",
+        "price": 40.04,
+        "change_pct": 3.6,
+        "score": 89.8,
+        "scores": {
+          "technical": 37,
+          "capital": 23,
+          "fundamental": 6,
+          "emotion": 11
+        },
+        "signals": [
+          "均线多头",
+          "强放量",
+          "接近突破",
+          "主力流入3742.8亿",
+          "资金反转",
+          "PE偏低(15.1)"
+        ],
+        "capital_flow": {
+          "today": 37427699.63,
+          "trend": "由负转正",
+          "5day_total": 78184976
+        },
+        "fundamentals": {
+          "pe_ttm": 15.11,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 149.47,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 39.59,
+          "ma10": 37.85,
+          "ma20": 37.96,
+          "high20": 41.7,
+          "low20": 33.85,
+          "position_20d": 0.789
+        },
+        "amount_yi": 5.0,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 7,
+          "tags": [
+            "资金修复",
+            "资金配合",
+            "单日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 1,
+          "style_text": "口子窖"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ],
+    "rebound": [],
+    "hot": [
+      {
+        "code": "000002",
+        "name": "万 科Ａ",
+        "price": 10.21,
+        "change_pct": 3.13,
+        "score": 97.45,
+        "scores": {
+          "technical": 44,
+          "capital": 21,
+          "fundamental": 0,
+          "emotion": 15
+        },
+        "signals": [
+          "均线强多头",
+          "强放量",
+          "接近突破",
+          "主力流入12590.5亿"
+        ],
+        "capital_flow": {
+          "today": 125904679.43,
+          "trend": "连续2日流入",
+          "5day_total": 243692162
+        },
+        "fundamentals": {
+          "pe_ttm": -0.53,
+          "pb": 0.41,
+          "roe": null,
+          "margin": null,
+          "total_mv": 473.65,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 9.91,
+          "ma10": 9.68,
+          "ma20": 9.63,
+          "high20": 10.49,
+          "low20": 8.93,
+          "position_20d": 0.821
+        },
+        "amount_yi": 18.4,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "万 科Ａ"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "603589",
+        "name": "口子窖",
+        "price": 40.04,
+        "change_pct": 3.6,
+        "score": 89.8,
+        "scores": {
+          "technical": 37,
+          "capital": 23,
+          "fundamental": 6,
+          "emotion": 11
+        },
+        "signals": [
+          "均线多头",
+          "强放量",
+          "接近突破",
+          "主力流入3742.8亿",
+          "资金反转",
+          "PE偏低(15.1)"
+        ],
+        "capital_flow": {
+          "today": 37427699.63,
+          "trend": "由负转正",
+          "5day_total": 78184976
+        },
+        "fundamentals": {
+          "pe_ttm": 15.11,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 149.47,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 39.59,
+          "ma10": 37.85,
+          "ma20": 37.96,
+          "high20": 41.7,
+          "low20": 33.85,
+          "position_20d": 0.789
+        },
+        "amount_yi": 5.0,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 7,
+          "tags": [
+            "资金修复",
+            "资金配合",
+            "单日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 1,
+          "style_text": "口子窖"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ],
+    "combined": [
+      {
+        "code": "000002",
+        "name": "万 科Ａ",
+        "price": 10.21,
+        "change_pct": 3.13,
+        "score": 97.45,
+        "scores": {
+          "technical": 44,
+          "capital": 21,
+          "fundamental": 0,
+          "emotion": 15
+        },
+        "signals": [
+          "均线强多头",
+          "强放量",
+          "接近突破",
+          "主力流入12590.5亿"
+        ],
+        "capital_flow": {
+          "today": 125904679.43,
+          "trend": "连续2日流入",
+          "5day_total": 243692162
+        },
+        "fundamentals": {
+          "pe_ttm": -0.53,
+          "pb": 0.41,
+          "roe": null,
+          "margin": null,
+          "total_mv": 473.65,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 9.91,
+          "ma10": 9.68,
+          "ma20": 9.63,
+          "high20": 10.49,
+          "low20": 8.93,
+          "position_20d": 0.821
+        },
+        "amount_yi": 18.4,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "万 科Ａ"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "002271",
+        "name": "东方雨虹",
+        "price": 14.29,
+        "change_pct": 7.93,
+        "score": 92.8,
+        "scores": {
+          "technical": 41,
+          "capital": 23,
+          "fundamental": 1,
+          "emotion": 16
+        },
+        "signals": [
+          "均线多头",
+          "强放量",
+          "强势拉升",
+          "接近突破",
+          "主力流入12570.6亿",
+          "资金反转",
+          "高位偏热",
+          "追高风险"
+        ],
+        "capital_flow": {
+          "today": 125706109.5,
+          "trend": "由负转正",
+          "5day_total": 160032548
+        },
+        "fundamentals": {
+          "pe_ttm": 36.0,
+          "pb": 1.87,
+          "roe": null,
+          "margin": null,
+          "total_mv": 388.64,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 13.58,
+          "ma10": 13.13,
+          "ma20": 13.54,
+          "high20": 15.02,
+          "low20": 11.63,
+          "position_20d": 0.785
+        },
+        "amount_yi": 10.5,
+        "source_pool": "hs300+zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 5,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 11,
+          "tags": [
+            "资金修复",
+            "涨幅强",
+            "资金配合",
+            "单日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 1,
+          "style_text": "东方雨虹"
+        },
+        "theme": "建材链",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "600132",
+        "name": "重庆啤酒",
+        "price": 59.06,
+        "change_pct": 11.22,
+        "score": 91.7,
+        "scores": {
+          "technical": 40,
+          "capital": 27,
+          "fundamental": 4,
+          "emotion": 14
+        },
+        "signals": [
+          "均线多头",
+          "强放量",
+          "强势拉升",
+          "接近突破",
+          "主力流入6699.9亿",
+          "连续3日流入",
+          "PE合理(21.3)",
+          "高位高潮"
+        ],
+        "capital_flow": {
+          "today": 66998643.75,
+          "trend": "连续3日流入",
+          "5day_total": 87604899
+        },
+        "fundamentals": {
+          "pe_ttm": 21.27,
+          "pb": 19.01,
+          "roe": null,
+          "margin": null,
+          "total_mv": 261.83,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "高位大涨，次日分歧风险",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 53.69,
+          "ma10": 51.27,
+          "ma20": 52.29,
+          "high20": 59.06,
+          "low20": 46.03,
+          "position_20d": 1.0
+        },
+        "amount_yi": 5.6,
+        "source_pool": "hs300+zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 9,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 9,
+          "tags": [
+            "低换手脉冲",
+            "涨幅强",
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "重庆啤酒"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "601888",
+        "name": "中国中免",
+        "price": 83.91,
+        "change_pct": 2.86,
+        "score": 90.6,
+        "scores": {
+          "technical": 38,
+          "capital": 23,
+          "fundamental": 1,
+          "emotion": 13
+        },
+        "signals": [
+          "均线多头",
+          "强放量",
+          "接近突破",
+          "主力流入18358.5亿",
+          "资金反转"
+        ],
+        "capital_flow": {
+          "today": 183584799.28,
+          "trend": "由负转正",
+          "5day_total": 361377534
+        },
+        "fundamentals": {
+          "pe_ttm": 39.62,
+          "pb": 2.56,
+          "roe": null,
+          "margin": null,
+          "total_mv": 1420.8,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合 + 成交额充足",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 82.08,
+          "ma10": 79.55,
+          "ma20": 79.89,
+          "high20": 86.73,
+          "low20": 72.88,
+          "position_20d": 0.796
+        },
+        "amount_yi": 30.6,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 7,
+          "tags": [
+            "资金修复",
+            "资金配合",
+            "单日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 1,
+          "style_text": "中国中免"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "603589",
+        "name": "口子窖",
+        "price": 40.04,
+        "change_pct": 3.6,
+        "score": 89.8,
+        "scores": {
+          "technical": 37,
+          "capital": 23,
+          "fundamental": 6,
+          "emotion": 11
+        },
+        "signals": [
+          "均线多头",
+          "强放量",
+          "接近突破",
+          "主力流入3742.8亿",
+          "资金反转",
+          "PE偏低(15.1)"
+        ],
+        "capital_flow": {
+          "today": 37427699.63,
+          "trend": "由负转正",
+          "5day_total": 78184976
+        },
+        "fundamentals": {
+          "pe_ttm": 15.11,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 149.47,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 39.59,
+          "ma10": 37.85,
+          "ma20": 37.96,
+          "high20": 41.7,
+          "low20": 33.85,
+          "position_20d": 0.789
+        },
+        "amount_yi": 5.0,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 7,
+          "tags": [
+            "资金修复",
+            "资金配合",
+            "单日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 1,
+          "style_text": "口子窖"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "601236",
+        "name": "红塔证券",
+        "price": 7.32,
+        "change_pct": 5.63,
+        "score": 88.7,
+        "scores": {
+          "technical": 38,
+          "capital": 21,
+          "fundamental": 4,
+          "emotion": 12
+        },
+        "signals": [
+          "均线多头",
+          "强放量",
+          "接近突破",
+          "主力流入9327.1亿",
+          "PE合理(30.2)"
+        ],
+        "capital_flow": {
+          "today": 93270933.88,
+          "trend": "连续2日流入",
+          "5day_total": 106178607
+        },
+        "fundamentals": {
+          "pe_ttm": 30.2,
+          "pb": 1.45,
+          "roe": null,
+          "margin": null,
+          "total_mv": 366.49,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 6.99,
+          "ma10": 6.88,
+          "ma20": 7.02,
+          "high20": 7.65,
+          "low20": 6.27,
+          "position_20d": 0.761
+        },
+        "amount_yi": 8.0,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 9,
+          "tags": [
+            "低换手脉冲",
+            "涨幅强",
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "红塔证券"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "600048",
+        "name": "保利发展",
+        "price": 9.52,
+        "change_pct": 2.48,
+        "score": 85.15,
+        "scores": {
+          "technical": 36,
+          "capital": 21,
+          "fundamental": 0,
+          "emotion": 13
+        },
+        "signals": [
+          "均线强多头",
+          "接近突破",
+          "主力流入8598.8亿"
+        ],
+        "capital_flow": {
+          "today": 85988456.48,
+          "trend": "连续2日流入",
+          "5day_total": 197526935
+        },
+        "fundamentals": {
+          "pe_ttm": 69.33,
+          "pb": 0.37,
+          "roe": null,
+          "margin": null,
+          "total_mv": 711.04,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 9.27,
+          "ma10": 9.04,
+          "ma20": 8.84,
+          "high20": 9.78,
+          "low20": 7.96,
+          "position_20d": 0.857
+        },
+        "amount_yi": 15.2,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "保利发展"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ]
+  }
+}

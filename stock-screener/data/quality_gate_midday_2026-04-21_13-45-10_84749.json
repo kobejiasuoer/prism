@@ -1,0 +1,18 @@
+{
+  "checked_at": "2026-04-21 13:46:59",
+  "mode": "screener",
+  "validation_status": "ok",
+  "errors": [],
+  "warnings": [],
+  "paths": {
+    "message": "/tmp/stock_midday_confirmation.txt",
+    "report": "data/history/reports/screener/stock_midday_confirmation_2026-04-21_13-45-10_84749.md",
+    "generator": "packages/screener/generate_feishu_message.py"
+  },
+  "expected_timestamp": "2026-04-21 13:46:59",
+  "stats": {
+    "fresh_candidates": 3,
+    "confirmed": 0,
+    "downgraded": 0
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "entered": [],
+  "upgraded": [],
+  "downgraded": [],
+  "exited": [],
+  "handed_off": [],
+  "summary": {
+    "entered_count": 0,
+    "upgraded_count": 0,
+    "downgraded_count": 0,
+    "exited_count": 0,
+    "handed_off_count": 0,
+    "current_pool_size": 11,
+    "previous_pool_size": 11
+  },
+  "metadata": {
+    "generated_at": "2026-04-13 20:02:59",
+    "current_timestamp": "2026-04-13 20:02:59",
+    "previous_snapshot_source": "raw_scan_history",
+    "previous_snapshot_timestamp": "2026-04-13 18:59:38",
+    "previous_pool_size": 11,
+    "midday_verification_timestamp": "2026-04-13 13:46:23",
+    "midday_matches_current_ai": false,
+    "midday_downgraded_count": 0,
+    "ai_input": "runtime/stock-screener/data/ai_screening_result.json",
+    "midday_input": "runtime/stock-screener/data/midday_verification_result.json"
+  }
+}

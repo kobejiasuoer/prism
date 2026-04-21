@@ -1,0 +1,1 @@
+../apps/control-panel/watchlist_registry.py

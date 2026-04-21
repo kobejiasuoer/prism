@@ -1,0 +1,282 @@
+{
+  "entered": [
+    {
+      "code": "002460",
+      "name": "赣锋锂业",
+      "tier": "C",
+      "screening_status": "caution",
+      "score": 65.8,
+      "theme": "新能源链",
+      "change_pct": 2.56,
+      "entry_reason": "量价活跃 + 换手充分",
+      "main_risk": "公告风险：质押；估值偏高；周期波动较大"
+    },
+    {
+      "code": "002466",
+      "name": "天齐锂业",
+      "tier": "C",
+      "screening_status": "caution",
+      "score": 85.0,
+      "theme": "新能源链",
+      "change_pct": 4.46,
+      "entry_reason": "趋势突破+资金配合 + 成交额充足",
+      "main_risk": "估值偏高；周期波动较大"
+    },
+    {
+      "code": "600732",
+      "name": "爱旭股份",
+      "tier": "C",
+      "screening_status": "caution",
+      "score": 68.15,
+      "theme": "其他",
+      "change_pct": 4.19,
+      "entry_reason": "趋势突破+资金配合",
+      "main_risk": "公告风险：减持；留意次日承接强度"
+    },
+    {
+      "code": "600875",
+      "name": "东方电气",
+      "tier": "C",
+      "screening_status": "caution",
+      "score": 55.45,
+      "theme": "电网设备链",
+      "change_pct": 0.79,
+      "entry_reason": "趋势突破+资金配合",
+      "main_risk": "公告风险：减持；留意次日承接强度"
+    },
+    {
+      "code": "603019",
+      "name": "中科曙光",
+      "tier": "C",
+      "screening_status": "caution",
+      "score": 61.5,
+      "theme": "AI信息链",
+      "change_pct": 4.26,
+      "entry_reason": "资金驱动走强 + 成交额充足",
+      "main_risk": "估值偏高"
+    },
+    {
+      "code": "603659",
+      "name": "璞泰来",
+      "tier": "B",
+      "screening_status": "approved",
+      "score": 65.15,
+      "theme": "其他",
+      "change_pct": 3.8,
+      "entry_reason": "资金驱动走强",
+      "main_risk": "留意次日承接强度"
+    },
+    {
+      "code": "603799",
+      "name": "华友钴业",
+      "tier": "B",
+      "screening_status": "approved",
+      "score": 66.25,
+      "theme": "新能源链",
+      "change_pct": 2.02,
+      "entry_reason": "资金驱动走强 + 成交额充足",
+      "main_risk": "留意次日承接强度"
+    }
+  ],
+  "upgraded": [
+    {
+      "code": "600010",
+      "name": "包钢股份",
+      "prev_tier": "",
+      "curr_tier": "B",
+      "prev_screening_status": "",
+      "curr_screening_status": "approved",
+      "prev_score": 58.05,
+      "curr_score": 82.25,
+      "score_delta": 24.2,
+      "theme": "有色资源链"
+    }
+  ],
+  "downgraded": [
+    {
+      "code": "000938",
+      "name": "紫光股份",
+      "prev_tier": "",
+      "curr_tier": "C",
+      "prev_screening_status": "",
+      "curr_screening_status": "caution",
+      "prev_score": 83.1,
+      "curr_score": 58.6,
+      "score_delta": -24.5,
+      "theme": "AI信息链"
+    }
+  ],
+  "exited": [
+    {
+      "code": "000063",
+      "name": "中兴通讯",
+      "tier": "",
+      "screening_status": "",
+      "score": 79.95,
+      "theme": "AI硬件链",
+      "last_seen": "2026-04-09 23:12:24"
+    },
+    {
+      "code": "000338",
+      "name": "潍柴动力",
+      "tier": "",
+      "screening_status": "",
+      "score": 75.15,
+      "theme": "汽车链",
+      "last_seen": "2026-04-09 23:12:24"
+    },
+    {
+      "code": "000977",
+      "name": "浪潮信息",
+      "tier": "",
+      "screening_status": "",
+      "score": 87.55,
+      "theme": "AI信息链",
+      "last_seen": "2026-04-09 23:12:24"
+    },
+    {
+      "code": "002179",
+      "name": "中航光电",
+      "tier": "",
+      "screening_status": "",
+      "score": 83.3,
+      "theme": "军工链",
+      "last_seen": "2026-04-09 23:12:24"
+    },
+    {
+      "code": "002475",
+      "name": "立讯精密",
+      "tier": "",
+      "screening_status": "",
+      "score": 92.15,
+      "theme": "消费电子链",
+      "last_seen": "2026-04-09 23:12:24"
+    },
+    {
+      "code": "600938",
+      "name": "中国海油",
+      "tier": "",
+      "screening_status": "",
+      "score": 52.75,
+      "theme": "新能源链",
+      "last_seen": "2026-04-09 23:12:24"
+    },
+    {
+      "code": "601600",
+      "name": "中国铝业",
+      "tier": "",
+      "screening_status": "",
+      "score": 62.55,
+      "theme": "有色资源链",
+      "last_seen": "2026-04-09 23:12:24"
+    }
+  ],
+  "handed_off": [
+    {
+      "code": "000977",
+      "name": "浪潮信息",
+      "tier": "A",
+      "morning_score": 88.65,
+      "status": "confirmed",
+      "reason": "盘中延续性良好",
+      "in_current_shortlist": false,
+      "current_tier": "N/A",
+      "current_screening_status": "N/A"
+    },
+    {
+      "code": "002241",
+      "name": "歌尔股份",
+      "tier": "B",
+      "morning_score": 79.65,
+      "status": "confirmed",
+      "reason": "盘中延续性良好",
+      "in_current_shortlist": false,
+      "current_tier": "N/A",
+      "current_screening_status": "N/A"
+    },
+    {
+      "code": "002475",
+      "name": "立讯精密",
+      "tier": "A",
+      "morning_score": 95.3,
+      "status": "confirmed",
+      "reason": "盘中延续性良好",
+      "in_current_shortlist": false,
+      "current_tier": "N/A",
+      "current_screening_status": "N/A"
+    },
+    {
+      "code": "600030",
+      "name": "中信证券",
+      "tier": "A",
+      "morning_score": 97.55,
+      "status": "confirmed",
+      "reason": "盘中延续性良好",
+      "in_current_shortlist": false,
+      "current_tier": "N/A",
+      "current_screening_status": "N/A"
+    },
+    {
+      "code": "600176",
+      "name": "中国巨石",
+      "tier": "B",
+      "morning_score": 84.05,
+      "status": "confirmed",
+      "reason": "盘中延续性良好",
+      "in_current_shortlist": true,
+      "current_tier": "C",
+      "current_screening_status": "caution"
+    },
+    {
+      "code": "600875",
+      "name": "东方电气",
+      "tier": "B",
+      "morning_score": 83.65,
+      "status": "confirmed",
+      "reason": "盘中延续性良好",
+      "in_current_shortlist": true,
+      "current_tier": "C",
+      "current_screening_status": "caution"
+    },
+    {
+      "code": "603659",
+      "name": "璞泰来",
+      "tier": "B",
+      "morning_score": 82.7,
+      "status": "confirmed",
+      "reason": "盘中延续性良好",
+      "in_current_shortlist": true,
+      "current_tier": "B",
+      "current_screening_status": "approved"
+    },
+    {
+      "code": "603799",
+      "name": "华友钴业",
+      "tier": "B",
+      "morning_score": 71.05,
+      "status": "confirmed",
+      "reason": "盘中延续性良好",
+      "in_current_shortlist": true,
+      "current_tier": "B",
+      "current_screening_status": "approved"
+    }
+  ],
+  "summary": {
+    "entered_count": 7,
+    "upgraded_count": 1,
+    "downgraded_count": 1,
+    "exited_count": 7,
+    "handed_off_count": 8,
+    "current_pool_size": 10,
+    "previous_pool_size": 10
+  },
+  "metadata": {
+    "generated_at": "2026-04-13 13:26:31",
+    "current_timestamp": "2026-04-13 13:26:31",
+    "previous_snapshot_source": "raw_scan_history",
+    "previous_pool_size": 10,
+    "midday_verification_timestamp": "2026-04-11 23:47:08",
+    "ai_input": "runtime/stock-screener/data/ai_screening_result.json",
+    "midday_input": "runtime/stock-screener/data/midday_verification_result.json"
+  }
+}

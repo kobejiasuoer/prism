@@ -1,0 +1,28 @@
+{
+  "task_id": "watchlist_refresh_20260419_110106_580686",
+  "task_name": "watchlist_refresh",
+  "title": "自选股名单刷新",
+  "command": [
+    "bash",
+    "skills/invest-flow/scripts/run_watchlist_refresh.sh"
+  ],
+  "cwd": "<redacted-path>",
+  "send_to_feishu": false,
+  "status": "success",
+  "started_at": "2026-04-19 11:01:06",
+  "finished_at": "2026-04-19 11:01:10",
+  "exit_code": 0,
+  "pid": 19874,
+  "log_path": "data/history/control_panel_runs/logs/watchlist_refresh_20260419_110106_580686.log",
+  "meta_path": "data/history/control_panel_runs/watchlist_refresh_20260419_110106_580686.json",
+  "feishu_delivery": {
+    "requested": false,
+    "channel": "",
+    "target": "",
+    "source": "",
+    "job_id": "",
+    "job_name": "",
+    "resolved": false
+  },
+  "shell_env_sanitized": false
+}

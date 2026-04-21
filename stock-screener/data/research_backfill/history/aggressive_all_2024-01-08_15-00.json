@@ -1,0 +1,399 @@
+{
+  "timestamp": "2024-01-08 15:00:00",
+  "pool": "aggressive",
+  "pool_label": "进攻型池(中证500+沪深300)",
+  "stage1_count": 7,
+  "stage2_count": 7,
+  "market_regime": {
+    "score": 0,
+    "label": "偏谨慎",
+    "regime": "defensive",
+    "attack_ok": false,
+    "summary": "强势扩散不够，今天更适合精选观察，不适合激进追高。",
+    "basis": "pool",
+    "sample_size": 499,
+    "metrics": {
+      "positive_ratio": 0.066,
+      "avg_change_pct": -1.82,
+      "avg_turnover": 0.51,
+      "strong_ratio": 0.006
+    },
+    "candidate_view": {
+      "score": 7,
+      "label": "进攻环境较强",
+      "regime": "aggressive",
+      "attack_ok": true,
+      "summary": "市场活跃度和强势股占比都不错，可正常做进攻型观察。",
+      "basis": "candidate",
+      "sample_size": 7,
+      "metrics": {
+        "positive_ratio": 0.857,
+        "avg_change_pct": 3.08,
+        "avg_turnover": 2.07,
+        "strong_ratio": 0.429
+      }
+    },
+    "candidate_score_gap": 7,
+    "candidate_gap_note": "候选口径明显更强，说明入围票强于整体股票池，别把候选强度误读成真实环境。",
+    "execution_gate": {
+      "status": "off",
+      "label": "进攻阀门关闭",
+      "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+      "position_cap": "0成",
+      "allow_new_positions": false,
+      "allow_handoff": false,
+      "allowed_setups": [],
+      "risk_flags": [
+        "赚钱效应不足",
+        "平均涨幅偏弱",
+        "强势股占比过低",
+        "流动性一般"
+      ]
+    }
+  },
+  "market_themes": {
+    "top_theme": "新能源链",
+    "summary": "今日偏双主线：主攻 新能源链，次主线 光伏链。 主线持续性：延续但分化（9分）。",
+    "themes": [
+      {
+        "theme": "新能源链",
+        "score": 37.57,
+        "count": 1,
+        "weighted_count": 1.08,
+        "leader_codes": [
+          "赣锋锂业(002460)"
+        ],
+        "persistence": {
+          "score": 9,
+          "label": "延续但分化",
+          "summary": "主题权重回落；龙头部分延续",
+          "trend": "down",
+          "leader_stability": 1.0
+        },
+        "metrics": {
+          "count_score": 8.84,
+          "leader_score": 15.05,
+          "capital_score": 0.18,
+          "structure_score": 0,
+          "purity_score": 13.5,
+          "persistence_score": 9,
+          "total_flow_yi": 0.77,
+          "avg_flow_yi": 0.77,
+          "preferred_ratio": 1.0,
+          "keep_ratio": 1.0,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "光伏链",
+        "score": 37.25,
+        "count": 1,
+        "weighted_count": 1.24,
+        "leader_codes": [
+          "德业股份(605117)"
+        ],
+        "persistence": {
+          "score": 3,
+          "label": "一日游风险",
+          "summary": "主题权重回落；主题分提升；龙头切换较快",
+          "trend": "up",
+          "leader_stability": 0.0
+        },
+        "metrics": {
+          "count_score": 10.09,
+          "leader_score": 17.46,
+          "capital_score": 0.2,
+          "structure_score": 0,
+          "purity_score": 9.5,
+          "persistence_score": 3,
+          "total_flow_yi": 0.84,
+          "avg_flow_yi": 0.84,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 1.0,
+          "hot_ratio": 1.0
+        }
+      },
+      {
+        "theme": "其他",
+        "score": 47.29,
+        "count": 5,
+        "weighted_count": 6.27,
+        "leader_codes": [
+          "万泰生物(603392)",
+          "京东方Ａ(000725)",
+          "TCL科技(000100)"
+        ],
+        "persistence": {
+          "score": 12,
+          "label": "强势延续",
+          "summary": "主题权重回落；主题分提升；龙头部分延续",
+          "trend": "up",
+          "leader_stability": 0.33
+        },
+        "metrics": {
+          "count_score": 25,
+          "leader_score": 22.48,
+          "capital_score": 0.7,
+          "structure_score": 15,
+          "purity_score": 2.5,
+          "persistence_score": 12,
+          "total_flow_yi": 3.98,
+          "avg_flow_yi": 0.8,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 0.76,
+          "hot_ratio": 0.31
+        }
+      }
+    ]
+  },
+  "replay_meta": {
+    "mode": "research_eod_backfill",
+    "trade_date": "2024-01-08",
+    "assumptions": [
+      "历史价格使用东方财富日线K线回放",
+      "历史资金流暂用价格量能代理，不等同真实东方财富日频资金流",
+      "基本面暂用当前快照近似，不等同严格历史披露时点",
+      "股票池暂用当前可取到的池子近似，不等同严格历史成分股"
+    ],
+    "universe_meta": {
+      "pool": "aggressive",
+      "pool_label": "进攻型池(中证500+沪深300)",
+      "universe_size": 594,
+      "hs300_count": 248,
+      "zz500_count": 369,
+      "warnings": []
+    }
+  },
+  "strategies": {
+    "conservative": [],
+    "growth": [],
+    "rebound": [],
+    "hot": [
+      {
+        "code": "603392",
+        "name": "万泰生物",
+        "price": 86.68,
+        "change_pct": 8.31,
+        "score": 89.95,
+        "scores": {
+          "technical": 39,
+          "capital": 21,
+          "fundamental": 0,
+          "emotion": 20
+        },
+        "signals": [
+          "均线强多头",
+          "强势拉升",
+          "接近突破",
+          "主力流入27146.8亿",
+          "高位高潮",
+          "追高风险"
+        ],
+        "capital_flow": {
+          "today": 271468055.85,
+          "trend": "连续2日流入",
+          "5day_total": 545288664
+        },
+        "fundamentals": {
+          "pe_ttm": 492.5,
+          "pb": 4.12,
+          "roe": null,
+          "margin": null,
+          "total_mv": 498.17,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "高位大涨，次日分歧风险；估值偏高",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 78.56,
+          "ma10": 75.5,
+          "ma20": 64.64,
+          "high20": 87.68,
+          "low20": 46.62,
+          "position_20d": 0.976
+        },
+        "amount_yi": 22.6,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 7,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 12,
+          "tags": [
+            "高换手",
+            "涨幅强",
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "万泰生物"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ],
+    "combined": [
+      {
+        "code": "603392",
+        "name": "万泰生物",
+        "price": 86.68,
+        "change_pct": 8.31,
+        "score": 89.95,
+        "scores": {
+          "technical": 39,
+          "capital": 21,
+          "fundamental": 0,
+          "emotion": 20
+        },
+        "signals": [
+          "均线强多头",
+          "强势拉升",
+          "接近突破",
+          "主力流入27146.8亿",
+          "高位高潮",
+          "追高风险"
+        ],
+        "capital_flow": {
+          "today": 271468055.85,
+          "trend": "连续2日流入",
+          "5day_total": 545288664
+        },
+        "fundamentals": {
+          "pe_ttm": 492.5,
+          "pb": 4.12,
+          "roe": null,
+          "margin": null,
+          "total_mv": 498.17,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "高位大涨，次日分歧风险；估值偏高",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 78.56,
+          "ma10": 75.5,
+          "ma20": 64.64,
+          "high20": 87.68,
+          "low20": 46.62,
+          "position_20d": 0.976
+        },
+        "amount_yi": 22.6,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 7,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 12,
+          "tags": [
+            "高换手",
+            "涨幅强",
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "万泰生物"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "000100",
+        "name": "TCL科技",
+        "price": 4.16,
+        "change_pct": 1.46,
+        "score": 67.85,
+        "scores": {
+          "technical": 25,
+          "capital": 21,
+          "fundamental": 4,
+          "emotion": 8
+        },
+        "signals": [
+          "均线强多头",
+          "主力流入5907.2亿",
+          "PE合理(20.0)"
+        ],
+        "capital_flow": {
+          "today": 59071792.36,
+          "trend": "连续2日流入",
+          "5day_total": 10161805
+        },
+        "fundamentals": {
+          "pe_ttm": 20.03,
+          "pb": 1.47,
+          "roe": null,
+          "margin": null,
+          "total_mv": 904.84,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 4.12,
+          "ma10": 4.04,
+          "ma20": 3.92,
+          "high20": 4.3,
+          "low20": 3.73,
+          "position_20d": 0.754
+        },
+        "amount_yi": 17.6,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "TCL科技"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ]
+  }
+}

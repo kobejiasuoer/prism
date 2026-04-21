@@ -1,0 +1,1282 @@
+{
+  "timestamp": "2024-02-08 15:00:00",
+  "pool": "aggressive",
+  "pool_label": "进攻型池(中证500+沪深300)",
+  "stage1_count": 30,
+  "stage2_count": 30,
+  "market_regime": {
+    "score": 5,
+    "label": "中性偏进攻",
+    "regime": "balanced",
+    "attack_ok": true,
+    "summary": "可以做进攻型筛选，但别满仓追。",
+    "basis": "pool",
+    "sample_size": 455,
+    "metrics": {
+      "positive_ratio": 0.657,
+      "avg_change_pct": 1.22,
+      "avg_turnover": 0.95,
+      "strong_ratio": 0.207
+    },
+    "candidate_view": {
+      "score": 6,
+      "label": "进攻环境较强",
+      "regime": "aggressive",
+      "attack_ok": true,
+      "summary": "市场活跃度和强势股占比都不错，可正常做进攻型观察。",
+      "basis": "candidate",
+      "sample_size": 30,
+      "metrics": {
+        "positive_ratio": 0.833,
+        "avg_change_pct": 4.46,
+        "avg_turnover": 1.87,
+        "strong_ratio": 0.767
+      }
+    },
+    "candidate_score_gap": 1,
+    "candidate_gap_note": "候选口径与整体股票池接近，可把候选强度当作环境的辅助参考。",
+    "execution_gate": {
+      "status": "limited",
+      "label": "进攻阀门半开",
+      "summary": "环境还不够顺，只允许轻仓试错，优先回踩接力和低位反转，不做强趋势追涨。",
+      "position_cap": "0.5成以内",
+      "allow_new_positions": true,
+      "allow_handoff": false,
+      "allowed_setups": [
+        "pullback_continuation",
+        "low_reversal"
+      ],
+      "risk_flags": [
+        "流动性一般"
+      ]
+    }
+  },
+  "market_themes": {
+    "top_theme": "光伏链",
+    "summary": "今日偏双主线：主攻 光伏链，次主线 AI硬件链。 主线持续性：延续但分化（9分）。",
+    "themes": [
+      {
+        "theme": "光伏链",
+        "score": 34.14,
+        "count": 2,
+        "weighted_count": 2.4,
+        "leader_codes": [
+          "TCL中环(002129)",
+          "爱旭股份(600732)"
+        ],
+        "persistence": {
+          "score": 9,
+          "label": "延续但分化",
+          "summary": "更多依赖当前截面强度，历史延续性一般",
+          "trend": "neutral",
+          "leader_stability": 0.0
+        },
+        "metrics": {
+          "count_score": 4.37,
+          "leader_score": 19.81,
+          "capital_score": 0.44,
+          "structure_score": 5,
+          "purity_score": 4.52,
+          "persistence_score": 9,
+          "total_flow_yi": 2.2,
+          "avg_flow_yi": 1.1,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 0.6,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "AI硬件链",
+        "score": 30.38,
+        "count": 1,
+        "weighted_count": 1.45,
+        "leader_codes": [
+          "工业富联(601138)"
+        ],
+        "persistence": {
+          "score": 7,
+          "label": "热度衰减",
+          "summary": "主题分回落；龙头部分延续",
+          "trend": "down",
+          "leader_stability": 1.0
+        },
+        "metrics": {
+          "count_score": 2.65,
+          "leader_score": 20.79,
+          "capital_score": 0.44,
+          "structure_score": 0,
+          "purity_score": 6.5,
+          "persistence_score": 7,
+          "total_flow_yi": 1.81,
+          "avg_flow_yi": 1.81,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 1.0,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "其他",
+        "score": 49.91,
+        "count": 27,
+        "weighted_count": 34.5,
+        "leader_codes": [
+          "万丰奥威(002085)",
+          "万泰生物(603392)",
+          "盛和资源(600392)"
+        ],
+        "persistence": {
+          "score": 9,
+          "label": "延续但分化",
+          "summary": "主题分提升；龙头切换较快",
+          "trend": "up",
+          "leader_stability": 0.0
+        },
+        "metrics": {
+          "count_score": 25,
+          "leader_score": 24.27,
+          "capital_score": 2.55,
+          "structure_score": 15,
+          "purity_score": 2.5,
+          "persistence_score": 9,
+          "total_flow_yi": 15.62,
+          "avg_flow_yi": 0.58,
+          "preferred_ratio": 0.05,
+          "keep_ratio": 0.89,
+          "hot_ratio": 0.66
+        }
+      }
+    ]
+  },
+  "replay_meta": {
+    "mode": "research_eod_backfill",
+    "trade_date": "2024-02-08",
+    "assumptions": [
+      "历史价格使用东方财富日线K线回放",
+      "历史资金流暂用价格量能代理，不等同真实东方财富日频资金流",
+      "基本面暂用当前快照近似，不等同严格历史披露时点",
+      "股票池暂用当前可取到的池子近似，不等同严格历史成分股"
+    ],
+    "universe_meta": {
+      "pool": "aggressive",
+      "pool_label": "进攻型池(中证500+沪深300)",
+      "universe_size": 594,
+      "hs300_count": 248,
+      "zz500_count": 369,
+      "warnings": []
+    }
+  },
+  "strategies": {
+    "conservative": [],
+    "growth": [
+      {
+        "code": "002085",
+        "name": "万丰奥威",
+        "price": 5.7,
+        "change_pct": 6.74,
+        "score": 93.75,
+        "scores": {
+          "technical": 35,
+          "capital": 27,
+          "fundamental": 4,
+          "emotion": 16
+        },
+        "signals": [
+          "站上MA5",
+          "强放量",
+          "接近突破",
+          "主力流入12000.7亿",
+          "连续3日流入",
+          "PE合理(31.1)",
+          "高位偏热"
+        ],
+        "capital_flow": {
+          "today": 120007308.15,
+          "trend": "连续3日流入",
+          "5day_total": 80197202
+        },
+        "fundamentals": {
+          "pe_ttm": 31.06,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 301.93,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 5.01,
+          "ma10": 5.03,
+          "ma20": 5.03,
+          "high20": 5.91,
+          "low20": 4.33,
+          "position_20d": 0.867
+        },
+        "amount_yi": 10.0,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 3,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 12,
+          "tags": [
+            "涨幅强",
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "万丰奥威"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ],
+    "rebound": [],
+    "hot": [
+      {
+        "code": "002085",
+        "name": "万丰奥威",
+        "price": 5.7,
+        "change_pct": 6.74,
+        "score": 93.75,
+        "scores": {
+          "technical": 35,
+          "capital": 27,
+          "fundamental": 4,
+          "emotion": 16
+        },
+        "signals": [
+          "站上MA5",
+          "强放量",
+          "接近突破",
+          "主力流入12000.7亿",
+          "连续3日流入",
+          "PE合理(31.1)",
+          "高位偏热"
+        ],
+        "capital_flow": {
+          "today": 120007308.15,
+          "trend": "连续3日流入",
+          "5day_total": 80197202
+        },
+        "fundamentals": {
+          "pe_ttm": 31.06,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 301.93,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 5.01,
+          "ma10": 5.03,
+          "ma20": 5.03,
+          "high20": 5.91,
+          "low20": 4.33,
+          "position_20d": 0.867
+        },
+        "amount_yi": 10.0,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 3,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 12,
+          "tags": [
+            "涨幅强",
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "万丰奥威"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "002129",
+        "name": "TCL中环",
+        "price": 11.81,
+        "change_pct": 4.88,
+        "score": 79.65,
+        "scores": {
+          "technical": 24,
+          "capital": 27,
+          "fundamental": 0,
+          "emotion": 15
+        },
+        "signals": [
+          "站上MA5",
+          "低位反弹",
+          "主力流入15750.9亿",
+          "连续3日流入"
+        ],
+        "capital_flow": {
+          "today": 157509012.1,
+          "trend": "连续3日流入",
+          "5day_total": -118230525
+        },
+        "fundamentals": {
+          "pe_ttm": -3.74,
+          "pb": 1.6,
+          "roe": null,
+          "margin": null,
+          "total_mv": 350.94,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "低位活跃反弹 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 11.25,
+          "ma10": 12.11,
+          "ma20": 13.63,
+          "high20": 16.39,
+          "low20": 10.24,
+          "position_20d": 0.255
+        },
+        "amount_yi": 17.1,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "高换手",
+            "资金配合",
+            "连续3日流入",
+            "仍在低位"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "TCL中环"
+        },
+        "theme": "光伏链",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "000723",
+        "name": "美锦能源",
+        "price": 6.03,
+        "change_pct": 6.16,
+        "score": 71.0,
+        "scores": {
+          "technical": 18,
+          "capital": 27,
+          "fundamental": 0,
+          "emotion": 14
+        },
+        "signals": [
+          "站上MA5",
+          "主力流入7767.0亿",
+          "连续3日流入"
+        ],
+        "capital_flow": {
+          "today": 77670021.12,
+          "trend": "连续3日流入",
+          "5day_total": 135373208
+        },
+        "fundamentals": {
+          "pe_ttm": -20.65,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 203.0,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 5.31,
+          "ma10": 5.4,
+          "ma20": 5.66,
+          "high20": 6.52,
+          "low20": 4.58,
+          "position_20d": 0.747
+        },
+        "amount_yi": 6.5,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 17,
+          "tags": [
+            "偏好行业:能源",
+            "涨幅强",
+            "资金配合",
+            "连续3日流入",
+            "趋势中高位"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": true,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "name:能源 | 美锦能源"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "002410",
+        "name": "广联达",
+        "price": 11.93,
+        "change_pct": 4.56,
+        "score": 64.35,
+        "scores": {
+          "technical": 15,
+          "capital": 27,
+          "fundamental": 1,
+          "emotion": 11
+        },
+        "signals": [
+          "站上MA5",
+          "主力流入6967.2亿",
+          "连续3日流入"
+        ],
+        "capital_flow": {
+          "today": 69672289.92,
+          "trend": "连续3日流入",
+          "5day_total": 13560540
+        },
+        "fundamentals": {
+          "pe_ttm": 46.45,
+          "pb": 3.11,
+          "roe": null,
+          "margin": null,
+          "total_mv": 188.16,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 11.31,
+          "ma10": 12.09,
+          "ma20": 13.08,
+          "high20": 15.24,
+          "low20": 10.06,
+          "position_20d": 0.361
+        },
+        "amount_yi": 7.5,
+        "source_pool": "hs300+zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 6,
+          "tags": [
+            "资金配合",
+            "连续3日流入"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "广联达"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ],
+    "combined": [
+      {
+        "code": "002085",
+        "name": "万丰奥威",
+        "price": 5.7,
+        "change_pct": 6.74,
+        "score": 93.75,
+        "scores": {
+          "technical": 35,
+          "capital": 27,
+          "fundamental": 4,
+          "emotion": 16
+        },
+        "signals": [
+          "站上MA5",
+          "强放量",
+          "接近突破",
+          "主力流入12000.7亿",
+          "连续3日流入",
+          "PE合理(31.1)",
+          "高位偏热"
+        ],
+        "capital_flow": {
+          "today": 120007308.15,
+          "trend": "连续3日流入",
+          "5day_total": 80197202
+        },
+        "fundamentals": {
+          "pe_ttm": 31.06,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 301.93,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 5.01,
+          "ma10": 5.03,
+          "ma20": 5.03,
+          "high20": 5.91,
+          "low20": 4.33,
+          "position_20d": 0.867
+        },
+        "amount_yi": 10.0,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 3,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 12,
+          "tags": [
+            "涨幅强",
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "万丰奥威"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "603392",
+        "name": "万泰生物",
+        "price": 62.44,
+        "change_pct": 2.11,
+        "score": 92.15,
+        "scores": {
+          "technical": 34,
+          "capital": 27,
+          "fundamental": 0,
+          "emotion": 15
+        },
+        "signals": [
+          "均线多头",
+          "强放量",
+          "主力流入10488.5亿",
+          "连续4日流入"
+        ],
+        "capital_flow": {
+          "today": 104885088.41,
+          "trend": "连续4日流入",
+          "5day_total": 200002598
+        },
+        "fundamentals": {
+          "pe_ttm": 492.5,
+          "pb": 4.12,
+          "roe": null,
+          "margin": null,
+          "total_mv": 498.17,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "估值偏高",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 56.01,
+          "ma10": 55.62,
+          "ma20": 61.25,
+          "high20": 76.22,
+          "low20": 47.3,
+          "position_20d": 0.524
+        },
+        "amount_yi": 17.8,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 2,
+          "tags": [
+            "资金配合",
+            "连续4日流入",
+            "估值压制"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 4,
+          "style_text": "万泰生物"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "600392",
+        "name": "盛和资源",
+        "price": 9.21,
+        "change_pct": 7.22,
+        "score": 92.1,
+        "scores": {
+          "technical": 35,
+          "capital": 27,
+          "fundamental": 1,
+          "emotion": 16
+        },
+        "signals": [
+          "站上MA5",
+          "强放量",
+          "强势拉升",
+          "接近突破",
+          "主力流入10852.4亿",
+          "连续3日流入",
+          "高位偏热"
+        ],
+        "capital_flow": {
+          "today": 108524014.56,
+          "trend": "连续3日流入",
+          "5day_total": 117921481
+        },
+        "fundamentals": {
+          "pe_ttm": 40.99,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 430.49,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 8.02,
+          "ma10": 8.16,
+          "ma20": 8.45,
+          "high20": 9.52,
+          "low20": 6.7,
+          "position_20d": 0.89
+        },
+        "amount_yi": 9.0,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 3,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 9,
+          "tags": [
+            "低换手脉冲",
+            "涨幅强",
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "盛和资源"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "002230",
+        "name": "科大讯飞",
+        "price": 43.35,
+        "change_pct": 3.71,
+        "score": 87.35,
+        "scores": {
+          "technical": 32,
+          "capital": 27,
+          "fundamental": 0,
+          "emotion": 13
+        },
+        "signals": [
+          "均线强多头",
+          "接近突破",
+          "主力流入20902.3亿",
+          "连续3日流入"
+        ],
+        "capital_flow": {
+          "today": 209023461.31,
+          "trend": "连续3日流入",
+          "5day_total": 347199278
+        },
+        "fundamentals": {
+          "pe_ttm": 198.08,
+          "pb": 6.17,
+          "roe": null,
+          "margin": null,
+          "total_mv": 1099.05,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "估值偏高",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 41.03,
+          "ma10": 40.69,
+          "ma20": 40.44,
+          "high20": 43.68,
+          "low20": 37.2,
+          "position_20d": 0.949
+        },
+        "amount_yi": 29.9,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 4,
+          "tags": [
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区",
+            "估值压制"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "科大讯飞"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "002129",
+        "name": "TCL中环",
+        "price": 11.81,
+        "change_pct": 4.88,
+        "score": 79.65,
+        "scores": {
+          "technical": 24,
+          "capital": 27,
+          "fundamental": 0,
+          "emotion": 15
+        },
+        "signals": [
+          "站上MA5",
+          "低位反弹",
+          "主力流入15750.9亿",
+          "连续3日流入"
+        ],
+        "capital_flow": {
+          "today": 157509012.1,
+          "trend": "连续3日流入",
+          "5day_total": -118230525
+        },
+        "fundamentals": {
+          "pe_ttm": -3.74,
+          "pb": 1.6,
+          "roe": null,
+          "margin": null,
+          "total_mv": 350.94,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "低位活跃反弹 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 11.25,
+          "ma10": 12.11,
+          "ma20": 13.63,
+          "high20": 16.39,
+          "low20": 10.24,
+          "position_20d": 0.255
+        },
+        "amount_yi": 17.1,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "高换手",
+            "资金配合",
+            "连续3日流入",
+            "仍在低位"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "TCL中环"
+        },
+        "theme": "光伏链",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "002008",
+        "name": "大族激光",
+        "price": 17.96,
+        "change_pct": 3.7,
+        "score": 77.75,
+        "scores": {
+          "technical": 28,
+          "capital": 27,
+          "fundamental": 0,
+          "emotion": 9
+        },
+        "signals": [
+          "站上MA5",
+          "强放量",
+          "接近突破",
+          "主力流入8008.7亿",
+          "连续3日流入"
+        ],
+        "capital_flow": {
+          "today": 80086853.56,
+          "trend": "连续3日流入",
+          "5day_total": 98953396
+        },
+        "fundamentals": {
+          "pe_ttm": 70.47,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 811.22,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 16.07,
+          "ma10": 16.39,
+          "ma20": 17.1,
+          "high20": 18.78,
+          "low20": 13.91,
+          "position_20d": 0.832
+        },
+        "amount_yi": 10.4,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 4,
+          "tags": [
+            "换手不足",
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "大族激光"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "002156",
+        "name": "通富微电",
+        "price": 21.5,
+        "change_pct": 5.5,
+        "score": 72.45,
+        "scores": {
+          "technical": 21,
+          "capital": 27,
+          "fundamental": 0,
+          "emotion": 12
+        },
+        "signals": [
+          "均线多头",
+          "主力流入9338.0亿",
+          "连续4日流入"
+        ],
+        "capital_flow": {
+          "today": 93379701.32,
+          "trend": "连续4日流入",
+          "5day_total": 221233758
+        },
+        "fundamentals": {
+          "pe_ttm": 62.16,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 713.12,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 19.67,
+          "ma10": 19.09,
+          "ma20": 20.12,
+          "high20": 22.98,
+          "low20": 17.14,
+          "position_20d": 0.747
+        },
+        "amount_yi": 8.5,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 7,
+          "tags": [
+            "换手不足",
+            "涨幅强",
+            "资金配合",
+            "连续4日流入",
+            "趋势中高位"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 4,
+          "style_text": "通富微电"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "000723",
+        "name": "美锦能源",
+        "price": 6.03,
+        "change_pct": 6.16,
+        "score": 71.0,
+        "scores": {
+          "technical": 18,
+          "capital": 27,
+          "fundamental": 0,
+          "emotion": 14
+        },
+        "signals": [
+          "站上MA5",
+          "主力流入7767.0亿",
+          "连续3日流入"
+        ],
+        "capital_flow": {
+          "today": 77670021.12,
+          "trend": "连续3日流入",
+          "5day_total": 135373208
+        },
+        "fundamentals": {
+          "pe_ttm": -20.65,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 203.0,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 5.31,
+          "ma10": 5.4,
+          "ma20": 5.66,
+          "high20": 6.52,
+          "low20": 4.58,
+          "position_20d": 0.747
+        },
+        "amount_yi": 6.5,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 17,
+          "tags": [
+            "偏好行业:能源",
+            "涨幅强",
+            "资金配合",
+            "连续3日流入",
+            "趋势中高位"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": true,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "name:能源 | 美锦能源"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "000002",
+        "name": "万 科Ａ",
+        "price": 10.06,
+        "change_pct": 5.67,
+        "score": 69.75,
+        "scores": {
+          "technical": 17,
+          "capital": 27,
+          "fundamental": 0,
+          "emotion": 14
+        },
+        "signals": [
+          "站上MA5",
+          "主力流入13845.3亿",
+          "连续3日流入"
+        ],
+        "capital_flow": {
+          "today": 138452686.86,
+          "trend": "连续3日流入",
+          "5day_total": 192244691
+        },
+        "fundamentals": {
+          "pe_ttm": -0.53,
+          "pb": 0.41,
+          "roe": null,
+          "margin": null,
+          "total_mv": 473.65,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 9.55,
+          "ma10": 9.68,
+          "ma20": 9.58,
+          "high20": 10.45,
+          "low20": 8.93,
+          "position_20d": 0.743
+        },
+        "amount_yi": 13.3,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 11,
+          "tags": [
+            "涨幅强",
+            "资金配合",
+            "连续3日流入",
+            "趋势中高位"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "万 科Ａ"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "000034",
+        "name": "神州数码",
+        "price": 24.11,
+        "change_pct": 6.12,
+        "score": 66.75,
+        "scores": {
+          "technical": 16,
+          "capital": 27,
+          "fundamental": 1,
+          "emotion": 12
+        },
+        "signals": [
+          "站上MA5",
+          "主力流入6685.7亿",
+          "连续3日流入"
+        ],
+        "capital_flow": {
+          "today": 66857064.42,
+          "trend": "连续3日流入",
+          "5day_total": 79680755
+        },
+        "fundamentals": {
+          "pe_ttm": 48.38,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 253.02,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 22.04,
+          "ma10": 22.91,
+          "ma20": 24.23,
+          "high20": 27.16,
+          "low20": 19.45,
+          "position_20d": 0.604
+        },
+        "amount_yi": 5.8,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "低换手脉冲",
+            "涨幅强",
+            "资金配合",
+            "连续3日流入",
+            "趋势中高位"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "神州数码"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ]
+  }
+}

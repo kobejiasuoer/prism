@@ -1,0 +1,442 @@
+{
+  "timestamp": "2024-03-27 15:00:00",
+  "pool": "aggressive",
+  "pool_label": "进攻型池(中证500+沪深300)",
+  "stage1_count": 5,
+  "stage2_count": 5,
+  "market_regime": {
+    "score": 0,
+    "label": "偏谨慎",
+    "regime": "defensive",
+    "attack_ok": false,
+    "summary": "强势扩散不够，今天更适合精选观察，不适合激进追高。",
+    "basis": "pool",
+    "sample_size": 459,
+    "metrics": {
+      "positive_ratio": 0.172,
+      "avg_change_pct": -1.97,
+      "avg_turnover": 0.68,
+      "strong_ratio": 0.007
+    },
+    "candidate_view": {
+      "score": 5,
+      "label": "中性偏进攻",
+      "regime": "balanced",
+      "attack_ok": true,
+      "summary": "可以做进攻型筛选，但别满仓追。",
+      "basis": "candidate",
+      "sample_size": 5,
+      "metrics": {
+        "positive_ratio": 0.6,
+        "avg_change_pct": 0.11,
+        "avg_turnover": 3.9,
+        "strong_ratio": 0.4
+      }
+    },
+    "candidate_score_gap": 5,
+    "candidate_gap_note": "候选口径明显更强，说明入围票强于整体股票池，别把候选强度误读成真实环境。",
+    "execution_gate": {
+      "status": "off",
+      "label": "进攻阀门关闭",
+      "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+      "position_cap": "0成",
+      "allow_new_positions": false,
+      "allow_handoff": false,
+      "allowed_setups": [],
+      "risk_flags": [
+        "赚钱效应不足",
+        "平均涨幅偏弱",
+        "强势股占比过低",
+        "流动性一般"
+      ]
+    }
+  },
+  "market_themes": {
+    "top_theme": "AI硬件链",
+    "summary": "今日主线不够集中，更像轮动市，适合精选个股。 主线持续性：延续但分化（11分）。",
+    "themes": [
+      {
+        "theme": "AI硬件链",
+        "score": 50.05,
+        "count": 1,
+        "weighted_count": 1.89,
+        "leader_codes": [
+          "长电科技(600584)"
+        ],
+        "persistence": {
+          "score": 11,
+          "label": "延续但分化",
+          "summary": "主题权重增强；主题分提升；龙头切换较快",
+          "trend": "up",
+          "leader_stability": 0.0
+        },
+        "metrics": {
+          "count_score": 20.67,
+          "leader_score": 22.15,
+          "capital_score": 0.73,
+          "structure_score": 0,
+          "purity_score": 6.5,
+          "persistence_score": 11,
+          "total_flow_yi": 3.06,
+          "avg_flow_yi": 3.06,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 1.0,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "其他",
+        "score": 43.44,
+        "count": 4,
+        "weighted_count": 4.51,
+        "leader_codes": [
+          "浙商证券(601878)",
+          "天山股份(000877)",
+          "沃尔核材(002130)"
+        ],
+        "persistence": {
+          "score": 9,
+          "label": "延续但分化",
+          "summary": "主题权重回落；主题分提升；龙头部分延续",
+          "trend": "up",
+          "leader_stability": 0.33
+        },
+        "metrics": {
+          "count_score": 25,
+          "leader_score": 20.84,
+          "capital_score": 0.0,
+          "structure_score": 12,
+          "purity_score": 2.5,
+          "persistence_score": 9,
+          "total_flow_yi": -3.75,
+          "avg_flow_yi": -0.94,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 0.67,
+          "hot_ratio": 0.34
+        }
+      }
+    ]
+  },
+  "replay_meta": {
+    "mode": "research_eod_backfill",
+    "trade_date": "2024-03-27",
+    "assumptions": [
+      "历史价格使用东方财富日线K线回放",
+      "历史资金流暂用价格量能代理，不等同真实东方财富日频资金流",
+      "基本面暂用当前快照近似，不等同严格历史披露时点",
+      "股票池暂用当前可取到的池子近似，不等同严格历史成分股"
+    ],
+    "universe_meta": {
+      "pool": "aggressive",
+      "pool_label": "进攻型池(中证500+沪深300)",
+      "universe_size": 594,
+      "hs300_count": 248,
+      "zz500_count": 369,
+      "warnings": []
+    }
+  },
+  "strategies": {
+    "conservative": [],
+    "growth": [
+      {
+        "code": "600584",
+        "name": "长电科技",
+        "price": 28.86,
+        "change_pct": 3.07,
+        "score": 85.2,
+        "scores": {
+          "technical": 30,
+          "capital": 23,
+          "fundamental": 1,
+          "emotion": 17
+        },
+        "signals": [
+          "站上MA5",
+          "强放量",
+          "主力流入30578.7亿",
+          "资金反转"
+        ],
+        "capital_flow": {
+          "today": 305787458.86,
+          "trend": "由负转正",
+          "5day_total": 302831449
+        },
+        "fundamentals": {
+          "pe_ttm": 49.83,
+          "pb": 2.72,
+          "roe": null,
+          "margin": null,
+          "total_mv": 780.01,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 28.16,
+          "ma10": 28.21,
+          "ma20": 27.31,
+          "high20": 30.83,
+          "low20": 24.07,
+          "position_20d": 0.709
+        },
+        "amount_yi": 46.3,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 10,
+          "tags": [
+            "高换手",
+            "资金修复",
+            "资金配合",
+            "单日流入",
+            "趋势中高位"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 1,
+          "style_text": "长电科技"
+        },
+        "theme": "AI硬件链",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ],
+    "rebound": [],
+    "hot": [
+      {
+        "code": "600584",
+        "name": "长电科技",
+        "price": 28.86,
+        "change_pct": 3.07,
+        "score": 85.2,
+        "scores": {
+          "technical": 30,
+          "capital": 23,
+          "fundamental": 1,
+          "emotion": 17
+        },
+        "signals": [
+          "站上MA5",
+          "强放量",
+          "主力流入30578.7亿",
+          "资金反转"
+        ],
+        "capital_flow": {
+          "today": 305787458.86,
+          "trend": "由负转正",
+          "5day_total": 302831449
+        },
+        "fundamentals": {
+          "pe_ttm": 49.83,
+          "pb": 2.72,
+          "roe": null,
+          "margin": null,
+          "total_mv": 780.01,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 28.16,
+          "ma10": 28.21,
+          "ma20": 27.31,
+          "high20": 30.83,
+          "low20": 24.07,
+          "position_20d": 0.709
+        },
+        "amount_yi": 46.3,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 10,
+          "tags": [
+            "高换手",
+            "资金修复",
+            "资金配合",
+            "单日流入",
+            "趋势中高位"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 1,
+          "style_text": "长电科技"
+        },
+        "theme": "AI硬件链",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ],
+    "combined": [
+      {
+        "code": "600584",
+        "name": "长电科技",
+        "price": 28.86,
+        "change_pct": 3.07,
+        "score": 85.2,
+        "scores": {
+          "technical": 30,
+          "capital": 23,
+          "fundamental": 1,
+          "emotion": 17
+        },
+        "signals": [
+          "站上MA5",
+          "强放量",
+          "主力流入30578.7亿",
+          "资金反转"
+        ],
+        "capital_flow": {
+          "today": 305787458.86,
+          "trend": "由负转正",
+          "5day_total": 302831449
+        },
+        "fundamentals": {
+          "pe_ttm": 49.83,
+          "pb": 2.72,
+          "roe": null,
+          "margin": null,
+          "total_mv": 780.01,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 28.16,
+          "ma10": 28.21,
+          "ma20": 27.31,
+          "high20": 30.83,
+          "low20": 24.07,
+          "position_20d": 0.709
+        },
+        "amount_yi": 46.3,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 10,
+          "tags": [
+            "高换手",
+            "资金修复",
+            "资金配合",
+            "单日流入",
+            "趋势中高位"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 1,
+          "style_text": "长电科技"
+        },
+        "theme": "AI硬件链",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "601878",
+        "name": "浙商证券",
+        "price": 11.19,
+        "change_pct": 1.18,
+        "score": 84.35,
+        "scores": {
+          "technical": 25,
+          "capital": 30,
+          "fundamental": 6,
+          "emotion": 12
+        },
+        "signals": [
+          "均线强多头",
+          "主力流入5569.6亿",
+          "连续5日流入",
+          "PE偏低(18.3)"
+        ],
+        "capital_flow": {
+          "today": 55695677.12,
+          "trend": "连续5日流入",
+          "5day_total": 293737781
+        },
+        "fundamentals": {
+          "pe_ttm": 18.33,
+          "pb": 1.21,
+          "roe": null,
+          "margin": null,
+          "total_mv": 442.29,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 10.82,
+          "ma10": 10.45,
+          "ma20": 10.18,
+          "high20": 11.69,
+          "low20": 9.61,
+          "position_20d": 0.76
+        },
+        "amount_yi": 15.2,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "资金配合",
+            "连续5日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 5,
+          "style_text": "浙商证券"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ]
+  }
+}

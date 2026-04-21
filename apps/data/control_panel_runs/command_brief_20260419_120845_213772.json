@@ -1,0 +1,28 @@
+{
+  "task_id": "command_brief_20260419_120845_213772",
+  "task_name": "command_brief",
+  "title": "投资总控简报",
+  "command": [
+    "bash",
+    "skills/invest-flow/scripts/run_command_brief.sh"
+  ],
+  "cwd": "<redacted-path>",
+  "send_to_feishu": true,
+  "status": "success",
+  "started_at": "2026-04-19 12:08:45",
+  "finished_at": "2026-04-19 12:08:57",
+  "exit_code": 0,
+  "pid": 28873,
+  "log_path": "data/history/control_panel_runs/logs/command_brief_20260419_120845_213772.log",
+  "meta_path": "data/history/control_panel_runs/command_brief_20260419_120845_213772.json",
+  "feishu_delivery": {
+    "requested": true,
+    "channel": "feishu",
+    "target": "user:<redacted>",
+    "source": "cron_jobs",
+    "job_id": "f58b0644-d9bd-4850-9f84-ff4bc0f1be98",
+    "job_name": "自选股早盘分析",
+    "resolved": true
+  },
+  "shell_env_sanitized": false
+}

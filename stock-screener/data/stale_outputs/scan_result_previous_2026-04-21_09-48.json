@@ -1,0 +1,55 @@
+{
+  "timestamp": "2026-04-21 09:05:39",
+  "pool": "aggressive",
+  "pool_label": "进攻型池(中证500+沪深300)",
+  "stage1_count": 0,
+  "stage2_count": 0,
+  "market_regime": {
+    "score": 0,
+    "label": "数据不足",
+    "attack_ok": false,
+    "regime": "defensive",
+    "summary": "样本为空，暂不建议进攻。",
+    "basis": "pool",
+    "sample_size": 0,
+    "candidate_view": {
+      "score": 0,
+      "label": "数据不足",
+      "attack_ok": false,
+      "regime": "defensive",
+      "summary": "样本为空，暂不建议进攻。",
+      "basis": "candidate",
+      "sample_size": 0
+    },
+    "candidate_score_gap": 0,
+    "candidate_gap_note": "候选口径与整体股票池接近，可把候选强度当作环境的辅助参考。",
+    "execution_gate": {
+      "status": "off",
+      "label": "进攻阀门关闭",
+      "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+      "position_cap": "0成",
+      "allow_new_positions": false,
+      "allow_handoff": false,
+      "allowed_setups": [],
+      "risk_flags": [
+        "赚钱效应不足",
+        "平均涨幅偏弱",
+        "强势股占比过低",
+        "流动性一般"
+      ]
+    }
+  },
+  "market_themes": {
+    "top_theme": null,
+    "summary": "无候选，无法判断主线。",
+    "themes": []
+  },
+  "verification_universe": [],
+  "strategies": {
+    "conservative": [],
+    "growth": [],
+    "rebound": [],
+    "hot": [],
+    "combined": []
+  }
+}

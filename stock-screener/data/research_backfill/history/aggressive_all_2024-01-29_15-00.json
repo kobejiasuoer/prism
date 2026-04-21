@@ -1,0 +1,588 @@
+{
+  "timestamp": "2024-01-29 15:00:00",
+  "pool": "aggressive",
+  "pool_label": "进攻型池(中证500+沪深300)",
+  "stage1_count": 18,
+  "stage2_count": 18,
+  "market_regime": {
+    "score": 0,
+    "label": "偏谨慎",
+    "regime": "defensive",
+    "attack_ok": false,
+    "summary": "强势扩散不够，今天更适合精选观察，不适合激进追高。",
+    "basis": "pool",
+    "sample_size": 500,
+    "metrics": {
+      "positive_ratio": 0.292,
+      "avg_change_pct": -1.4,
+      "avg_turnover": 0.71,
+      "strong_ratio": 0.018
+    },
+    "candidate_view": {
+      "score": 2,
+      "label": "偏谨慎",
+      "regime": "defensive",
+      "attack_ok": false,
+      "summary": "强势扩散不够，今天更适合精选观察，不适合激进追高。",
+      "basis": "candidate",
+      "sample_size": 18,
+      "metrics": {
+        "positive_ratio": 0.5,
+        "avg_change_pct": -2.0,
+        "avg_turnover": 2.67,
+        "strong_ratio": 0.167
+      }
+    },
+    "candidate_score_gap": 2,
+    "candidate_gap_note": "候选口径明显更强，说明入围票强于整体股票池，别把候选强度误读成真实环境。",
+    "execution_gate": {
+      "status": "off",
+      "label": "进攻阀门关闭",
+      "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+      "position_cap": "0成",
+      "allow_new_positions": false,
+      "allow_handoff": false,
+      "allowed_setups": [],
+      "risk_flags": [
+        "赚钱效应不足",
+        "平均涨幅偏弱",
+        "强势股占比过低",
+        "流动性一般"
+      ]
+    }
+  },
+  "market_themes": {
+    "top_theme": "光伏链",
+    "summary": "今日偏双主线：主攻 光伏链，次主线 其他。 主线持续性：热度衰减（5分）。",
+    "themes": [
+      {
+        "theme": "光伏链",
+        "score": 22.98,
+        "count": 2,
+        "weighted_count": 1.2,
+        "leader_codes": [
+          "隆基绿能(601012)",
+          "晶澳科技(002459)"
+        ],
+        "persistence": {
+          "score": 5,
+          "label": "热度衰减",
+          "summary": "更多依赖当前截面强度，历史延续性一般",
+          "trend": "neutral",
+          "leader_stability": 0.0
+        },
+        "metrics": {
+          "count_score": 3.97,
+          "leader_score": 8.51,
+          "capital_score": 0.0,
+          "structure_score": 9,
+          "purity_score": 1.5,
+          "persistence_score": 5,
+          "total_flow_yi": -7.72,
+          "avg_flow_yi": -3.86,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 0.0,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "其他",
+        "score": 48.6,
+        "count": 16,
+        "weighted_count": 19.98,
+        "leader_codes": [
+          "格力电器(000651)",
+          "中信银行(601998)",
+          "东阿阿胶(000423)"
+        ],
+        "persistence": {
+          "score": 4,
+          "label": "一日游风险",
+          "summary": "主题权重回落；主题分提升；龙头切换较快",
+          "trend": "down",
+          "leader_stability": 0.0
+        },
+        "metrics": {
+          "count_score": 25,
+          "leader_score": 25,
+          "capital_score": 0.0,
+          "structure_score": 15,
+          "purity_score": 2.5,
+          "persistence_score": 4,
+          "total_flow_yi": -5.65,
+          "avg_flow_yi": -0.35,
+          "preferred_ratio": 0.03,
+          "keep_ratio": 0.66,
+          "hot_ratio": 0.34
+        }
+      }
+    ]
+  },
+  "replay_meta": {
+    "mode": "research_eod_backfill",
+    "trade_date": "2024-01-29",
+    "assumptions": [
+      "历史价格使用东方财富日线K线回放",
+      "历史资金流暂用价格量能代理，不等同真实东方财富日频资金流",
+      "基本面暂用当前快照近似，不等同严格历史披露时点",
+      "股票池暂用当前可取到的池子近似，不等同严格历史成分股"
+    ],
+    "universe_meta": {
+      "pool": "aggressive",
+      "pool_label": "进攻型池(中证500+沪深300)",
+      "universe_size": 594,
+      "hs300_count": 248,
+      "zz500_count": 369,
+      "warnings": []
+    }
+  },
+  "strategies": {
+    "conservative": [],
+    "growth": [
+      {
+        "code": "000009",
+        "name": "中国宝安",
+        "price": 11.92,
+        "change_pct": 2.85,
+        "score": 82.55,
+        "scores": {
+          "technical": 32,
+          "capital": 23,
+          "fundamental": 0,
+          "emotion": 13
+        },
+        "signals": [
+          "均线多头",
+          "强放量",
+          "主力流入5595.6亿",
+          "资金反转"
+        ],
+        "capital_flow": {
+          "today": 55956460.26,
+          "trend": "由负转正",
+          "5day_total": 77965366
+        },
+        "fundamentals": {
+          "pe_ttm": 60.51,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 228.52,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 11.6,
+          "ma10": 11.49,
+          "ma20": 11.54,
+          "high20": 12.71,
+          "low20": 10.86,
+          "position_20d": 0.573
+        },
+        "amount_yi": 8.4,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 5,
+          "tags": [
+            "资金修复",
+            "资金配合",
+            "单日流入"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 1,
+          "style_text": "中国宝安"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ],
+    "rebound": [],
+    "hot": [],
+    "combined": [
+      {
+        "code": "000423",
+        "name": "东阿阿胶",
+        "price": 49.63,
+        "change_pct": 6.3,
+        "score": 95.4,
+        "scores": {
+          "technical": 40,
+          "capital": 27,
+          "fundamental": 4,
+          "emotion": 12
+        },
+        "signals": [
+          "均线强多头",
+          "放量",
+          "接近突破",
+          "主力流入8856.3亿",
+          "连续4日流入",
+          "PE合理(20.5)",
+          "高位偏热"
+        ],
+        "capital_flow": {
+          "today": 88562549.98,
+          "trend": "连续4日流入",
+          "5day_total": 144251218
+        },
+        "fundamentals": {
+          "pe_ttm": 20.48,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 356.05,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 45.81,
+          "ma10": 45.58,
+          "ma20": 45.29,
+          "high20": 50.72,
+          "low20": 41.92,
+          "position_20d": 0.876
+        },
+        "amount_yi": 7.6,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 3,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 9,
+          "tags": [
+            "低换手脉冲",
+            "涨幅强",
+            "资金配合",
+            "连续4日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 4,
+          "style_text": "东阿阿胶"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "601186",
+        "name": "中国铁建",
+        "price": 8.01,
+        "change_pct": 2.56,
+        "score": 89.85,
+        "scores": {
+          "technical": 34,
+          "capital": 27,
+          "fundamental": 0,
+          "emotion": 13
+        },
+        "signals": [
+          "均线强多头",
+          "放量",
+          "主力流入18082.9亿",
+          "连续4日流入"
+        ],
+        "capital_flow": {
+          "today": 180828782.16,
+          "trend": "连续4日流入",
+          "5day_total": 585126522
+        },
+        "fundamentals": {
+          "pe_ttm": 5.15,
+          "pb": 0.34,
+          "roe": null,
+          "margin": null,
+          "total_mv": 945.14,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 7.47,
+          "ma10": 7.11,
+          "ma20": 7.0,
+          "high20": 8.64,
+          "low20": 6.5,
+          "position_20d": 0.706
+        },
+        "amount_yi": 27.1,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 7,
+          "tags": [
+            "资金配合",
+            "连续4日流入",
+            "趋势中高位"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 4,
+          "style_text": "中国铁建"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "000009",
+        "name": "中国宝安",
+        "price": 11.92,
+        "change_pct": 2.85,
+        "score": 82.55,
+        "scores": {
+          "technical": 32,
+          "capital": 23,
+          "fundamental": 0,
+          "emotion": 13
+        },
+        "signals": [
+          "均线多头",
+          "强放量",
+          "主力流入5595.6亿",
+          "资金反转"
+        ],
+        "capital_flow": {
+          "today": 55956460.26,
+          "trend": "由负转正",
+          "5day_total": 77965366
+        },
+        "fundamentals": {
+          "pe_ttm": 60.51,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 228.52,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 11.6,
+          "ma10": 11.49,
+          "ma20": 11.54,
+          "high20": 12.71,
+          "low20": 10.86,
+          "position_20d": 0.573
+        },
+        "amount_yi": 8.4,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 5,
+          "tags": [
+            "资金修复",
+            "资金配合",
+            "单日流入"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 1,
+          "style_text": "中国宝安"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "600050",
+        "name": "中国联通",
+        "price": 4.25,
+        "change_pct": 0.47,
+        "score": 75.95,
+        "scores": {
+          "technical": 23,
+          "capital": 27,
+          "fundamental": 6,
+          "emotion": 10
+        },
+        "signals": [
+          "均线强多头",
+          "主力流入6452.9亿",
+          "连续4日流入",
+          "PE偏低(15.7)"
+        ],
+        "capital_flow": {
+          "today": 64528741.43,
+          "trend": "连续4日流入",
+          "5day_total": 599164584
+        },
+        "fundamentals": {
+          "pe_ttm": 15.66,
+          "pb": 0.85,
+          "roe": null,
+          "margin": null,
+          "total_mv": 1428.78,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 4.03,
+          "ma10": 3.87,
+          "ma20": 3.85,
+          "high20": 4.51,
+          "low20": 3.58,
+          "position_20d": 0.72
+        },
+        "amount_yi": 28.7,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 4,
+          "tags": [
+            "涨幅弱",
+            "资金配合",
+            "连续4日流入",
+            "趋势中高位"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 4,
+          "style_text": "中国联通"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "600970",
+        "name": "中材国际",
+        "price": 10.28,
+        "change_pct": 1.98,
+        "score": 60.5,
+        "scores": {
+          "technical": 20,
+          "capital": 23,
+          "fundamental": 6,
+          "emotion": 4
+        },
+        "signals": [
+          "均线强多头",
+          "主力流入2418.2亿",
+          "资金反转",
+          "PE偏低(9.7)"
+        ],
+        "capital_flow": {
+          "today": 24181988.93,
+          "trend": "由负转正",
+          "5day_total": 97477953
+        },
+        "fundamentals": {
+          "pe_ttm": 9.68,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 277.13,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 9.86,
+          "ma10": 9.49,
+          "ma20": 9.25,
+          "high20": 11.09,
+          "low20": 8.49,
+          "position_20d": 0.688
+        },
+        "amount_yi": 4.4,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 2,
+          "tags": [
+            "换手不足",
+            "资金修复",
+            "资金配合",
+            "单日流入",
+            "趋势中高位"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 1,
+          "style_text": "中材国际"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ]
+  }
+}

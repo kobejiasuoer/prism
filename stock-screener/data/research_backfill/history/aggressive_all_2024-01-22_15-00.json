@@ -1,0 +1,373 @@
+{
+  "timestamp": "2024-01-22 15:00:00",
+  "pool": "aggressive",
+  "pool_label": "进攻型池(中证500+沪深300)",
+  "stage1_count": 4,
+  "stage2_count": 4,
+  "market_regime": {
+    "score": 0,
+    "label": "偏谨慎",
+    "regime": "defensive",
+    "attack_ok": false,
+    "summary": "强势扩散不够，今天更适合精选观察，不适合激进追高。",
+    "basis": "pool",
+    "sample_size": 500,
+    "metrics": {
+      "positive_ratio": 0.03,
+      "avg_change_pct": -3.9,
+      "avg_turnover": 0.63,
+      "strong_ratio": 0.002
+    },
+    "candidate_view": {
+      "score": 5,
+      "label": "中性偏进攻",
+      "regime": "balanced",
+      "attack_ok": true,
+      "summary": "可以做进攻型筛选，但别满仓追。",
+      "basis": "candidate",
+      "sample_size": 4,
+      "metrics": {
+        "positive_ratio": 0.5,
+        "avg_change_pct": 1.04,
+        "avg_turnover": 7.23,
+        "strong_ratio": 0.25
+      }
+    },
+    "candidate_score_gap": 5,
+    "candidate_gap_note": "候选口径明显更强，说明入围票强于整体股票池，别把候选强度误读成真实环境。",
+    "execution_gate": {
+      "status": "off",
+      "label": "进攻阀门关闭",
+      "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+      "position_cap": "0成",
+      "allow_new_positions": false,
+      "allow_handoff": false,
+      "allowed_setups": [],
+      "risk_flags": [
+        "赚钱效应不足",
+        "平均涨幅偏弱",
+        "强势股占比过低",
+        "流动性一般"
+      ]
+    }
+  },
+  "market_themes": {
+    "top_theme": "光伏链",
+    "summary": "今日主线较清晰，主攻方向偏 光伏链。 主线持续性：强势延续（15分）。",
+    "themes": [
+      {
+        "theme": "光伏链",
+        "score": 59.41,
+        "count": 3,
+        "weighted_count": 3.87,
+        "leader_codes": [
+          "爱旭股份(600732)",
+          "TCL中环(002129)",
+          "晶澳科技(002459)"
+        ],
+        "persistence": {
+          "score": 15,
+          "label": "强势延续",
+          "summary": "主题权重增强；主题分提升；龙头稳定",
+          "trend": "up",
+          "leader_stability": 1.0
+        },
+        "metrics": {
+          "count_score": 25,
+          "leader_score": 21.95,
+          "capital_score": 0.0,
+          "structure_score": 8,
+          "purity_score": 4.46,
+          "persistence_score": 15,
+          "total_flow_yi": -1.21,
+          "avg_flow_yi": -0.4,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 0.59,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "其他",
+        "score": 35.76,
+        "count": 1,
+        "weighted_count": 1.97,
+        "leader_codes": [
+          "国盛证券(002670)"
+        ],
+        "persistence": {
+          "score": 4,
+          "label": "一日游风险",
+          "summary": "主题权重回落；主题分提升；龙头切换较快",
+          "trend": "down",
+          "leader_stability": 0.0
+        },
+        "metrics": {
+          "count_score": 23.58,
+          "leader_score": 23.35,
+          "capital_score": 0.23,
+          "structure_score": 0,
+          "purity_score": 2.5,
+          "persistence_score": 4,
+          "total_flow_yi": 0.94,
+          "avg_flow_yi": 0.94,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 1.0,
+          "hot_ratio": 0.0
+        }
+      }
+    ]
+  },
+  "replay_meta": {
+    "mode": "research_eod_backfill",
+    "trade_date": "2024-01-22",
+    "assumptions": [
+      "历史价格使用东方财富日线K线回放",
+      "历史资金流暂用价格量能代理，不等同真实东方财富日频资金流",
+      "基本面暂用当前快照近似，不等同严格历史披露时点",
+      "股票池暂用当前可取到的池子近似，不等同严格历史成分股"
+    ],
+    "universe_meta": {
+      "pool": "aggressive",
+      "pool_label": "进攻型池(中证500+沪深300)",
+      "universe_size": 594,
+      "hs300_count": 248,
+      "zz500_count": 369,
+      "warnings": []
+    }
+  },
+  "strategies": {
+    "conservative": [],
+    "growth": [],
+    "rebound": [],
+    "hot": [
+      {
+        "code": "002670",
+        "name": "国盛证券",
+        "price": 10.1,
+        "change_pct": 3.8,
+        "score": 89.8,
+        "scores": {
+          "technical": 40,
+          "capital": 23,
+          "fundamental": -5,
+          "emotion": 13
+        },
+        "signals": [
+          "均线强多头",
+          "放量",
+          "接近突破",
+          "主力流入9428.7亿",
+          "资金反转",
+          "PE偏高(86.9)"
+        ],
+        "capital_flow": {
+          "today": 94287422.62,
+          "trend": "由负转正",
+          "5day_total": 184829914
+        },
+        "fundamentals": {
+          "pe_ttm": 86.94,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 280.59,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "估值偏高",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 9.91,
+          "ma10": 9.51,
+          "ma20": 9.28,
+          "high20": 10.57,
+          "low20": 8.58,
+          "position_20d": 0.764
+        },
+        "amount_yi": 11.1,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 3,
+          "tags": [
+            "资金修复",
+            "资金配合",
+            "单日流入",
+            "趋势突破区",
+            "估值压制"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 1,
+          "style_text": "国盛证券"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ],
+    "combined": [
+      {
+        "code": "600732",
+        "name": "爱旭股份",
+        "price": 18.21,
+        "change_pct": 2.65,
+        "score": 97.15,
+        "scores": {
+          "technical": 40,
+          "capital": 23,
+          "fundamental": 0,
+          "emotion": 17
+        },
+        "signals": [
+          "均线强多头",
+          "接近突破",
+          "主力流入12740.0亿",
+          "资金反转"
+        ],
+        "capital_flow": {
+          "today": 127399924.15,
+          "trend": "由负转正",
+          "5day_total": 303078431
+        },
+        "fundamentals": {
+          "pe_ttm": -5.33,
+          "pb": 5.08,
+          "roe": null,
+          "margin": null,
+          "total_mv": 328.39,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 17.68,
+          "ma10": 17.38,
+          "ma20": 16.97,
+          "high20": 18.92,
+          "low20": 15.47,
+          "position_20d": 0.794
+        },
+        "amount_yi": 19.8,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 11,
+          "tags": [
+            "高换手",
+            "资金修复",
+            "资金配合",
+            "单日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 1,
+          "style_text": "爱旭股份"
+        },
+        "theme": "光伏链",
+        "announcements": [],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "002670",
+        "name": "国盛证券",
+        "price": 10.1,
+        "change_pct": 3.8,
+        "score": 89.8,
+        "scores": {
+          "technical": 40,
+          "capital": 23,
+          "fundamental": -5,
+          "emotion": 13
+        },
+        "signals": [
+          "均线强多头",
+          "放量",
+          "接近突破",
+          "主力流入9428.7亿",
+          "资金反转",
+          "PE偏高(86.9)"
+        ],
+        "capital_flow": {
+          "today": 94287422.62,
+          "trend": "由负转正",
+          "5day_total": 184829914
+        },
+        "fundamentals": {
+          "pe_ttm": 86.94,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 280.59,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "估值偏高",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 9.91,
+          "ma10": 9.51,
+          "ma20": 9.28,
+          "high20": 10.57,
+          "low20": 8.58,
+          "position_20d": 0.764
+        },
+        "amount_yi": 11.1,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 3,
+          "tags": [
+            "资金修复",
+            "资金配合",
+            "单日流入",
+            "趋势突破区",
+            "估值压制"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 1,
+          "style_text": "国盛证券"
+        },
+        "theme": "其他",
+        "announcements": [],
+        "notice_risk_tags": []
+      }
+    ]
+  }
+}

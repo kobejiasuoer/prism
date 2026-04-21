@@ -1,0 +1,3337 @@
+{
+  "timestamp": "2026-04-21 10:04:45",
+  "pool": "aggressive",
+  "pool_label": "进攻型池(中证500+沪深300)",
+  "stage1_count": 27,
+  "stage2_count": 27,
+  "market_regime": {
+    "score": 0,
+    "label": "偏谨慎",
+    "regime": "defensive",
+    "attack_ok": false,
+    "summary": "强势扩散不够，今天更适合精选观察，不适合激进追高。",
+    "basis": "pool",
+    "sample_size": 39,
+    "metrics": {
+      "positive_ratio": 0.385,
+      "avg_change_pct": -0.43,
+      "avg_turnover": 1.44,
+      "strong_ratio": 0.128
+    },
+    "candidate_view": {
+      "score": 1,
+      "label": "偏谨慎",
+      "regime": "defensive",
+      "attack_ok": false,
+      "summary": "强势扩散不够，今天更适合精选观察，不适合激进追高。",
+      "basis": "candidate",
+      "sample_size": 27,
+      "metrics": {
+        "positive_ratio": 0.407,
+        "avg_change_pct": -0.1,
+        "avg_turnover": 1.66,
+        "strong_ratio": 0.185
+      }
+    },
+    "candidate_score_gap": 1,
+    "candidate_gap_note": "候选口径与整体股票池接近，可把候选强度当作环境的辅助参考。",
+    "execution_gate": {
+      "status": "off",
+      "label": "进攻阀门关闭",
+      "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+      "position_cap": "0成",
+      "allow_new_positions": false,
+      "allow_handoff": false,
+      "allowed_setups": [],
+      "risk_flags": [
+        "赚钱效应不足",
+        "平均涨幅偏弱",
+        "流动性一般",
+        "候选强度不足"
+      ]
+    }
+  },
+  "market_themes": {
+    "top_theme": "新能源链",
+    "summary": "今日偏双主线：主攻 新能源链，次主线 AI硬件链。 主线持续性：持续增强（20分）。",
+    "themes": [
+      {
+        "theme": "新能源链",
+        "score": 57.55,
+        "count": 3,
+        "weighted_count": 4.71,
+        "leader_codes": [
+          "天齐锂业(002466)",
+          "恩捷股份(002812)",
+          "赣锋锂业(002460)"
+        ],
+        "persistence": {
+          "score": 20,
+          "label": "持续增强",
+          "summary": "主题权重增强；主题分提升；龙头稳定",
+          "trend": "up",
+          "leader_stability": 0.67
+        },
+        "metrics": {
+          "count_score": 13.59,
+          "leader_score": 22.69,
+          "capital_score": 0.41,
+          "structure_score": 8,
+          "purity_score": 12.86,
+          "persistence_score": 20,
+          "total_flow_yi": 2.19,
+          "avg_flow_yi": 0.73,
+          "preferred_ratio": 0.7,
+          "keep_ratio": 1.0,
+          "hot_ratio": 0.48
+        }
+      },
+      {
+        "theme": "AI硬件链",
+        "score": 55.67,
+        "count": 5,
+        "weighted_count": 5.1,
+        "leader_codes": [
+          "鹏鼎控股(002938)",
+          "生益科技(600183)",
+          "深南电路(002916)"
+        ],
+        "persistence": {
+          "score": 18,
+          "label": "持续增强",
+          "summary": "主题权重增强；主题分提升；龙头稳定",
+          "trend": "up",
+          "leader_stability": 0.67
+        },
+        "metrics": {
+          "count_score": 14.74,
+          "leader_score": 19.81,
+          "capital_score": 0.0,
+          "structure_score": 15,
+          "purity_score": 6.12,
+          "persistence_score": 18,
+          "total_flow_yi": -1.01,
+          "avg_flow_yi": -0.2,
+          "preferred_ratio": 0.1,
+          "keep_ratio": 0.78,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "其他",
+        "score": 45.04,
+        "count": 11,
+        "weighted_count": 9.24,
+        "leader_codes": [
+          "兆易创新(603986)",
+          "中国卫通(601698)",
+          "天赐材料(002709)"
+        ],
+        "persistence": {
+          "score": 7,
+          "label": "热度衰减",
+          "summary": "主题权重回落；主题分提升；龙头切换较快",
+          "trend": "up",
+          "leader_stability": 0.0
+        },
+        "metrics": {
+          "count_score": 25,
+          "leader_score": 19.39,
+          "capital_score": 0.66,
+          "structure_score": 15,
+          "purity_score": 2.5,
+          "persistence_score": 7,
+          "total_flow_yi": 3.94,
+          "avg_flow_yi": 0.36,
+          "preferred_ratio": 0.13,
+          "keep_ratio": 0.4,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "AI信息链",
+        "score": 30.4,
+        "count": 3,
+        "weighted_count": 2.01,
+        "leader_codes": [
+          "浪潮信息(000977)",
+          "紫光股份(000938)",
+          "中科曙光(603019)"
+        ],
+        "persistence": {
+          "score": 11,
+          "label": "延续但分化",
+          "summary": "主题权重增强；主题分提升；龙头部分延续",
+          "trend": "up",
+          "leader_stability": 0.33
+        },
+        "metrics": {
+          "count_score": 5.8,
+          "leader_score": 12.28,
+          "capital_score": 0.0,
+          "structure_score": 8,
+          "purity_score": 4.32,
+          "persistence_score": 11,
+          "total_flow_yi": -10.99,
+          "avg_flow_yi": -3.66,
+          "preferred_ratio": 0.4,
+          "keep_ratio": 0.0,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "消费电子链",
+        "score": 20.33,
+        "count": 2,
+        "weighted_count": 1.37,
+        "leader_codes": [
+          "立讯精密(002475)",
+          "歌尔股份(002241)"
+        ],
+        "persistence": {
+          "score": 11,
+          "label": "延续但分化",
+          "summary": "主题权重增强；主题分提升；龙头部分延续",
+          "trend": "up",
+          "leader_stability": 0.5
+        },
+        "metrics": {
+          "count_score": 3.96,
+          "leader_score": 11.37,
+          "capital_score": 0.0,
+          "structure_score": 5,
+          "purity_score": 0.0,
+          "persistence_score": 11,
+          "total_flow_yi": -6.67,
+          "avg_flow_yi": -3.33,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 0.0,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "电网设备链",
+        "score": 9.02,
+        "count": 1,
+        "weighted_count": 0.6,
+        "leader_codes": [
+          "特变电工(600089)"
+        ],
+        "persistence": {
+          "score": 0,
+          "label": "一日游风险",
+          "summary": "主题权重回落；主题分回落；龙头部分延续",
+          "trend": "down",
+          "leader_stability": 1.0
+        },
+        "metrics": {
+          "count_score": 1.73,
+          "leader_score": 7.29,
+          "capital_score": 0.0,
+          "structure_score": 0,
+          "purity_score": 0.0,
+          "persistence_score": 0,
+          "total_flow_yi": -2.06,
+          "avg_flow_yi": -2.06,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 0.0,
+          "hot_ratio": 0.0
+        }
+      }
+    ]
+  },
+  "verification_universe": [
+    {
+      "code": "002466",
+      "name": "天齐锂业",
+      "price": 72.6,
+      "change_pct": 8.65,
+      "score": 94.4,
+      "scores": {
+        "technical": 39,
+        "capital": 27,
+        "fundamental": -5,
+        "emotion": 20
+      },
+      "signals": [
+        "均线强多头",
+        "强势拉升",
+        "接近突破",
+        "主力流入13517.9亿",
+        "连续3日流入",
+        "PE偏高(267.8)",
+        "高位高潮",
+        "追高风险"
+      ],
+      "capital_flow": {
+        "today": 135179280.0,
+        "trend": "连续3日流入",
+        "5day_total": 84437392
+      },
+      "fundamentals": {
+        "pe_ttm": 267.76,
+        "pb": 2.92,
+        "roe": null,
+        "margin": null,
+        "total_mv": 1238.73,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "趋势突破+资金配合 + 换手充分",
+        "main_risk": "公告风险：业绩预警；高位大涨，次日分歧风险；估值偏高",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+      },
+      "technical_state": {
+        "ma5": 65.02,
+        "ma10": 61.95,
+        "ma20": 58.28,
+        "high20": 68.4,
+        "low20": 48.28,
+        "position_20d": 0.921
+      },
+      "amount_yi": 50.0,
+      "source_pool": "hs300",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 7,
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 18,
+        "tags": [
+          "偏好行业:锂",
+          "高换手",
+          "涨幅强",
+          "资金配合",
+          "连续3日流入"
+        ],
+        "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+        "is_preferred": true,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 3,
+        "style_text": "name:锂 | 天齐锂业"
+      },
+      "theme": "新能源链",
+      "announcements": [
+        {
+          "date": "2026-04-21",
+          "title": "2026年第一季度业绩预告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-16",
+          "title": "H股公告:董事会会议通告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-15",
+          "title": "关于开展外汇及商品期货套期保值业务的进展公告",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": [
+        {
+          "label": "业绩预警",
+          "title": "2026年第一季度业绩预告",
+          "date": "2026-04-21"
+        }
+      ]
+    },
+    {
+      "code": "002938",
+      "name": "鹏鼎控股",
+      "price": 68.16,
+      "change_pct": 3.48,
+      "score": 78.5,
+      "scores": {
+        "technical": 32,
+        "capital": 23,
+        "fundamental": 1,
+        "emotion": 9
+      },
+      "signals": [
+        "均线强多头",
+        "接近突破",
+        "主力流入4086.6亿",
+        "资金反转"
+      ],
+      "capital_flow": {
+        "today": 40866242.0,
+        "trend": "由负转正",
+        "5day_total": 80624100
+      },
+      "fundamentals": {
+        "pe_ttm": 42.28,
+        "pb": 4.63,
+        "roe": null,
+        "margin": null,
+        "total_mv": 1580.22,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "趋势突破+资金配合",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+      },
+      "technical_state": {
+        "ma5": 61.75,
+        "ma10": 58.41,
+        "ma20": 54.68,
+        "high20": 66.95,
+        "low20": 48.0,
+        "position_20d": 0.943
+      },
+      "amount_yi": 11.8,
+      "source_pool": "hs300",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 3,
+        "tags": [
+          "换手不足",
+          "资金修复",
+          "资金配合",
+          "单日流入",
+          "趋势突破区"
+        ],
+        "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+        "is_preferred": false,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 1,
+        "style_text": "鹏鼎控股"
+      },
+      "theme": "AI硬件链",
+      "announcements": [
+        {
+          "date": "2026-04-18",
+          "title": "鹏鼎控股(深圳)股份有限公司关于召开2025年年度股东会的提示性公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-10",
+          "title": "2026年4月9日投资者关系活动记录表",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-08",
+          "title": "鹏鼎控股(深圳)股份有限公司2026年3月营业收入简报",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": []
+    },
+    {
+      "code": "603986",
+      "name": "兆易创新",
+      "price": 303.9,
+      "change_pct": 4.6,
+      "score": 77.4,
+      "scores": {
+        "technical": 32,
+        "capital": 21,
+        "fundamental": -5,
+        "emotion": 13
+      },
+      "signals": [
+        "均线强多头",
+        "接近突破",
+        "主力流入99794.4亿",
+        "PE偏高(129.2)"
+      ],
+      "capital_flow": {
+        "today": 997944464.0,
+        "trend": "连续2日流入",
+        "5day_total": 2472641136
+      },
+      "fundamentals": {
+        "pe_ttm": 129.2,
+        "pb": 11.21,
+        "roe": null,
+        "margin": null,
+        "total_mv": 2129.25,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "趋势突破+资金配合 + 成交额充足",
+        "main_risk": "公告风险：减持；估值偏高",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+      },
+      "technical_state": {
+        "ma5": 284.05,
+        "ma10": 270.36,
+        "ma20": 264.74,
+        "high20": 295.96,
+        "low20": 236.86,
+        "position_20d": 0.908
+      },
+      "amount_yi": 58.4,
+      "source_pool": "hs300",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 4,
+        "tags": [
+          "资金配合",
+          "连续2日流入",
+          "趋势突破区",
+          "估值压制"
+        ],
+        "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+        "is_preferred": false,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 2,
+        "style_text": "兆易创新"
+      },
+      "theme": "其他",
+      "announcements": [
+        {
+          "date": "2026-04-08",
+          "title": "兆易创新股东减持股份计划公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-03",
+          "title": "兆易创新2025年年度股东会会议资料",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-03-31",
+          "title": "兆易创新第五届董事会第十次会议决议公告",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": [
+        {
+          "label": "减持",
+          "title": "兆易创新股东减持股份计划公告",
+          "date": "2026-04-08"
+        }
+      ]
+    },
+    {
+      "code": "002812",
+      "name": "恩捷股份",
+      "price": 75.68,
+      "change_pct": 4.89,
+      "score": 76.1,
+      "scores": {
+        "technical": 30,
+        "capital": 23,
+        "fundamental": -3,
+        "emotion": 11
+      },
+      "signals": [
+        "均线强多头",
+        "接近突破",
+        "主力流入6056.0亿",
+        "资金反转",
+        "ROE偏弱(0.2%)"
+      ],
+      "capital_flow": {
+        "today": 60559648.0,
+        "trend": "由负转正",
+        "5day_total": 280797056
+      },
+      "fundamentals": {
+        "pe_ttm": -132.77,
+        "pb": 0.89,
+        "roe": 0.19,
+        "margin": 0.26,
+        "total_mv": 742.39,
+        "industry": "电池",
+        "concept": "云南板块"
+      },
+      "style": {
+        "industry": "电池",
+        "concept": "云南板块"
+      },
+      "trade_note": {
+        "entry_reason": "趋势突破+资金配合",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+      },
+      "technical_state": {
+        "ma5": 71.33,
+        "ma10": 69.49,
+        "ma20": 68.89,
+        "high20": 74.61,
+        "low20": 62.6,
+        "position_20d": 0.795
+      },
+      "amount_yi": 13.1,
+      "source_pool": "hs300",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 4,
+        "tags": [
+          "低换手脉冲",
+          "资金修复",
+          "资金配合",
+          "单日流入",
+          "趋势突破区"
+        ],
+        "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+        "is_preferred": false,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 1,
+        "style_text": "电池 | 云南板块 | 恩捷股份"
+      },
+      "theme": "新能源链",
+      "announcements": [
+        {
+          "date": "2026-04-16",
+          "title": "关于召开2025年度暨2026年一季度业绩说明会的公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-16",
+          "title": "关于公司合并报表范围内提供担保的进展公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-04",
+          "title": "关于发行股份购买资产并募集配套资金的进展公告",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": []
+    },
+    {
+      "code": "600183",
+      "name": "生益科技",
+      "price": 72.91,
+      "change_pct": 4.46,
+      "score": 75.9,
+      "scores": {
+        "technical": 30,
+        "capital": 21,
+        "fundamental": 1,
+        "emotion": 11
+      },
+      "signals": [
+        "均线强多头",
+        "接近突破",
+        "主力流入24775.9亿"
+      ],
+      "capital_flow": {
+        "today": 247759248.0,
+        "trend": "连续2日流入",
+        "5day_total": 874759712
+      },
+      "fundamentals": {
+        "pe_ttm": 53.08,
+        "pb": 11.4,
+        "roe": null,
+        "margin": null,
+        "total_mv": 1769.61,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "趋势突破+资金配合",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+      },
+      "technical_state": {
+        "ma5": 68.07,
+        "ma10": 63.84,
+        "ma20": 59.38,
+        "high20": 71.49,
+        "low20": 51.2,
+        "position_20d": 0.917
+      },
+      "amount_yi": 21.3,
+      "source_pool": "hs300",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 4,
+        "tags": [
+          "换手不足",
+          "资金配合",
+          "连续2日流入",
+          "趋势突破区"
+        ],
+        "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+        "is_preferred": false,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 2,
+        "style_text": "生益科技"
+      },
+      "theme": "AI硬件链",
+      "announcements": [
+        {
+          "date": "2026-03-31",
+          "title": "生益科技关于持股5%以上股东非公开发行可交换公司债券发行完成的公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-03-14",
+          "title": "生益科技关于持股5%以上股东拟非公开发行可交换公司债券办理持有股份担保及信托登记的公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-03-12",
+          "title": "湖南绿晟环保股份有限公司关于开展境内期货套期保值业务的可行性报告",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": []
+    },
+    {
+      "code": "601698",
+      "name": "中国卫通",
+      "price": 38.19,
+      "change_pct": 2.17,
+      "score": 67.45,
+      "scores": {
+        "technical": 42,
+        "capital": 0,
+        "fundamental": 0,
+        "emotion": 13
+      },
+      "signals": [
+        "均线强多头",
+        "强放量",
+        "接近突破"
+      ],
+      "capital_flow": {
+        "today": -97057776.0,
+        "trend": "mixed",
+        "5day_total": 1209634839
+      },
+      "fundamentals": {
+        "pe_ttm": 365.81,
+        "pb": 8.97,
+        "roe": null,
+        "margin": null,
+        "total_mv": 1615.4,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "量价活跃 + 成交额充足",
+        "main_risk": "估值偏高",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；观察资金是否回流"
+      },
+      "technical_state": {
+        "ma5": 34.63,
+        "ma10": 33.51,
+        "ma20": 32.78,
+        "high20": 37.38,
+        "low20": 30.73,
+        "position_20d": 1.0
+      },
+      "amount_yi": 40.3,
+      "source_pool": "hs300",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "exclude",
+        "bias_score": -16,
+        "tags": [
+          "资金背离",
+          "资金背离",
+          "趋势突破区",
+          "估值压制",
+          "非偏好且无资金"
+        ],
+        "reason": "风格偏弱或与进攻型不匹配，直接淘汰。",
+        "is_preferred": false,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 0,
+        "style_text": "中国卫通"
+      },
+      "theme": "其他",
+      "announcements": [
+        {
+          "date": "2026-04-03",
+          "title": "关于公司控股股东公开发行可交换公司债券摘牌完成暨拟办理解除可交换公司债券担保及信托登记的提示性公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-01",
+          "title": "中国卫通集团股份有限公司董事会关于会计政策变更的说明",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-01",
+          "title": "立信会计师事务所(特殊普通合伙)关于中国卫通涉及财务公司关联交易的专项说明",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": []
+    },
+    {
+      "code": "002709",
+      "name": "天赐材料",
+      "price": 50.51,
+      "change_pct": 1.73,
+      "score": 65.45,
+      "scores": {
+        "technical": 23,
+        "capital": 21,
+        "fundamental": 0,
+        "emotion": 10
+      },
+      "signals": [
+        "均线强多头",
+        "主力流入1292.7亿"
+      ],
+      "capital_flow": {
+        "today": 12926928.0,
+        "trend": "连续2日流入",
+        "5day_total": 618709648
+      },
+      "fundamentals": {
+        "pe_ttm": 75.56,
+        "pb": 5.77,
+        "roe": null,
+        "margin": null,
+        "total_mv": 1029.07,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "趋势突破+资金配合",
+        "main_risk": "公告风险：诉讼；留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+      },
+      "technical_state": {
+        "ma5": 48.99,
+        "ma10": 47.09,
+        "ma20": 45.99,
+        "high20": 50.66,
+        "low20": 41.1,
+        "position_20d": 0.894
+      },
+      "amount_yi": 19.0,
+      "source_pool": "hs300",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 14,
+        "tags": [
+          "偏好行业:材料",
+          "资金配合",
+          "连续2日流入",
+          "趋势突破区"
+        ],
+        "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+        "is_preferred": true,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 2,
+        "style_text": "name:材料 | 天赐材料"
+      },
+      "theme": "其他",
+      "announcements": [
+        {
+          "date": "2026-04-02",
+          "title": "关于公司提起诉讼的公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-02",
+          "title": "第七届董事会第一次会议决议的公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-02",
+          "title": "董事长、董事会秘书、证券事务代表联系方式的公告",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": [
+        {
+          "label": "诉讼",
+          "title": "关于公司提起诉讼的公告",
+          "date": "2026-04-02"
+        }
+      ]
+    },
+    {
+      "code": "002916",
+      "name": "深南电路",
+      "price": 292.0,
+      "change_pct": 1.52,
+      "score": 63.05,
+      "scores": {
+        "technical": 19,
+        "capital": 27,
+        "fundamental": 0,
+        "emotion": 6
+      },
+      "signals": [
+        "均线强多头",
+        "主力流入1550.8亿",
+        "连续4日流入"
+      ],
+      "capital_flow": {
+        "today": 15507725.0,
+        "trend": "连续4日流入",
+        "5day_total": 402331453
+      },
+      "fundamentals": {
+        "pe_ttm": 60.75,
+        "pb": 11.6,
+        "roe": null,
+        "margin": null,
+        "total_mv": 1990.03,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "趋势突破+资金配合",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+      },
+      "technical_state": {
+        "ma5": 279.5,
+        "ma10": 262.47,
+        "ma20": 245.23,
+        "high20": 298.0,
+        "low20": 211.0,
+        "position_20d": 0.881
+      },
+      "amount_yi": 11.4,
+      "source_pool": "hs300",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 4,
+        "tags": [
+          "换手不足",
+          "资金配合",
+          "连续4日流入",
+          "趋势突破区"
+        ],
+        "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+        "is_preferred": false,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 4,
+        "style_text": "深南电路"
+      },
+      "theme": "AI硬件链",
+      "announcements": [
+        {
+          "date": "2026-04-04",
+          "title": "北京市嘉源律师事务所关于深南电路股份有限公司2025年年度股东会的法律意见书",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-04",
+          "title": "2025年年度股东会决议公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-03-30",
+          "title": "2026年3月30日投资者关系活动记录表",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": []
+    },
+    {
+      "code": "002460",
+      "name": "赣锋锂业",
+      "price": 84.71,
+      "change_pct": 2.42,
+      "score": 57.2,
+      "scores": {
+        "technical": 14,
+        "capital": 21,
+        "fundamental": -5,
+        "emotion": 15
+      },
+      "signals": [
+        "主力流入2359.6亿",
+        "PE偏高(110.0)"
+      ],
+      "capital_flow": {
+        "today": 23595808.0,
+        "trend": "连续2日流入",
+        "5day_total": -917523488
+      },
+      "fundamentals": {
+        "pe_ttm": 110.04,
+        "pb": 3.93,
+        "roe": null,
+        "margin": null,
+        "total_mv": 1774.85,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "资金驱动走强 + 成交额充足",
+        "main_risk": "公告风险：业绩预警；估值偏高；周期波动较大",
+        "watch_condition": "继续放量上攻再确认；主力资金别转负"
+      },
+      "technical_state": {
+        "ma5": 84.56,
+        "ma10": 83.32,
+        "ma20": 79.41,
+        "high20": 88.48,
+        "low20": 65.58,
+        "position_20d": 0.748
+      },
+      "amount_yi": 33.6,
+      "source_pool": "hs300",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 9,
+        "tags": [
+          "偏好行业:锂",
+          "资金配合",
+          "连续2日流入",
+          "趋势中高位",
+          "估值压制"
+        ],
+        "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+        "is_preferred": true,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 2,
+        "style_text": "name:锂 | 赣锋锂业"
+      },
+      "theme": "新能源链",
+      "announcements": [
+        {
+          "date": "2026-04-17",
+          "title": "2026年4月16日投资者关系活动记录表",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-17",
+          "title": "2026年第一季度业绩预告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-16",
+          "title": "关于召开2025年年度股东会的通知",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": [
+        {
+          "label": "业绩预警",
+          "title": "2026年第一季度业绩预告",
+          "date": "2026-04-17"
+        }
+      ]
+    },
+    {
+      "code": "000559",
+      "name": "万向钱潮",
+      "price": 16.83,
+      "change_pct": 1.39,
+      "score": 55.65,
+      "scores": {
+        "technical": 26,
+        "capital": 15,
+        "fundamental": 1,
+        "emotion": 4
+      },
+      "signals": [
+        "均线强多头",
+        "放量",
+        "主力流入3478.1亿"
+      ],
+      "capital_flow": {
+        "today": 34780823.0,
+        "trend": "今日流入",
+        "5day_total": 34780823
+      },
+      "fundamentals": {
+        "pe_ttm": 53.98,
+        "pb": null,
+        "roe": null,
+        "margin": null,
+        "total_mv": 558.97,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "趋势突破+资金配合",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+      },
+      "technical_state": {
+        "ma5": 16.43,
+        "ma10": 16.05,
+        "ma20": 15.67,
+        "high20": 16.84,
+        "low20": 14.64,
+        "position_20d": 0.891
+      },
+      "amount_yi": 7.7,
+      "source_pool": "zz500",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 2,
+        "tags": [
+          "换手不足",
+          "资金配合",
+          "单日流入",
+          "趋势突破区"
+        ],
+        "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+        "is_preferred": false,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 1,
+        "style_text": "万向钱潮"
+      },
+      "theme": "其他",
+      "announcements": [
+        {
+          "date": "2026-04-15",
+          "title": "关于举行2025年度业绩网上说明会并公开征集问题的公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-11",
+          "title": "关于重大资产重组的进展公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-07",
+          "title": "关于前期会计差错更正的公告",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": []
+    },
+    {
+      "code": "000977",
+      "name": "浪潮信息",
+      "price": 69.32,
+      "change_pct": -5.2,
+      "score": 53.3,
+      "scores": {
+        "technical": 33,
+        "capital": 0,
+        "fundamental": 1,
+        "emotion": 10
+      },
+      "signals": [
+        "均线强多头",
+        "强放量"
+      ],
+      "capital_flow": {
+        "today": -634778560.0,
+        "trend": "mixed",
+        "5day_total": -309202576
+      },
+      "fundamentals": {
+        "pe_ttm": 42.11,
+        "pb": 4.61,
+        "roe": null,
+        "margin": null,
+        "total_mv": 1016.04,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "量价活跃 + 成交额充足",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；观察资金是否回流"
+      },
+      "technical_state": {
+        "ma5": 69.3,
+        "ma10": 66.96,
+        "ma20": 62.15,
+        "high20": 75.05,
+        "low20": 55.36,
+        "position_20d": 0.902
+      },
+      "amount_yi": 30.8,
+      "source_pool": "hs300",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "downgrade",
+        "bias_score": -2,
+        "tags": [
+          "偏好行业:信息",
+          "涨幅弱",
+          "资金背离",
+          "趋势突破区"
+        ],
+        "reason": "有一定进攻信号，但不够纯粹，降级观察。",
+        "is_preferred": true,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 0,
+        "style_text": "name:信息 | 浪潮信息"
+      },
+      "theme": "AI信息链",
+      "announcements": [
+        {
+          "date": "2026-04-11",
+          "title": "独立董事关鑫2025年度述职报告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-11",
+          "title": "关于授权董事会制定中期分红方案的公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-11",
+          "title": "独立董事刘培德2025年度述职报告",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": []
+    },
+    {
+      "code": "601985",
+      "name": "中国核电",
+      "price": 8.92,
+      "change_pct": 1.71,
+      "score": 50.9,
+      "scores": {
+        "technical": 20,
+        "capital": 15,
+        "fundamental": 6,
+        "emotion": 4
+      },
+      "signals": [
+        "均线多头",
+        "低位反弹",
+        "主力流入11193.8亿",
+        "PE偏低(17.2)"
+      ],
+      "capital_flow": {
+        "today": 111938200.0,
+        "trend": "今日流入",
+        "5day_total": 111938200
+      },
+      "fundamentals": {
+        "pe_ttm": 17.21,
+        "pb": 1.59,
+        "roe": null,
+        "margin": null,
+        "total_mv": 1836.72,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "低位活跃反弹",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "继续放量上攻再确认；主力资金别转负"
+      },
+      "technical_state": {
+        "ma5": 8.74,
+        "ma10": 8.73,
+        "ma20": 8.91,
+        "high20": 9.44,
+        "low20": 8.64,
+        "position_20d": 0.162
+      },
+      "amount_yi": 6.6,
+      "source_pool": "hs300",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "downgrade",
+        "bias_score": -2,
+        "tags": [
+          "换手不足",
+          "资金配合",
+          "单日流入",
+          "仍在低位"
+        ],
+        "reason": "有一定进攻信号，但不够纯粹，降级观察。",
+        "is_preferred": false,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 1,
+        "style_text": "中国核电"
+      },
+      "theme": "其他",
+      "announcements": [
+        {
+          "date": "2026-04-07",
+          "title": "中国核电关于浙江金七门核电站2号机组浇筑核岛第一罐混凝土的公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-07",
+          "title": "中国核电2026年一季度发电量公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-02",
+          "title": "中国核电关于股份回购进展公告",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": []
+    },
+    {
+      "code": "002475",
+      "name": "立讯精密",
+      "price": 64.24,
+      "change_pct": -2.27,
+      "score": 45.35,
+      "scores": {
+        "technical": 29,
+        "capital": 0,
+        "fundamental": 4,
+        "emotion": 6
+      },
+      "signals": [
+        "均线强多头",
+        "强放量",
+        "PE合理(28.1)"
+      ],
+      "capital_flow": {
+        "today": -552710848.0,
+        "trend": "mixed",
+        "5day_total": 3453480688
+      },
+      "fundamentals": {
+        "pe_ttm": 28.14,
+        "pb": 5.55,
+        "roe": null,
+        "margin": null,
+        "total_mv": 4671.77,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "量价活跃 + 成交额充足",
+        "main_risk": "公告风险：业绩预警；留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；观察资金是否回流"
+      },
+      "technical_state": {
+        "ma5": 60.77,
+        "ma10": 57.64,
+        "ma20": 53.4,
+        "high20": 65.73,
+        "low20": 44.57,
+        "position_20d": 1.0
+      },
+      "amount_yi": 58.0,
+      "source_pool": "hs300",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "exclude",
+        "bias_score": -15,
+        "tags": [
+          "换手不足",
+          "涨幅弱",
+          "资金背离",
+          "趋势突破区",
+          "非偏好且无资金"
+        ],
+        "reason": "风格偏弱或与进攻型不匹配，直接淘汰。",
+        "is_preferred": false,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 0,
+        "style_text": "立讯精密"
+      },
+      "theme": "消费电子链",
+      "announcements": [
+        {
+          "date": "2026-04-20",
+          "title": "2026年4月16日-20日投资者关系活动记录表",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-16",
+          "title": "关于“质量回报双提升”行动方案的进展公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-15",
+          "title": "2025年度独立董事述职报告(宋宇红)",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": [
+        {
+          "label": "业绩预警",
+          "title": "2026年第一季度业绩预告",
+          "date": "2026-04-15"
+        }
+      ]
+    },
+    {
+      "code": "002202",
+      "name": "金风科技",
+      "price": 26.17,
+      "change_pct": -1.58,
+      "score": 41.0,
+      "scores": {
+        "technical": 25,
+        "capital": 0,
+        "fundamental": 1,
+        "emotion": 8
+      },
+      "signals": [
+        "均线多头",
+        "放量"
+      ],
+      "capital_flow": {
+        "today": -238369024.0,
+        "trend": "mixed",
+        "5day_total": 37498848
+      },
+      "fundamentals": {
+        "pe_ttm": 39.93,
+        "pb": 2.85,
+        "roe": null,
+        "margin": null,
+        "total_mv": 1107.9,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "量价活跃",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "继续放量上攻再确认；观察资金是否回流"
+      },
+      "technical_state": {
+        "ma5": 25.46,
+        "ma10": 24.61,
+        "ma20": 25.63,
+        "high20": 29.08,
+        "low20": 22.8,
+        "position_20d": 0.604
+      },
+      "amount_yi": 21.4,
+      "source_pool": "hs300",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "exclude",
+        "bias_score": -12,
+        "tags": [
+          "涨幅弱",
+          "资金背离",
+          "趋势中高位",
+          "非偏好且无资金"
+        ],
+        "reason": "风格偏弱或与进攻型不匹配，直接淘汰。",
+        "is_preferred": false,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 0,
+        "style_text": "金风科技"
+      },
+      "theme": "其他",
+      "announcements": [
+        {
+          "date": "2026-04-15",
+          "title": "2026年4月15日2025年度线上业绩说明会",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-15",
+          "title": "H股公告(董事會會議召開日期)",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-11",
+          "title": "关于为全资子公司金风国际和GoldwindMorocco(SARL)提供担保的公告",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": []
+    },
+    {
+      "code": "002241",
+      "name": "歌尔股份",
+      "price": 24.4,
+      "change_pct": -1.93,
+      "score": 37.0,
+      "scores": {
+        "technical": 26,
+        "capital": 0,
+        "fundamental": 4,
+        "emotion": 2
+      },
+      "signals": [
+        "均线强多头",
+        "强放量",
+        "PE合理(25.1)"
+      ],
+      "capital_flow": {
+        "today": -114166599.0,
+        "trend": "mixed",
+        "5day_total": -114166599
+      },
+      "fundamentals": {
+        "pe_ttm": 25.08,
+        "pb": 2.42,
+        "roe": null,
+        "margin": null,
+        "total_mv": 865.14,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "量价活跃",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；观察资金是否回流"
+      },
+      "technical_state": {
+        "ma5": 24.38,
+        "ma10": 24.01,
+        "ma20": 23.3,
+        "high20": 25.11,
+        "low20": 21.85,
+        "position_20d": 0.929
+      },
+      "amount_yi": 7.1,
+      "source_pool": "hs300",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "exclude",
+        "bias_score": -15,
+        "tags": [
+          "换手不足",
+          "涨幅弱",
+          "资金背离",
+          "趋势突破区",
+          "非偏好且无资金"
+        ],
+        "reason": "风格偏弱或与进攻型不匹配，直接淘汰。",
+        "is_preferred": false,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 0,
+        "style_text": "歌尔股份"
+      },
+      "theme": "消费电子链",
+      "announcements": [
+        {
+          "date": "2026-04-15",
+          "title": "关于参与设立投资基金完成备案的公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-11",
+          "title": "关于股份回购实施结果暨股份变动的公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-02",
+          "title": "关于回购公司股份的进展公告",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": []
+    },
+    {
+      "code": "000063",
+      "name": "中兴通讯",
+      "price": 34.99,
+      "change_pct": -2.34,
+      "score": 33.05,
+      "scores": {
+        "technical": 21,
+        "capital": 0,
+        "fundamental": 4,
+        "emotion": 4
+      },
+      "signals": [
+        "均线强多头",
+        "PE合理(29.8)"
+      ],
+      "capital_flow": {
+        "today": -280848608.0,
+        "trend": "mixed",
+        "5day_total": -280848608
+      },
+      "fundamentals": {
+        "pe_ttm": 29.81,
+        "pb": 2.22,
+        "roe": null,
+        "margin": null,
+        "total_mv": 1674.72,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "量价活跃",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；观察资金是否回流"
+      },
+      "technical_state": {
+        "ma5": 35.52,
+        "ma10": 35.11,
+        "ma20": 33.85,
+        "high20": 36.4,
+        "low20": 31.8,
+        "position_20d": 0.876
+      },
+      "amount_yi": 12.0,
+      "source_pool": "hs300",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "exclude",
+        "bias_score": -15,
+        "tags": [
+          "换手不足",
+          "涨幅弱",
+          "资金背离",
+          "趋势突破区",
+          "非偏好且无资金"
+        ],
+        "reason": "风格偏弱或与进攻型不匹配，直接淘汰。",
+        "is_preferred": false,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 0,
+        "style_text": "中兴通讯"
+      },
+      "theme": "AI硬件链",
+      "announcements": [
+        {
+          "date": "2026-04-15",
+          "title": "关于按照《香港上市规则》公布董事会会议通告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-03",
+          "title": "关于回购A股股份的进展公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-03",
+          "title": "关于按照《香港上市规则》公布2026年3月份证券变动月报表的公告",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": []
+    },
+    {
+      "code": "000657",
+      "name": "中钨高新",
+      "price": 58.26,
+      "change_pct": -0.48,
+      "score": 32.7,
+      "scores": {
+        "technical": 21,
+        "capital": 0,
+        "fundamental": -5,
+        "emotion": 8
+      },
+      "signals": [
+        "均线强多头",
+        "PE偏高(104.1)"
+      ],
+      "capital_flow": {
+        "today": -47330528.0,
+        "trend": "mixed",
+        "5day_total": 1145260032
+      },
+      "fundamentals": {
+        "pe_ttm": 104.08,
+        "pb": null,
+        "roe": null,
+        "margin": null,
+        "total_mv": 1332.98,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "量价活跃",
+        "main_risk": "估值偏高",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；观察资金是否回流"
+      },
+      "technical_state": {
+        "ma5": 52.74,
+        "ma10": 50.73,
+        "ma20": 49.39,
+        "high20": 60.75,
+        "low20": 45.55,
+        "position_20d": 0.855
+      },
+      "amount_yi": 18.1,
+      "source_pool": "zz500",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "exclude",
+        "bias_score": -15,
+        "tags": [
+          "涨幅弱",
+          "资金背离",
+          "趋势突破区",
+          "估值压制",
+          "非偏好且无资金"
+        ],
+        "reason": "风格偏弱或与进攻型不匹配，直接淘汰。",
+        "is_preferred": false,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 0,
+        "style_text": "中钨高新"
+      },
+      "theme": "其他",
+      "announcements": [
+        {
+          "date": "2026-04-21",
+          "title": "股票交易异常波动公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-10",
+          "title": "中钨高新材料股份有限公司2025年度业绩快报",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-10",
+          "title": "中钨高新材料股份有限公司2026年一季度业绩预增的公告",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": []
+    },
+    {
+      "code": "000938",
+      "name": "紫光股份",
+      "price": 27.44,
+      "change_pct": -3.41,
+      "score": 31.4,
+      "scores": {
+        "technical": 21,
+        "capital": 0,
+        "fundamental": 1,
+        "emotion": 4
+      },
+      "signals": [
+        "均线强多头"
+      ],
+      "capital_flow": {
+        "today": -187782744.0,
+        "trend": "mixed",
+        "5day_total": -889929000
+      },
+      "fundamentals": {
+        "pe_ttm": 46.54,
+        "pb": 5.32,
+        "roe": null,
+        "margin": null,
+        "total_mv": 784.52,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "量价活跃",
+        "main_risk": "公告风险：减持；留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；观察资金是否回流"
+      },
+      "technical_state": {
+        "ma5": 27.91,
+        "ma10": 27.35,
+        "ma20": 26.31,
+        "high20": 29.15,
+        "low20": 23.85,
+        "position_20d": 0.86
+      },
+      "amount_yi": 11.8,
+      "source_pool": "hs300",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "exclude",
+        "bias_score": -15,
+        "tags": [
+          "换手不足",
+          "涨幅弱",
+          "资金背离",
+          "趋势突破区",
+          "非偏好且无资金"
+        ],
+        "reason": "风格偏弱或与进攻型不匹配，直接淘汰。",
+        "is_preferred": false,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 0,
+        "style_text": "紫光股份"
+      },
+      "theme": "AI信息链",
+      "announcements": [
+        {
+          "date": "2026-04-17",
+          "title": "关于股东减持计划期限届满暨实施情况的公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-16",
+          "title": "2026年4月15日投资者关系活动记录表",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-15",
+          "title": "关于拟续聘会计师事务所的公告",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": [
+        {
+          "label": "减持",
+          "title": "关于股东减持计划期限届满暨实施情况的公告",
+          "date": "2026-04-17"
+        }
+      ]
+    },
+    {
+      "code": "600089",
+      "name": "特变电工",
+      "price": 27.47,
+      "change_pct": -1.51,
+      "score": 28.05,
+      "scores": {
+        "technical": 17,
+        "capital": 0,
+        "fundamental": 4,
+        "emotion": 4
+      },
+      "signals": [
+        "均线多头",
+        "PE合理(23.4)"
+      ],
+      "capital_flow": {
+        "today": -206493828.0,
+        "trend": "mixed",
+        "5day_total": -644336612
+      },
+      "fundamentals": {
+        "pe_ttm": 23.36,
+        "pb": 1.99,
+        "roe": null,
+        "margin": null,
+        "total_mv": 1391.03,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "量价活跃",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "继续放量上攻再确认；观察资金是否回流"
+      },
+      "technical_state": {
+        "ma5": 27.77,
+        "ma10": 27.19,
+        "ma20": 27.34,
+        "high20": 29.26,
+        "low20": 25.22,
+        "position_20d": 0.661
+      },
+      "amount_yi": 12.9,
+      "source_pool": "hs300",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "exclude",
+        "bias_score": -16,
+        "tags": [
+          "换手不足",
+          "涨幅弱",
+          "资金背离",
+          "趋势中高位",
+          "非偏好且无资金"
+        ],
+        "reason": "风格偏弱或与进攻型不匹配，直接淘汰。",
+        "is_preferred": false,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 0,
+        "style_text": "特变电工"
+      },
+      "theme": "电网设备链",
+      "announcements": [
+        {
+          "date": "2026-04-16",
+          "title": "特变电工股份有限公司2025年年度利润分配预案公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-16",
+          "title": "特变电工股份有限公司独立董事2025年度述职报告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-16",
+          "title": "特变电工股份有限公司对外投资公告",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": []
+    },
+    {
+      "code": "603019",
+      "name": "中科曙光",
+      "price": 88.92,
+      "change_pct": -3.32,
+      "score": 27.9,
+      "scores": {
+        "technical": 19,
+        "capital": 0,
+        "fundamental": -5,
+        "emotion": 6
+      },
+      "signals": [
+        "均线强多头",
+        "PE偏高(144.3)"
+      ],
+      "capital_flow": {
+        "today": -275942419.0,
+        "trend": "mixed",
+        "5day_total": 330636973
+      },
+      "fundamentals": {
+        "pe_ttm": 144.27,
+        "pb": 5.85,
+        "roe": null,
+        "margin": null,
+        "total_mv": 1300.86,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "量价活跃",
+        "main_risk": "估值偏高",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；观察资金是否回流"
+      },
+      "technical_state": {
+        "ma5": 89.6,
+        "ma10": 86.65,
+        "ma20": 83.4,
+        "high20": 94.28,
+        "low20": 76.78,
+        "position_20d": 0.868
+      },
+      "amount_yi": 18.5,
+      "source_pool": "hs300",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "exclude",
+        "bias_score": -19,
+        "tags": [
+          "换手不足",
+          "涨幅弱",
+          "资金背离",
+          "趋势突破区",
+          "估值压制"
+        ],
+        "reason": "风格偏弱或与进攻型不匹配，直接淘汰。",
+        "is_preferred": false,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 0,
+        "style_text": "中科曙光"
+      },
+      "theme": "AI信息链",
+      "announcements": [
+        {
+          "date": "2026-04-16",
+          "title": "中科曙光关于2026年度日常关联交易预计的补充公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-15",
+          "title": "中科曙光2025年度环境、社会和公司治理报告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-15",
+          "title": "中科曙光2025年度审计报告",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": []
+    },
+    {
+      "code": "000426",
+      "name": "兴业银锡",
+      "price": 44.81,
+      "change_pct": -1.47,
+      "score": 27.85,
+      "scores": {
+        "technical": 20,
+        "capital": 0,
+        "fundamental": 1,
+        "emotion": 2
+      },
+      "signals": [
+        "均线强多头"
+      ],
+      "capital_flow": {
+        "today": -47989078.0,
+        "trend": "mixed",
+        "5day_total": 445530042
+      },
+      "fundamentals": {
+        "pe_ttm": 43.77,
+        "pb": null,
+        "roe": null,
+        "margin": null,
+        "total_mv": 796.02,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "量价活跃",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；观察资金是否回流"
+      },
+      "technical_state": {
+        "ma5": 44.4,
+        "ma10": 43.47,
+        "ma20": 41.49,
+        "high20": 46.63,
+        "low20": 35.85,
+        "position_20d": 0.893
+      },
+      "amount_yi": 6.7,
+      "source_pool": "zz500",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "exclude",
+        "bias_score": -15,
+        "tags": [
+          "换手不足",
+          "涨幅弱",
+          "资金背离",
+          "趋势突破区",
+          "非偏好且无资金"
+        ],
+        "reason": "风格偏弱或与进攻型不匹配，直接淘汰。",
+        "is_preferred": false,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 0,
+        "style_text": "兴业银锡"
+      },
+      "theme": "其他",
+      "announcements": [
+        {
+          "date": "2026-04-03",
+          "title": "关于公司为子公司及参股公司提供担保的进展公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-03-31",
+          "title": "北京市金杜律师事务所关于内蒙古兴业银锡矿业股份有限公司2026年第二次临时股东会之法律意见书",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-03-31",
+          "title": "关于完成补选独立董事的公告",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": []
+    },
+    {
+      "code": "000062",
+      "name": "深圳华强",
+      "price": 29.96,
+      "change_pct": -3.88,
+      "score": 27.1,
+      "scores": {
+        "technical": 18,
+        "capital": 0,
+        "fundamental": 0,
+        "emotion": 4
+      },
+      "signals": [
+        "均线强多头"
+      ],
+      "capital_flow": {
+        "today": -103130463.0,
+        "trend": "mixed",
+        "5day_total": 195258692
+      },
+      "fundamentals": {
+        "pe_ttm": 67.37,
+        "pb": null,
+        "roe": null,
+        "margin": null,
+        "total_mv": 311.89,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "量价活跃",
+        "main_risk": "公告风险：业绩预警；留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；观察资金是否回流"
+      },
+      "technical_state": {
+        "ma5": 29.22,
+        "ma10": 28.77,
+        "ma20": 27.43,
+        "high20": 31.99,
+        "low20": 24.13,
+        "position_20d": 0.896
+      },
+      "amount_yi": 6.4,
+      "source_pool": "zz500",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "exclude",
+        "bias_score": -11,
+        "tags": [
+          "涨幅弱",
+          "资金背离",
+          "趋势突破区",
+          "非偏好且无资金"
+        ],
+        "reason": "风格偏弱或与进攻型不匹配，直接淘汰。",
+        "is_preferred": false,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 0,
+        "style_text": "深圳华强"
+      },
+      "theme": "其他",
+      "announcements": [
+        {
+          "date": "2026-04-17",
+          "title": "北京金诚同达(深圳)律师事务所关于深圳华强实业股份有限公司2025年年度股东会的法律意见书",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-17",
+          "title": "2025年年度股东会决议公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-15",
+          "title": "2026年第一季度业绩预告",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": [
+        {
+          "label": "业绩预警",
+          "title": "2026年第一季度业绩预告",
+          "date": "2026-04-15"
+        }
+      ]
+    },
+    {
+      "code": "002049",
+      "name": "紫光国微",
+      "price": 70.19,
+      "change_pct": -4.01,
+      "score": 26.4,
+      "scores": {
+        "technical": 17,
+        "capital": 0,
+        "fundamental": 1,
+        "emotion": 4
+      },
+      "signals": [
+        "均线强多头"
+      ],
+      "capital_flow": {
+        "today": -158976990.0,
+        "trend": "mixed",
+        "5day_total": -158976990
+      },
+      "fundamentals": {
+        "pe_ttm": 41.48,
+        "pb": 4.4,
+        "roe": null,
+        "margin": null,
+        "total_mv": 596.1,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "量价活跃",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；观察资金是否回流"
+      },
+      "technical_state": {
+        "ma5": 71.64,
+        "ma10": 70.09,
+        "ma20": 68.56,
+        "high20": 73.71,
+        "low20": 64.8,
+        "position_20d": 0.934
+      },
+      "amount_yi": 8.2,
+      "source_pool": "hs300",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "exclude",
+        "bias_score": -15,
+        "tags": [
+          "换手不足",
+          "涨幅弱",
+          "资金背离",
+          "趋势突破区",
+          "非偏好且无资金"
+        ],
+        "reason": "风格偏弱或与进攻型不匹配，直接淘汰。",
+        "is_preferred": false,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 0,
+        "style_text": "紫光国微"
+      },
+      "theme": "其他",
+      "announcements": [
+        {
+          "date": "2026-04-21",
+          "title": "2025年度可持续发展报告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-21",
+          "title": "2025年度非经营性资金占用及其他关联资金往来情况汇总表",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-21",
+          "title": "关于购买董事、高级管理人员责任保险的公告",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": []
+    },
+    {
+      "code": "600584",
+      "name": "长电科技",
+      "price": 43.87,
+      "change_pct": -1.39,
+      "score": 26.4,
+      "scores": {
+        "technical": 17,
+        "capital": 0,
+        "fundamental": 1,
+        "emotion": 4
+      },
+      "signals": [
+        "均线强多头"
+      ],
+      "capital_flow": {
+        "today": -124460422.0,
+        "trend": "mixed",
+        "5day_total": 391311674
+      },
+      "fundamentals": {
+        "pe_ttm": 50.08,
+        "pb": 0.9,
+        "roe": -0.83,
+        "margin": null,
+        "total_mv": 783.94,
+        "industry": "半导体",
+        "concept": "江苏板块"
+      },
+      "style": {
+        "industry": "半导体",
+        "concept": "江苏板块"
+      },
+      "trade_note": {
+        "entry_reason": "量价活跃",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；观察资金是否回流"
+      },
+      "technical_state": {
+        "ma5": 44.03,
+        "ma10": 42.87,
+        "ma20": 41.08,
+        "high20": 45.08,
+        "low20": 38.02,
+        "position_20d": 0.916
+      },
+      "amount_yi": 8.6,
+      "source_pool": "hs300",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "downgrade",
+        "bias_score": -6,
+        "tags": [
+          "偏好行业:半导体",
+          "换手不足",
+          "涨幅弱",
+          "资金背离",
+          "趋势突破区"
+        ],
+        "reason": "有一定进攻信号，但不够纯粹，降级观察。",
+        "is_preferred": true,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 0,
+        "style_text": "半导体 | 江苏板块 | 长电科技"
+      },
+      "theme": "AI硬件链",
+      "announcements": [
+        {
+          "date": "2026-04-11",
+          "title": "2026年1-3月投资者关系活动记录表",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-10",
+          "title": "江苏长电科技股份有限公司关于公司会计政策变更的公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-10",
+          "title": "江苏长电科技股份有限公司对会计师事务所履职情况评估报告",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": []
+    },
+    {
+      "code": "002371",
+      "name": "北方华创",
+      "price": 454.86,
+      "change_pct": -3.47,
+      "score": 26.2,
+      "scores": {
+        "technical": 15,
+        "capital": 0,
+        "fundamental": 1,
+        "emotion": 6
+      },
+      "signals": [
+        "强放量"
+      ],
+      "capital_flow": {
+        "today": -227203376.0,
+        "trend": "mixed",
+        "5day_total": -19978186
+      },
+      "fundamentals": {
+        "pe_ttm": 59.58,
+        "pb": 8.74,
+        "roe": null,
+        "margin": null,
+        "total_mv": 3290.02,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "量价活跃",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "继续放量上攻再确认；观察资金是否回流"
+      },
+      "technical_state": {
+        "ma5": 474.26,
+        "ma10": 468.16,
+        "ma20": 458.2,
+        "high20": 492.0,
+        "low20": 422.25,
+        "position_20d": 0.702
+      },
+      "amount_yi": 19.6,
+      "source_pool": "hs300",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "exclude",
+        "bias_score": -16,
+        "tags": [
+          "换手不足",
+          "涨幅弱",
+          "资金背离",
+          "趋势中高位",
+          "非偏好且无资金"
+        ],
+        "reason": "风格偏弱或与进攻型不匹配，直接淘汰。",
+        "is_preferred": false,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 0,
+        "style_text": "北方华创"
+      },
+      "theme": "高端制造链",
+      "announcements": [
+        {
+          "date": "2026-04-18",
+          "title": "关于2025年度利润分配及公积金转增股本预案的公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-18",
+          "title": "独立董事述职报告(刘怡)",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-18",
+          "title": "独立董事述职报告(陈胜华)",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": []
+    },
+    {
+      "code": "000021",
+      "name": "深科技",
+      "price": 28.7,
+      "change_pct": -1.37,
+      "score": 22.85,
+      "scores": {
+        "technical": 16,
+        "capital": 0,
+        "fundamental": 1,
+        "emotion": 2
+      },
+      "signals": [
+        "均线强多头"
+      ],
+      "capital_flow": {
+        "today": -70469081.0,
+        "trend": "mixed",
+        "5day_total": -70469081
+      },
+      "fundamentals": {
+        "pe_ttm": 44.73,
+        "pb": null,
+        "roe": null,
+        "margin": null,
+        "total_mv": 450.76,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "量价活跃",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "继续放量上攻再确认；观察资金是否回流"
+      },
+      "technical_state": {
+        "ma5": 28.86,
+        "ma10": 28.22,
+        "ma20": 27.75,
+        "high20": 30.38,
+        "low20": 25.48,
+        "position_20d": 0.739
+      },
+      "amount_yi": 5.5,
+      "source_pool": "zz500",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "exclude",
+        "bias_score": -16,
+        "tags": [
+          "换手不足",
+          "涨幅弱",
+          "资金背离",
+          "趋势中高位",
+          "非偏好且无资金"
+        ],
+        "reason": "风格偏弱或与进攻型不匹配，直接淘汰。",
+        "is_preferred": false,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 0,
+        "style_text": "深科技"
+      },
+      "theme": "其他",
+      "announcements": [
+        {
+          "date": "2026-03-18",
+          "title": "2026年度(第一次)临时股东会决议公告",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-03-18",
+          "title": "2026年度(第一次)临时股东会之法律意见书",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-02-28",
+          "title": "关于2026年度日常关联交易预计的公告",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": []
+    },
+    {
+      "code": "601689",
+      "name": "拓普集团",
+      "price": 59.28,
+      "change_pct": -2.13,
+      "score": 22.85,
+      "scores": {
+        "technical": 16,
+        "capital": 0,
+        "fundamental": 1,
+        "emotion": 2
+      },
+      "signals": [
+        "均线强多头"
+      ],
+      "capital_flow": {
+        "today": -177476741.0,
+        "trend": "mixed",
+        "5day_total": -177476741
+      },
+      "fundamentals": {
+        "pe_ttm": 37.1,
+        "pb": 4.28,
+        "roe": null,
+        "margin": null,
+        "total_mv": 1031.06,
+        "industry": null,
+        "concept": null
+      },
+      "style": {
+        "industry": null,
+        "concept": null
+      },
+      "trade_note": {
+        "entry_reason": "量价活跃",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；观察资金是否回流"
+      },
+      "technical_state": {
+        "ma5": 60.37,
+        "ma10": 59.59,
+        "ma20": 58.65,
+        "high20": 61.68,
+        "low20": 55.3,
+        "position_20d": 0.826
+      },
+      "amount_yi": 6.6,
+      "source_pool": "hs300",
+      "has_capital_flow": true,
+      "missing_cap_penalty": 0,
+      "overheat_penalty": 0,
+      "attack_profile": {
+        "status": "exclude",
+        "bias_score": -15,
+        "tags": [
+          "换手不足",
+          "涨幅弱",
+          "资金背离",
+          "趋势突破区",
+          "非偏好且无资金"
+        ],
+        "reason": "风格偏弱或与进攻型不匹配，直接淘汰。",
+        "is_preferred": false,
+        "is_cyclical_soft": false,
+        "consecutive_inflows": 0,
+        "style_text": "拓普集团"
+      },
+      "theme": "汽车链",
+      "announcements": [
+        {
+          "date": "2026-04-09",
+          "title": "TuopuGroupAnnualReport2025",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-09",
+          "title": "拓普集团2025年年度股东会会议材料",
+          "source": "东方财富"
+        },
+        {
+          "date": "2026-04-09",
+          "title": "拓普集团关于召开2025年年度股东会的通知",
+          "source": "东方财富"
+        }
+      ],
+      "notice_risk_tags": []
+    }
+  ],
+  "strategies": {
+    "conservative": [],
+    "growth": [],
+    "rebound": [],
+    "hot": [
+      {
+        "code": "002466",
+        "name": "天齐锂业",
+        "price": 72.6,
+        "change_pct": 8.65,
+        "score": 94.4,
+        "scores": {
+          "technical": 39,
+          "capital": 27,
+          "fundamental": -5,
+          "emotion": 20
+        },
+        "signals": [
+          "均线强多头",
+          "强势拉升",
+          "接近突破",
+          "主力流入13517.9亿",
+          "连续3日流入",
+          "PE偏高(267.8)",
+          "高位高潮",
+          "追高风险"
+        ],
+        "capital_flow": {
+          "today": 135179280.0,
+          "trend": "连续3日流入",
+          "5day_total": 84437392
+        },
+        "fundamentals": {
+          "pe_ttm": 267.76,
+          "pb": 2.92,
+          "roe": null,
+          "margin": null,
+          "total_mv": 1238.73,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "公告风险：业绩预警；高位大涨，次日分歧风险；估值偏高",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 65.02,
+          "ma10": 61.95,
+          "ma20": 58.28,
+          "high20": 68.4,
+          "low20": 48.28,
+          "position_20d": 0.921
+        },
+        "amount_yi": 50.0,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 7,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 18,
+          "tags": [
+            "偏好行业:锂",
+            "高换手",
+            "涨幅强",
+            "资金配合",
+            "连续3日流入"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": true,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "name:锂 | 天齐锂业"
+        },
+        "theme": "新能源链",
+        "announcements": [
+          {
+            "date": "2026-04-21",
+            "title": "2026年第一季度业绩预告",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-04-16",
+            "title": "H股公告:董事会会议通告",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-04-15",
+            "title": "关于开展外汇及商品期货套期保值业务的进展公告",
+            "source": "东方财富"
+          }
+        ],
+        "notice_risk_tags": [
+          {
+            "label": "业绩预警",
+            "title": "2026年第一季度业绩预告",
+            "date": "2026-04-21"
+          }
+        ]
+      }
+    ],
+    "combined": [
+      {
+        "code": "002466",
+        "name": "天齐锂业",
+        "price": 72.6,
+        "change_pct": 8.65,
+        "score": 94.4,
+        "scores": {
+          "technical": 39,
+          "capital": 27,
+          "fundamental": -5,
+          "emotion": 20
+        },
+        "signals": [
+          "均线强多头",
+          "强势拉升",
+          "接近突破",
+          "主力流入13517.9亿",
+          "连续3日流入",
+          "PE偏高(267.8)",
+          "高位高潮",
+          "追高风险"
+        ],
+        "capital_flow": {
+          "today": 135179280.0,
+          "trend": "连续3日流入",
+          "5day_total": 84437392
+        },
+        "fundamentals": {
+          "pe_ttm": 267.76,
+          "pb": 2.92,
+          "roe": null,
+          "margin": null,
+          "total_mv": 1238.73,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "公告风险：业绩预警；高位大涨，次日分歧风险；估值偏高",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 65.02,
+          "ma10": 61.95,
+          "ma20": 58.28,
+          "high20": 68.4,
+          "low20": 48.28,
+          "position_20d": 0.921
+        },
+        "amount_yi": 50.0,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 7,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 18,
+          "tags": [
+            "偏好行业:锂",
+            "高换手",
+            "涨幅强",
+            "资金配合",
+            "连续3日流入"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": true,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "name:锂 | 天齐锂业"
+        },
+        "theme": "新能源链",
+        "announcements": [
+          {
+            "date": "2026-04-21",
+            "title": "2026年第一季度业绩预告",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-04-16",
+            "title": "H股公告:董事会会议通告",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-04-15",
+            "title": "关于开展外汇及商品期货套期保值业务的进展公告",
+            "source": "东方财富"
+          }
+        ],
+        "notice_risk_tags": [
+          {
+            "label": "业绩预警",
+            "title": "2026年第一季度业绩预告",
+            "date": "2026-04-21"
+          }
+        ]
+      },
+      {
+        "code": "603986",
+        "name": "兆易创新",
+        "price": 303.9,
+        "change_pct": 4.6,
+        "score": 77.4,
+        "scores": {
+          "technical": 32,
+          "capital": 21,
+          "fundamental": -5,
+          "emotion": 13
+        },
+        "signals": [
+          "均线强多头",
+          "接近突破",
+          "主力流入99794.4亿",
+          "PE偏高(129.2)"
+        ],
+        "capital_flow": {
+          "today": 997944464.0,
+          "trend": "连续2日流入",
+          "5day_total": 2472641136
+        },
+        "fundamentals": {
+          "pe_ttm": 129.2,
+          "pb": 11.21,
+          "roe": null,
+          "margin": null,
+          "total_mv": 2129.25,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合 + 成交额充足",
+          "main_risk": "公告风险：减持；估值偏高",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 284.05,
+          "ma10": 270.36,
+          "ma20": 264.74,
+          "high20": 295.96,
+          "low20": 236.86,
+          "position_20d": 0.908
+        },
+        "amount_yi": 58.4,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 4,
+          "tags": [
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区",
+            "估值压制"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "兆易创新"
+        },
+        "theme": "其他",
+        "announcements": [
+          {
+            "date": "2026-04-08",
+            "title": "兆易创新股东减持股份计划公告",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-04-03",
+            "title": "兆易创新2025年年度股东会会议资料",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-03-31",
+            "title": "兆易创新第五届董事会第十次会议决议公告",
+            "source": "东方财富"
+          }
+        ],
+        "notice_risk_tags": [
+          {
+            "label": "减持",
+            "title": "兆易创新股东减持股份计划公告",
+            "date": "2026-04-08"
+          }
+        ]
+      },
+      {
+        "code": "002812",
+        "name": "恩捷股份",
+        "price": 75.68,
+        "change_pct": 4.89,
+        "score": 76.1,
+        "scores": {
+          "technical": 30,
+          "capital": 23,
+          "fundamental": -3,
+          "emotion": 11
+        },
+        "signals": [
+          "均线强多头",
+          "接近突破",
+          "主力流入6056.0亿",
+          "资金反转",
+          "ROE偏弱(0.2%)"
+        ],
+        "capital_flow": {
+          "today": 60559648.0,
+          "trend": "由负转正",
+          "5day_total": 280797056
+        },
+        "fundamentals": {
+          "pe_ttm": -132.77,
+          "pb": 0.89,
+          "roe": 0.19,
+          "margin": 0.26,
+          "total_mv": 742.39,
+          "industry": "电池",
+          "concept": "云南板块"
+        },
+        "style": {
+          "industry": "电池",
+          "concept": "云南板块"
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 71.33,
+          "ma10": 69.49,
+          "ma20": 68.89,
+          "high20": 74.61,
+          "low20": 62.6,
+          "position_20d": 0.795
+        },
+        "amount_yi": 13.1,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 4,
+          "tags": [
+            "低换手脉冲",
+            "资金修复",
+            "资金配合",
+            "单日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 1,
+          "style_text": "电池 | 云南板块 | 恩捷股份"
+        },
+        "theme": "新能源链",
+        "announcements": [
+          {
+            "date": "2026-04-16",
+            "title": "关于召开2025年度暨2026年一季度业绩说明会的公告",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-04-16",
+            "title": "关于公司合并报表范围内提供担保的进展公告",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-04-04",
+            "title": "关于发行股份购买资产并募集配套资金的进展公告",
+            "source": "东方财富"
+          }
+        ],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "002709",
+        "name": "天赐材料",
+        "price": 50.51,
+        "change_pct": 1.73,
+        "score": 65.45,
+        "scores": {
+          "technical": 23,
+          "capital": 21,
+          "fundamental": 0,
+          "emotion": 10
+        },
+        "signals": [
+          "均线强多头",
+          "主力流入1292.7亿"
+        ],
+        "capital_flow": {
+          "today": 12926928.0,
+          "trend": "连续2日流入",
+          "5day_total": 618709648
+        },
+        "fundamentals": {
+          "pe_ttm": 75.56,
+          "pb": 5.77,
+          "roe": null,
+          "margin": null,
+          "total_mv": 1029.07,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "公告风险：诉讼；留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 48.99,
+          "ma10": 47.09,
+          "ma20": 45.99,
+          "high20": 50.66,
+          "low20": 41.1,
+          "position_20d": 0.894
+        },
+        "amount_yi": 19.0,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 14,
+          "tags": [
+            "偏好行业:材料",
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": true,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "name:材料 | 天赐材料"
+        },
+        "theme": "其他",
+        "announcements": [
+          {
+            "date": "2026-04-02",
+            "title": "关于公司提起诉讼的公告",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-04-02",
+            "title": "第七届董事会第一次会议决议的公告",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-04-02",
+            "title": "董事长、董事会秘书、证券事务代表联系方式的公告",
+            "source": "东方财富"
+          }
+        ],
+        "notice_risk_tags": [
+          {
+            "label": "诉讼",
+            "title": "关于公司提起诉讼的公告",
+            "date": "2026-04-02"
+          }
+        ]
+      },
+      {
+        "code": "002460",
+        "name": "赣锋锂业",
+        "price": 84.71,
+        "change_pct": 2.42,
+        "score": 57.2,
+        "scores": {
+          "technical": 14,
+          "capital": 21,
+          "fundamental": -5,
+          "emotion": 15
+        },
+        "signals": [
+          "主力流入2359.6亿",
+          "PE偏高(110.0)"
+        ],
+        "capital_flow": {
+          "today": 23595808.0,
+          "trend": "连续2日流入",
+          "5day_total": -917523488
+        },
+        "fundamentals": {
+          "pe_ttm": 110.04,
+          "pb": 3.93,
+          "roe": null,
+          "margin": null,
+          "total_mv": 1774.85,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强 + 成交额充足",
+          "main_risk": "公告风险：业绩预警；估值偏高；周期波动较大",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 84.56,
+          "ma10": 83.32,
+          "ma20": 79.41,
+          "high20": 88.48,
+          "low20": 65.58,
+          "position_20d": 0.748
+        },
+        "amount_yi": 33.6,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 9,
+          "tags": [
+            "偏好行业:锂",
+            "资金配合",
+            "连续2日流入",
+            "趋势中高位",
+            "估值压制"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": true,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "name:锂 | 赣锋锂业"
+        },
+        "theme": "新能源链",
+        "announcements": [
+          {
+            "date": "2026-04-17",
+            "title": "2026年4月16日投资者关系活动记录表",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-04-17",
+            "title": "2026年第一季度业绩预告",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-04-16",
+            "title": "关于召开2025年年度股东会的通知",
+            "source": "东方财富"
+          }
+        ],
+        "notice_risk_tags": [
+          {
+            "label": "业绩预警",
+            "title": "2026年第一季度业绩预告",
+            "date": "2026-04-17"
+          }
+        ]
+      },
+      {
+        "code": "000559",
+        "name": "万向钱潮",
+        "price": 16.83,
+        "change_pct": 1.39,
+        "score": 55.65,
+        "scores": {
+          "technical": 26,
+          "capital": 15,
+          "fundamental": 1,
+          "emotion": 4
+        },
+        "signals": [
+          "均线强多头",
+          "放量",
+          "主力流入3478.1亿"
+        ],
+        "capital_flow": {
+          "today": 34780823.0,
+          "trend": "今日流入",
+          "5day_total": 34780823
+        },
+        "fundamentals": {
+          "pe_ttm": 53.98,
+          "pb": null,
+          "roe": null,
+          "margin": null,
+          "total_mv": 558.97,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 16.43,
+          "ma10": 16.05,
+          "ma20": 15.67,
+          "high20": 16.84,
+          "low20": 14.64,
+          "position_20d": 0.891
+        },
+        "amount_yi": 7.7,
+        "source_pool": "zz500",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 2,
+          "tags": [
+            "换手不足",
+            "资金配合",
+            "单日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 1,
+          "style_text": "万向钱潮"
+        },
+        "theme": "其他",
+        "announcements": [
+          {
+            "date": "2026-04-15",
+            "title": "关于举行2025年度业绩网上说明会并公开征集问题的公告",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-04-11",
+            "title": "关于重大资产重组的进展公告",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-04-07",
+            "title": "关于前期会计差错更正的公告",
+            "source": "东方财富"
+          }
+        ],
+        "notice_risk_tags": []
+      }
+    ]
+  }
+}

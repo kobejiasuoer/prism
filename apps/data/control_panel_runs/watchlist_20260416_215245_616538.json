@@ -1,0 +1,18 @@
+{
+  "task_id": "watchlist_20260416_215245_616538",
+  "task_name": "watchlist",
+  "title": "自选股早盘摘要",
+  "command": [
+    "bash",
+    "skills/stock-analyzer/scripts/run_watchlist_feishu_summary.sh"
+  ],
+  "cwd": "<redacted-path>",
+  "send_to_feishu": false,
+  "status": "success",
+  "started_at": "2026-04-16 21:52:45",
+  "finished_at": "2026-04-16 21:52:46",
+  "exit_code": 0,
+  "pid": 8614,
+  "log_path": "data/history/control_panel_runs/logs/watchlist_20260416_215245_616538.log",
+  "meta_path": "data/history/control_panel_runs/watchlist_20260416_215245_616538.json"
+}

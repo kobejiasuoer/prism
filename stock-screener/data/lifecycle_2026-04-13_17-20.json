@@ -1,0 +1,68 @@
+{
+  "entered": [],
+  "upgraded": [],
+  "downgraded": [
+    {
+      "code": "603659",
+      "name": "璞泰来",
+      "prev_tier": "B",
+      "curr_tier": "B",
+      "prev_screening_status": "midday_watch",
+      "curr_screening_status": "approved",
+      "prev_score": 65.15,
+      "curr_score": 69.95,
+      "score_delta": 4.8,
+      "theme": "其他",
+      "reason": "盘中综合得分掉到 70 以下",
+      "source": "midday_verification"
+    },
+    {
+      "code": "603799",
+      "name": "华友钴业",
+      "prev_tier": "B",
+      "curr_tier": "",
+      "prev_screening_status": "midday_watch",
+      "curr_screening_status": "",
+      "prev_score": 66.25,
+      "curr_score": 66.25,
+      "score_delta": 0.0,
+      "theme": "",
+      "reason": "盘中综合得分掉到 70 以下",
+      "source": "midday_verification"
+    }
+  ],
+  "exited": [],
+  "handed_off": [
+    {
+      "code": "600010",
+      "name": "包钢股份",
+      "tier": "B",
+      "morning_score": 82.25,
+      "status": "confirmed",
+      "reason": "盘中延续性良好",
+      "in_current_shortlist": true,
+      "current_tier": "B",
+      "current_screening_status": "approved"
+    }
+  ],
+  "summary": {
+    "entered_count": 0,
+    "upgraded_count": 0,
+    "downgraded_count": 2,
+    "exited_count": 0,
+    "handed_off_count": 1,
+    "current_pool_size": 10,
+    "previous_pool_size": 10
+  },
+  "metadata": {
+    "generated_at": "2026-04-13 17:20:28",
+    "current_timestamp": "2026-04-13 17:20:28",
+    "previous_snapshot_source": "raw_scan_history",
+    "previous_snapshot_timestamp": "2026-04-13 13:48:36",
+    "previous_pool_size": 10,
+    "midday_verification_timestamp": "2026-04-13 13:46:23",
+    "midday_downgraded_count": 2,
+    "ai_input": "runtime/stock-screener/data/ai_screening_result.json",
+    "midday_input": "runtime/stock-screener/data/midday_verification_result.json"
+  }
+}

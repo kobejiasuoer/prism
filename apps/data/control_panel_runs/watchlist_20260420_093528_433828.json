@@ -1,0 +1,28 @@
+{
+  "task_id": "watchlist_20260420_093528_433828",
+  "task_name": "watchlist",
+  "title": "自选股早盘摘要",
+  "command": [
+    "bash",
+    "skills/stock-analyzer/scripts/run_watchlist_feishu_summary.sh"
+  ],
+  "cwd": "<redacted-path>",
+  "send_to_feishu": true,
+  "status": "failed",
+  "started_at": "2026-04-20 09:35:28",
+  "finished_at": "2026-04-20 09:35:28",
+  "exit_code": 1,
+  "pid": 29252,
+  "log_path": "data/history/control_panel_runs/logs/watchlist_20260420_093528_433828.log",
+  "meta_path": "data/history/control_panel_runs/watchlist_20260420_093528_433828.json",
+  "feishu_delivery": {
+    "requested": true,
+    "channel": "feishu",
+    "target": "user:<redacted>",
+    "source": "cron_jobs",
+    "job_id": "f58b0644-d9bd-4850-9f84-ff4bc0f1be98",
+    "job_name": "自选股早盘分析",
+    "resolved": true
+  },
+  "shell_env_sanitized": false
+}

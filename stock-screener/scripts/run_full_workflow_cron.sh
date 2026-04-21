@@ -1,0 +1,1 @@
+../packages/screener/run_full_workflow_cron.sh

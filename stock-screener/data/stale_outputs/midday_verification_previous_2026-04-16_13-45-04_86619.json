@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-04-15 13:46:28",
+  "validation_status": "ok",
+  "validation_errors": [],
+  "source_morning_timestamp": "2026-04-15 13:11:27",
+  "source_scan_timestamp": "2026-04-15 10:31:31",
+  "verified_against_scan_timestamp": "2026-04-15 13:46:27",
+  "target_codes": [],
+  "confirmed": [],
+  "downgraded": [],
+  "items": []
+}

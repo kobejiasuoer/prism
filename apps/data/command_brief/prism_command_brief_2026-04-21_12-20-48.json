@@ -1,0 +1,2101 @@
+{
+  "summary": {
+    "trade_date": "2026-04-21",
+    "generated_at": "2026-04-21 12:20:53",
+    "open_new_positions": "否，今天进攻阀门关闭。",
+    "position_cap": "0成",
+    "main_theme": "新能源链",
+    "holding_focus": [
+      "大金重工",
+      "海尔智家",
+      "中航光电"
+    ],
+    "opportunity_focus": [],
+    "avoid_points": [
+      "先处理持仓风险，别一边减仓一边追新。",
+      "赚钱效应不足",
+      "平均涨幅偏弱"
+    ],
+    "gate_label": "进攻阀门关闭",
+    "gate_summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+    "watchlist_summary": "先处理持仓风险。3 只需要优先处理。",
+    "midday_summary": "暂无同日午盘确认。"
+  },
+  "watchlist": {
+    "snapshot_path": "data/history/daily_snapshots/2026-04-21.json",
+    "generated_at": "2026-04-21 12:20:52",
+    "price_basis": "新浪实时行情",
+    "flow_basis": "东方财富资金流",
+    "tech_basis": "240分钟K线",
+    "records": [
+      {
+        "code": "002487",
+        "name": "大金重工",
+        "action": "减仓观望",
+        "position": "0-0.5成",
+        "score": 8.0,
+        "signal": "中性（评分8）",
+        "hard_flags": [
+          "PE偏高",
+          "追高风险"
+        ],
+        "positives": [
+          "分红催化",
+          "经营改善"
+        ],
+        "watch_points": [
+          "资金流仅更新到 2026-04-20，先别把它当盘中确认"
+        ],
+        "support": 82.0,
+        "resistance": 89.5,
+        "stop_loss": 81.5,
+        "price_as_of": "2026-04-21 11:30:00",
+        "flow_as_of": "2026-04-20"
+      },
+      {
+        "code": "600690",
+        "name": "海尔智家",
+        "action": "减仓观望",
+        "position": "0-0.5成",
+        "score": 0.0,
+        "signal": "看空（评分0）",
+        "hard_flags": [
+          "弱于行业"
+        ],
+        "positives": [
+          "股东回报",
+          "分红催化",
+          "经营改善"
+        ],
+        "watch_points": [
+          "留意布林下轨支撑（19.66）"
+        ],
+        "support": 19.7,
+        "resistance": 20.9,
+        "stop_loss": 19.6,
+        "price_as_of": "2026-04-21 11:30:00",
+        "flow_as_of": "2026-04-21"
+      },
+      {
+        "code": "002179",
+        "name": "中航光电",
+        "action": "减仓观望",
+        "position": "0-0.5成",
+        "score": 0.0,
+        "signal": "看空（评分0）",
+        "hard_flags": [],
+        "positives": [
+          "股东回报",
+          "经营改善"
+        ],
+        "watch_points": [
+          "留意布林下轨支撑（31.84）"
+        ],
+        "support": 36.2,
+        "resistance": 36.9,
+        "stop_loss": 31.7,
+        "price_as_of": "2026-04-21 11:30:00",
+        "flow_as_of": "2026-04-21"
+      },
+      {
+        "code": "000625",
+        "name": "长安汽车",
+        "action": "观望",
+        "position": "0-0.5成",
+        "score": 12.0,
+        "signal": "中性（评分12）",
+        "hard_flags": [
+          "ROE偏弱",
+          "弱于行业"
+        ],
+        "positives": [
+          "业务催化"
+        ],
+        "watch_points": [
+          "资金流仅更新到 2026-04-20，先别把它当盘中确认",
+          "先观察能否站回 MA20（10.05）"
+        ],
+        "support": 9.95,
+        "resistance": 10.0,
+        "stop_loss": 9.85,
+        "price_as_of": "2026-04-21 11:30:00",
+        "flow_as_of": "2026-04-20"
+      },
+      {
+        "code": "601021",
+        "name": "春秋航空",
+        "action": "观望",
+        "position": "0-0.5成",
+        "score": 15.0,
+        "signal": "中性（评分15）",
+        "hard_flags": [
+          "弱于行业"
+        ],
+        "positives": [
+          "股东回报",
+          "业务催化",
+          "经营改善"
+        ],
+        "watch_points": [
+          "资金流仅更新到 2026-04-20，先别把它当盘中确认",
+          "中期仍受 MA60（51.71）压制"
+        ],
+        "support": 47.8,
+        "resistance": 48.6,
+        "stop_loss": 47.7,
+        "price_as_of": "2026-04-21 11:30:00",
+        "flow_as_of": "2026-04-20"
+      }
+    ],
+    "priority": [
+      {
+        "code": "002487",
+        "name": "大金重工",
+        "action": "减仓观望",
+        "position": "0-0.5成",
+        "score": 8.0,
+        "signal": "中性（评分8）",
+        "hard_flags": [
+          "PE偏高",
+          "追高风险"
+        ],
+        "positives": [
+          "分红催化",
+          "经营改善"
+        ],
+        "watch_points": [
+          "资金流仅更新到 2026-04-20，先别把它当盘中确认"
+        ],
+        "support": 82.0,
+        "resistance": 89.5,
+        "stop_loss": 81.5,
+        "price_as_of": "2026-04-21 11:30:00",
+        "flow_as_of": "2026-04-20"
+      },
+      {
+        "code": "600690",
+        "name": "海尔智家",
+        "action": "减仓观望",
+        "position": "0-0.5成",
+        "score": 0.0,
+        "signal": "看空（评分0）",
+        "hard_flags": [
+          "弱于行业"
+        ],
+        "positives": [
+          "股东回报",
+          "分红催化",
+          "经营改善"
+        ],
+        "watch_points": [
+          "留意布林下轨支撑（19.66）"
+        ],
+        "support": 19.7,
+        "resistance": 20.9,
+        "stop_loss": 19.6,
+        "price_as_of": "2026-04-21 11:30:00",
+        "flow_as_of": "2026-04-21"
+      },
+      {
+        "code": "002179",
+        "name": "中航光电",
+        "action": "减仓观望",
+        "position": "0-0.5成",
+        "score": 0.0,
+        "signal": "看空（评分0）",
+        "hard_flags": [],
+        "positives": [
+          "股东回报",
+          "经营改善"
+        ],
+        "watch_points": [
+          "留意布林下轨支撑（31.84）"
+        ],
+        "support": 36.2,
+        "resistance": 36.9,
+        "stop_loss": 31.7,
+        "price_as_of": "2026-04-21 11:30:00",
+        "flow_as_of": "2026-04-21"
+      }
+    ],
+    "follow": [],
+    "observe": [
+      {
+        "code": "000625",
+        "name": "长安汽车",
+        "action": "观望",
+        "position": "0-0.5成",
+        "score": 12.0,
+        "signal": "中性（评分12）",
+        "hard_flags": [
+          "ROE偏弱",
+          "弱于行业"
+        ],
+        "positives": [
+          "业务催化"
+        ],
+        "watch_points": [
+          "资金流仅更新到 2026-04-20，先别把它当盘中确认",
+          "先观察能否站回 MA20（10.05）"
+        ],
+        "support": 9.95,
+        "resistance": 10.0,
+        "stop_loss": 9.85,
+        "price_as_of": "2026-04-21 11:30:00",
+        "flow_as_of": "2026-04-20"
+      },
+      {
+        "code": "601021",
+        "name": "春秋航空",
+        "action": "观望",
+        "position": "0-0.5成",
+        "score": 15.0,
+        "signal": "中性（评分15）",
+        "hard_flags": [
+          "弱于行业"
+        ],
+        "positives": [
+          "股东回报",
+          "业务催化",
+          "经营改善"
+        ],
+        "watch_points": [
+          "资金流仅更新到 2026-04-20，先别把它当盘中确认",
+          "中期仍受 MA60（51.71）压制"
+        ],
+        "support": 47.8,
+        "resistance": 48.6,
+        "stop_loss": 47.7,
+        "price_as_of": "2026-04-21 11:30:00",
+        "flow_as_of": "2026-04-20"
+      }
+    ],
+    "summary": "先处理持仓风险。3 只需要优先处理。"
+  },
+  "screener": {
+    "path": "runtime/stock-screener/data/ai_screening_result.json",
+    "timestamp": "2026-04-21 12:01:24",
+    "source_scan_timestamp": "2026-04-21 12:01:24",
+    "market_regime": {
+      "score": 1,
+      "label": "偏谨慎",
+      "regime": "defensive",
+      "attack_ok": false,
+      "summary": "强势扩散不够，今天更适合精选观察，不适合激进追高。",
+      "basis": "pool",
+      "sample_size": 141,
+      "metrics": {
+        "positive_ratio": 0.44,
+        "avg_change_pct": -0.29,
+        "avg_turnover": 2.53,
+        "strong_ratio": 0.142
+      },
+      "candidate_view": {
+        "score": 8,
+        "label": "进攻环境较强",
+        "regime": "aggressive",
+        "attack_ok": true,
+        "summary": "市场活跃度和强势股占比都不错，可正常做进攻型观察。",
+        "basis": "candidate",
+        "sample_size": 30,
+        "metrics": {
+          "positive_ratio": 0.767,
+          "avg_change_pct": 1.76,
+          "avg_turnover": 4.27,
+          "strong_ratio": 0.4
+        }
+      },
+      "candidate_score_gap": 7,
+      "candidate_gap_note": "候选口径明显更强，说明入围票强于整体股票池，别把候选强度误读成真实环境。",
+      "execution_gate": {
+        "status": "off",
+        "label": "进攻阀门关闭",
+        "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+        "position_cap": "0成",
+        "allow_new_positions": false,
+        "allow_handoff": false,
+        "allowed_setups": [],
+        "risk_flags": [
+          "赚钱效应不足",
+          "平均涨幅偏弱"
+        ]
+      }
+    },
+    "execution_gate": {
+      "status": "off",
+      "label": "进攻阀门关闭",
+      "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+      "position_cap": "0成",
+      "allow_new_positions": false,
+      "allow_handoff": false,
+      "allowed_setups": [],
+      "risk_flags": [
+        "赚钱效应不足",
+        "平均涨幅偏弱"
+      ]
+    },
+    "market_themes": {
+      "top_theme": "新能源链",
+      "summary": "今日偏双主线：主攻 新能源链，次主线 AI硬件链。 主线持续性：延续但分化（8分）。",
+      "themes": [
+        {
+          "theme": "新能源链",
+          "score": 38.1,
+          "count": 2,
+          "weighted_count": 2.85,
+          "leader_codes": [
+            "恩捷股份(002812)",
+            "天齐锂业(002466)"
+          ],
+          "persistence": {
+            "score": 8,
+            "label": "延续但分化",
+            "summary": "龙头稳定；连续两段衰减",
+            "trend": "down",
+            "leader_stability": 1.0
+          },
+          "metrics": {
+            "count_score": 4.84,
+            "leader_score": 21.09,
+            "capital_score": 0.0,
+            "structure_score": 5,
+            "purity_score": 7.17,
+            "persistence_score": 8,
+            "total_flow_yi": -0.73,
+            "avg_flow_yi": -0.36,
+            "preferred_ratio": 0.33,
+            "keep_ratio": 0.67,
+            "hot_ratio": 0.0
+          }
+        },
+        {
+          "theme": "AI硬件链",
+          "score": 33.97,
+          "count": 2,
+          "weighted_count": 2.39,
+          "leader_codes": [
+            "生益科技(600183)",
+            "鹏鼎控股(002938)"
+          ],
+          "persistence": {
+            "score": 14,
+            "label": "强势延续",
+            "summary": "龙头稳定；连续两段维持",
+            "trend": "neutral",
+            "leader_stability": 1.0
+          },
+          "metrics": {
+            "count_score": 4.06,
+            "leader_score": 19.73,
+            "capital_score": 0.62,
+            "structure_score": 5,
+            "purity_score": 4.5600000000000005,
+            "persistence_score": 14,
+            "total_flow_yi": 3.11,
+            "avg_flow_yi": 1.55,
+            "preferred_ratio": 0.0,
+            "keep_ratio": 0.61,
+            "hot_ratio": 0.0
+          }
+        },
+        {
+          "theme": "AI信息链",
+          "score": 29.07,
+          "count": 1,
+          "weighted_count": 1.01,
+          "leader_codes": [
+            "浪潮信息(000977)"
+          ],
+          "persistence": {
+            "score": 7,
+            "label": "热度衰减",
+            "summary": "龙头部分延续；连续两段衰减",
+            "trend": "down",
+            "leader_stability": 1.0
+          },
+          "metrics": {
+            "count_score": 1.71,
+            "leader_score": 13.86,
+            "capital_score": 0.0,
+            "structure_score": 0,
+            "purity_score": 13.5,
+            "persistence_score": 7,
+            "total_flow_yi": -9.61,
+            "avg_flow_yi": -9.61,
+            "preferred_ratio": 1.0,
+            "keep_ratio": 1.0,
+            "hot_ratio": 0.0
+          }
+        },
+        {
+          "theme": "军工链",
+          "score": 24.1,
+          "count": 1,
+          "weighted_count": 0.88,
+          "leader_codes": [
+            "航天电子(600879)"
+          ],
+          "persistence": {
+            "score": 6,
+            "label": "热度衰减",
+            "summary": "龙头部分延续",
+            "trend": "neutral",
+            "leader_stability": 1.0
+          },
+          "metrics": {
+            "count_score": 1.49,
+            "leader_score": 14.96,
+            "capital_score": 0.0,
+            "structure_score": 0,
+            "purity_score": 7.65,
+            "persistence_score": 6,
+            "total_flow_yi": -3.35,
+            "avg_flow_yi": -3.35,
+            "preferred_ratio": 0.88,
+            "keep_ratio": 0.0,
+            "hot_ratio": 0.0
+          }
+        },
+        {
+          "theme": "消费电子链",
+          "score": 14.46,
+          "count": 1,
+          "weighted_count": 0.84,
+          "leader_codes": [
+            "立讯精密(002475)"
+          ],
+          "persistence": {
+            "score": 2,
+            "label": "一日游风险",
+            "summary": "龙头部分延续；连续两段衰减",
+            "trend": "down",
+            "leader_stability": 1.0
+          },
+          "metrics": {
+            "count_score": 1.42,
+            "leader_score": 13.04,
+            "capital_score": 0.0,
+            "structure_score": 0,
+            "purity_score": 0.0,
+            "persistence_score": 2,
+            "total_flow_yi": -14.72,
+            "avg_flow_yi": -14.72,
+            "preferred_ratio": 0.0,
+            "keep_ratio": 0.0,
+            "hot_ratio": 0.0
+          }
+        },
+        {
+          "theme": "其他",
+          "score": 49.36,
+          "count": 23,
+          "weighted_count": 33.26,
+          "leader_codes": [
+            "科华数据(002335)",
+            "广合科技(001389)",
+            "盛和资源(600392)"
+          ],
+          "persistence": {
+            "score": 16,
+            "label": "持续增强",
+            "summary": "主题分提升；龙头稳定",
+            "trend": "up",
+            "leader_stability": 1.0
+          },
+          "metrics": {
+            "count_score": 25,
+            "leader_score": 25,
+            "capital_score": 1.05,
+            "structure_score": 15,
+            "purity_score": 2.5,
+            "persistence_score": 16,
+            "total_flow_yi": 6.4,
+            "avg_flow_yi": 0.28,
+            "preferred_ratio": 0.18,
+            "keep_ratio": 0.73,
+            "hot_ratio": 0.04
+          }
+        }
+      ]
+    },
+    "screening_summary": {
+      "total_candidates": 22,
+      "unique_candidates": 11,
+      "shortlisted_count": 11,
+      "approved_count": 0,
+      "caution_count": 11,
+      "excluded_count": 0,
+      "tier_a_count": 0,
+      "tier_b_count": 0,
+      "tier_c_count": 11,
+      "quality_high_count": 0,
+      "quality_mid_count": 2,
+      "quality_low_count": 9,
+      "execution_gate_status": "off"
+    },
+    "shortlist": [
+      {
+        "code": "002335",
+        "name": "科华数据",
+        "best_score": 106.95,
+        "change_pct": 2.78,
+        "amount_yi": 19.1,
+        "strategy_hits": [
+          "growth",
+          "combined"
+        ],
+        "strategy_labels": [
+          "成长",
+          "综合"
+        ],
+        "themes": [
+          "其他"
+        ],
+        "entry_reason": "趋势突破+资金配合 + 换手充分",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+        "signals": [
+          "均线强多头",
+          "放量",
+          "接近突破",
+          "主力流入19687.4亿",
+          "连续3日流入"
+        ],
+        "setup_type": "breakout_follow",
+        "setup_label": "突破跟随",
+        "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。 整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+        "entry_plan": {
+          "action": "今天不新开仓，只保留观察名单。",
+          "trigger": "等待风控阀门重新打开后再评估。",
+          "avoid": "高开高走但量能跟不上时不追。",
+          "invalidate": "跌回 59.67 下方或主力转负就取消。",
+          "sizing": "先不开新仓",
+          "levels": {
+            "trigger": 64.75,
+            "pullback": 61.76,
+            "invalidate": 59.67
+          }
+        },
+        "screening_reasons": [
+          "风控阀门关闭，今天只观察不执行"
+        ],
+        "capital_flow": {
+          "trend": "连续3日流入",
+          "today_yi": 1.97,
+          "five_day_total_yi": 4.11
+        },
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 12,
+          "tags": [
+            "高换手",
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ]
+        },
+        "fundamentals": {
+          "pe_ttm": 73.83,
+          "roe": null,
+          "pb": null,
+          "net_profit": null
+        },
+        "consistency": {
+          "score": 4,
+          "label": "高一致性",
+          "notes": [
+            "主题持续增强",
+            "资金同向",
+            "流动性支持",
+            "进攻风格匹配"
+          ]
+        },
+        "execution_quality": {
+          "score": 2,
+          "label": "低执行质量",
+          "positives": [
+            "成交额厚",
+            "资金有承接",
+            "一致性尚可",
+            "趋势 setup"
+          ],
+          "warnings": [
+            "阀门关闭"
+          ]
+        },
+        "variants": [
+          {
+            "strategy": "growth",
+            "strategy_label": "成长",
+            "score": 106.95,
+            "status": "caution",
+            "reason": "风控阀门关闭，今天只观察不执行",
+            "consistency": {
+              "score": 4,
+              "label": "高一致性",
+              "notes": [
+                "主题持续增强",
+                "资金同向",
+                "流动性支持",
+                "进攻风格匹配"
+              ]
+            }
+          },
+          {
+            "strategy": "combined",
+            "strategy_label": "综合",
+            "score": 106.95,
+            "status": "caution",
+            "reason": "风控阀门关闭，今天只观察不执行",
+            "consistency": {
+              "score": 4,
+              "label": "高一致性",
+              "notes": [
+                "主题持续增强",
+                "资金同向",
+                "流动性支持",
+                "进攻风格匹配"
+              ]
+            }
+          }
+        ],
+        "screening_status": "caution",
+        "screening_note": "风控阀门关闭，今天只观察不执行",
+        "strategy_count": 2,
+        "approved_hits": 0,
+        "caution_hits": 2,
+        "priority_score": 124.95,
+        "tier": "C",
+        "tier_note": "风控阀门关闭，仅保留观察名单",
+        "tier_rank": 1,
+        "execution_gate": {
+          "status": "off",
+          "label": "进攻阀门关闭",
+          "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+          "position_cap": "0成"
+        }
+      },
+      {
+        "code": "600392",
+        "name": "盛和资源",
+        "best_score": 92.7,
+        "change_pct": 2.49,
+        "amount_yi": 18.0,
+        "strategy_hits": [
+          "growth",
+          "combined"
+        ],
+        "strategy_labels": [
+          "成长",
+          "综合"
+        ],
+        "themes": [
+          "其他"
+        ],
+        "entry_reason": "趋势突破+资金配合",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+        "signals": [
+          "均线强多头",
+          "接近突破",
+          "主力流入13063.4亿",
+          "连续3日流入"
+        ],
+        "setup_type": "breakout_follow",
+        "setup_label": "突破跟随",
+        "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。 整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+        "entry_plan": {
+          "action": "今天不新开仓，只保留观察名单。",
+          "trigger": "等待风控阀门重新打开后再评估。",
+          "avoid": "高开高走但量能跟不上时不追。",
+          "invalidate": "跌回 25.28 下方或主力转负就取消。",
+          "sizing": "先不开新仓",
+          "levels": {
+            "trigger": 26.99,
+            "pullback": 25.63,
+            "invalidate": 25.28
+          }
+        },
+        "screening_reasons": [
+          "风控阀门关闭，今天只观察不执行"
+        ],
+        "capital_flow": {
+          "trend": "连续3日流入",
+          "today_yi": 1.31,
+          "five_day_total_yi": 5.1
+        },
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ]
+        },
+        "fundamentals": {
+          "pe_ttm": 46.03,
+          "roe": null,
+          "pb": null,
+          "net_profit": null
+        },
+        "consistency": {
+          "score": 5,
+          "label": "高一致性",
+          "notes": [
+            "主题持续增强",
+            "资金同向",
+            "流动性支持",
+            "进攻风格匹配"
+          ]
+        },
+        "execution_quality": {
+          "score": 3,
+          "label": "中执行质量",
+          "positives": [
+            "成交额厚",
+            "资金有承接",
+            "一致性高",
+            "趋势 setup"
+          ],
+          "warnings": [
+            "阀门关闭"
+          ]
+        },
+        "variants": [
+          {
+            "strategy": "growth",
+            "strategy_label": "成长",
+            "score": 92.7,
+            "status": "caution",
+            "reason": "风控阀门关闭，今天只观察不执行",
+            "consistency": {
+              "score": 5,
+              "label": "高一致性",
+              "notes": [
+                "主题持续增强",
+                "资金同向",
+                "流动性支持",
+                "进攻风格匹配"
+              ]
+            }
+          },
+          {
+            "strategy": "combined",
+            "strategy_label": "综合",
+            "score": 92.7,
+            "status": "caution",
+            "reason": "风控阀门关闭，今天只观察不执行",
+            "consistency": {
+              "score": 5,
+              "label": "高一致性",
+              "notes": [
+                "主题持续增强",
+                "资金同向",
+                "流动性支持",
+                "进攻风格匹配"
+              ]
+            }
+          }
+        ],
+        "screening_status": "caution",
+        "screening_note": "风控阀门关闭，今天只观察不执行",
+        "strategy_count": 2,
+        "approved_hits": 0,
+        "caution_hits": 2,
+        "priority_score": 114.2,
+        "tier": "C",
+        "tier_note": "风控阀门关闭，仅保留观察名单",
+        "tier_rank": 1,
+        "execution_gate": {
+          "status": "off",
+          "label": "进攻阀门关闭",
+          "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+          "position_cap": "0成"
+        }
+      },
+      {
+        "code": "002008",
+        "name": "大族激光",
+        "best_score": 92.15,
+        "change_pct": 4.35,
+        "amount_yi": 32.7,
+        "strategy_hits": [
+          "growth",
+          "hot",
+          "combined"
+        ],
+        "strategy_labels": [
+          "成长",
+          "热门",
+          "综合"
+        ],
+        "themes": [
+          "其他"
+        ],
+        "entry_reason": "趋势突破+资金配合 + 成交额充足",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+        "signals": [
+          "均线强多头",
+          "接近突破",
+          "主力流入26167.7亿",
+          "连续3日流入"
+        ],
+        "setup_type": "breakout_follow",
+        "setup_label": "突破跟随",
+        "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。 整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+        "entry_plan": {
+          "action": "今天不新开仓，只保留观察名单。",
+          "trigger": "等待风控阀门重新打开后再评估。",
+          "avoid": "高开高走但量能跟不上时不追。",
+          "invalidate": "跌回 78.88 下方或主力转负就取消。",
+          "sizing": "先不开新仓",
+          "levels": {
+            "trigger": 91.68,
+            "pullback": 84.98,
+            "invalidate": 78.88
+          }
+        },
+        "screening_reasons": [
+          "风控阀门关闭，今天只观察不执行"
+        ],
+        "capital_flow": {
+          "trend": "连续3日流入",
+          "today_yi": 2.62,
+          "five_day_total_yi": 8.06
+        },
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ]
+        },
+        "fundamentals": {
+          "pe_ttm": 67.65,
+          "roe": null,
+          "pb": null,
+          "net_profit": null
+        },
+        "consistency": {
+          "score": 4,
+          "label": "高一致性",
+          "notes": [
+            "主题持续增强",
+            "资金同向",
+            "流动性支持",
+            "进攻风格匹配"
+          ]
+        },
+        "execution_quality": {
+          "score": 2,
+          "label": "低执行质量",
+          "positives": [
+            "成交额厚",
+            "资金有承接",
+            "一致性尚可",
+            "趋势 setup"
+          ],
+          "warnings": [
+            "阀门关闭"
+          ]
+        },
+        "variants": [
+          {
+            "strategy": "growth",
+            "strategy_label": "成长",
+            "score": 92.15,
+            "status": "caution",
+            "reason": "风控阀门关闭，今天只观察不执行",
+            "consistency": {
+              "score": 4,
+              "label": "高一致性",
+              "notes": [
+                "主题持续增强",
+                "资金同向",
+                "流动性支持",
+                "进攻风格匹配"
+              ]
+            }
+          },
+          {
+            "strategy": "hot",
+            "strategy_label": "热门",
+            "score": 92.15,
+            "status": "caution",
+            "reason": "风控阀门关闭，今天只观察不执行",
+            "consistency": {
+              "score": 4,
+              "label": "高一致性",
+              "notes": [
+                "主题持续增强",
+                "资金同向",
+                "流动性支持",
+                "进攻风格匹配"
+              ]
+            }
+          },
+          {
+            "strategy": "combined",
+            "strategy_label": "综合",
+            "score": 92.15,
+            "status": "caution",
+            "reason": "风控阀门关闭，今天只观察不执行",
+            "consistency": {
+              "score": 4,
+              "label": "高一致性",
+              "notes": [
+                "主题持续增强",
+                "资金同向",
+                "流动性支持",
+                "进攻风格匹配"
+              ]
+            }
+          }
+        ],
+        "screening_status": "caution",
+        "screening_note": "风控阀门关闭，今天只观察不执行",
+        "strategy_count": 3,
+        "approved_hits": 0,
+        "caution_hits": 3,
+        "priority_score": 114.15,
+        "tier": "C",
+        "tier_note": "风控阀门关闭，仅保留观察名单",
+        "tier_rank": 1,
+        "execution_gate": {
+          "status": "off",
+          "label": "进攻阀门关闭",
+          "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+          "position_cap": "0成"
+        }
+      },
+      {
+        "code": "000960",
+        "name": "锡业股份",
+        "best_score": 89.65,
+        "change_pct": 1.15,
+        "amount_yi": 19.1,
+        "strategy_hits": [
+          "combined"
+        ],
+        "strategy_labels": [
+          "综合"
+        ],
+        "themes": [
+          "其他"
+        ],
+        "entry_reason": "趋势突破+资金配合",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+        "signals": [
+          "均线强多头",
+          "放量",
+          "主力流入9417.1亿",
+          "连续3日流入",
+          "PE合理(31.8)"
+        ],
+        "setup_type": "breakout_follow",
+        "setup_label": "突破跟随",
+        "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。 整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+        "entry_plan": {
+          "action": "今天不新开仓，只保留观察名单。",
+          "trigger": "等待风控阀门重新打开后再评估。",
+          "avoid": "高开高走但量能跟不上时不追。",
+          "invalidate": "跌回 33.89 下方或主力转负就取消。",
+          "sizing": "先不开新仓",
+          "levels": {
+            "trigger": 39.1,
+            "pullback": 35.3,
+            "invalidate": 33.89
+          }
+        },
+        "screening_reasons": [
+          "风控阀门关闭，今天只观察不执行"
+        ],
+        "capital_flow": {
+          "trend": "连续3日流入",
+          "today_yi": 0.94,
+          "five_day_total_yi": 3.59
+        },
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ]
+        },
+        "fundamentals": {
+          "pe_ttm": 31.78,
+          "roe": null,
+          "pb": null,
+          "net_profit": null
+        },
+        "consistency": {
+          "score": 5,
+          "label": "高一致性",
+          "notes": [
+            "主题持续增强",
+            "资金同向",
+            "流动性支持",
+            "进攻风格匹配"
+          ]
+        },
+        "execution_quality": {
+          "score": 3,
+          "label": "中执行质量",
+          "positives": [
+            "成交额厚",
+            "资金有承接",
+            "一致性高",
+            "趋势 setup"
+          ],
+          "warnings": [
+            "阀门关闭"
+          ]
+        },
+        "variants": [
+          {
+            "strategy": "combined",
+            "strategy_label": "综合",
+            "score": 89.65,
+            "status": "caution",
+            "reason": "风控阀门关闭，今天只观察不执行",
+            "consistency": {
+              "score": 5,
+              "label": "高一致性",
+              "notes": [
+                "主题持续增强",
+                "资金同向",
+                "流动性支持",
+                "进攻风格匹配"
+              ]
+            }
+          }
+        ],
+        "screening_status": "caution",
+        "screening_note": "风控阀门关闭，今天只观察不执行",
+        "strategy_count": 1,
+        "approved_hits": 0,
+        "caution_hits": 1,
+        "priority_score": 107.15,
+        "tier": "C",
+        "tier_note": "风控阀门关闭，仅保留观察名单",
+        "tier_rank": 1,
+        "execution_gate": {
+          "status": "off",
+          "label": "进攻阀门关闭",
+          "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+          "position_cap": "0成"
+        }
+      },
+      {
+        "code": "001389",
+        "name": "广合科技",
+        "best_score": 97.15,
+        "change_pct": 4.07,
+        "amount_yi": 12.2,
+        "strategy_hits": [
+          "growth",
+          "hot",
+          "combined"
+        ],
+        "strategy_labels": [
+          "成长",
+          "热门",
+          "综合"
+        ],
+        "themes": [
+          "其他"
+        ],
+        "entry_reason": "趋势突破+资金配合 + 换手充分",
+        "main_risk": "公告风险：业绩预警；留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+        "signals": [
+          "均线强多头",
+          "接近突破",
+          "主力流入8807.0亿",
+          "连续3日流入"
+        ],
+        "setup_type": "breakout_follow",
+        "setup_label": "突破跟随",
+        "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。 整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+        "entry_plan": {
+          "action": "今天不新开仓，只保留观察名单。",
+          "trigger": "等待风控阀门重新打开后再评估。",
+          "avoid": "高开高走但量能跟不上时不追。",
+          "invalidate": "跌回 131.99 下方或主力转负就取消。",
+          "sizing": "先不开新仓",
+          "levels": {
+            "trigger": 153.88,
+            "pullback": 138.82,
+            "invalidate": 131.99
+          }
+        },
+        "screening_reasons": [
+          "风控阀门关闭，今天只观察不执行"
+        ],
+        "capital_flow": {
+          "trend": "连续3日流入",
+          "today_yi": 0.88,
+          "five_day_total_yi": 2.3
+        },
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 12,
+          "tags": [
+            "高换手",
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ]
+        },
+        "fundamentals": {
+          "pe_ttm": 71.78,
+          "roe": null,
+          "pb": null,
+          "net_profit": null
+        },
+        "consistency": {
+          "score": 1,
+          "label": "中一致性",
+          "notes": [
+            "主题持续增强",
+            "资金同向",
+            "流动性支持",
+            "进攻风格匹配"
+          ]
+        },
+        "execution_quality": {
+          "score": -2,
+          "label": "低执行质量",
+          "positives": [
+            "成交额厚",
+            "资金有承接",
+            "趋势 setup",
+            "主题延续"
+          ],
+          "warnings": [
+            "一致性偏弱",
+            "公告风险待消化",
+            "阀门关闭"
+          ]
+        },
+        "variants": [
+          {
+            "strategy": "growth",
+            "strategy_label": "成长",
+            "score": 97.15,
+            "status": "caution",
+            "reason": "风控阀门关闭，今天只观察不执行",
+            "consistency": {
+              "score": 1,
+              "label": "中一致性",
+              "notes": [
+                "主题持续增强",
+                "资金同向",
+                "流动性支持",
+                "进攻风格匹配"
+              ]
+            }
+          },
+          {
+            "strategy": "hot",
+            "strategy_label": "热门",
+            "score": 97.15,
+            "status": "caution",
+            "reason": "风控阀门关闭，今天只观察不执行",
+            "consistency": {
+              "score": 1,
+              "label": "中一致性",
+              "notes": [
+                "主题持续增强",
+                "资金同向",
+                "流动性支持",
+                "进攻风格匹配"
+              ]
+            }
+          },
+          {
+            "strategy": "combined",
+            "strategy_label": "综合",
+            "score": 97.15,
+            "status": "caution",
+            "reason": "风控阀门关闭，今天只观察不执行",
+            "consistency": {
+              "score": 1,
+              "label": "中一致性",
+              "notes": [
+                "主题持续增强",
+                "资金同向",
+                "流动性支持",
+                "进攻风格匹配"
+              ]
+            }
+          }
+        ],
+        "screening_status": "caution",
+        "screening_note": "风控阀门关闭，今天只观察不执行",
+        "strategy_count": 3,
+        "approved_hits": 0,
+        "caution_hits": 3,
+        "priority_score": 106.65,
+        "tier": "C",
+        "tier_note": "风控阀门关闭，仅保留观察名单",
+        "tier_rank": 1,
+        "execution_gate": {
+          "status": "off",
+          "label": "进攻阀门关闭",
+          "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+          "position_cap": "0成"
+        }
+      },
+      {
+        "code": "000559",
+        "name": "万向钱潮",
+        "best_score": 88.3,
+        "change_pct": 2.77,
+        "amount_yi": 16.9,
+        "strategy_hits": [
+          "growth",
+          "combined"
+        ],
+        "strategy_labels": [
+          "成长",
+          "综合"
+        ],
+        "themes": [
+          "其他"
+        ],
+        "entry_reason": "趋势突破+资金配合",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+        "signals": [
+          "均线强多头",
+          "放量",
+          "接近突破",
+          "主力流入14567.2亿"
+        ],
+        "setup_type": "breakout_follow",
+        "setup_label": "突破跟随",
+        "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。 整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+        "entry_plan": {
+          "action": "今天不新开仓，只保留观察名单。",
+          "trigger": "等待风控阀门重新打开后再评估。",
+          "avoid": "高开高走但量能跟不上时不追。",
+          "invalidate": "跌回 16.05 下方或主力转负就取消。",
+          "sizing": "先不开新仓",
+          "levels": {
+            "trigger": 16.84,
+            "pullback": 16.43,
+            "invalidate": 16.05
+          }
+        },
+        "screening_reasons": [
+          "风控阀门关闭，今天只观察不执行"
+        ],
+        "capital_flow": {
+          "trend": "今日流入",
+          "today_yi": 1.46,
+          "five_day_total_yi": 1.46
+        },
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 6,
+          "tags": [
+            "资金配合",
+            "单日流入",
+            "趋势突破区"
+          ]
+        },
+        "fundamentals": {
+          "pe_ttm": 54.62,
+          "roe": null,
+          "pb": null,
+          "net_profit": null
+        },
+        "consistency": {
+          "score": 4,
+          "label": "高一致性",
+          "notes": [
+            "主题持续增强",
+            "资金同向",
+            "流动性支持",
+            "进攻风格匹配"
+          ]
+        },
+        "execution_quality": {
+          "score": 2,
+          "label": "低执行质量",
+          "positives": [
+            "成交额厚",
+            "资金有承接",
+            "一致性尚可",
+            "趋势 setup"
+          ],
+          "warnings": [
+            "阀门关闭"
+          ]
+        },
+        "variants": [
+          {
+            "strategy": "growth",
+            "strategy_label": "成长",
+            "score": 88.3,
+            "status": "caution",
+            "reason": "风控阀门关闭，今天只观察不执行",
+            "consistency": {
+              "score": 4,
+              "label": "高一致性",
+              "notes": [
+                "主题持续增强",
+                "资金同向",
+                "流动性支持",
+                "进攻风格匹配"
+              ]
+            }
+          },
+          {
+            "strategy": "combined",
+            "strategy_label": "综合",
+            "score": 88.3,
+            "status": "caution",
+            "reason": "风控阀门关闭，今天只观察不执行",
+            "consistency": {
+              "score": 4,
+              "label": "高一致性",
+              "notes": [
+                "主题持续增强",
+                "资金同向",
+                "流动性支持",
+                "进攻风格匹配"
+              ]
+            }
+          }
+        ],
+        "screening_status": "caution",
+        "screening_note": "风控阀门关闭，今天只观察不执行",
+        "strategy_count": 2,
+        "approved_hits": 0,
+        "caution_hits": 2,
+        "priority_score": 106.3,
+        "tier": "C",
+        "tier_note": "风控阀门关闭，仅保留观察名单",
+        "tier_rank": 1,
+        "execution_gate": {
+          "status": "off",
+          "label": "进攻阀门关闭",
+          "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+          "position_cap": "0成"
+        }
+      },
+      {
+        "code": "002812",
+        "name": "恩捷股份",
+        "best_score": 85.7,
+        "change_pct": 3.99,
+        "amount_yi": 25.7,
+        "strategy_hits": [
+          "hot",
+          "combined"
+        ],
+        "strategy_labels": [
+          "热门",
+          "综合"
+        ],
+        "themes": [
+          "新能源链"
+        ],
+        "entry_reason": "趋势突破+资金配合 + 换手充分",
+        "main_risk": "留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+        "signals": [
+          "均线强多头",
+          "接近突破",
+          "主力流入11832.6亿",
+          "资金反转",
+          "ROE偏弱(0.2%)"
+        ],
+        "setup_type": "breakout_follow",
+        "setup_label": "突破跟随",
+        "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。 整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+        "entry_plan": {
+          "action": "今天不新开仓，只保留观察名单。",
+          "trigger": "等待风控阀门重新打开后再评估。",
+          "avoid": "高开高走但量能跟不上时不追。",
+          "invalidate": "跌回 69.49 下方或主力转负就取消。",
+          "sizing": "先不开新仓",
+          "levels": {
+            "trigger": 74.61,
+            "pullback": 71.33,
+            "invalidate": 69.49
+          }
+        },
+        "screening_reasons": [
+          "风控阀门关闭，今天只观察不执行"
+        ],
+        "capital_flow": {
+          "trend": "由负转正",
+          "today_yi": 1.18,
+          "five_day_total_yi": 3.39
+        },
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 11,
+          "tags": [
+            "高换手",
+            "资金修复",
+            "资金配合",
+            "单日流入"
+          ]
+        },
+        "fundamentals": {
+          "pe_ttm": -131.63,
+          "roe": 0.19,
+          "pb": 0.89,
+          "net_profit": null
+        },
+        "consistency": {
+          "score": 3,
+          "label": "中一致性",
+          "notes": [
+            "主题延续但分化",
+            "资金同向",
+            "流动性支持",
+            "进攻风格匹配"
+          ]
+        },
+        "execution_quality": {
+          "score": 2,
+          "label": "低执行质量",
+          "positives": [
+            "成交额厚",
+            "资金有承接",
+            "一致性尚可",
+            "趋势 setup"
+          ],
+          "warnings": [
+            "阀门关闭"
+          ]
+        },
+        "variants": [
+          {
+            "strategy": "hot",
+            "strategy_label": "热门",
+            "score": 85.7,
+            "status": "caution",
+            "reason": "风控阀门关闭，今天只观察不执行",
+            "consistency": {
+              "score": 3,
+              "label": "中一致性",
+              "notes": [
+                "主题延续但分化",
+                "资金同向",
+                "流动性支持",
+                "进攻风格匹配"
+              ]
+            }
+          },
+          {
+            "strategy": "combined",
+            "strategy_label": "综合",
+            "score": 85.7,
+            "status": "caution",
+            "reason": "风控阀门关闭，今天只观察不执行",
+            "consistency": {
+              "score": 3,
+              "label": "中一致性",
+              "notes": [
+                "主题延续但分化",
+                "资金同向",
+                "流动性支持",
+                "进攻风格匹配"
+              ]
+            }
+          }
+        ],
+        "screening_status": "caution",
+        "screening_note": "风控阀门关闭，今天只观察不执行",
+        "strategy_count": 2,
+        "approved_hits": 0,
+        "caution_hits": 2,
+        "priority_score": 102.2,
+        "tier": "C",
+        "tier_note": "风控阀门关闭，仅保留观察名单",
+        "tier_rank": 1,
+        "execution_gate": {
+          "status": "off",
+          "label": "进攻阀门关闭",
+          "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+          "position_cap": "0成"
+        }
+      },
+      {
+        "code": "002709",
+        "name": "天赐材料",
+        "best_score": 89.75,
+        "change_pct": 3.12,
+        "amount_yi": 51.4,
+        "strategy_hits": [
+          "growth",
+          "hot",
+          "combined"
+        ],
+        "strategy_labels": [
+          "成长",
+          "热门",
+          "综合"
+        ],
+        "themes": [
+          "其他"
+        ],
+        "entry_reason": "趋势突破+资金配合 + 换手充分",
+        "main_risk": "公告风险：诉讼；留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+        "signals": [
+          "均线强多头",
+          "接近突破",
+          "主力流入38183.1亿"
+        ],
+        "setup_type": "breakout_follow",
+        "setup_label": "突破跟随",
+        "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。 整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+        "entry_plan": {
+          "action": "今天不新开仓，只保留观察名单。",
+          "trigger": "等待风控阀门重新打开后再评估。",
+          "avoid": "高开高走但量能跟不上时不追。",
+          "invalidate": "跌回 47.09 下方或主力转负就取消。",
+          "sizing": "先不开新仓",
+          "levels": {
+            "trigger": 50.66,
+            "pullback": 48.99,
+            "invalidate": 47.09
+          }
+        },
+        "screening_reasons": [
+          "风控阀门关闭，今天只观察不执行"
+        ],
+        "capital_flow": {
+          "trend": "连续2日流入",
+          "today_yi": 3.82,
+          "five_day_total_yi": 9.88
+        },
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 18,
+          "tags": [
+            "偏好行业:材料",
+            "高换手",
+            "资金配合",
+            "连续2日流入"
+          ]
+        },
+        "fundamentals": {
+          "pe_ttm": 76.64,
+          "roe": null,
+          "pb": 5.85,
+          "net_profit": null
+        },
+        "consistency": {
+          "score": 1,
+          "label": "中一致性",
+          "notes": [
+            "主题持续增强",
+            "资金同向",
+            "流动性支持",
+            "进攻风格匹配"
+          ]
+        },
+        "execution_quality": {
+          "score": -1,
+          "label": "低执行质量",
+          "positives": [
+            "成交额厚",
+            "资金确认强",
+            "趋势 setup",
+            "主题延续"
+          ],
+          "warnings": [
+            "一致性偏弱",
+            "公告风险待消化",
+            "阀门关闭"
+          ]
+        },
+        "variants": [
+          {
+            "strategy": "growth",
+            "strategy_label": "成长",
+            "score": 89.75,
+            "status": "caution",
+            "reason": "风控阀门关闭，今天只观察不执行",
+            "consistency": {
+              "score": 1,
+              "label": "中一致性",
+              "notes": [
+                "主题持续增强",
+                "资金同向",
+                "流动性支持",
+                "进攻风格匹配"
+              ]
+            }
+          },
+          {
+            "strategy": "hot",
+            "strategy_label": "热门",
+            "score": 89.75,
+            "status": "caution",
+            "reason": "风控阀门关闭，今天只观察不执行",
+            "consistency": {
+              "score": 1,
+              "label": "中一致性",
+              "notes": [
+                "主题持续增强",
+                "资金同向",
+                "流动性支持",
+                "进攻风格匹配"
+              ]
+            }
+          },
+          {
+            "strategy": "combined",
+            "strategy_label": "综合",
+            "score": 89.75,
+            "status": "caution",
+            "reason": "风控阀门关闭，今天只观察不执行",
+            "consistency": {
+              "score": 1,
+              "label": "中一致性",
+              "notes": [
+                "主题持续增强",
+                "资金同向",
+                "流动性支持",
+                "进攻风格匹配"
+              ]
+            }
+          }
+        ],
+        "screening_status": "caution",
+        "screening_note": "风控阀门关闭，今天只观察不执行",
+        "strategy_count": 3,
+        "approved_hits": 0,
+        "caution_hits": 3,
+        "priority_score": 101.25,
+        "tier": "C",
+        "tier_note": "风控阀门关闭，仅保留观察名单",
+        "tier_rank": 1,
+        "execution_gate": {
+          "status": "off",
+          "label": "进攻阀门关闭",
+          "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+          "position_cap": "0成"
+        }
+      },
+      {
+        "code": "600208",
+        "name": "衢州发展",
+        "best_score": 92.05,
+        "change_pct": 2.7,
+        "amount_yi": 7.0,
+        "strategy_hits": [
+          "combined"
+        ],
+        "strategy_labels": [
+          "综合"
+        ],
+        "themes": [
+          "其他"
+        ],
+        "entry_reason": "趋势突破+资金配合",
+        "main_risk": "公告风险：减持；留意次日承接强度",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+        "signals": [
+          "均线强多头",
+          "强放量",
+          "接近突破",
+          "主力流入2900.0亿",
+          "连续3日流入"
+        ],
+        "setup_type": "breakout_follow",
+        "setup_label": "突破跟随",
+        "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。 整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+        "entry_plan": {
+          "action": "今天不新开仓，只保留观察名单。",
+          "trigger": "等待风控阀门重新打开后再评估。",
+          "avoid": "高开高走但量能跟不上时不追。",
+          "invalidate": "跌回 3.32 下方或主力转负就取消。",
+          "sizing": "先不开新仓",
+          "levels": {
+            "trigger": 3.81,
+            "pullback": 3.41,
+            "invalidate": 3.32
+          }
+        },
+        "screening_reasons": [
+          "风控阀门关闭，今天只观察不执行"
+        ],
+        "capital_flow": {
+          "trend": "连续3日流入",
+          "today_yi": 0.29,
+          "five_day_total_yi": 2.71
+        },
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ]
+        },
+        "fundamentals": {
+          "pe_ttm": 44.94,
+          "roe": null,
+          "pb": null,
+          "net_profit": null
+        },
+        "consistency": {
+          "score": 1,
+          "label": "中一致性",
+          "notes": [
+            "主题持续增强",
+            "资金同向",
+            "进攻风格匹配",
+            "估值盈利匹配尚可"
+          ]
+        },
+        "execution_quality": {
+          "score": -5,
+          "label": "低执行质量",
+          "positives": [
+            "资金有承接",
+            "趋势 setup",
+            "主题延续"
+          ],
+          "warnings": [
+            "成交额偏薄",
+            "一致性偏弱",
+            "公告风险待消化",
+            "阀门关闭"
+          ]
+        },
+        "variants": [
+          {
+            "strategy": "combined",
+            "strategy_label": "综合",
+            "score": 92.05,
+            "status": "caution",
+            "reason": "风控阀门关闭，今天只观察不执行",
+            "consistency": {
+              "score": 1,
+              "label": "中一致性",
+              "notes": [
+                "主题持续增强",
+                "资金同向",
+                "进攻风格匹配",
+                "估值盈利匹配尚可"
+              ]
+            }
+          }
+        ],
+        "screening_status": "caution",
+        "screening_note": "风控阀门关闭，今天只观察不执行",
+        "strategy_count": 1,
+        "approved_hits": 0,
+        "caution_hits": 1,
+        "priority_score": 87.55,
+        "tier": "C",
+        "tier_note": "风控阀门关闭，仅保留观察名单",
+        "tier_rank": 1,
+        "execution_gate": {
+          "status": "off",
+          "label": "进攻阀门关闭",
+          "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+          "position_cap": "0成"
+        }
+      },
+      {
+        "code": "603986",
+        "name": "兆易创新",
+        "best_score": 82.2,
+        "change_pct": 4.59,
+        "amount_yi": 99.7,
+        "strategy_hits": [
+          "hot",
+          "combined"
+        ],
+        "strategy_labels": [
+          "热门",
+          "综合"
+        ],
+        "themes": [
+          "其他"
+        ],
+        "entry_reason": "趋势突破+资金配合 + 换手充分",
+        "main_risk": "公告风险：减持；估值偏高",
+        "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+        "signals": [
+          "均线强多头",
+          "接近突破",
+          "主力流入128886.8亿",
+          "PE偏高(129.3)"
+        ],
+        "setup_type": "breakout_follow",
+        "setup_label": "突破跟随",
+        "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。 当前一致性一般，执行上要更保守。 整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+        "entry_plan": {
+          "action": "今天不新开仓，只保留观察名单。",
+          "trigger": "等待风控阀门重新打开后再评估。",
+          "avoid": "高开高走但量能跟不上时不追。",
+          "invalidate": "跌回 270.36 下方或主力转负就取消。",
+          "sizing": "先不开新仓",
+          "levels": {
+            "trigger": 295.96,
+            "pullback": 284.05,
+            "invalidate": 270.36
+          }
+        },
+        "screening_reasons": [
+          "风控阀门关闭，今天只观察不执行"
+        ],
+        "capital_flow": {
+          "trend": "连续2日流入",
+          "today_yi": 12.89,
+          "five_day_total_yi": 27.64
+        },
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "高换手",
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ]
+        },
+        "fundamentals": {
+          "pe_ttm": 129.28,
+          "roe": null,
+          "pb": 11.21,
+          "net_profit": null
+        },
+        "consistency": {
+          "score": -1,
+          "label": "低一致性",
+          "notes": [
+            "主题持续增强",
+            "估值与盈利错配",
+            "资金同向",
+            "流动性支持"
+          ]
+        },
+        "execution_quality": {
+          "score": -1,
+          "label": "低执行质量",
+          "positives": [
+            "成交额厚",
+            "资金确认强",
+            "趋势 setup",
+            "主题延续"
+          ],
+          "warnings": [
+            "一致性偏弱",
+            "公告风险待消化",
+            "阀门关闭"
+          ]
+        },
+        "variants": [
+          {
+            "strategy": "hot",
+            "strategy_label": "热门",
+            "score": 82.2,
+            "status": "caution",
+            "reason": "风控阀门关闭，今天只观察不执行",
+            "consistency": {
+              "score": -1,
+              "label": "低一致性",
+              "notes": [
+                "主题持续增强",
+                "估值与盈利错配",
+                "资金同向",
+                "流动性支持"
+              ]
+            }
+          },
+          {
+            "strategy": "combined",
+            "strategy_label": "综合",
+            "score": 82.2,
+            "status": "caution",
+            "reason": "风控阀门关闭，今天只观察不执行",
+            "consistency": {
+              "score": -1,
+              "label": "低一致性",
+              "notes": [
+                "主题持续增强",
+                "估值与盈利错配",
+                "资金同向",
+                "流动性支持"
+              ]
+            }
+          }
+        ],
+        "screening_status": "caution",
+        "screening_note": "风控阀门关闭，今天只观察不执行",
+        "strategy_count": 2,
+        "approved_hits": 0,
+        "caution_hits": 2,
+        "priority_score": 86.7,
+        "tier": "C",
+        "tier_note": "风控阀门关闭，仅保留观察名单",
+        "tier_rank": 1,
+        "execution_gate": {
+          "status": "off",
+          "label": "进攻阀门关闭",
+          "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+          "position_cap": "0成"
+        }
+      },
+      {
+        "code": "600032",
+        "name": "浙江新能",
+        "best_score": 78.15,
+        "change_pct": 10.03,
+        "amount_yi": 11.3,
+        "strategy_hits": [
+          "hot"
+        ],
+        "strategy_labels": [
+          "热门"
+        ],
+        "themes": [
+          "其他"
+        ],
+        "entry_reason": "低位活跃反弹 + 换手充分",
+        "main_risk": "公告风险：减持；留意次日承接强度",
+        "watch_condition": "继续放量上攻再确认；主力资金别转负",
+        "signals": [
+          "均线多头",
+          "强势拉升",
+          "低位反弹",
+          "主力流入10558.5亿",
+          "PE合理(31.9)"
+        ],
+        "setup_type": "low_reversal",
+        "setup_label": "低位反转",
+        "setup_summary": "位置偏低，优先看二次确认，不抢第一根情绪脉冲。 当前一致性一般，执行上要更保守。 整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+        "entry_plan": {
+          "action": "今天不新开仓，只保留观察名单。",
+          "trigger": "等待风控阀门重新打开后再评估。",
+          "avoid": "第一波直线拉升不追。",
+          "invalidate": "跌破 9.48 或再次放量走弱就取消。",
+          "sizing": "先不开新仓",
+          "levels": {
+            "trigger": 14.1,
+            "pullback": 9.78,
+            "invalidate": 9.48
+          }
+        },
+        "screening_reasons": [
+          "风控阀门关闭，今天只观察不执行"
+        ],
+        "capital_flow": {
+          "trend": "今日流入",
+          "today_yi": 1.06,
+          "five_day_total_yi": 1.06
+        },
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 10,
+          "tags": [
+            "高换手",
+            "涨幅强",
+            "资金配合",
+            "单日流入"
+          ]
+        },
+        "fundamentals": {
+          "pe_ttm": 31.94,
+          "roe": null,
+          "pb": null,
+          "net_profit": null
+        },
+        "consistency": {
+          "score": 0,
+          "label": "低一致性",
+          "notes": [
+            "主题持续增强",
+            "资金同向",
+            "流动性支持",
+            "进攻风格匹配"
+          ]
+        },
+        "execution_quality": {
+          "score": -3,
+          "label": "低执行质量",
+          "positives": [
+            "流动性够用",
+            "资金有承接",
+            "位置更友好",
+            "主题延续"
+          ],
+          "warnings": [
+            "一致性偏弱",
+            "情绪偏热",
+            "公告风险待消化",
+            "阀门关闭"
+          ]
+        },
+        "variants": [
+          {
+            "strategy": "hot",
+            "strategy_label": "热门",
+            "score": 78.15,
+            "status": "caution",
+            "reason": "风控阀门关闭，今天只观察不执行",
+            "consistency": {
+              "score": 0,
+              "label": "低一致性",
+              "notes": [
+                "主题持续增强",
+                "资金同向",
+                "流动性支持",
+                "进攻风格匹配"
+              ]
+            }
+          }
+        ],
+        "screening_status": "caution",
+        "screening_note": "风控阀门关闭，今天只观察不执行",
+        "strategy_count": 1,
+        "approved_hits": 0,
+        "caution_hits": 1,
+        "priority_score": 76.15,
+        "tier": "C",
+        "tier_note": "风控阀门关闭，仅保留观察名单",
+        "tier_rank": 1,
+        "execution_gate": {
+          "status": "off",
+          "label": "进攻阀门关闭",
+          "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+          "position_cap": "0成"
+        }
+      }
+    ],
+    "opportunities": [],
+    "top_theme": "新能源链"
+  },
+  "midday": {
+    "refresh": {
+      "timestamp": "2026-04-21 12:01:25",
+      "validation_status": "ok",
+      "source_scan_timestamp": "2026-04-21 12:01:24",
+      "scan_timestamp": "2026-04-21 12:01:24"
+    },
+    "confirm": {},
+    "summary": "暂无同日午盘确认。"
+  }
+}

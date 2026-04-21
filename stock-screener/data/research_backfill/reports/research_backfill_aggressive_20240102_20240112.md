@@ -1,0 +1,33 @@
+# 研究版历史补档报告
+
+生成时间：2026-04-15 11:22:02
+股票池：aggressive
+日期范围：2024-01-02 ~ 2024-01-12
+补档结果：成功 5 天 | 跳过 4 天
+scan 输出目录：runtime/stock-screener/data/research_backfill/history
+ai 输出目录：runtime/stock-screener/data/research_backfill/ai_history
+
+## 研究边界
+
+- 历史价格使用东方财富日线K线回放
+- 历史资金流暂用价格量能代理，不等同真实东方财富日频资金流
+- 基本面暂用当前快照近似，不等同严格历史披露时点
+- 股票池暂用当前可取到的池子近似，不等同严格历史成分股
+
+## 运行警告
+
+- 当前 `zz500` 节点未取到成分，研究版暂按当前可取到池子近似。
+
+## 每日结果
+
+| 日期 | 状态 | Stage1 | Stage2 | 阀门 | 主线 | Shortlist | 备注 |
+|---|---|---:|---:|---|---|---:|---|
+| 2024-01-02 | skipped_existing | - | - | - | - | - | skipped_existing |
+| 2024-01-03 | skipped_existing | - | - | - | - | - | skipped_existing |
+| 2024-01-04 | skipped_existing | - | - | - | - | - | skipped_existing |
+| 2024-01-05 | skipped_existing | - | - | - | - | - | skipped_existing |
+| 2024-01-08 | ok | 5 | 5 | off | 光伏链 | 2 | - |
+| 2024-01-09 | ok | 23 | 23 | off | 光伏链 | 3 | - |
+| 2024-01-10 | ok | 10 | 10 | off | 光伏链 | 1 | - |
+| 2024-01-11 | ok | 19 | 19 | off | 光伏链 | 4 | - |
+| 2024-01-12 | ok | 17 | 17 | off | 光伏链 | 1 | - |

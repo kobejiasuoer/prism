@@ -1,0 +1,17 @@
+{
+  "checked_at": "2026-04-16 18:39:54",
+  "mode": "screener",
+  "validation_status": "ok",
+  "errors": [],
+  "warnings": [],
+  "paths": {
+    "message": "/var/folders/fp/2rkpp8kj2ms23w902367z9s40000gn/T/tmp.IqVv79dUZO/brief.txt",
+    "report": "/var/folders/fp/2rkpp8kj2ms23w902367z9s40000gn/T/tmp.IqVv79dUZO/report.md",
+    "generator": "packages/screener/generate_feishu_message.py"
+  },
+  "expected_timestamp": "2026-04-16 16:58:29",
+  "stats": {
+    "shortlist_count": 14,
+    "has_lifecycle": false
+  }
+}

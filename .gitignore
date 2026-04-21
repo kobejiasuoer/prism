@@ -7,3 +7,5 @@ dist/
 build/
 .env
 *.log
+!data/history/cron_logs/**/*.log
+!data/history/control_panel_runs/logs/**/*.log
