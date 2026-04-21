@@ -1,5 +1,8 @@
 # Prism
 
+English version: [README.md](README.md)
+
+
 Prism 是一个完整开源的 AI Native 投研系统。
 
 这个仓库公开 Prism 的真实控制台页面、真实工作流逻辑、真实 prompt、真实参数和真实历史运行产物。

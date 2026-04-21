@@ -1,5 +1,8 @@
 # Prism
 
+Chinese version: [README.zh-CN.md](README.zh-CN.md)
+
+
 Prism is a full-source AI-native investment research system.
 
 This repository publishes the real control panel, real workflow logic, real prompts, real thresholds, and real historical outputs of the Prism system.
