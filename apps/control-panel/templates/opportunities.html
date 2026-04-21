@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>棱镜·机会池</title>
+    {% include "_theme_head.html" %}
+    <link rel="stylesheet" href="/static/control-panel.css?v=20260420-schemec5">
+  </head>
+  <body>
+    <div class="panel-shell today-shell prism-page-shell opportunities-page-shell" data-refresh-page="opportunities">
+      <header class="today-dispatch-nav">
+        {% set nav_active = "opportunities" %}
+        {% set nav_links = opportunities.links %}
+        {% set nav_api_href = opportunities.links.api_self %}
+        {% include "_page_nav.html" %}
+      </header>
+
+      <main class="today-dispatch-main opportunities-dispatch-main">
+        <section class="today-quality-block today-dispatch-block stage-decision-layer">
+          {% set verdict_badge = opportunities.topline.verdict_badge %}
+          {% set verdict_title = opportunities.topline.verdict_title %}
+          {% set verdict_summary = opportunities.topline.verdict_summary %}
+          {% set meta_pills = opportunities.topline.meta_pills %}
+          {% set cta_links = opportunities.topline.cta_links %}
+          {% include "_decision_topline.html" %}
+        </section>
+
+        <section id="opportunities-top-three" class="today-quality-block today-dispatch-block stage-decision-layer">
+          <div class="today-panel-head">
+            <div>
+              {% if opportunities.promote_watch %}
+              <p class="eyebrow">观察优先</p>
+              <h2>Top 3 观察/午盘承接候选</h2>
+              {% else %}
+              <p class="eyebrow">新仓优先</p>
+              <h2>Top 3 可执行候选</h2>
+              {% endif %}
+            </div>
+            <span class="panel-stat">{{ opportunities.top_rows|length }}</span>
+          </div>
+          {% if opportunities.promote_watch %}
+          <p class="today-panel-copy">今天没有可执行新仓。先看 3 只观察名单，再等午盘承接确认。</p>
+          {% else %}
+          <p class="today-panel-copy">先看可执行候选，再决定是否继续展开其余观察与午盘承接。</p>
+          {% endif %}
+          {% set decision_rows = opportunities.top_rows %}
+          {% include "_decision_rows.html" %}
+        </section>
+
+        <section class="today-quality-block today-dispatch-block stage-decision-layer">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">快照状态</p>
+              <h2>状态细栏</h2>
+            </div>
+          </div>
+          {% set status_strip_label = "状态细栏" %}
+          {% set status_items = opportunities.status_strip %}
+          {% include "_status_strip.html" %}
+        </section>
+
+        <details id="opportunities-secondary" class="progressive-section opportunities-secondary-fold" data-open-on-anchor>
+          <summary class="progressive-summary">
+            <div class="progressive-summary-main">
+              <p class="eyebrow">后续层</p>
+              <strong>其余观察与午盘承接</strong>
+            </div>
+            <span class="progressive-summary-note">{{ opportunities.secondary_total }} 只候选</span>
+          </summary>
+          <div class="progressive-body">
+            <section class="today-dispatch-secondary-grid opportunities-secondary-grid stage-action-layer">
+              {% for group in opportunities.secondary_groups %}
+              <article class="today-quality-block">
+                <div class="section-head">
+                  <div>
+                    <p class="eyebrow">观察池</p>
+                    <h3>{{ group.title }}</h3>
+                  </div>
+                  <span class="panel-stat">{{ group.count }}</span>
+                </div>
+                {% set decision_rows = group.rows %}
+                {% include "_decision_rows.html" %}
+                {% if not group.rows %}
+                <p class="today-panel-copy">{{ group.empty }}</p>
+                {% endif %}
+              </article>
+              {% endfor %}
+            </section>
+          </div>
+        </details>
+
+        <details id="opportunities-themes" class="progressive-section opportunities-themes-fold" data-open-on-anchor>
+          <summary class="progressive-summary">
+            <div class="progressive-summary-main">
+              <p class="eyebrow">主线</p>
+              <strong>主线雷达</strong>
+            </div>
+            <span class="progressive-summary-note">{{ opportunities.theme_cards|length }} 条主题</span>
+          </summary>
+          <div class="progressive-body">
+            <section class="today-quality-block stage-action-layer">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">主题视角</p>
+                  <h3>主线雷达</h3>
+                </div>
+              </div>
+              {% if opportunities.theme_cards %}
+              <div class="detail-theme-grid opportunities-theme-grid">
+                {% for item in opportunities.theme_cards %}
+                <article class="quality-card tone-watch opportunities-theme-card">
+                  <div class="quality-card-head">
+                    <strong>{{ item.title }}</strong>
+                    <span class="status-chip status-unknown">{{ item.score }}</span>
+                  </div>
+                  <p>{{ item.detail }}</p>
+                  {% if item.leaders %}
+                  <div class="detail-tag-list">
+                    {% for leader in item.leaders %}
+                    <span class="detail-tag">{{ leader }}</span>
+                    {% endfor %}
+                  </div>
+                  {% endif %}
+                </article>
+                {% endfor %}
+              </div>
+              {% else %}
+              <div class="decision-empty">当前没有主线主题可展示。</div>
+              {% endif %}
+            </section>
+          </div>
+        </details>
+
+        <details id="opportunities-support" class="progressive-section opportunities-support-fold" data-open-on-anchor>
+          <summary class="progressive-summary">
+            <div class="progressive-summary-main">
+              <p class="eyebrow">证据层</p>
+              <strong>质检与原始数据</strong>
+            </div>
+            <span class="progressive-summary-note">展开质检与回源入口</span>
+          </summary>
+          <div class="progressive-body">
+            <section class="prism-refresh-strip" data-refresh-panel>
+              <div class="prism-refresh-main">
+                <div class="prism-refresh-headline">
+                  <strong data-refresh-market>刷新状态加载中...</strong>
+                  <span data-refresh-clock>--</span>
+                </div>
+                <p class="prism-refresh-hint" data-refresh-hint>正在读取链路新鲜度。</p>
+                <div class="prism-refresh-tags" data-refresh-tags></div>
+              </div>
+              <div class="prism-refresh-actions">
+                <label class="prism-refresh-toggle">
+                  <input type="checkbox" data-refresh-auto>
+                  <span>自动刷新</span>
+                </label>
+                <button class="ghost-button prism-refresh-button" type="button" data-refresh-trigger>立即刷新</button>
+              </div>
+            </section>
+
+            <section class="today-dispatch-secondary-grid stage-action-layer">
+              <article class="today-quality-block">
+                <div class="section-head">
+                  <div>
+                    <p class="eyebrow">可信度</p>
+                    <h3>可信度总开关</h3>
+                  </div>
+                </div>
+                {% set confidence_switch = opportunities.confidence_switch %}
+                {% set confidence_callout_class = "" %}
+                {% include "_confidence_switch.html" %}
+              </article>
+
+              <article class="today-quality-block prism-page-quality">
+                <div class="section-head">
+                  <div>
+                    <p class="eyebrow">质检状态</p>
+                    <h3>机会链路质检</h3>
+                  </div>
+                </div>
+                <div class="quality-grid quality-grid-dual">
+                  {% for item in opportunities.quality_cards %}
+                  <article class="quality-card tone-{{ item.tone }}">
+                    <div class="quality-card-head">
+                      <strong>{{ item.title }}</strong>
+                      <span class="status-chip status-{{ item.status }}">{{ item.status }}</span>
+                    </div>
+                    <p>{{ item.issue }}</p>
+                    <div class="quality-times">
+                      <span>检查 {{ item.checked_at }}</span>
+                      <span>目标 {{ item.expected_timestamp }}</span>
+                    </div>
+                    {% if item.path %}
+                    <button
+                      class="panel-link panel-link-button"
+                      type="button"
+                      data-preview-path="{{ item.path }}"
+                      data-preview-title="{{ item.title }}质检 JSON"
+                      onclick="openPreviewButton(this)"
+                    >
+                      页内看质检 JSON
+                    </button>
+                    {% endif %}
+                  </article>
+                  {% endfor %}
+                </div>
+              </article>
+            </section>
+
+            <section class="today-quality-block stage-action-layer">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">原始数据</p>
+                  <h3>原始数据入口</h3>
+                </div>
+              </div>
+              <div class="detail-artifact-grid page-artifact-grid">
+                {% for item in opportunities.artifacts %}
+                <button
+                  class="artifact-link"
+                  type="button"
+                  data-preview-path="{{ item.path }}"
+                  data-preview-title="{{ item.title }}"
+                  onclick="openPreviewButton(this)"
+                >
+                  <span>{{ item.title }}</span>
+                  <strong>{{ item.name }}</strong>
+                  <em>{{ item.mtime_full }}</em>
+                </button>
+                {% endfor %}
+              </div>
+            </section>
+          </div>
+        </details>
+      </main>
+    </div>
+    {% include "_preview_drawer.html" %}
+    <script src="/static/control-panel-refresh.js?v=20260420-refreshb1" defer></script>
+    <script>
+      (function () {
+        function openAnchorFold() {
+          var hash = window.location.hash;
+          if (!hash || hash === "#") {
+            return;
+          }
+          var target = document.querySelector(hash);
+          if (!target) {
+            return;
+          }
+          var details = target.matches("details[data-open-on-anchor]")
+            ? target
+            : target.closest("details[data-open-on-anchor]");
+          if (details && !details.open) {
+            details.open = true;
+          }
+        }
+        window.addEventListener("hashchange", openAnchorFold);
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", openAnchorFold, { once: true });
+        } else {
+          openAnchorFold();
+        }
+      })();
+    </script>
+  </body>
+</html>

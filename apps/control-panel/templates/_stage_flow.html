@@ -1,0 +1,44 @@
+{% set stage_items = [
+  {"key": "today", "label": "今日", "title": "动作收束", "desc": "确认执行与回避", "href": nav_links.today},
+  {"key": "ask", "label": "问股", "title": "单票深挖", "desc": "判断单票边界", "href": nav_links.ask},
+  {"key": "watchlist", "label": "自选股", "title": "持仓管理", "desc": "收束优先级", "href": nav_links.watchlist},
+  {"key": "opportunities", "label": "机会池", "title": "新增筛选", "desc": "筛选新增机会", "href": nav_links.opportunities},
+  {"key": "review", "label": "复盘", "title": "约束校正", "desc": "回放校准阀门", "href": nav_links.review},
+] %}
+{% set ns = namespace(active_index=0) %}
+{% for stage in stage_items %}
+  {% if stage.key == nav_active %}
+    {% set ns.active_index = loop.index0 %}
+  {% endif %}
+{% endfor %}
+{% set prev_stage = stage_items[ns.active_index - 1] if ns.active_index > 0 else None %}
+{% set curr_stage = stage_items[ns.active_index] %}
+{% set next_stage = stage_items[ns.active_index + 1] if (ns.active_index + 1) < (stage_items|length) else None %}
+{% set progress_pct = (((ns.active_index + 1) / (stage_items|length)) * 100)|int %}
+<section class="stage-flow stage-flow-compact" aria-label="决策阶段流">
+  <div class="stage-progress-strip" role="presentation">
+    <div class="stage-progress-track">
+      <span class="stage-progress-fill" style="width: {{ progress_pct }}%;"></span>
+    </div>
+    <span class="stage-progress-label">阶段 {{ ns.active_index + 1 }}/{{ stage_items|length }}</span>
+  </div>
+  <div class="stage-flow-meta">
+    <article class="stage-current">
+      <span>当前阶段</span>
+      <strong>{{ curr_stage.title }}</strong>
+      <p>{{ curr_stage.desc }}</p>
+    </article>
+    <div class="stage-jump-links">
+      {% if prev_stage %}
+      <a class="stage-jump stage-jump-prev" href="{{ prev_stage.href }}">上一步：{{ prev_stage.title }}</a>
+      {% else %}
+      <span class="stage-jump stage-jump-prev is-disabled" aria-disabled="true">上一步</span>
+      {% endif %}
+      {% if next_stage %}
+      <a class="stage-jump stage-jump-next" href="{{ next_stage.href }}">下一步：{{ next_stage.title }}</a>
+      {% else %}
+      <span class="stage-jump stage-jump-next is-disabled" aria-disabled="true">下一步</span>
+      {% endif %}
+    </div>
+  </div>
+</section>

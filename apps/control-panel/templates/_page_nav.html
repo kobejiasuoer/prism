@@ -1,0 +1,25 @@
+<nav class="today-nav stage-nav" aria-label="主导航">
+  <div class="nav-brand">
+    <span>棱镜</span>
+    <strong>交易决策台</strong>
+  </div>
+  <div class="nav-chip-row">
+    <a class="nav-chip {% if nav_active == 'today' %}nav-chip-active{% endif %}" href="{{ nav_links.today }}" {% if nav_active == 'today' %}aria-current="page"{% endif %}>今日</a>
+    <a class="nav-chip {% if nav_active == 'ask' %}nav-chip-active{% endif %}" href="{{ nav_links.ask }}" {% if nav_active == 'ask' %}aria-current="page"{% endif %}>问股</a>
+    <a class="nav-chip {% if nav_active == 'watchlist' %}nav-chip-active{% endif %}" href="{{ nav_links.watchlist }}" {% if nav_active == 'watchlist' %}aria-current="page"{% endif %}>自选股</a>
+    <a class="nav-chip {% if nav_active == 'opportunities' %}nav-chip-active{% endif %}" href="{{ nav_links.opportunities }}" {% if nav_active == 'opportunities' %}aria-current="page"{% endif %}>机会池</a>
+    <a class="nav-chip {% if nav_active == 'review' %}nav-chip-active{% endif %}" href="{{ nav_links.review }}" {% if nav_active == 'review' %}aria-current="page"{% endif %}>复盘</a>
+  </div>
+  <div class="nav-tools">
+    <a class="nav-ops-link {% if nav_active == 'ops' %}nav-ops-link-active{% endif %}" href="{{ nav_links.ops }}" {% if nav_active == 'ops' %}aria-current="page"{% endif %}>控制台</a>
+    {% if show_api_link and nav_api_href %}
+    <a class="nav-ops-link nav-ops-link-meta" href="{{ nav_api_href }}" target="_blank" rel="noopener">接口</a>
+    {% endif %}
+    {% if preview_theme == "ibm-preview" %}
+    <span class="nav-preview-badge" role="note" aria-label="IBM 预览">IBM 预览</span>
+    <a class="nav-ops-link nav-preview-exit" href="{{ preview_theme_exit_url }}">退出试版</a>
+    {% endif %}
+    {% include "_theme_toggle.html" %}
+  </div>
+</nav>
+{% include "_stage_flow.html" %}

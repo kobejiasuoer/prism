@@ -1,0 +1,30 @@
+{% set decision_rows = decision_rows if decision_rows is defined and decision_rows else [] %}
+<section class="decision-rows" aria-label="高密度决策 Top 3">
+  {% if decision_rows %}
+  <ol class="decision-rows-list">
+    {% for row in decision_rows[:3] %}
+    <li class="decision-row decision-row-{{ row.tone|default('neutral') }}">
+      {% if row.url %}
+      <a class="decision-row-link" href="{{ row.url }}">
+      {% endif %}
+        <div class="decision-row-main">
+          <span class="decision-row-rank">{{ "%02d"|format(loop.index) }}</span>
+          <span class="decision-row-title">{{ row.title }}</span>
+          <strong class="decision-row-action">{{ row.action }}</strong>
+          <span class="decision-row-trigger">{{ row.trigger }}</span>
+        </div>
+        <p class="decision-row-reason">{{ row.reason }}</p>
+        <div class="decision-row-meta">
+          <span class="decision-row-risk">风险：{{ row.risk }}</span>
+          <span class="decision-row-freshness">{{ row.freshness }}</span>
+        </div>
+      {% if row.url %}
+      </a>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="decision-rows-empty">暂无可执行决策行。</p>
+  {% endif %}
+</section>

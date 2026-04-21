@@ -1,0 +1,29 @@
+{% set verdict_badge = verdict_badge if verdict_badge is defined else "一句判断" %}
+{% set verdict_title = verdict_title if verdict_title is defined else "等待结论" %}
+{% set verdict_summary = verdict_summary if verdict_summary is defined else "先聚焦来源与质量，再确认具体动作。" %}
+{% set meta_pills = meta_pills if meta_pills is defined and meta_pills else [] %}
+{% set cta_links = cta_links if cta_links is defined and cta_links else [] %}
+<section class="decision-topline" aria-label="决策一句判断">
+  <div class="decision-topline-main">
+    <span class="decision-topline-badge">{{ verdict_badge }}</span>
+    <strong class="decision-topline-title">{{ verdict_title }}</strong>
+    <p class="decision-topline-summary">{{ verdict_summary }}</p>
+  </div>
+  {% if meta_pills %}
+  <div class="decision-topline-pills">
+    {% for pill in meta_pills %}
+    <article class="decision-pill">
+      <span>{{ pill.label }}</span>
+      <strong>{{ pill.value }}</strong>
+    </article>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if cta_links %}
+  <div class="decision-topline-cta-row">
+    {% for cta in cta_links %}
+    <a class="decision-topline-cta" href="{{ cta.href }}">{{ cta.label }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>

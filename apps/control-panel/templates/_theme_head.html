@@ -1,0 +1,32 @@
+<script>
+  (() => {
+    const root = document.documentElement;
+    {% if preview_theme %}
+    root.dataset.previewTheme = {{ preview_theme|tojson }};
+    {% endif %}
+    try {
+      const storageKey = "prism-theme-mode";
+      const stored = window.localStorage.getItem(storageKey);
+      const mode = ["light", "dark", "system"].includes(stored) ? stored : "system";
+      const prefersLight =
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-color-scheme: light)").matches;
+      const applied = mode === "system" ? (prefersLight ? "light" : "dark") : mode;
+      root.dataset.themeMode = mode;
+      root.dataset.themeApplied = applied;
+      root.style.colorScheme = applied;
+    } catch (error) {
+      root.dataset.themeMode = "system";
+      root.dataset.themeApplied = "dark";
+      root.style.colorScheme = "dark";
+    }
+  })();
+</script>
+{% if preview_theme %}
+<meta name="prism-preview-theme" content="{{ preview_theme }}" data-preview-theme="{{ preview_theme }}">
+{% endif %}
+<script src="/static/control-panel-theme.js?v=20260419-schemec2" defer></script>
+<script src="/static/control-panel-nav.js?v=20260419-schemec2" defer></script>
+{% if preview_theme == "ibm-preview" %}
+<link rel="stylesheet" href="/static/control-panel-ibm-preview.css?v=20260421-ibm-preview2">
+{% endif %}

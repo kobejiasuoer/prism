@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>棱镜·今日总览</title>
+    {% include "_theme_head.html" %}
+    <link rel="stylesheet" href="/static/control-panel.css?v=20260420-schemec5">
+  </head>
+  <body>
+    <div class="panel-shell today-shell prism-page-shell today-page-shell" data-refresh-page="today">
+      <header class="today-dispatch-nav">
+        {% set nav_active = "today" %}
+        {% set nav_links = today.links %}
+        {% set nav_api_href = today.links.api_today %}
+        {% include "_page_nav.html" %}
+      </header>
+
+      <main class="today-dispatch-main">
+        <section class="today-quality-block today-dispatch-block stage-decision-layer">
+          {% set verdict_badge = today.topline.verdict_badge %}
+          {% set verdict_title = today.topline.verdict_title %}
+          {% set verdict_summary = today.topline.verdict_summary %}
+          {% set meta_pills = today.topline.meta_pills %}
+          {% set cta_links = today.topline.cta_links %}
+          {% include "_decision_topline.html" %}
+        </section>
+
+        <section class="today-quality-block today-dispatch-block stage-decision-layer">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">下一步</p>
+              <h2>下一步动作</h2>
+            </div>
+            <span class="today-next-step-current">当前最佳：{{ today.next_steps.current_label }}</span>
+          </div>
+          <div class="today-next-step-strip">
+            {% for item in today.next_steps["items"] %}
+            <a
+              class="today-next-step-card today-next-step-link {% if item.active %}today-next-step-card-active{% endif %}"
+              href="{{ item.href }}"
+              {% if item.active %}aria-current="step"{% endif %}
+            >
+              <strong>{{ item.label }}</strong>
+              <p>{{ item.detail }}</p>
+              <span>{% if item.active %}当前最佳{% else %}备选{% endif %}</span>
+            </a>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section class="today-quality-block today-dispatch-block stage-decision-layer">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">优先动作</p>
+              <h2>Top 3 今日动作</h2>
+            </div>
+          </div>
+          {% set decision_rows = today.top_rows %}
+          {% include "_decision_rows.html" %}
+        </section>
+
+        <section class="today-quality-block today-dispatch-block stage-decision-layer">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">快照状态</p>
+              <h2>状态细栏</h2>
+            </div>
+          </div>
+          {% set status_strip_label = "状态细栏" %}
+          {% set status_items = today.status_strip %}
+          {% include "_status_strip.html" %}
+        </section>
+
+        <details class="progressive-section">
+          <summary class="progressive-summary">
+            <div class="progressive-summary-main">
+              <p class="eyebrow">延展层</p>
+              <strong>更多动作/背景</strong>
+            </div>
+            <span class="progressive-summary-note">展开完整动作与变化轨迹</span>
+          </summary>
+          <div class="progressive-body">
+            <section class="today-dispatch-secondary-grid stage-action-layer">
+              <article class="today-quality-block">
+                <div class="section-head">
+                  <div>
+                    <p class="eyebrow">动作背景</p>
+                    <h3>更多动作</h3>
+                  </div>
+                </div>
+                <div class="today-dispatch-mini-grid">
+                  {% for group in today.action_groups %}
+                  <article class="today-dispatch-mini-group">
+                    <div class="today-dispatch-mini-head">
+                      <strong>{{ group.title }}</strong>
+                      <span>{{ group.count }}</span>
+                    </div>
+                    <p class="today-dispatch-mini-copy">{{ group.subtitle }}</p>
+                    {% if group["items"] %}
+                    <ul class="today-dispatch-mini-list">
+                      {% for item in group["items"][:2] %}
+                      <li>
+                        {% if item.url %}
+                        <a href="{{ item.url }}">{{ item.title }}</a>
+                        {% else %}
+                        <span>{{ item.title }}</span>
+                        {% endif %}
+                        <em>{{ item.status }}</em>
+                      </li>
+                      {% endfor %}
+                    </ul>
+                    {% if group.count > 2 %}
+                    <p class="today-dispatch-mini-more">还有 {{ group.count - 2 }} 条未展开</p>
+                    {% endif %}
+                    {% else %}
+                    <div class="decision-empty">{{ group.empty }}</div>
+                    {% endif %}
+                  </article>
+                  {% endfor %}
+                </div>
+              </article>
+
+              <article class="today-quality-block">
+                <div class="section-head">
+                  <div>
+                    <p class="eyebrow">变化背景</p>
+                    <h3>{{ today.change_view.title }}</h3>
+                  </div>
+                </div>
+                <p class="today-panel-copy">{{ today.change_view.subtitle }}</p>
+                {% if today.change_view.meta_tags %}
+                <div class="detail-tag-list">
+                  {% for item in today.change_view.meta_tags %}
+                  <span class="detail-tag">{{ item }}</span>
+                  {% endfor %}
+                </div>
+                {% endif %}
+                <div class="today-dispatch-mini-grid">
+                  {% for group in today.change_view.groups %}
+                  <article class="today-dispatch-mini-group">
+                    <div class="today-dispatch-mini-head">
+                      <strong>{{ group.title }}</strong>
+                      <span>{{ group.count }}</span>
+                    </div>
+                    <p class="today-dispatch-mini-copy">{{ group.subtitle }}</p>
+                    {% if group.cards %}
+                    <ul class="today-dispatch-mini-list">
+                      {% for item in group.cards[:2] %}
+                      <li>
+                        <span>{{ item.name }} {{ item.code }}</span>
+                        <em>{{ item.status }}</em>
+                      </li>
+                      {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="decision-empty">{{ group.empty }}</div>
+                    {% endif %}
+                  </article>
+                  {% endfor %}
+                </div>
+              </article>
+            </section>
+          </div>
+        </details>
+
+        <details class="progressive-section">
+          <summary class="progressive-summary">
+            <div class="progressive-summary-main">
+              <p class="eyebrow">证据层</p>
+              <strong>来源/质量</strong>
+            </div>
+            <span class="progressive-summary-note">展开刷新、来源快照与原始入口</span>
+          </summary>
+          <div class="progressive-body">
+            <section class="prism-refresh-strip" data-refresh-panel>
+              <div class="prism-refresh-main">
+                <div class="prism-refresh-headline">
+                  <strong data-refresh-market>刷新状态加载中...</strong>
+                  <span data-refresh-clock>--</span>
+                </div>
+                <p class="prism-refresh-hint" data-refresh-hint>正在读取链路新鲜度。</p>
+                <div class="prism-refresh-tags" data-refresh-tags></div>
+              </div>
+              <div class="prism-refresh-actions">
+                <label class="prism-refresh-toggle">
+                  <input type="checkbox" data-refresh-auto>
+                  <span>自动刷新</span>
+                </label>
+                <button class="ghost-button prism-refresh-button" type="button" data-refresh-trigger>立即刷新</button>
+              </div>
+            </section>
+
+            <section class="today-dispatch-secondary-grid stage-action-layer">
+              <article class="today-quality-block">
+                <div class="section-head">
+                  <div>
+                    <p class="eyebrow">来源</p>
+                    <h3>来源快照</h3>
+                  </div>
+                </div>
+                <div class="prism-source-stack">
+                  {% for item in today.source_cards %}
+                  <article class="source-card page-source-card tone-watch">
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.value }}</strong>
+                    <p>{{ item.detail }}</p>
+                  </article>
+                  {% endfor %}
+                </div>
+              </article>
+
+              <article class="today-quality-block">
+                <div class="section-head">
+                  <div>
+                    <p class="eyebrow">质量</p>
+                    <h3>链路质检</h3>
+                  </div>
+                </div>
+                <div class="quality-grid">
+                  {% for item in today.quality_cards %}
+                  <article class="quality-card tone-{{ item.tone }}">
+                    <div class="quality-card-head">
+                      <strong>{{ item.title }}</strong>
+                      <span class="status-chip status-{{ item.status }}">{{ item.status }}</span>
+                    </div>
+                    <p>{{ item.issue }}</p>
+                    <div class="quality-times">
+                      <span>检查 {{ item.checked_at }}</span>
+                      <span>目标 {{ item.expected_timestamp }}</span>
+                    </div>
+                  </article>
+                  {% endfor %}
+                </div>
+              </article>
+            </section>
+
+            <section class="today-quality-block stage-action-layer">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">回源入口</p>
+                  <h3>原始入口</h3>
+                </div>
+              </div>
+              <div class="detail-artifact-grid page-artifact-grid">
+                {% if today.artifacts.decision_brief.path %}
+                <button
+                  class="artifact-link"
+                  type="button"
+                  data-preview-path="{{ today.artifacts.decision_brief.path }}"
+                  data-preview-title="总控简报"
+                  onclick="openPreviewButton(this)"
+                >
+                  <span>总控简报</span>
+                  <strong>{{ today.artifacts.decision_brief.label }}</strong>
+                  <em>{{ today.artifacts.decision_brief.path }}</em>
+                </button>
+                {% endif %}
+                {% if today.artifacts.watchlist_snapshot.path %}
+                <button
+                  class="artifact-link"
+                  type="button"
+                  data-preview-path="{{ today.artifacts.watchlist_snapshot.path }}"
+                  data-preview-title="自选股快照"
+                  onclick="openPreviewButton(this)"
+                >
+                  <span>自选股快照</span>
+                  <strong>{{ today.artifacts.watchlist_snapshot.label }}</strong>
+                  <em>{{ today.artifacts.watchlist_snapshot.path }}</em>
+                </button>
+                {% endif %}
+                {% if today.artifacts.screening_batch.path %}
+                <button
+                  class="artifact-link"
+                  type="button"
+                  data-preview-path="{{ today.artifacts.screening_batch.path }}"
+                  data-preview-title="早盘批次"
+                  onclick="openPreviewButton(this)"
+                >
+                  <span>早盘批次</span>
+                  <strong>{{ today.artifacts.screening_batch.label }}</strong>
+                  <em>{{ today.artifacts.screening_batch.path }}</em>
+                </button>
+                {% endif %}
+                {% if today.artifacts.confirmation.path %}
+                <button
+                  class="artifact-link"
+                  type="button"
+                  data-preview-path="{{ today.artifacts.confirmation.path }}"
+                  data-preview-title="午盘确认"
+                  onclick="openPreviewButton(this)"
+                >
+                  <span>午盘确认</span>
+                  <strong>{{ today.artifacts.confirmation.label }}</strong>
+                  <em>{{ today.artifacts.confirmation.path }}</em>
+                </button>
+                {% endif %}
+              </div>
+            </section>
+          </div>
+        </details>
+      </main>
+    </div>
+    {% include "_preview_drawer.html" %}
+    <script src="/static/control-panel-refresh.js?v=20260420-refreshb1" defer></script>
+  </body>
+</html>

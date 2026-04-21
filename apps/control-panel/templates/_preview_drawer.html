@@ -1,0 +1,302 @@
+<div id="preview-shell" class="preview-shell hidden" aria-hidden="true">
+  <div class="preview-backdrop" onclick="closePreview()"></div>
+  <aside class="preview-panel" role="dialog" aria-modal="true" aria-labelledby="preview-title">
+    <div class="preview-head">
+      <div>
+        <p class="eyebrow">页内预览</p>
+        <h2 id="preview-title">页内预览</h2>
+        <p id="preview-subtitle" class="preview-subtitle">点报告、研究或 JSON，直接在这里看。</p>
+      </div>
+      <div class="preview-actions">
+        <a id="preview-download" class="ghost-button hidden" href="#" target="_blank" rel="noopener">下载原件</a>
+        <button class="ghost-button" type="button" onclick="closePreview()">关闭</button>
+      </div>
+    </div>
+    <div id="preview-note" class="preview-note hidden"></div>
+    <div id="preview-content" class="preview-body">
+      <div class="preview-empty">选择一份报告或原始文件后，这里会直接展示内容，不再默认下载。</div>
+    </div>
+  </aside>
+</div>
+
+<script>
+  (() => {
+    const previewShell = document.getElementById('preview-shell');
+    if (!previewShell) return;
+
+    const previewTitle = document.getElementById('preview-title');
+    const previewSubtitle = document.getElementById('preview-subtitle');
+    const previewNote = document.getElementById('preview-note');
+    const previewContent = document.getElementById('preview-content');
+    const previewDownload = document.getElementById('preview-download');
+    let previousFocusedElement = null;
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    function renderInlineMarkdown(text) {
+      let html = escapeHtml(text);
+      html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+      html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+      return html;
+    }
+
+    function renderTable(lines) {
+      if (lines.length < 2) {
+        return `<pre class="preview-plain">${escapeHtml(lines.join('\n'))}</pre>`;
+      }
+
+      const parseRow = (line) => line.trim().slice(1, -1).split('|').map((cell) => cell.trim());
+      const rows = lines.map(parseRow);
+      const header = rows[0];
+      const separator = rows[1] || [];
+      const hasSeparator =
+        separator.length === header.length &&
+        separator.every((cell) => /^:?-{3,}:?$/.test(cell.replace(/\s+/g, '')));
+      const bodyRows = hasSeparator ? rows.slice(2) : rows.slice(1);
+
+      let html = '<div class="preview-table-shell"><table class="preview-table"><thead><tr>';
+      html += header.map((cell) => `<th>${renderInlineMarkdown(cell)}</th>`).join('');
+      html += '</tr></thead>';
+      if (bodyRows.length) {
+        html += '<tbody>';
+        html += bodyRows
+          .map((row) => `<tr>${row.map((cell) => `<td>${renderInlineMarkdown(cell)}</td>`).join('')}</tr>`)
+          .join('');
+        html += '</tbody>';
+      }
+      html += '</table></div>';
+      return html;
+    }
+
+    function renderMarkdown(text) {
+      const lines = String(text || '').replace(/\r\n/g, '\n').split('\n');
+      const parts = [];
+      let paragraph = [];
+      let listType = null;
+      let listItems = [];
+      let codeLines = null;
+      let tableLines = [];
+
+      function flushParagraph() {
+        if (!paragraph.length) return;
+        parts.push(`<p>${renderInlineMarkdown(paragraph.join(' '))}</p>`);
+        paragraph = [];
+      }
+
+      function flushList() {
+        if (!listItems.length || !listType) return;
+        const tag = listType === 'ol' ? 'ol' : 'ul';
+        parts.push(`<${tag}>${listItems.map((item) => `<li>${item}</li>`).join('')}</${tag}>`);
+        listType = null;
+        listItems = [];
+      }
+
+      function flushCode() {
+        if (codeLines === null) return;
+        parts.push(`<pre class="preview-code"><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
+        codeLines = null;
+      }
+
+      function flushTable() {
+        if (!tableLines.length) return;
+        parts.push(renderTable(tableLines));
+        tableLines = [];
+      }
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('```')) {
+          flushParagraph();
+          flushList();
+          flushTable();
+          if (codeLines === null) {
+            codeLines = [];
+          } else {
+            flushCode();
+          }
+          continue;
+        }
+
+        if (codeLines !== null) {
+          codeLines.push(line);
+          continue;
+        }
+
+        if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+          flushParagraph();
+          flushList();
+          tableLines.push(line);
+          continue;
+        }
+        flushTable();
+
+        if (!trimmed) {
+          flushParagraph();
+          flushList();
+          continue;
+        }
+
+        const heading = trimmed.match(/^(#{1,4})\s+(.*)$/);
+        if (heading) {
+          flushParagraph();
+          flushList();
+          const level = Math.min(heading[1].length + 1, 4);
+          parts.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
+          continue;
+        }
+
+        const quote = trimmed.match(/^>\s?(.*)$/);
+        if (quote) {
+          flushParagraph();
+          flushList();
+          parts.push(`<blockquote><p>${renderInlineMarkdown(quote[1])}</p></blockquote>`);
+          continue;
+        }
+
+        const bullet = trimmed.match(/^[-*]\s+(.*)$/);
+        if (bullet) {
+          flushParagraph();
+          if (listType && listType !== 'ul') flushList();
+          listType = 'ul';
+          listItems.push(renderInlineMarkdown(bullet[1]));
+          continue;
+        }
+
+        const numbered = trimmed.match(/^\d+\.\s+(.*)$/);
+        if (numbered) {
+          flushParagraph();
+          if (listType && listType !== 'ol') flushList();
+          listType = 'ol';
+          listItems.push(renderInlineMarkdown(numbered[1]));
+          continue;
+        }
+
+        if (listType && line.startsWith('  ') && listItems.length) {
+          listItems[listItems.length - 1] += `<br>${renderInlineMarkdown(trimmed)}`;
+          continue;
+        }
+
+        if (listType) {
+          flushList();
+        }
+
+        paragraph.push(trimmed);
+      }
+
+      flushParagraph();
+      flushList();
+      flushTable();
+      flushCode();
+
+      if (!parts.length) {
+        return `<pre class="preview-plain">${escapeHtml(text)}</pre>`;
+      }
+      return `<div class="preview-markdown">${parts.join('')}</div>`;
+    }
+
+    function setPreviewLoading(title, path) {
+      previewTitle.textContent = title || '页内预览';
+      previewSubtitle.textContent = path || '正在读取文件内容...';
+      previewContent.innerHTML = '<div class="preview-loading">正在加载预览...</div>';
+      previewNote.classList.add('hidden');
+      previewNote.textContent = '';
+      previewDownload.classList.add('hidden');
+      previewDownload.removeAttribute('href');
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes || Number.isNaN(bytes)) return '-';
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    function renderPreview(payload, title) {
+      const kindLabelMap = {
+        markdown: 'Markdown 报告',
+        json: 'JSON 数据',
+        text: '文本/日志',
+        binary: '二进制文件',
+      };
+
+      previewTitle.textContent = title || payload.name || '页内预览';
+      previewSubtitle.textContent = `${payload.name} | ${kindLabelMap[payload.kind] || payload.kind} | ${payload.mtime} | ${formatBytes(payload.size_bytes)}`;
+      previewDownload.href = `/artifacts?path=${encodeURIComponent(payload.path)}`;
+      previewDownload.classList.remove('hidden');
+
+      if (payload.truncated) {
+        previewNote.textContent = '文件较大，当前仅预览前一部分内容；如需完整查看，可下载原件。';
+        previewNote.classList.remove('hidden');
+      } else {
+        previewNote.classList.add('hidden');
+        previewNote.textContent = '';
+      }
+
+      if (payload.kind === 'binary') {
+        previewContent.innerHTML = '<div class="preview-empty">这类文件暂不支持页内预览，右上角可以直接下载原件。</div>';
+        return;
+      }
+
+      if (payload.kind === 'markdown') {
+        previewContent.innerHTML = renderMarkdown(payload.text || '');
+        return;
+      }
+
+      previewContent.innerHTML = `<pre class="preview-plain">${escapeHtml(payload.text || '')}</pre>`;
+    }
+
+    async function openPreviewFromPath(path, title) {
+      if (!path) return;
+
+      previousFocusedElement = document.activeElement;
+      previewShell.classList.remove('hidden');
+      previewShell.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('preview-open');
+      setPreviewLoading(title, path);
+
+      try {
+        const response = await fetch(`/api/preview?path=${encodeURIComponent(path)}`);
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail || '预览加载失败');
+        }
+        renderPreview(data, title);
+      } catch (error) {
+        previewContent.innerHTML = `<div class="preview-empty">预览失败：${escapeHtml(error.message || '未知错误')}</div>`;
+        previewSubtitle.textContent = path;
+      }
+    }
+
+    function closePreview() {
+      previewShell.classList.add('hidden');
+      previewShell.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('preview-open');
+      if (previousFocusedElement && typeof previousFocusedElement.focus === 'function') {
+        previousFocusedElement.focus();
+      }
+    }
+
+    function openPreviewButton(button) {
+      const { previewPath, previewTitle: title } = button.dataset;
+      openPreviewFromPath(previewPath, title || '页内预览');
+    }
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !previewShell.classList.contains('hidden')) {
+        closePreview();
+      }
+    });
+
+    window.openPreviewFromPath = openPreviewFromPath;
+    window.openPreviewButton = openPreviewButton;
+    window.closePreview = closePreview;
+  })();
+</script>

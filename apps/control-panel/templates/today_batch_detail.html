@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ detail.hero.title }} · 棱镜批次详情</title>
+    {% include "_theme_head.html" %}
+    <link rel="stylesheet" href="/static/control-panel.css?v=20260420-schemec5">
+  </head>
+  <body>
+    <div class="panel-shell today-shell prism-page-shell detail-page-shell">
+      <header class="today-hero detail-hero">
+        {% set nav_active = "opportunities" %}
+        {% set nav_links = detail.links %}
+        {% set nav_api_href = detail.links.api_self %}
+        {% include "_page_nav.html" %}
+
+        <div class="today-hero-main">
+          <div class="today-copy">
+            <p class="eyebrow">{{ detail.hero.eyebrow }}</p>
+            <h1>{{ detail.hero.title }}</h1>
+            <p class="today-summary">{{ detail.hero.summary }}</p>
+            <section class="opportunities-hero-guide">
+              <p class="opportunities-hero-guide-copy">
+                {% if detail.kind == "screener" %}
+                先看候选密度和主线集中度，再进入单票；如果今天阀门偏弱，优先读谨慎观察而不是直接开新仓。
+                {% else %}
+                先看保留、降级和新增观察的分布，再决定谁还能留在午盘后的执行视野里。
+                {% endif %}
+              </p>
+              <div class="panel-link-stack opportunities-hero-guide-links">
+                <a class="panel-link" href="#batch-candidates">先看候选队列</a>
+                {% if detail.theme_cards %}
+                <a class="panel-link panel-link-subtle" href="#batch-themes">看主线雷达</a>
+                {% else %}
+                <a class="panel-link panel-link-subtle" href="{{ detail.links.screener_batch }}">回看早盘基线</a>
+                {% endif %}
+                <a class="panel-link panel-link-subtle" href="#batch-artifacts">回看原始文件</a>
+              </div>
+            </section>
+            <div class="today-hero-meta">
+              <div class="meta-pill">
+                <span>状态</span>
+                <strong>{{ detail.hero.status_label }}</strong>
+              </div>
+              {% for item in detail.meta_cards[:3] %}
+              <div class="meta-pill">
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <aside class="today-callout">
+            <span class="callout-label">质检状态</span>
+            <strong>{{ detail.quality.status }}</strong>
+            <p>检查时间 {{ detail.quality.checked_at }}，目标锚点 {{ detail.quality.expected_timestamp }}。</p>
+            <div class="callout-actions">
+              <a class="ghost-button link-button" href="{{ detail.links.opportunities }}">回到机会池</a>
+              {% if detail.kind == "screener" %}
+              <a class="ghost-button link-button" href="{{ detail.links.confirmation_batch }}">看午盘确认</a>
+              {% else %}
+              <a class="ghost-button link-button" href="{{ detail.links.screener_batch }}">回看早盘批次</a>
+              {% endif %}
+            </div>
+          </aside>
+        </div>
+      </header>
+
+      <section class="detail-metric-grid detail-summary-zone">
+        {% for item in detail.meta_cards %}
+        <article class="today-summary-card">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+          <p>{{ item.detail }}</p>
+        </article>
+        {% endfor %}
+      </section>
+
+      {% if detail.theme_cards %}
+      <section id="batch-themes" class="today-quality-block detail-evidence-zone">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">主线雷达</p>
+            <h2>主线雷达</h2>
+          </div>
+        </div>
+        <div class="detail-theme-grid">
+          {% for item in detail.theme_cards %}
+          <article class="quality-card tone-watch">
+            <div class="quality-card-head">
+              <strong>{{ item.title }}</strong>
+              <span class="status-chip status-unknown">{{ item.score }}</span>
+            </div>
+            <p>{{ item.detail }}</p>
+            {% if item.leaders %}
+            <div class="detail-tag-list">
+              {% for leader in item.leaders %}
+              <span class="detail-tag">{{ leader }}</span>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+
+      <section id="batch-candidates" class="today-quality-block detail-batch-groups-block detail-evidence-zone">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">{{ detail.hero.eyebrow }}</p>
+            <h2>候选队列</h2>
+          </div>
+        </div>
+        <p class="today-panel-copy">
+          {% if detail.kind == "screener" %}
+          批次页最重要的是先看今天有哪些票还在执行视野里，再决定要不要点进单票做细看。
+          {% else %}
+          午盘页优先回答哪些票保留、哪些降级、哪些只是新增观察，不让列表空白吞掉首屏判断。
+          {% endif %}
+        </p>
+        <div class="detail-batch-groups">
+        {% for group in detail.candidate_groups %}
+        <article class="today-panel detail-batch-group">
+          <div class="today-panel-head">
+            <div>
+              <p class="eyebrow">{{ detail.hero.eyebrow }}</p>
+              <h2>{{ group.title }}</h2>
+            </div>
+            <span class="panel-stat">{{ group.count }}</span>
+          </div>
+          <div class="decision-card-list detail-candidate-card-grid">
+            {% if group.cards %}
+            {% for item in group.cards %}
+            <a class="decision-link" href="{{ item.detail_url }}">
+              <article class="decision-card tone-{{ item.tone }}">
+                <div class="decision-card-head">
+                  <div>
+                    <strong>{{ item.name }}</strong>
+                    <span>{{ item.code }}</span>
+                  </div>
+                  <span class="action-chip action-chip-{{ item.tone }}">{{ item.status }}</span>
+                </div>
+                <p class="decision-card-copy">{{ item.setup_label }} | {{ item.theme }}</p>
+                <div class="decision-levels">
+                  <span>分数 {{ item.score if item.score is not none else "-" }}</span>
+                  <span>涨幅 {{ item.change_pct if item.change_pct is not none else "-" }}%</span>
+                  <span>成交 {{ item.amount_yi if item.amount_yi is not none else "-" }}亿</span>
+                </div>
+                <p class="decision-foot">{{ item.foot }}</p>
+              </article>
+            </a>
+            {% endfor %}
+            {% else %}
+            <div class="decision-empty">当前分组没有候选。</div>
+            {% endif %}
+          </div>
+          {% if group.footer_link %}
+          <a class="panel-link" href="{{ group.footer_link.url }}">{{ group.footer_link.title }}</a>
+          {% endif %}
+        </article>
+        {% endfor %}
+        </div>
+      </section>
+
+      <section id="batch-artifacts" class="today-quality-block detail-action-zone">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">原始文件</p>
+            <h2>数据入口</h2>
+          </div>
+        </div>
+        <div class="detail-artifact-grid">
+          {% for item in detail.artifacts %}
+          <button
+            class="artifact-link"
+            type="button"
+            data-preview-path="{{ item.path }}"
+            data-preview-title="{{ item.title }}"
+            onclick="openPreviewButton(this)"
+          >
+            <span>{{ item.title }}</span>
+            <strong>{{ item.name }}</strong>
+            <em>{{ item.mtime_full }}</em>
+          </button>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+    {% include "_preview_drawer.html" %}
+  </body>
+</html>

@@ -1,0 +1,19 @@
+{% set status_strip_label = status_strip_label if status_strip_label is defined else "来源 / 质量 / 新鲜度" %}
+{% set status_items = status_items if status_items is defined and status_items else [
+  {"label": "来源", "value": "待接入", "note": "source", "tone": "neutral"},
+  {"label": "质量", "value": "待校验", "note": "quality", "tone": "neutral"},
+  {"label": "新鲜度", "value": "待刷新", "note": "freshness", "tone": "neutral"},
+] %}
+<section class="status-strip" aria-label="{{ status_strip_label }}">
+  <ul class="status-strip-list">
+    {% for item in status_items %}
+    <li class="status-strip-item status-strip-item-{{ item.tone|default('neutral') }}">
+      <span class="status-strip-item-label">{{ item.label }}</span>
+      <strong class="status-strip-item-value">{{ item.value }}</strong>
+      {% if item.note %}
+      <em class="status-strip-item-note">{{ item.note }}</em>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</section>

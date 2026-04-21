@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="zh-CN"{% if preview_theme %} data-preview-theme="{{ preview_theme }}"{% endif %}>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>棱镜·问股</title>
+    {% include "_theme_head.html" %}
+    <link rel="stylesheet" href="/static/control-panel.css?v=20260420-schemec5">
+  </head>
+  <body>
+    <div
+      class="panel-shell today-shell prism-page-shell ask-page-shell"
+      data-ask-root
+      data-ask-suggest-url="{{ ask.links.suggest_api }}"
+      data-ask-followup-url="{{ ask.links.followup_api }}"
+      data-ask-followup-query="{{ ask.followup.query if ask.followup else '' }}"
+      data-watchlist-add-url="{{ ask.manager.add_api }}"
+      data-watchlist-restore-url="{{ ask.manager.restore_api }}"
+    >
+      <header class="today-hero prism-page-hero ask-page-hero">
+        {% set nav_active = "ask" %}
+        {% set nav_links = ask.links %}
+        {% set nav_api_href = ask.links.api_self %}
+        {% include "_page_nav.html" %}
+
+        <div class="today-hero-main">
+          <div class="today-copy">
+            <p class="eyebrow">问股</p>
+            <h1>{{ ask.hero.title }}</h1>
+            <p class="today-summary">{{ ask.hero.summary }}</p>
+            {% if preview_theme == "ibm-preview" %}
+            <div class="preview-theme-banner" role="note" aria-label="IBM 预览">
+              <span>{{ preview_theme_label }}</span>
+              <strong>先审秩序感，再决定要不要替换</strong>
+              <p>这版只重做问股页的视觉层，不改结论逻辑和数据来源。</p>
+              <div class="preview-theme-banner-actions">
+                <a class="ghost-button link-button" href="{{ preview_theme_dashboard_url }}">打开控制台试版</a>
+                <a class="ghost-button link-button" href="{{ preview_theme_exit_url }}">返回默认主题</a>
+              </div>
+            </div>
+            {% endif %}
+
+            <form class="ask-search-form" method="get" action="/ask" data-ask-search-form>
+              {% if preview_theme == "ibm-preview" %}
+              <input type="hidden" name="theme" value="{{ preview_theme }}">
+              {% endif %}
+              <div class="ask-search-row">
+                <label class="ask-search-field">
+                  <span>股票代码或名称</span>
+                  <input
+                    type="text"
+                    name="q"
+                    value="{{ ask.query }}"
+                    placeholder="例如 600690 / 海尔智家"
+                    autocomplete="off"
+                    inputmode="search"
+                    spellcheck="false"
+                    data-ask-search-input
+                  >
+                </label>
+                <button class="ghost-button ask-search-button" type="submit" data-ask-submit-button>
+                  <span>开始分析</span>
+                  <kbd>Enter</kbd>
+                </button>
+              </div>
+              <p class="ask-search-hint">支持代码/名称联想，候选项会优先回填可直接分析的查询值。</p>
+              <p class="ask-search-status" data-ask-search-status aria-live="polite"></p>
+              <div class="ask-suggest-panel hidden" data-ask-suggest-panel role="listbox" aria-label="问股候选"></div>
+            </form>
+
+            <div class="ask-compact-promise">
+              <strong>先给结论，再给边界</strong>
+              <p>输入后直接返回结论、边界和跨系统状态，不先铺说明。</p>
+            </div>
+
+            {% if (ask.examples or ask.recent_queries) and not ask.query and not ask.case %}
+            <section class="ask-quick-block">
+              <div class="ask-quick-head">
+                <span>快速选择</span>
+                <em>点卡片可直接分析</em>
+              </div>
+
+              {% if ask.examples %}
+              <div class="ask-quick-group">
+                <div class="ask-mini-head">
+                  <span>系统候选</span>
+                  <em>{{ ask.examples|length }} 条</em>
+                </div>
+                <div class="ask-example-strip">
+                  {% for item in ask.examples %}
+                  <a class="ask-example-chip" href="{{ item.url }}">
+                    <span>{{ item.tag }}</span>
+                    <strong>{{ item.name }}</strong>
+                    <em>{{ item.code }}</em>
+                  </a>
+                  {% endfor %}
+                </div>
+              </div>
+              {% endif %}
+
+              {% if ask.recent_queries %}
+              <div class="ask-quick-group ask-recent-block">
+                <div class="ask-mini-head">
+                  <span>最近问过</span>
+                  <em>{{ ask.recent_queries|length }} 条</em>
+                </div>
+                <div class="ask-example-strip ask-recent-strip">
+                  {% for item in ask.recent_queries %}
+                  <a class="ask-example-chip ask-recent-chip" href="{{ item.url }}">
+                    <span>{{ item.tag }}</span>
+                    <strong>{{ item.name }}</strong>
+                    <em>{{ item.detail }}</em>
+                  </a>
+                  {% endfor %}
+                </div>
+              </div>
+              {% endif %}
+            </section>
+            {% endif %}
+
+            {% if ask.recent_queries and ask.query and not ask.case %}
+            <div class="ask-recent-block ask-recent-inline">
+              <div class="ask-mini-head">
+                <span>最近问过</span>
+                <em>{{ ask.recent_queries|length }} 条</em>
+              </div>
+              <div class="ask-example-strip ask-recent-strip">
+                {% for item in ask.recent_queries[:4] %}
+                <a class="ask-example-chip ask-recent-chip" href="{{ item.url }}">
+                  <span>{{ item.tag }}</span>
+                  <strong>{{ item.name }}</strong>
+                  <em>{{ item.detail }}</em>
+                </a>
+                {% endfor %}
+              </div>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </header>
+
+      {% if ask.error %}
+      <section class="today-quality-block ask-feedback-block ask-feedback-risk stage-decision-layer">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">查询失败</p>
+            <h2>这次没找到可分析的股票</h2>
+          </div>
+        </div>
+        <p class="today-panel-copy">{{ ask.error }}</p>
+      </section>
+      {% endif %}
+
+      {% if ask.case %}
+      {% set detail = ask.case %}
+      <details class="progressive-section ask-progressive-strip">
+        <summary class="progressive-summary">
+          <div class="progressive-summary-main">
+            <p class="eyebrow">跨系统状态</p>
+            <strong>先看跨层状态</strong>
+          </div>
+          <span class="progressive-summary-note">{{ detail.cross_cards|length }} 项跨层信息</span>
+        </summary>
+        <div class="progressive-body">
+      <section class="today-source-strip ask-source-strip stage-evidence-layer">
+        {% for item in detail.cross_cards %}
+        <article class="source-card tone-{{ item.tone }}">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+          <p>{{ item.detail }}</p>
+        </article>
+        {% endfor %}
+      </section>
+        </div>
+      </details>
+
+      <section class="today-hero ask-result-hero stage-decision-layer">
+        <div class="today-copy">
+          <p class="eyebrow">单票结论</p>
+          <h2>{{ detail.hero.title }}</h2>
+          <p class="today-summary">{{ detail.hero.summary }}</p>
+          <div class="detail-tag-list ask-context-tags">
+            {% for tag in detail.context_tags %}
+            <span class="detail-tag">{{ tag }}</span>
+            {% endfor %}
+          </div>
+          <div class="today-hero-meta ask-result-meta">
+            <div class="meta-pill">
+              <span>当前结论</span>
+              <strong>{{ detail.hero.decision_label }}</strong>
+            </div>
+            <div class="meta-pill">
+              <span>建议仓位</span>
+              <strong>{{ detail.hero.position }}</strong>
+            </div>
+            <div class="meta-pill">
+              <span>可信度</span>
+              <strong>{{ detail.hero.confidence_label }}</strong>
+            </div>
+            <div class="meta-pill">
+              <span>交易日</span>
+              <strong>{{ detail.trade_date }}</strong>
+            </div>
+          </div>
+        </div>
+
+        <aside class="today-callout ask-result-callout">
+          <span class="callout-label">可信度说明</span>
+          <strong>{{ detail.hero.confidence_label }} 可信度</strong>
+          <p>{{ detail.hero.confidence_note }}</p>
+          <div class="callout-actions">
+            {% if detail.links.watchlist_detail %}
+            <a class="ghost-button link-button" href="{{ detail.links.watchlist_detail }}">查看自选股视角</a>
+            {% endif %}
+            {% if detail.links.candidate_detail %}
+            <a class="ghost-button link-button" href="{{ detail.links.candidate_detail }}">查看机会池视角</a>
+            {% endif %}
+          </div>
+          <section class="ask-watchlist-block tone-{{ detail.watchlist_action.tone }}">
+            <span class="callout-label">自选股动作</span>
+            <strong>{{ detail.watchlist_action.label }}</strong>
+            <p>{{ detail.watchlist_action.detail }}</p>
+            <div class="callout-actions">
+              {% if detail.watchlist_action.kind == "active" %}
+              <a class="ghost-button link-button" href="{{ ask.manager.watchlist_url }}">{{ detail.watchlist_action.button_label }}</a>
+              {% else %}
+              <button
+                class="ghost-button link-button ask-watchlist-action-button"
+                type="button"
+                data-ask-watchlist-action="{{ detail.watchlist_action.kind }}"
+                data-watchlist-code="{{ detail.watchlist_action.code }}"
+                data-watchlist-name="{{ detail.watchlist_action.name }}"
+              >{{ detail.watchlist_action.button_label }}</button>
+              <a class="ghost-button link-button" href="{{ ask.manager.watchlist_url }}">看自选股列表</a>
+              {% endif %}
+            </div>
+            <p class="ask-watchlist-feedback" data-ask-watchlist-feedback aria-live="polite">{{ detail.watchlist_action.feedback_hint }}</p>
+          </section>
+        </aside>
+      </section>
+
+      <section class="detail-metric-grid stage-evidence-layer">
+        {% for item in detail.metric_cards %}
+        <article class="today-summary-card">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+          <p>{{ item.detail }}</p>
+        </article>
+        {% endfor %}
+      </section>
+
+      <details class="progressive-section">
+        <summary class="progressive-summary">
+          <div class="progressive-summary-main">
+            <p class="eyebrow">深入展开</p>
+            <strong>分层评分、追问与证据拆解</strong>
+          </div>
+          <span class="progressive-summary-note">展开评分层级、连续追问、六维拆解与事件证据</span>
+        </summary>
+        <div class="progressive-body">
+      <section class="detail-metric-grid stage-evidence-layer">
+        {% for item in detail.level_cards %}
+        <article class="today-summary-card">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+          <p>{{ item.detail }}</p>
+        </article>
+        {% endfor %}
+      </section>
+
+      {% if ask.followup %}
+      <section class="today-panel ask-followup-shell stage-action-layer" data-ask-followup>
+        <div class="today-panel-head">
+          <div>
+            <p class="eyebrow">连续追问</p>
+            <h2>继续问这一只股票</h2>
+          </div>
+        </div>
+        <p class="today-panel-copy">{{ ask.followup.starter.summary }}</p>
+        {% if ask.followup.engine_badge %}
+        <div class="ask-followup-capability-strip">
+          <span class="ask-followup-capability tone-{{ ask.followup.engine_badge.tone }}">{{ ask.followup.engine_badge.label }}</span>
+        </div>
+        {% endif %}
+        {% if ask.followup.presets %}
+        <div class="ask-followup-preset-strip">
+          {% for item in ask.followup.presets %}
+          <button
+            class="ask-followup-preset"
+            type="button"
+            data-ask-followup-preset
+            data-ask-followup-question="{{ item.question }}"
+          >{{ item.label }}</button>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <form class="ask-followup-form" data-ask-followup-form>
+          <label class="ask-followup-field">
+            <span>继续追问</span>
+            <input
+              type="text"
+              name="question"
+              placeholder="例如：为什么当前是这个结论？"
+              autocomplete="off"
+              data-ask-followup-input
+            >
+          </label>
+          <button class="ghost-button ask-followup-submit" type="submit">继续问</button>
+        </form>
+        <p class="ask-followup-status" data-ask-followup-status aria-live="polite">{{ ask.followup.hint }}</p>
+        <div class="ask-followup-thread" data-ask-followup-thread>
+          <article class="ask-followup-message ask-followup-message-assistant">
+            <span>棱镜</span>
+            <strong>{{ ask.followup.starter.title }}</strong>
+            <p>{{ ask.followup.starter.summary }}</p>
+          </article>
+        </div>
+      </section>
+      {% endif %}
+
+      <section class="detail-split ask-detail-split stage-evidence-layer">
+        <div class="detail-main-stack">
+          <article class="today-panel">
+            <div class="today-panel-head">
+              <div>
+                <p class="eyebrow">为什么这样判断</p>
+                <h2>六维拆解</h2>
+              </div>
+            </div>
+            <p class="today-panel-copy">先看技术、资金和事件，再看基本面、板块情绪与风险，避免一句话判断看起来很果断但证据是散的。</p>
+            <div class="detail-group-grid ask-analysis-grid">
+              {% for group in detail.analysis_groups %}
+              <section class="detail-group-card ask-analysis-card tone-{{ group.tone }}">
+                <div class="detail-group-head">
+                  <strong>{{ group.title }}</strong>
+                  <span>{{ group.metric }}</span>
+                </div>
+                {% if group["items"] %}
+                <ul class="detail-bullet-list">
+                  {% for item in group["items"] %}
+                  <li>{{ item }}</li>
+                  {% endfor %}
+                </ul>
+                {% else %}
+                <p class="detail-empty-copy">{{ group.empty }}</p>
+                {% endif %}
+              </section>
+              {% endfor %}
+            </div>
+          </article>
+
+          <article class="today-panel">
+            <div class="today-panel-head">
+              <div>
+                <p class="eyebrow">事件证据</p>
+                <h2>公告与新闻</h2>
+              </div>
+            </div>
+            <p class="today-panel-copy">事件面不只看一句“偏多/偏空”，这里保留最近命中的公告和新闻标题，方便你快速确认情绪来源。</p>
+            <div class="detail-group-grid ask-event-grid">
+              {% for group in detail.event_groups %}
+              <section class="detail-group-card">
+                <div class="detail-group-head">
+                  <strong>{{ group.title }}</strong>
+                  <span>{{ group["items"]|length }}</span>
+                </div>
+                {% if group["items"] %}
+                <div class="detail-stack">
+                  {% for item in group["items"] %}
+                  <article class="detail-note-card ask-event-card">
+                    <strong>{{ item.title }}</strong>
+                    <p>{{ item.meta }}</p>
+                  </article>
+                  {% endfor %}
+                </div>
+                {% else %}
+                <p class="detail-empty-copy">{{ group.empty }}</p>
+                {% endif %}
+              </section>
+              {% endfor %}
+            </div>
+          </article>
+        </div>
+
+        <div class="detail-side-stack">
+          <article class="today-panel">
+            <div class="today-panel-head">
+              <div>
+                <p class="eyebrow">执行计划</p>
+                <h2>今天怎么处理</h2>
+              </div>
+            </div>
+            <p class="today-panel-copy">这块只保留真正影响动作的字段，先看动作、触发、回避和失效，再决定要不要继续深挖。</p>
+            <div class="detail-row-list detail-row-list-single">
+              {% for item in detail.plan_rows %}
+              <article class="detail-row-card">
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+              </article>
+              {% endfor %}
+            </div>
+            <div class="decision-levels detail-levels">
+              {% for item in detail.plan_levels %}
+              <span>{{ item.label }} {{ item.value }}</span>
+              {% endfor %}
+            </div>
+          </article>
+
+          <article class="today-panel">
+            <div class="today-panel-head">
+              <div>
+                <p class="eyebrow">盘中触发</p>
+                <h2>盘中触发</h2>
+              </div>
+            </div>
+            <p class="today-panel-copy">盘中只盯真正会改变动作的边界，不把说明和纪律混成一团。</p>
+            <div class="detail-stack">
+              {% if detail.triggers %}
+              {% for item in detail.triggers %}
+              <article class="detail-note-card">
+                <strong>{{ item.name }}</strong>
+                <p>{{ item.condition }}</p>
+                <span>{{ item.action }}</span>
+              </article>
+              {% endfor %}
+              {% else %}
+              <div class="decision-empty">当前没有可展示的盘中触发条件。</div>
+              {% endif %}
+            </div>
+          </article>
+        </div>
+      </section>
+        </div>
+      </details>
+
+      {% if detail.artifacts %}
+      <details class="progressive-section">
+        <summary class="progressive-summary">
+          <div class="progressive-summary-main">
+            <p class="eyebrow">回源文件</p>
+            <strong>数据入口</strong>
+          </div>
+          <span class="progressive-summary-note">{{ detail.artifacts|length }} 个文件入口</span>
+        </summary>
+        <div class="progressive-body">
+      <section class="today-quality-block stage-action-layer">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">原始文件</p>
+            <h2>数据入口</h2>
+          </div>
+        </div>
+        <div class="detail-artifact-grid">
+          {% for item in detail.artifacts %}
+          <button
+            class="artifact-link"
+            type="button"
+            data-preview-path="{{ item.path }}"
+            data-preview-title="{{ item.title }}"
+            onclick="openPreviewButton(this)"
+          >
+            <span>{{ item.title }}</span>
+            <strong>{{ item.name }}</strong>
+            <em>{{ item.mtime_full }}</em>
+          </button>
+          {% endfor %}
+        </div>
+      </section>
+        </div>
+      </details>
+      {% endif %}
+      {% else %}
+      <section class="today-quality-block ask-empty-block stage-decision-layer">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">开始方式</p>
+            <h2>先输入一只股票</h2>
+          </div>
+        </div>
+        <p class="today-panel-copy">先给结论，再给边界。输入 6 位代码或股票名称后，页面会直接返回当前结论、执行边界，以及是否已进入自选股或机会池。</p>
+      </section>
+      {% endif %}
+    </div>
+    {% include "_preview_drawer.html" %}
+    <script src="/static/control-panel-ask.js?v=20260419-schemec2"></script>
+  </body>
+</html>

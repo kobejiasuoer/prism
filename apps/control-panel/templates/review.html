@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>棱镜·复盘</title>
+    {% include "_theme_head.html" %}
+    <link rel="stylesheet" href="/static/control-panel.css?v=20260420-schemec5">
+  </head>
+  <body>
+    <div class="panel-shell today-shell review-shell prism-page-shell review-page-shell">
+      <header class="today-dispatch-nav">
+        {% set nav_active = "review" %}
+        {% set nav_links = review.links %}
+        {% set nav_api_href = review.links.api_self %}
+        {% include "_page_nav.html" %}
+      </header>
+
+      <main class="today-dispatch-main review-dispatch-main">
+        <section class="today-quality-block today-dispatch-block stage-decision-layer">
+          {% set verdict_badge = review.topline.verdict_badge %}
+          {% set verdict_title = review.topline.verdict_title %}
+          {% set verdict_summary = review.topline.verdict_summary %}
+          {% set meta_pills = review.topline.meta_pills %}
+          {% set cta_links = review.topline.cta_links %}
+          {% include "_decision_topline.html" %}
+        </section>
+
+        <section id="review-action-rules" class="today-quality-block today-dispatch-block stage-decision-layer">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">环境规则</p>
+              <h2>三条动作规则</h2>
+            </div>
+          </div>
+          <p class="today-panel-copy">把这三条当作今日 Top 3 动作锚点：先执行规则，再看展开层证据。</p>
+          {% set decision_rows = review.action_rules %}
+          {% include "_decision_rows.html" %}
+          <div class="review-action-links">
+            {% for item in review.action_rules %}
+            {% if item.url %}
+            <a class="decision-topline-cta" href="{{ item.url }}">打开详细研究</a>
+            {% endif %}
+            {% endfor %}
+          </div>
+        </section>
+
+        <section id="review-changes" class="today-quality-block today-dispatch-block stage-decision-layer">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">变化追踪</p>
+              <h2>最近结论变化</h2>
+            </div>
+          </div>
+          <p class="today-panel-copy">{{ review.change_log.note }}</p>
+          <div class="review-change-grid">
+            {% if review.change_log.entries %}
+            {% for item in review.change_log.entries %}
+            <article class="today-summary-card review-change-card review-change-card-{{ item.tone }}">
+              <span>{{ item.title }}</span>
+              <strong>{{ item.change }}</strong>
+              <p>{{ item.detail }}</p>
+              {% if item.url %}
+              <a class="card-inline-link" href="{{ item.url }}">查看变化明细</a>
+              {% endif %}
+            </article>
+            {% endfor %}
+            {% else %}
+            <div class="decision-empty">{{ review.change_log.empty }}</div>
+            {% endif %}
+          </div>
+        </section>
+
+        <section id="review-compare" class="today-quality-block today-dispatch-block stage-decision-layer">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">快照状态</p>
+              <h2>环境对比栏</h2>
+            </div>
+          </div>
+          {% set status_strip_label = "环境对比栏" %}
+          {% set status_items = review.mini_compare %}
+          {% include "_status_strip.html" %}
+        </section>
+
+        <details id="review-control" class="progressive-section review-control-fold" data-open-on-anchor>
+          <summary class="progressive-summary">
+            <div class="progressive-summary-main">
+              <p class="eyebrow">研究层</p>
+              <strong>研究细节</strong>
+            </div>
+            <span class="progressive-summary-note">展开研究窗口、来源快照与可信度</span>
+          </summary>
+          <div class="progressive-body">
+            <section class="today-dispatch-secondary-grid stage-action-layer">
+              <article class="today-quality-block">
+                <div class="section-head">
+                  <div>
+                    <p class="eyebrow">窗口切换</p>
+                    <h3>研究窗口切换</h3>
+                  </div>
+                </div>
+                <div class="review-selector-stack">
+                  {% for group in review.selector_groups %}
+                  <article class="today-panel review-selector-card">
+                    <div class="today-panel-head">
+                      <div>
+                        <p class="eyebrow">窗口</p>
+                        <h3>{{ group.title }}</h3>
+                      </div>
+                    </div>
+                    <p class="today-panel-copy">{{ group.subtitle }}</p>
+                    <div class="detail-tag-list">
+                      {% for item in group.options %}
+                      <a class="detail-tag {% if item.active %}detail-tag-active{% endif %}" href="{{ item.url }}">{{ item.label }}</a>
+                      {% endfor %}
+                    </div>
+                  </article>
+                  {% endfor %}
+                </div>
+              </article>
+
+              <article class="today-quality-block">
+                <div class="section-head">
+                  <div>
+                    <p class="eyebrow">来源校验</p>
+                    <h3>来源快照</h3>
+                  </div>
+                </div>
+                <div class="review-source-stack">
+                  {% for item in review.source_cards %}
+                  <article class="source-card review-source-card">
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.value }}</strong>
+                    <p>{{ item.detail }}</p>
+                  </article>
+                  {% endfor %}
+                </div>
+              </article>
+            </section>
+
+            <section class="today-quality-block stage-action-layer">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">可信度</p>
+                  <h3>可信度总开关</h3>
+                </div>
+              </div>
+              {% set confidence_switch = review.confidence_switch %}
+              {% set confidence_callout_class = "" %}
+              {% include "_confidence_switch.html" %}
+            </section>
+          </div>
+        </details>
+
+        <details id="review-evidence" class="progressive-section review-evidence-fold" data-open-on-anchor>
+          <summary class="progressive-summary">
+            <div class="progressive-summary-main">
+              <p class="eyebrow">证据层</p>
+              <strong>变化回放、研究拆解与原始入口</strong>
+            </div>
+            <span class="progressive-summary-note">展开全部研究证据，不抢首屏</span>
+          </summary>
+          <div class="progressive-body">
+            <section class="today-quality-block stage-action-layer">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">变化回放</p>
+                  <h3>变化回放明细</h3>
+                </div>
+              </div>
+              <p class="today-panel-copy">{{ review.lifecycle_note }}</p>
+              <section class="detail-metric-grid review-lifecycle-metrics">
+                {% for item in review.lifecycle_cards %}
+                <article class="today-summary-card review-lifecycle-card">
+                  <span>{{ item.label }}</span>
+                  <strong>{{ item.value }}</strong>
+                  <p>{{ item.detail }}</p>
+                </article>
+                {% endfor %}
+              </section>
+
+              <div class="review-lifecycle-groups">
+                {% for group in review.lifecycle_groups %}
+                <section class="review-lifecycle-group">
+                  <div class="detail-group-head">
+                    <strong>{{ group.title }}</strong>
+                    <span>{{ group.count }}</span>
+                  </div>
+                  <p class="detail-empty-copy review-lifecycle-group-copy">{{ group.subtitle }}</p>
+                  <div class="decision-card-list">
+                    {% if group.cards %}
+                    {% for item in group.cards %}
+                    <article class="decision-card tone-{{ item.tone }}">
+                      <div class="decision-card-head">
+                        <div>
+                          <strong>{{ item.name }}</strong>
+                          <span>{{ item.code }}</span>
+                        </div>
+                        <span class="action-chip action-chip-{{ item.tone }}">{{ item.status }}</span>
+                      </div>
+                      <p class="decision-card-copy">{{ item["copy"] }}</p>
+                      <div class="decision-levels">
+                        {% for metric in item.metrics %}
+                        <span>{{ metric }}</span>
+                        {% endfor %}
+                      </div>
+                      <p class="decision-foot">{{ item.foot }}</p>
+                    </article>
+                    {% endfor %}
+                    {% else %}
+                    <div class="decision-empty">{{ group.empty }}</div>
+                    {% endif %}
+                  </div>
+                </section>
+                {% endfor %}
+              </div>
+            </section>
+
+            <section class="today-quality-block stage-action-layer">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">研究拆解</p>
+                  <h3>研究拆解</h3>
+                </div>
+              </div>
+              <p class="today-panel-copy">左侧看 Q1 基准，右侧看最近切片。用于解释规则，不替代首屏动作。</p>
+              <section class="detail-layout detail-layout-2 review-research-grid">
+                {% for panel in review.research_panels %}
+                <article class="today-panel review-research-panel">
+                  <div class="today-panel-head">
+                    <div>
+                      <p class="eyebrow">{{ panel.eyebrow }}</p>
+                      <h3>{{ panel.title }}</h3>
+                    </div>
+                  </div>
+                  <p class="today-panel-copy">{{ panel.summary }}</p>
+
+                  <section class="detail-row-list review-research-metrics">
+                    {% for item in panel.metric_cards %}
+                    <article class="detail-row-card">
+                      <span>{{ item.label }}</span>
+                      <strong>{{ item.value }}</strong>
+                      <p class="detail-empty-copy">{{ item.detail }}</p>
+                      {% if item.detail_url %}
+                      <a class="card-inline-link" href="{{ item.detail_url }}">{{ item.detail_link_text or "查看对应分组" }}</a>
+                      {% endif %}
+                    </article>
+                    {% endfor %}
+                  </section>
+
+                  <section class="detail-group-list review-group-list">
+                    {% for group in panel.groups %}
+                    <section class="detail-group-card review-group-card">
+                      <div class="detail-group-head">
+                        <strong>{{ group.title }}</strong>
+                        <span>{{ group.entries|length }}</span>
+                      </div>
+                      {% if group.entries %}
+                      <ul class="detail-bullet-list">
+                        {% for item in group.entries %}
+                        <li>
+                          {% if item.detail_url %}
+                          <a class="detail-inline-link" href="{{ item.detail_url }}">{{ item.label }}</a>
+                          {% else %}
+                          {{ item.label }}
+                          {% endif %}
+                          {% if item.summary %}
+                          <span class="detail-inline-copy"> | {{ item.summary }}</span>
+                          {% endif %}
+                        </li>
+                        {% endfor %}
+                      </ul>
+                      {% else %}
+                      <p class="detail-empty-copy">{{ group.empty }}</p>
+                      {% endif %}
+                    </section>
+                    {% endfor %}
+                  </section>
+
+                  {% if panel.artifact_path %}
+                  <button
+                    class="panel-link panel-link-button"
+                    type="button"
+                    data-preview-path="{{ panel.artifact_path }}"
+                    data-preview-title="{{ panel.title }} 原始报告"
+                    onclick="openPreviewButton(this)"
+                  >
+                    打开原始报告
+                  </button>
+                  {% endif %}
+                </article>
+                {% endfor %}
+              </section>
+            </section>
+
+            <section class="today-quality-block stage-action-layer">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">原始文件</p>
+                  <h3>原始入口</h3>
+                </div>
+              </div>
+              <div class="detail-artifact-grid review-artifact-grid">
+                {% for item in review.artifacts %}
+                <button
+                  class="artifact-link"
+                  type="button"
+                  data-preview-path="{{ item.path }}"
+                  data-preview-title="{{ item.title }}"
+                  onclick="openPreviewButton(this)"
+                >
+                  <span>{{ item.title }}</span>
+                  <strong>{{ item.name }}</strong>
+                  <em>{{ item.mtime_full }}</em>
+                </button>
+                {% endfor %}
+              </div>
+            </section>
+          </div>
+        </details>
+      </main>
+    </div>
+    {% include "_preview_drawer.html" %}
+    <script>
+      (function () {
+        function openAnchorFold() {
+          var hash = window.location.hash;
+          if (!hash || hash === "#") {
+            return;
+          }
+          var target = document.querySelector(hash);
+          if (!target) {
+            return;
+          }
+          var details = target.matches("details[data-open-on-anchor]")
+            ? target
+            : target.closest("details[data-open-on-anchor]");
+          if (details && !details.open) {
+            details.open = true;
+          }
+        }
+        window.addEventListener("hashchange", openAnchorFold);
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", openAnchorFold, { once: true });
+        } else {
+          openAnchorFold();
+        }
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>棱镜·自选股</title>
+    {% include "_theme_head.html" %}
+    <link rel="stylesheet" href="/static/control-panel.css?v=20260420-schemec5">
+  </head>
+  <body>
+    <div class="panel-shell today-shell prism-page-shell watchlist-page-shell" data-refresh-page="watchlist">
+      {% set priority_group = watchlist.groups[0] %}
+      {% set follow_group = watchlist.groups[1] %}
+      {% set observe_group = watchlist.groups[2] %}
+      {% set manager = watchlist.manager %}
+
+      <header class="today-dispatch-nav">
+        {% set nav_active = "watchlist" %}
+        {% set nav_links = watchlist.links %}
+        {% set nav_api_href = watchlist.links.api_self %}
+        {% include "_page_nav.html" %}
+      </header>
+
+      <main class="today-dispatch-main watchlist-dispatch-main">
+        <section class="today-quality-block today-dispatch-block stage-decision-layer">
+          {% set verdict_badge = watchlist.topline.verdict_badge %}
+          {% set verdict_title = watchlist.topline.verdict_title %}
+          {% set verdict_summary = watchlist.topline.verdict_summary %}
+          {% set meta_pills = watchlist.topline.meta_pills %}
+          {% set cta_links = watchlist.topline.cta_links %}
+          {% include "_decision_topline.html" %}
+        </section>
+
+        <section id="watchlist-priority" class="today-quality-block today-dispatch-block stage-decision-layer">
+          <div class="today-panel-head">
+            <div>
+              <p class="eyebrow">自选股</p>
+              <h2>优先处理 Top 3</h2>
+            </div>
+            <span class="panel-stat">{{ priority_group.count }}</span>
+          </div>
+          {% set decision_rows = watchlist.priority_rows %}
+          {% include "_decision_rows.html" %}
+        </section>
+
+        <section class="today-quality-block today-dispatch-block stage-decision-layer">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">快照状态</p>
+              <h2>状态细栏</h2>
+            </div>
+          </div>
+          {% set status_strip_label = "状态细栏" %}
+          {% set status_items = watchlist.status_strip %}
+          {% include "_status_strip.html" %}
+        </section>
+
+        <details id="watchlist-follow" class="progressive-section watchlist-follow-fold">
+          <summary class="progressive-summary">
+            <div class="progressive-summary-main">
+              <p class="eyebrow">后续处理</p>
+              <strong>跟踪与观察</strong>
+            </div>
+            <span class="progressive-summary-note">其余待观察 {{ watchlist.follow_observe_count }} 只</span>
+          </summary>
+          <div class="progressive-body">
+            <section class="today-dispatch-secondary-grid stage-action-layer">
+              <article class="today-quality-block">
+                <div class="section-head">
+                  <div>
+                    <p class="eyebrow">跟踪增强</p>
+                    <h3>{{ follow_group.title }}</h3>
+                  </div>
+                  <span class="panel-stat">{{ follow_group.count }}</span>
+                </div>
+                {% set decision_rows = watchlist.follow_rows %}
+                {% include "_decision_rows.html" %}
+              </article>
+
+              <article class="today-quality-block">
+                <div class="section-head">
+                  <div>
+                    <p class="eyebrow">继续观察</p>
+                    <h3>{{ observe_group.title }}</h3>
+                  </div>
+                  <span class="panel-stat">{{ observe_group.count }}</span>
+                </div>
+                {% set decision_rows = watchlist.observe_rows %}
+                {% include "_decision_rows.html" %}
+              </article>
+            </section>
+          </div>
+        </details>
+
+        <details id="watchlist-manager" class="progressive-section watchlist-manager-fold">
+          <summary class="progressive-summary">
+            <div class="progressive-summary-main">
+              <p class="eyebrow">管理层</p>
+              <strong>自选股管理</strong>
+            </div>
+            <span class="progressive-summary-note">打开自选股管理（{{ manager.active_count }} 活跃）</span>
+          </summary>
+          <div class="progressive-body">
+            <section class="prism-refresh-strip" data-refresh-panel>
+              <div class="prism-refresh-main">
+                <div class="prism-refresh-headline">
+                  <strong data-refresh-market>刷新状态加载中...</strong>
+                  <span data-refresh-clock>--</span>
+                </div>
+                <p class="prism-refresh-hint" data-refresh-hint>正在读取链路新鲜度。</p>
+                <div class="prism-refresh-tags" data-refresh-tags></div>
+              </div>
+              <div class="prism-refresh-actions">
+                <label class="prism-refresh-toggle">
+                  <input type="checkbox" data-refresh-auto>
+                  <span>自动刷新</span>
+                </label>
+                <button class="ghost-button prism-refresh-button" type="button" data-refresh-trigger>立即刷新</button>
+              </div>
+            </section>
+
+            <section class="today-dispatch-secondary-grid stage-action-layer">
+              <article class="today-quality-block">
+                <div class="section-head">
+                  <div>
+                    <p class="eyebrow">持仓总览</p>
+                    <h3>持仓总览</h3>
+                  </div>
+                </div>
+                <p class="today-panel-copy">当前持仓层的数量与处理分布。</p>
+                <div class="page-summary-grid">
+                  {% for item in watchlist.summary_cards %}
+                  <article class="today-summary-card page-summary-card {% if loop.first %}page-summary-card-feature{% endif %}">
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.value }}</strong>
+                    <p>{{ item.detail }}</p>
+                  </article>
+                  {% endfor %}
+                </div>
+              </article>
+
+              <article
+                class="today-quality-block prism-page-manager"
+                data-watchlist-manager
+                data-watchlist-add-url="{{ manager.add_api }}"
+                data-watchlist-archive-url="{{ manager.archive_api }}"
+                data-watchlist-restore-url="{{ manager.restore_api }}"
+              >
+                <div class="section-head">
+                  <div>
+                    <p class="eyebrow">名单操作</p>
+                    <h3>调整与刷新</h3>
+                  </div>
+                  <span class="panel-stat">{{ manager.active_count }}</span>
+                </div>
+                <p class="today-panel-copy">{{ manager.summary }}</p>
+
+                <section class="watchlist-manager-status tone-{{ manager.refresh_status.tone }}">
+                  <div class="watchlist-manager-status-head">
+                    <strong>刷新状态</strong>
+                    <span class="action-chip action-chip-{{ manager.refresh_status.tone }}">{{ manager.refresh_status.label }}</span>
+                  </div>
+                  <p class="watchlist-manager-status-value">{{ manager.refresh_status.value }}</p>
+                  <p class="watchlist-manager-status-copy">{{ manager.refresh_status.detail }}</p>
+                  {% if manager.refresh_status.steps %}
+                  <div class="watchlist-manager-step-grid">
+                    {% for item in manager.refresh_status.steps %}
+                    <article class="watchlist-manager-step state-{{ item.state }}">
+                      <span>{{ item.label }}</span>
+                      <strong>
+                        {% if item.state == "completed" %}已完成{% elif item.state == "current" %}进行中{% elif item.state == "failed" %}未完成{% else %}等待中{% endif %}
+                      </strong>
+                      <p>{{ item.detail }}</p>
+                    </article>
+                    {% endfor %}
+                  </div>
+                  {% endif %}
+                  {% if manager.refresh_status.log_path %}
+                  <button
+                    class="panel-link panel-link-button"
+                    type="button"
+                    data-preview-path="{{ manager.refresh_status.log_path }}"
+                    data-preview-title="刷新日志"
+                    onclick="openPreviewButton(this)"
+                  >
+                    打开刷新日志
+                  </button>
+                  {% endif %}
+                </section>
+
+                <form class="watchlist-manager-form" data-watchlist-form>
+                  <div class="watchlist-manager-form-row">
+                    <label class="watchlist-field">
+                      <span>股票代码</span>
+                      <input name="code" type="text" inputmode="numeric" maxlength="6" placeholder="例如 600036" required>
+                    </label>
+                    <label class="watchlist-field">
+                      <span>股票名称</span>
+                      <input name="name" type="text" maxlength="24" placeholder="可不填，系统会自动识别">
+                    </label>
+                  </div>
+                  <div class="watchlist-manager-submit-row">
+                    <button class="ghost-button watchlist-manager-submit" type="submit">添加并刷新</button>
+                    <p class="watchlist-manager-feedback" data-watchlist-feedback aria-live="polite">{{ manager.feedback_hint }}</p>
+                  </div>
+                </form>
+
+                <section class="watchlist-manager-list-block">
+                  <div class="watchlist-manager-list-head">
+                    <strong>当前活跃池</strong>
+                    <span>{{ manager.active_count }} 只</span>
+                  </div>
+                  <div class="watchlist-manager-list">
+                    {% if manager.active_items %}
+                    {% for item in manager.active_items %}
+                    <article class="watchlist-manager-item tone-{{ item.tone }}">
+                      <div class="watchlist-manager-item-main">
+                        <div class="watchlist-manager-item-head">
+                          <strong>{{ item.name }}</strong>
+                          <span class="watchlist-manager-code">{{ item.code }} · {{ item.market }}</span>
+                          <span class="action-chip action-chip-{{ item.tone }}">{{ item.state_label }}</span>
+                        </div>
+                        <p class="watchlist-manager-item-copy">{{ item.state_detail }}</p>
+                        <p class="watchlist-manager-item-meta">最近更新 {{ item.updated_at }}</p>
+                      </div>
+                      <button
+                        class="ghost-button watchlist-manager-action"
+                        type="button"
+                        data-watchlist-action="archive"
+                        data-watchlist-code="{{ item.code }}"
+                        data-watchlist-name="{{ item.name }}"
+                      >归档</button>
+                    </article>
+                    {% endfor %}
+                    {% else %}
+                    <div class="watchlist-manager-empty">{{ manager.empty_active }}</div>
+                    {% endif %}
+                  </div>
+                </section>
+
+                <details class="watchlist-archive-fold">
+                  <summary>已归档 {{ manager.archived_count }} 只</summary>
+                  <div class="watchlist-manager-list watchlist-manager-list-archived">
+                    {% if manager.archived_items %}
+                    {% for item in manager.archived_items %}
+                    <article class="watchlist-manager-item tone-{{ item.tone }}">
+                      <div class="watchlist-manager-item-main">
+                        <div class="watchlist-manager-item-head">
+                          <strong>{{ item.name }}</strong>
+                          <span class="watchlist-manager-code">{{ item.code }} · {{ item.market }}</span>
+                          <span class="action-chip action-chip-{{ item.tone }}">{{ item.state_label }}</span>
+                        </div>
+                        <p class="watchlist-manager-item-copy">{{ item.state_detail }}</p>
+                      </div>
+                      <button
+                        class="ghost-button watchlist-manager-action"
+                        type="button"
+                        data-watchlist-action="restore"
+                        data-watchlist-code="{{ item.code }}"
+                        data-watchlist-name="{{ item.name }}"
+                      >恢复</button>
+                    </article>
+                    {% endfor %}
+                    {% else %}
+                    <div class="watchlist-manager-empty">{{ manager.empty_archived }}</div>
+                    {% endif %}
+                  </div>
+                </details>
+
+                <p class="watchlist-manager-footnote">归档只隐藏当前页面、后续报告和新闻展示，不会物理删除历史文件。</p>
+              </article>
+            </section>
+          </div>
+        </details>
+
+        <details id="watchlist-support" class="progressive-section watchlist-support-fold">
+        <summary class="progressive-summary">
+          <div class="progressive-summary-main">
+            <p class="eyebrow">回源校验</p>
+            <strong>质检与原始数据</strong>
+          </div>
+          <span class="progressive-summary-note">展开持仓链路质检与原始数据入口</span>
+        </summary>
+        <div class="progressive-body">
+          <section class="today-dispatch-secondary-grid stage-action-layer">
+            <article class="today-quality-block">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">可信度</p>
+                  <h3>可信度总开关</h3>
+                </div>
+              </div>
+              {% set confidence_switch = watchlist.confidence_switch %}
+              {% set confidence_callout_class = "" %}
+              {% include "_confidence_switch.html" %}
+            </article>
+
+            <article class="today-quality-block prism-page-quality">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">质检状态</p>
+                  <h3>持仓链路质检</h3>
+                </div>
+              </div>
+              <div class="detail-theme-grid">
+                <article class="quality-card tone-{{ watchlist.quality_card.tone }}">
+                  <div class="quality-card-head">
+                    <strong>{{ watchlist.quality_card.title }}</strong>
+                    <span class="status-chip status-{{ watchlist.quality_card.status }}">{{ watchlist.quality_card.status }}</span>
+                  </div>
+                  <p>{{ watchlist.quality_card.issue }}</p>
+                  <div class="quality-times">
+                    <span>检查 {{ watchlist.quality_card.checked_at }}</span>
+                    <span>目标 {{ watchlist.quality_card.expected_timestamp }}</span>
+                  </div>
+                  {% if watchlist.quality_card.path %}
+                  <button
+                    class="panel-link panel-link-button"
+                    type="button"
+                    data-preview-path="{{ watchlist.quality_card.path }}"
+                    data-preview-title="自选股质检 JSON"
+                    onclick="openPreviewButton(this)"
+                  >
+                    页内看质检 JSON
+                  </button>
+                  {% endif %}
+                </article>
+              </div>
+            </article>
+          </section>
+
+          <section id="watchlist-artifacts" class="today-quality-block stage-action-layer">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">原始数据</p>
+                <h3>原始数据入口</h3>
+              </div>
+            </div>
+            <div class="detail-artifact-grid page-artifact-grid">
+              {% for item in watchlist.artifacts %}
+              <button
+                class="artifact-link"
+                type="button"
+                data-preview-path="{{ item.path }}"
+                data-preview-title="{{ item.title }}"
+                onclick="openPreviewButton(this)"
+              >
+                <span>{{ item.title }}</span>
+                <strong>{{ item.name }}</strong>
+                <em>{{ item.mtime_full }}</em>
+              </button>
+              {% endfor %}
+            </div>
+          </section>
+        </div>
+        </details>
+      </main>
+    </div>
+    {% include "_preview_drawer.html" %}
+    <script src="/static/control-panel-refresh.js?v=20260420-refreshb1" defer></script>
+    <script src="/static/control-panel-watchlist.js?v=20260419-schemec2"></script>
+  </body>
+</html>

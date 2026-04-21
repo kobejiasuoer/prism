@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ detail.hero.title }} · 棱镜复盘</title>
+    {% include "_theme_head.html" %}
+    <link rel="stylesheet" href="/static/control-panel.css?v=20260420-schemec5">
+  </head>
+  <body>
+    <div class="panel-shell today-shell prism-page-shell detail-page-shell">
+      <header class="today-hero detail-hero">
+        {% set nav_active = "review" %}
+        {% set nav_links = detail.links %}
+        {% set nav_api_href = detail.links.api_self %}
+        {% include "_page_nav.html" %}
+
+        <div class="today-hero-main">
+          <div class="today-copy">
+            <p class="eyebrow">{{ detail.hero.eyebrow }}</p>
+            <h1>{{ detail.hero.title }}</h1>
+            <p class="today-summary">{{ detail.hero.summary }}</p>
+            <section class="review-hero-guide">
+              <p class="review-hero-guide-copy">先看变化摘要是不是足够改变结论，再切研究窗口确认边际变化，最后需要时直接展开两边原始报告。</p>
+              <div class="panel-link-stack review-hero-guide-links">
+                <a class="panel-link" href="#review-detail-summary">先看变化摘要</a>
+                <a class="panel-link panel-link-subtle" href="#review-detail-control">切研究窗口</a>
+                <a class="panel-link panel-link-subtle" href="#review-detail-artifacts">回看原始文件</a>
+              </div>
+            </section>
+          </div>
+
+          <aside class="today-callout">
+            <span class="callout-label">单组钻取</span>
+            <strong>先看变化，再看两边原始行</strong>
+            <p>这页只对比一个分组，窗口可以直接在本页切，不用退回总览重新选。</p>
+            <div class="callout-actions">
+              <a class="ghost-button link-button" href="{{ detail.links.review }}">回到复盘页</a>
+              <a class="ghost-button link-button" href="{{ detail.links.api_self }}" target="_blank" rel="noopener">打开接口</a>
+            </div>
+          </aside>
+        </div>
+      </header>
+
+      <section class="today-source-strip detail-summary-zone">
+        {% for item in detail.source_cards %}
+        <article class="source-card">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+          <p>{{ item.detail }}</p>
+        </article>
+        {% endfor %}
+      </section>
+
+      <section id="review-detail-summary" class="today-summary-grid detail-summary-zone">
+        {% for item in detail.summary_cards %}
+        <article class="today-summary-card">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+          <p>{{ item.detail }}</p>
+        </article>
+        {% endfor %}
+      </section>
+
+      <section id="review-detail-control" class="today-quality-block detail-action-zone">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">对比窗口</p>
+            <h2>对比窗口</h2>
+          </div>
+        </div>
+        <p class="today-panel-copy">{{ detail.comparison_note }}</p>
+        <div class="detail-layout detail-layout-2">
+          {% for group in detail.selector_groups %}
+          <article class="today-panel">
+            <div class="today-panel-head">
+              <div>
+                <p class="eyebrow">窗口切换</p>
+                <h2>{{ group.title }}</h2>
+              </div>
+            </div>
+            <p class="today-panel-copy">{{ group.subtitle }}</p>
+            <div class="detail-tag-list">
+              {% for item in group.options %}
+              <a class="detail-tag {% if item.active %}detail-tag-active{% endif %}" href="{{ item.url }}">{{ item.label }}</a>
+              {% endfor %}
+            </div>
+          </article>
+          {% endfor %}
+        </div>
+        {% if detail.missing_note %}
+        <div class="decision-empty">{{ detail.missing_note }}</div>
+        {% endif %}
+      </section>
+
+      <section id="review-detail-panels" class="detail-layout detail-layout-2 detail-evidence-zone">
+        {% for panel in detail.comparison_panels %}
+        <article class="today-panel">
+          <div class="today-panel-head">
+            <div>
+              <p class="eyebrow">{{ detail.hero.eyebrow }}</p>
+              <h2>{{ panel.title }}</h2>
+            </div>
+          </div>
+          <p class="today-panel-copy">{{ panel.subtitle }}</p>
+
+          {% if panel.cards %}
+          <section class="detail-row-list">
+            {% for item in panel.cards %}
+            <article class="detail-row-card">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+              <p class="detail-empty-copy">{{ item.detail }}</p>
+            </article>
+            {% endfor %}
+          </section>
+          {% else %}
+          <div class="decision-empty">{{ panel.empty }}</div>
+          {% endif %}
+
+          {% if panel.artifact_path %}
+          <button
+            class="panel-link panel-link-button"
+            type="button"
+            data-preview-path="{{ panel.artifact_path }}"
+            data-preview-title="{{ panel.title }} 原始报告"
+            onclick="openPreviewButton(this)"
+          >
+            打开原始报告
+          </button>
+          {% endif %}
+        </article>
+        {% endfor %}
+      </section>
+
+      <section id="review-detail-artifacts" class="today-quality-block detail-action-zone">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">原始文件</p>
+            <h2>原始入口</h2>
+          </div>
+        </div>
+        <div class="detail-artifact-grid">
+          {% for item in detail.artifacts %}
+          <button
+            class="artifact-link"
+            type="button"
+            data-preview-path="{{ item.path }}"
+            data-preview-title="{{ item.title }}"
+            onclick="openPreviewButton(this)"
+          >
+            <span>{{ item.title }}</span>
+            <strong>{{ item.name }}</strong>
+            <em>{{ item.mtime_full }}</em>
+          </button>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+    {% include "_preview_drawer.html" %}
+  </body>
+</html>

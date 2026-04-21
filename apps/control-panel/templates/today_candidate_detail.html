@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ detail.name }} · 棱镜机会池</title>
+    {% include "_theme_head.html" %}
+    <link rel="stylesheet" href="/static/control-panel.css?v=20260420-schemec5">
+  </head>
+  <body>
+    <div class="panel-shell today-shell prism-page-shell detail-page-shell">
+      <header class="today-hero detail-hero">
+        {% set nav_active = "opportunities" %}
+        {% set nav_links = detail.links %}
+        {% set nav_api_href = detail.links.api_self %}
+        {% include "_page_nav.html" %}
+
+        <div class="today-hero-main">
+          <div class="today-copy">
+            <p class="eyebrow">机会扫描</p>
+            <h1>{{ detail.hero.title }}</h1>
+            <p class="today-summary">{{ detail.hero.summary }}</p>
+            <section class="opportunities-hero-guide">
+              <p class="opportunities-hero-guide-copy">先读为什么它进入今天的执行视野，再看动作计划和资金承接，最后需要时回到批次或自选股快照核对。</p>
+              <div class="panel-link-stack opportunities-hero-guide-links">
+                <a class="panel-link" href="#candidate-signals">先看信号拆解</a>
+                <a class="panel-link panel-link-subtle" href="#candidate-plan">看执行计划</a>
+                <a class="panel-link panel-link-subtle" href="#candidate-artifacts">回看原始文件</a>
+              </div>
+            </section>
+            <div class="today-hero-meta">
+              <div class="meta-pill">
+                <span>当前标签</span>
+                <strong>{{ detail.hero.status_label }}</strong>
+              </div>
+              <div class="meta-pill">
+                <span>形态</span>
+                <strong>{{ detail.hero.setup_label }}</strong>
+              </div>
+              <div class="meta-pill">
+                <span>交易日</span>
+                <strong>{{ detail.trade_date }}</strong>
+              </div>
+              <div class="meta-pill">
+                <span>代码</span>
+                <strong>{{ detail.code }}</strong>
+              </div>
+            </div>
+          </div>
+
+          <aside class="today-callout">
+            <span class="callout-label">执行视角</span>
+            <strong>先看执行质量，再看分数</strong>
+            <p>这页把早盘批次、午盘确认和自选股里的同名股票状态拉到一起，避免只看单一路径。</p>
+            <div class="callout-actions">
+              <a class="ghost-button link-button" href="{{ detail.links.opportunities }}">回到机会池</a>
+              {% if detail.links.watchlist_detail %}
+              <a class="ghost-button link-button" href="{{ detail.links.watchlist_detail }}">查看持仓视角</a>
+              {% endif %}
+            </div>
+          </aside>
+        </div>
+      </header>
+
+      <section class="today-source-strip detail-summary-zone">
+        {% for item in detail.source_cards %}
+        <article class="source-card">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+          <p>{{ item.detail }}</p>
+        </article>
+        {% endfor %}
+      </section>
+
+      <section class="detail-metric-grid detail-summary-zone">
+        {% for item in detail.metric_cards %}
+        <article class="today-summary-card">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+          <p>{{ item.detail }}</p>
+        </article>
+        {% endfor %}
+      </section>
+
+      <section class="detail-split detail-evidence-zone">
+        <div class="detail-main-stack">
+          <article id="candidate-signals" class="today-panel">
+            <div class="today-panel-head">
+              <div>
+                <p class="eyebrow">信号拆解</p>
+                <h2>信号拆解</h2>
+              </div>
+            </div>
+            <p class="today-panel-copy">先确认主题、策略、风险和一致性为什么把它推到今天的页面，再决定是否值得执行。</p>
+            <div class="detail-group-grid">
+              {% for group in detail.insight_groups %}
+              <section class="detail-group-card">
+                <div class="detail-group-head">
+                  <strong>{{ group.title }}</strong>
+                  <span>{{ group["items"]|length }}</span>
+                </div>
+                {% if group["items"] %}
+                <ul class="detail-bullet-list">
+                  {% for item in group["items"] %}
+                  <li>{{ item }}</li>
+                  {% endfor %}
+                </ul>
+                {% else %}
+                <p class="detail-empty-copy">{{ group["empty"] }}</p>
+                {% endif %}
+              </section>
+              {% endfor %}
+            </div>
+          </article>
+        </div>
+
+        <div class="detail-side-stack">
+          <article id="candidate-plan" class="today-panel">
+            <div class="today-panel-head">
+              <div>
+                <p class="eyebrow">执行计划</p>
+                <h2>执行计划</h2>
+              </div>
+            </div>
+            <p class="today-panel-copy">动作、触发、回避和失效位全部放在一起，减少来回对照成本。</p>
+            <div class="detail-row-list detail-row-list-single">
+              {% for item in detail.plan_rows %}
+              <article class="detail-row-card">
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+              </article>
+              {% endfor %}
+            </div>
+            <div class="decision-levels detail-levels">
+              {% for item in detail.plan_levels %}
+              <span>{{ item.label }} {{ item.value }}</span>
+              {% endfor %}
+            </div>
+          </article>
+
+          <article class="today-panel">
+            <div class="today-panel-head">
+              <div>
+                <p class="eyebrow">资金承接</p>
+                <h2>资金承接</h2>
+              </div>
+            </div>
+            <p class="today-panel-copy">这两项只回答承接有没有继续，不再散落到页底单独占一行。</p>
+            <section class="detail-metric-grid detail-metric-grid-single detail-action-zone">
+              {% for item in detail.capital_cards %}
+              <article class="today-summary-card">
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+                <p>{{ item.detail }}</p>
+              </article>
+              {% endfor %}
+            </section>
+          </article>
+        </div>
+      </section>
+
+      <section id="candidate-artifacts" class="today-quality-block detail-action-zone">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">原始文件</p>
+            <h2>数据入口</h2>
+          </div>
+        </div>
+        <div class="detail-artifact-grid">
+          {% for item in detail.artifacts %}
+          <button
+            class="artifact-link"
+            type="button"
+            data-preview-path="{{ item.path }}"
+            data-preview-title="{{ item.title }}"
+            onclick="openPreviewButton(this)"
+          >
+            <span>{{ item.title }}</span>
+            <strong>{{ item.name }}</strong>
+            <em>{{ item.mtime_full }}</em>
+          </button>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+    {% include "_preview_drawer.html" %}
+  </body>
+</html>

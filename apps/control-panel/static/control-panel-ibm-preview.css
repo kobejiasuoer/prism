@@ -1,0 +1,430 @@
+html[data-preview-theme="ibm-preview"] {
+  color-scheme: light;
+}
+
+html[data-preview-theme="ibm-preview"] body {
+  background: #f4f4f4;
+  color: #161616;
+  font-family: "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Helvetica Neue", Arial, sans-serif;
+}
+
+html[data-preview-theme="ibm-preview"] body::before {
+  display: none;
+}
+
+html[data-preview-theme="ibm-preview"] .panel-shell {
+  width: min(1584px, calc(100% - 3rem));
+  padding: 1rem 0 3rem;
+}
+
+html[data-preview-theme="ibm-preview"] .dashboard-page-shell,
+html[data-preview-theme="ibm-preview"] .ask-page-shell {
+  color: #161616;
+}
+
+html[data-preview-theme="ibm-preview"] :is(
+  .dashboard-ops-header,
+  .ops-health-card,
+  .ops-blocked-item,
+  .task-card,
+  .freshness-card,
+  .lane-card,
+  .section-block,
+  .today-hero,
+  .today-summary-card,
+  .source-card,
+  .today-panel,
+  .today-callout,
+  .progressive-section,
+  .task-last-run,
+  .task-run-note,
+  .batch-banner,
+  .artifact-link,
+  .artifact-fold,
+  .artifact-empty,
+  .ask-compact-promise,
+  .ask-quick-block,
+  .ask-example-chip,
+  .ask-followup-shell,
+  .ops-health-metric
+) {
+  background: #ffffff;
+  border: 1px solid #c6c6c6;
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+html[data-preview-theme="ibm-preview"] .dashboard-ops-header,
+html[data-preview-theme="ibm-preview"] .today-hero,
+html[data-preview-theme="ibm-preview"] .today-panel,
+html[data-preview-theme="ibm-preview"] .section-block {
+  position: relative;
+  overflow: hidden;
+}
+
+html[data-preview-theme="ibm-preview"] .dashboard-ops-header::before,
+html[data-preview-theme="ibm-preview"] .today-hero::before,
+html[data-preview-theme="ibm-preview"] .today-panel::before,
+html[data-preview-theme="ibm-preview"] .section-block::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: #0f62fe;
+}
+
+html[data-preview-theme="ibm-preview"] :is(h1, h2, h3, h4, strong) {
+  color: #161616;
+}
+
+html[data-preview-theme="ibm-preview"] .dashboard-ops-header h1,
+html[data-preview-theme="ibm-preview"] .ask-page-hero h1,
+html[data-preview-theme="ibm-preview"] .ask-result-hero h2 {
+  font-family: "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
+  font-weight: 300;
+  letter-spacing: 0;
+  line-height: 1.12;
+}
+
+html[data-preview-theme="ibm-preview"] .hero-copy,
+html[data-preview-theme="ibm-preview"] .today-summary,
+html[data-preview-theme="ibm-preview"] .section-copy,
+html[data-preview-theme="ibm-preview"] .task-head p,
+html[data-preview-theme="ibm-preview"] .lane-head p,
+html[data-preview-theme="ibm-preview"] .today-panel-copy,
+html[data-preview-theme="ibm-preview"] .ask-search-hint,
+html[data-preview-theme="ibm-preview"] .ask-watchlist-feedback,
+html[data-preview-theme="ibm-preview"] .artifact-link span,
+html[data-preview-theme="ibm-preview"] .artifact-link em,
+html[data-preview-theme="ibm-preview"] .artifact-empty,
+html[data-preview-theme="ibm-preview"] .progressive-summary-note {
+  color: #525252;
+}
+
+html[data-preview-theme="ibm-preview"] .eyebrow {
+  color: #0f62fe;
+  font-family: "IBM Plex Mono", "SFMono-Regular", "JetBrains Mono", monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+}
+
+html[data-preview-theme="ibm-preview"] .eyebrow::before {
+  width: 1rem;
+  opacity: 1;
+  background: currentColor;
+}
+
+html[data-preview-theme="ibm-preview"] .today-nav.stage-nav {
+  background: #ffffff;
+  border: 1px solid #c6c6c6;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+html[data-preview-theme="ibm-preview"] .nav-brand span,
+html[data-preview-theme="ibm-preview"] .nav-brand strong,
+html[data-preview-theme="ibm-preview"] .nav-chip,
+html[data-preview-theme="ibm-preview"] .nav-ops-link {
+  color: #161616;
+}
+
+html[data-preview-theme="ibm-preview"] .nav-chip,
+html[data-preview-theme="ibm-preview"] .nav-ops-link {
+  border-radius: 0;
+  border: 1px solid transparent;
+}
+
+html[data-preview-theme="ibm-preview"] .nav-chip:hover,
+html[data-preview-theme="ibm-preview"] .nav-chip:focus-visible,
+html[data-preview-theme="ibm-preview"] .nav-ops-link:hover,
+html[data-preview-theme="ibm-preview"] .nav-ops-link:focus-visible {
+  border-color: #0f62fe;
+  color: #0f62fe;
+  background: #edf5ff;
+}
+
+html[data-preview-theme="ibm-preview"] .nav-chip-active,
+html[data-preview-theme="ibm-preview"] .nav-ops-link-active {
+  background: #0f62fe;
+  border-color: #0f62fe;
+  color: #ffffff;
+}
+
+html[data-preview-theme="ibm-preview"] .theme-toggle {
+  display: none;
+}
+
+html[data-preview-theme="ibm-preview"] .nav-preview-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  padding: 0 0.75rem;
+  border: 1px solid #0f62fe;
+  background: #edf5ff;
+  color: #0f62fe;
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+html[data-preview-theme="ibm-preview"] .nav-preview-exit {
+  border-color: #393939;
+}
+
+html[data-preview-theme="ibm-preview"] .preview-theme-banner {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 1.25rem;
+  padding: 1rem 1rem 1rem 1.2rem;
+  border: 1px solid #0f62fe;
+  border-left-width: 4px;
+  background: #edf5ff;
+}
+
+html[data-preview-theme="ibm-preview"] .preview-theme-banner span {
+  display: inline-block;
+  color: #0f62fe;
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+html[data-preview-theme="ibm-preview"] .preview-theme-banner strong {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+html[data-preview-theme="ibm-preview"] .preview-theme-banner p {
+  margin: 0;
+  color: #525252;
+  line-height: 1.5;
+}
+
+html[data-preview-theme="ibm-preview"] .preview-theme-banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+html[data-preview-theme="ibm-preview"] .primary-button,
+html[data-preview-theme="ibm-preview"] .ghost-button,
+html[data-preview-theme="ibm-preview"] .table-action-button,
+html[data-preview-theme="ibm-preview"] .panel-link-button,
+html[data-preview-theme="ibm-preview"] .today-decision-button {
+  min-height: 3rem;
+  border-radius: 0;
+  box-shadow: none;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+html[data-preview-theme="ibm-preview"] .primary-button {
+  background: #0f62fe;
+  border: 1px solid #0f62fe;
+  color: #ffffff;
+}
+
+html[data-preview-theme="ibm-preview"] .primary-button:hover,
+html[data-preview-theme="ibm-preview"] .primary-button:focus-visible {
+  background: #0043ce;
+  border-color: #0043ce;
+}
+
+html[data-preview-theme="ibm-preview"] .ghost-button,
+html[data-preview-theme="ibm-preview"] .table-action-button,
+html[data-preview-theme="ibm-preview"] .panel-link-button,
+html[data-preview-theme="ibm-preview"] .today-decision-button {
+  background: #ffffff;
+  border: 1px solid #393939;
+  color: #161616;
+}
+
+html[data-preview-theme="ibm-preview"] .ghost-button:hover,
+html[data-preview-theme="ibm-preview"] .ghost-button:focus-visible,
+html[data-preview-theme="ibm-preview"] .table-action-button:hover,
+html[data-preview-theme="ibm-preview"] .table-action-button:focus-visible,
+html[data-preview-theme="ibm-preview"] .panel-link-button:hover,
+html[data-preview-theme="ibm-preview"] .panel-link-button:focus-visible,
+html[data-preview-theme="ibm-preview"] .today-decision-button:hover,
+html[data-preview-theme="ibm-preview"] .today-decision-button:focus-visible {
+  background: #edf5ff;
+  border-color: #0f62fe;
+  color: #0f62fe;
+}
+
+html[data-preview-theme="ibm-preview"] .status-chip {
+  min-width: 4.8rem;
+  border-radius: 0;
+  border: 1px solid #c6c6c6;
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+}
+
+html[data-preview-theme="ibm-preview"] .status-ok,
+html[data-preview-theme="ibm-preview"] .status-success {
+  color: #24a148;
+  background: #defbe6;
+  border-color: #24a148;
+}
+
+html[data-preview-theme="ibm-preview"] .status-running {
+  color: #0f62fe;
+  background: #edf5ff;
+  border-color: #0f62fe;
+}
+
+html[data-preview-theme="ibm-preview"] .status-idle,
+html[data-preview-theme="ibm-preview"] .status-unknown {
+  color: #525252;
+  background: #f4f4f4;
+  border-color: #8d8d8d;
+}
+
+html[data-preview-theme="ibm-preview"] .status-blocked,
+html[data-preview-theme="ibm-preview"] .status-failed {
+  color: #da1e28;
+  background: #fff1f1;
+  border-color: #da1e28;
+}
+
+html[data-preview-theme="ibm-preview"] .ask-search-form,
+html[data-preview-theme="ibm-preview"] .ask-search-field,
+html[data-preview-theme="ibm-preview"] .ask-suggest-panel {
+  border-radius: 0;
+}
+
+html[data-preview-theme="ibm-preview"] .ask-search-field {
+  background: #ffffff;
+  border: 1px solid #c6c6c6;
+  border-bottom: 2px solid #6f6f6f;
+}
+
+html[data-preview-theme="ibm-preview"] .ask-search-field input {
+  background: transparent;
+  color: #161616;
+  border: 0;
+  border-bottom: 1px solid #8d8d8d;
+  border-radius: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+html[data-preview-theme="ibm-preview"] .ask-search-field input::placeholder {
+  color: #6f6f6f;
+}
+
+html[data-preview-theme="ibm-preview"] .ask-search-field input:focus {
+  outline: none;
+  border-bottom-color: #0f62fe;
+  box-shadow: inset 0 -2px 0 #0f62fe;
+}
+
+html[data-preview-theme="ibm-preview"] .ask-search-button {
+  background: #0f62fe;
+  border: 1px solid #0f62fe;
+  color: #ffffff;
+}
+
+html[data-preview-theme="ibm-preview"] .ask-search-button kbd {
+  border-radius: 0;
+  background: #0043ce;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+html[data-preview-theme="ibm-preview"] .ask-example-chip,
+html[data-preview-theme="ibm-preview"] .meta-pill,
+html[data-preview-theme="ibm-preview"] .detail-tag,
+html[data-preview-theme="ibm-preview"] .ops-health-metric,
+html[data-preview-theme="ibm-preview"] .source-card,
+html[data-preview-theme="ibm-preview"] .today-summary-card,
+html[data-preview-theme="ibm-preview"] .task-last-run,
+html[data-preview-theme="ibm-preview"] .task-run-note,
+html[data-preview-theme="ibm-preview"] .batch-banner {
+  border-radius: 0;
+}
+
+html[data-preview-theme="ibm-preview"] .meta-pill,
+html[data-preview-theme="ibm-preview"] .detail-tag,
+html[data-preview-theme="ibm-preview"] .task-last-run,
+html[data-preview-theme="ibm-preview"] .task-run-note,
+html[data-preview-theme="ibm-preview"] .batch-banner,
+html[data-preview-theme="ibm-preview"] .ops-health-metric {
+  background: #f4f4f4;
+  border: 1px solid #c6c6c6;
+}
+
+html[data-preview-theme="ibm-preview"] .source-card.tone-positive,
+html[data-preview-theme="ibm-preview"] .today-summary-card.tone-positive,
+html[data-preview-theme="ibm-preview"] .ask-watchlist-block.tone-positive {
+  border-left: 4px solid #24a148;
+}
+
+html[data-preview-theme="ibm-preview"] .source-card.tone-watch,
+html[data-preview-theme="ibm-preview"] .today-summary-card.tone-watch,
+html[data-preview-theme="ibm-preview"] .ask-watchlist-block.tone-watch {
+  border-left: 4px solid #f1c21b;
+}
+
+html[data-preview-theme="ibm-preview"] .source-card.tone-risk,
+html[data-preview-theme="ibm-preview"] .today-summary-card.tone-risk,
+html[data-preview-theme="ibm-preview"] .ask-watchlist-block.tone-risk {
+  border-left: 4px solid #da1e28;
+}
+
+html[data-preview-theme="ibm-preview"] .progressive-summary {
+  border-radius: 0;
+  background: #ffffff;
+}
+
+html[data-preview-theme="ibm-preview"] .progressive-summary::after {
+  border-radius: 0;
+  background: #0f62fe;
+  color: #ffffff;
+  border: 0;
+}
+
+html[data-preview-theme="ibm-preview"] .progressive-summary:focus-visible,
+html[data-preview-theme="ibm-preview"] .ghost-button:focus-visible,
+html[data-preview-theme="ibm-preview"] .primary-button:focus-visible,
+html[data-preview-theme="ibm-preview"] .table-action-button:focus-visible,
+html[data-preview-theme="ibm-preview"] .nav-chip:focus-visible,
+html[data-preview-theme="ibm-preview"] .nav-ops-link:focus-visible,
+html[data-preview-theme="ibm-preview"] .ask-search-field input:focus-visible {
+  outline: 2px solid #0f62fe;
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+html[data-preview-theme="ibm-preview"] .artifact-link:hover {
+  transform: none;
+  border-color: #0f62fe;
+  background: #edf5ff;
+}
+
+html[data-preview-theme="ibm-preview"] .dashboard-ops-actions {
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  html[data-preview-theme="ibm-preview"] .panel-shell {
+    width: min(100%, calc(100% - 1.5rem));
+  }
+
+  html[data-preview-theme="ibm-preview"] .preview-theme-banner-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  html[data-preview-theme="ibm-preview"] .preview-theme-banner-actions .ghost-button {
+    width: 100%;
+  }
+}

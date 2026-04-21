@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ detail.name }} · 棱镜自选股</title>
+    {% include "_theme_head.html" %}
+    <link rel="stylesheet" href="/static/control-panel.css?v=20260420-schemec5">
+  </head>
+  <body>
+    <div class="panel-shell today-shell prism-page-shell detail-page-shell">
+      <header class="today-hero detail-hero">
+        {% set nav_active = "watchlist" %}
+        {% set nav_links = detail.links %}
+        {% set nav_api_href = detail.links.api_self %}
+        {% include "_page_nav.html" %}
+
+        <div class="today-hero-main">
+          <div class="today-copy">
+            <p class="eyebrow">自选股</p>
+            <h1>{{ detail.hero.title }}</h1>
+            <p class="today-summary">{{ detail.hero.summary }}</p>
+            <section class="watchlist-hero-guide">
+              <p class="watchlist-hero-guide-copy">先确认这只持仓今天和机会链路的关系，再看盘中触发条件，最后需要时直接展开原始快照或批次 JSON。</p>
+              <div class="panel-link-stack watchlist-hero-guide-links">
+                <a class="panel-link" href="#watchlist-cross">先看跨层状态</a>
+                <a class="panel-link panel-link-subtle" href="#watchlist-triggers">看盘中触发</a>
+                <a class="panel-link panel-link-subtle" href="#watchlist-artifacts">回看原始文件</a>
+              </div>
+            </section>
+            <div class="today-hero-meta">
+              <div class="meta-pill">
+                <span>交易日</span>
+                <strong>{{ detail.trade_date }}</strong>
+              </div>
+              <div class="meta-pill">
+                <span>动作</span>
+                <strong>{{ detail.hero.status_label }}</strong>
+              </div>
+              <div class="meta-pill">
+                <span>仓位建议</span>
+                <strong>{{ detail.hero.position }}</strong>
+              </div>
+              <div class="meta-pill">
+                <span>代码</span>
+                <strong>{{ detail.code }}</strong>
+              </div>
+            </div>
+          </div>
+
+          <aside class="today-callout">
+            <span class="callout-label">跨层联动</span>
+            <strong>先处理持仓，再决定是否转入候选</strong>
+            <p>这页只回答一件事：这只票今天该怎么处理，以及它是否已经进入机会扫描或午盘确认链路。</p>
+            <div class="callout-actions">
+              <a class="ghost-button link-button" href="{{ detail.links.watchlist }}">回到自选股</a>
+              {% if detail.links.candidate_detail %}
+              <a class="ghost-button link-button" href="{{ detail.links.candidate_detail }}">查看候选视角</a>
+              {% endif %}
+            </div>
+          </aside>
+        </div>
+      </header>
+
+      <section id="watchlist-cross" class="detail-status-strip detail-summary-zone">
+        {% for item in detail.related_status %}
+        <article class="source-card tone-{{ item.tone }}">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+          <p>{{ item.detail }}</p>
+        </article>
+        {% endfor %}
+      </section>
+
+      <section class="detail-metric-grid detail-summary-zone">
+        {% for item in detail.meta_cards %}
+        <article class="today-summary-card">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+          <p>{{ item.detail }}</p>
+        </article>
+        {% endfor %}
+      </section>
+
+      <section class="detail-metric-grid detail-evidence-zone">
+        {% for item in detail.level_cards %}
+        <article class="today-summary-card">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+          <p>{{ item.detail }}</p>
+        </article>
+        {% endfor %}
+      </section>
+
+      <section class="detail-layout detail-layout-2 detail-evidence-zone">
+        <article id="watchlist-triggers" class="today-panel">
+          <div class="today-panel-head">
+            <div>
+              <p class="eyebrow">盘中触发</p>
+              <h2>盘中触发</h2>
+            </div>
+          </div>
+          <p class="today-panel-copy">只保留真正会影响今天处理动作的盘中条件，避免把说明和执行阈值混在一起看。</p>
+          <div class="detail-stack">
+            {% if detail.triggers %}
+            {% for item in detail.triggers %}
+            <article class="detail-note-card">
+              <strong>{{ item.name }}</strong>
+              <p>{{ item.condition }}</p>
+              <span>{{ item.action }}</span>
+            </article>
+            {% endfor %}
+            {% else %}
+            <div class="decision-empty">当前没有可展示的盘中触发条件。</div>
+            {% endif %}
+          </div>
+        </article>
+
+        <article class="today-panel">
+          <div class="today-panel-head">
+            <div>
+              <p class="eyebrow">判断依据</p>
+              <h2>判断依据</h2>
+            </div>
+          </div>
+          <p class="today-panel-copy">把硬风险、观察点和正向因素拆开看，比把它们混成一段话更容易判断今天该减仓、观望还是继续跟踪。</p>
+          <div class="detail-group-list">
+            {% for group in detail.insight_groups %}
+            <section class="detail-group-card">
+              <div class="detail-group-head">
+                <strong>{{ group.title }}</strong>
+                <span>{{ group["items"]|length }}</span>
+              </div>
+              {% if group["items"] %}
+              <ul class="detail-bullet-list">
+                {% for item in group["items"] %}
+                <li>{{ item }}</li>
+                {% endfor %}
+              </ul>
+              {% else %}
+              <p class="detail-empty-copy">{{ group["empty"] }}</p>
+              {% endif %}
+            </section>
+            {% endfor %}
+          </div>
+        </article>
+      </section>
+
+      <section id="watchlist-artifacts" class="today-quality-block detail-action-zone">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">原始文件</p>
+            <h2>数据入口</h2>
+          </div>
+        </div>
+        <div class="detail-artifact-grid">
+          {% for item in detail.artifacts %}
+          <button
+            class="artifact-link"
+            type="button"
+            data-preview-path="{{ item.path }}"
+            data-preview-title="{{ item.title }}"
+            onclick="openPreviewButton(this)"
+          >
+            <span>{{ item.title }}</span>
+            <strong>{{ item.name }}</strong>
+            <em>{{ item.mtime_full }}</em>
+          </button>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+    {% include "_preview_drawer.html" %}
+  </body>
+</html>

@@ -1,0 +1,37 @@
+<aside class="today-callout {{ confidence_callout_class or '' }} confidence-switch confidence-switch-{{ confidence_switch.tone }}">
+  <div class="confidence-switch-head">
+    <span class="callout-label">{{ confidence_switch.title }}</span>
+    <span class="action-chip action-chip-{{ confidence_switch.tone }}">{{ confidence_switch.status }}</span>
+  </div>
+  <strong>{{ confidence_switch.label }}</strong>
+  <p>{{ confidence_switch.summary }}</p>
+  {% if confidence_switch.note %}
+  <p class="confidence-switch-note">{{ confidence_switch.note }}</p>
+  {% endif %}
+
+  {% if confidence_switch.metrics %}
+  <div class="confidence-switch-metrics">
+    {% for item in confidence_switch.metrics %}
+    <article class="confidence-switch-metric">
+      <span>{{ item.label }}</span>
+      <strong>{{ item.value }}</strong>
+      {% if item.detail %}
+      <em>{{ item.detail }}</em>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if confidence_switch.actions %}
+  <div class="callout-actions">
+    {% for action in confidence_switch.actions %}
+    <a
+      class="ghost-button link-button"
+      href="{{ action.url }}"
+      {% if action.external %}target="_blank" rel="noopener"{% endif %}
+    >{{ action.title }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</aside>
