@@ -1,0 +1,4 @@
+[2026-04-20 09:35:28] start 自选股早盘摘要
+[2026-04-20 09:35:28] command: bash skills/stock-analyzer/scripts/run_watchlist_feishu_summary.sh
+[2026-04-20 09:35:28] feishu: feishu -> user:<redacted> (cron_jobs)
+找不到当日快照: data/history/daily_snapshots/2026-04-20.json

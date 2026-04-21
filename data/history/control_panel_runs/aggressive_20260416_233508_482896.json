@@ -1,0 +1,37 @@
+{
+  "task_id": "aggressive_20260416_233508_482896",
+  "task_name": "aggressive",
+  "title": "进攻型选股",
+  "command": [
+    "bash",
+    "skills/stock-screener/scripts/run_full_workflow.sh",
+    "--pool",
+    "aggressive",
+    "--top",
+    "10",
+    "--handoff-analyzer",
+    "--handoff-top",
+    "3",
+    "--handoff-min-consistency",
+    "6"
+  ],
+  "cwd": "<redacted-path>",
+  "send_to_feishu": true,
+  "status": "success",
+  "started_at": "2026-04-16 23:35:08",
+  "finished_at": "2026-04-16 23:36:00",
+  "exit_code": 0,
+  "pid": 20059,
+  "log_path": "data/history/control_panel_runs/logs/aggressive_20260416_233508_482896.log",
+  "meta_path": "data/history/control_panel_runs/aggressive_20260416_233508_482896.json",
+  "feishu_delivery": {
+    "requested": true,
+    "channel": "feishu",
+    "target": "user:<redacted>",
+    "source": "cron_jobs",
+    "job_id": "1cd3a273-28fa-4533-9fd9-d9f92043a159",
+    "job_name": "进攻型选股-早盘",
+    "resolved": true
+  },
+  "shell_env_sanitized": true
+}

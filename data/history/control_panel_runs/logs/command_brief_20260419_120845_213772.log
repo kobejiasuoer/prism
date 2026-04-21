@@ -1,0 +1,6 @@
+[2026-04-19 12:08:45] start 投资总控简报
+[2026-04-19 12:08:45] command: bash skills/invest-flow/scripts/run_command_brief.sh
+[2026-04-19 12:08:45] feishu: feishu -> user:<redacted> (cron_jobs)
+brief -> data/history/reports/command_brief/prism_command_brief_2026-04-19_12-08-45.txt
+report -> data/history/reports/command_brief/prism_command_brief_2026-04-19_12-08-45.md
+json -> data/history/command_brief/prism_command_brief_2026-04-19_12-08-45.json

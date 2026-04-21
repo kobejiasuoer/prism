@@ -1,0 +1,234 @@
+{
+  "date": "2026-04-10",
+  "stocks": {
+    "000625": {
+      "date": "2026-04-10",
+      "code": "000625",
+      "name": "长安汽车",
+      "action": "减仓观望",
+      "position": "0-0.5成",
+      "tech_base": "看空",
+      "flow_base": "偏多",
+      "event_base": "偏多",
+      "score": 0,
+      "score_kind": "技术分",
+      "signal": "看空（评分0）",
+      "hard_flags": [
+        "ROE偏弱"
+      ],
+      "watch_points": [
+        "留意布林下轨支撑（9.59）"
+      ],
+      "positives": [
+        "股东回报",
+        "业务催化"
+      ],
+      "support": 10.1,
+      "resistance": 10.2,
+      "stop_loss": 9.5,
+      "intraday_triggers": [
+        {
+          "name": "防守线",
+          "condition": "盘中跌破止损位 9.5 元",
+          "action": "直接按纪律离场，不做低吸"
+        },
+        {
+          "name": "突破线",
+          "condition": "放量站上压力位 10.2 元",
+          "action": "只视为弱修复，先别翻多，等收盘确认"
+        },
+        {
+          "name": "确认线",
+          "condition": "回踩不破支撑位 10.1 元，且主力净流入维持为正",
+          "action": "可继续持有/观察，等待二次确认"
+        }
+      ]
+    },
+    "002037": {
+      "date": "2026-04-10",
+      "code": "002037",
+      "name": "保利联合",
+      "action": "回避/逢高减仓",
+      "position": "0成或只留观察仓",
+      "tech_base": "看多",
+      "flow_base": "偏多",
+      "event_base": "偏空",
+      "score": 22,
+      "score_kind": "技术分",
+      "signal": "看多（评分22）",
+      "hard_flags": [
+        "治理风险",
+        "ROE为负",
+        "PB与ROE不匹配",
+        "弱于行业"
+      ],
+      "watch_points": [
+        "技术偏多但尚未明显强于行业，别追高"
+      ],
+      "positives": [],
+      "support": 8.45,
+      "resistance": 8.9,
+      "stop_loss": 8.15,
+      "intraday_triggers": [
+        {
+          "name": "防守线",
+          "condition": "盘中跌破止损位 8.15 元",
+          "action": "直接按纪律离场，不做低吸"
+        },
+        {
+          "name": "突破线",
+          "condition": "放量站上压力位 8.9 元 且相对行业不再落后",
+          "action": "可把结论上调一档，考虑 0.5 成以内试错"
+        },
+        {
+          "name": "确认线",
+          "condition": "回踩不破支撑位 8.45 元，且主力净流入维持为正",
+          "action": "可继续持有/观察，等待二次确认"
+        },
+        {
+          "name": "风控备注",
+          "condition": "即使盘中反弹",
+          "action": "也只按反抽看，除非硬风险先消失，否则不升级到重仓"
+        }
+      ]
+    },
+    "002851": {
+      "date": "2026-04-10",
+      "code": "002851",
+      "name": "麦格米特",
+      "action": "回避/逢高减仓",
+      "position": "0成或只留观察仓",
+      "tech_base": "中性",
+      "flow_base": "偏多",
+      "event_base": "中性",
+      "score": 5,
+      "score_kind": "技术分",
+      "signal": "中性（评分5）",
+      "hard_flags": [
+        "ROE偏弱",
+        "PE极高",
+        "PB与ROE不匹配"
+      ],
+      "watch_points": [
+        "中期仍受 MA60（112.92）压制"
+      ],
+      "positives": [],
+      "support": 103.0,
+      "resistance": 113.0,
+      "stop_loss": 102.5,
+      "intraday_triggers": [
+        {
+          "name": "防守线",
+          "condition": "盘中跌破止损位 102.5 元",
+          "action": "直接按纪律离场，不做低吸"
+        },
+        {
+          "name": "突破线",
+          "condition": "放量站上压力位 113.0 元",
+          "action": "可从观望升级为轻仓跟踪，但别追高"
+        },
+        {
+          "name": "确认线",
+          "condition": "回踩不破支撑位 103.0 元，且主力净流入维持为正",
+          "action": "可继续持有/观察，等待二次确认"
+        },
+        {
+          "name": "风控备注",
+          "condition": "即使盘中反弹",
+          "action": "也只按反抽看，除非硬风险先消失，否则不升级到重仓"
+        }
+      ]
+    },
+    "601021": {
+      "date": "2026-04-10",
+      "code": "601021",
+      "name": "春秋航空",
+      "action": "观望",
+      "position": "0-0.5成",
+      "tech_base": "中性",
+      "flow_base": "偏多",
+      "event_base": "偏多",
+      "score": 15,
+      "score_kind": "技术分",
+      "signal": "中性（评分15）",
+      "hard_flags": [
+        "弱于行业"
+      ],
+      "watch_points": [
+        "中期仍受 MA60（52.77）压制"
+      ],
+      "positives": [
+        "经营改善"
+      ],
+      "support": 47.1,
+      "resistance": 48.6,
+      "stop_loss": 47.0,
+      "intraday_triggers": [
+        {
+          "name": "防守线",
+          "condition": "盘中跌破止损位 47.0 元",
+          "action": "先减仓或离场"
+        },
+        {
+          "name": "突破线",
+          "condition": "放量站上压力位 48.6 元 且相对行业不再落后",
+          "action": "可从观望升级为轻仓跟踪，但别追高"
+        },
+        {
+          "name": "确认线",
+          "condition": "回踩不破支撑位 47.1 元，且主力净流入维持为正",
+          "action": "可继续持有/观察，等待二次确认"
+        }
+      ]
+    },
+    "600690": {
+      "date": "2026-04-10",
+      "code": "600690",
+      "name": "海尔智家",
+      "action": "回避/逢高减仓",
+      "position": "0成或只留观察仓",
+      "tech_base": "看空",
+      "flow_base": "偏空",
+      "event_base": "偏多",
+      "score": -10,
+      "score_kind": "技术分",
+      "signal": "看空（评分-10）",
+      "hard_flags": [
+        "主力连续5日流出",
+        "弱于行业"
+      ],
+      "watch_points": [
+        "等待主力连续流出先止住",
+        "留意布林下轨支撑（19.57）"
+      ],
+      "positives": [
+        "股东回报"
+      ],
+      "support": 20.7,
+      "resistance": 21.3,
+      "stop_loss": 19.5,
+      "intraday_triggers": [
+        {
+          "name": "防守线",
+          "condition": "盘中跌破止损位 19.5 元",
+          "action": "直接按纪律离场，不做低吸"
+        },
+        {
+          "name": "突破线",
+          "condition": "放量站上压力位 21.3 元 且相对行业不再落后",
+          "action": "只视为弱修复，先别翻多，等收盘确认"
+        },
+        {
+          "name": "确认线",
+          "condition": "回踩不破支撑位 20.7 元，但若主力继续流出则不成立",
+          "action": "没有资金确认前，不把反弹当反转"
+        },
+        {
+          "name": "风控备注",
+          "condition": "即使盘中反弹",
+          "action": "也只按反抽看，除非硬风险先消失，否则不升级到重仓"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "checked_at": "2026-04-16 23:22:45",
+  "mode": "screener",
+  "validation_status": "ok",
+  "errors": [],
+  "warnings": [],
+  "paths": {
+    "message": "/tmp/stock_recommendation.txt",
+    "report": "data/history/reports/screener/stock_recommendation_2026-04-16_23-21.md",
+    "generator": "packages/screener/generate_feishu_message.py"
+  },
+  "expected_timestamp": "2026-04-16 23:22:42",
+  "stats": {
+    "shortlist_count": 14,
+    "has_lifecycle": false
+  }
+}

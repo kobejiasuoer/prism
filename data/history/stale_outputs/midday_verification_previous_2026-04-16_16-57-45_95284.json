@@ -1,0 +1,117 @@
+{
+  "timestamp": "2026-04-16 16:24:18",
+  "validation_status": "ok",
+  "validation_errors": [],
+  "source_morning_timestamp": "2026-04-16 10:31:13",
+  "source_scan_timestamp": "2026-04-16 10:31:13",
+  "verified_against_scan_timestamp": "2026-04-16 16:24:18",
+  "target_codes": [
+    "002756",
+    "000657"
+  ],
+  "confirmed": [],
+  "downgraded": [
+    {
+      "code": "002756",
+      "name": "永兴材料",
+      "tier": "B",
+      "morning_score": 61.2,
+      "status": "downgraded",
+      "reason": "当前扫描未再出现，强度未延续",
+      "details": [
+        "盘中未进入最新候选，视为承接不足"
+      ]
+    },
+    {
+      "code": "000657",
+      "name": "中钨高新",
+      "tier": "B",
+      "morning_score": 62.5,
+      "status": "downgraded",
+      "reason": "当前扫描未再出现，强度未延续",
+      "details": [
+        "盘中未进入最新候选，视为承接不足"
+      ]
+    }
+  ],
+  "fresh_candidates": [
+    {
+      "code": "002466",
+      "name": "天齐锂业",
+      "theme": "新能源链",
+      "score": 101.6,
+      "change_pct": 5.7,
+      "amount_yi": 59.3,
+      "capital_trend": "由负转正",
+      "flow_today_yi": 2.57,
+      "entry_reason": "趋势突破+资金配合 + 换手充分",
+      "main_risk": "估值偏高；周期波动较大",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "setup_label": "突破跟随",
+      "high20": 66.66,
+      "ma5": 62.68,
+      "ma10": 59.76,
+      "active_theme": true
+    },
+    {
+      "code": "603799",
+      "name": "华友钴业",
+      "theme": "新能源链",
+      "score": 101.55,
+      "change_pct": 5.02,
+      "amount_yi": 61.2,
+      "capital_trend": "由负转正",
+      "flow_today_yi": 8.0,
+      "entry_reason": "趋势突破+资金配合 + 换手充分",
+      "main_risk": "留意次日承接强度",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "setup_label": "突破跟随",
+      "high20": 65.94,
+      "ma5": 63.37,
+      "ma10": 61.17,
+      "active_theme": true
+    },
+    {
+      "code": "002460",
+      "name": "赣锋锂业",
+      "theme": "新能源链",
+      "score": 89.4,
+      "change_pct": 4.17,
+      "amount_yi": 72.5,
+      "capital_trend": "由负转正",
+      "flow_today_yi": 3.15,
+      "entry_reason": "趋势突破+资金配合 + 换手充分",
+      "main_risk": "估值偏高；周期波动较大",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "setup_label": "突破跟随",
+      "high20": 88.48,
+      "ma5": 84.88,
+      "ma10": 82.61,
+      "active_theme": true
+    }
+  ],
+  "items": [
+    {
+      "code": "002756",
+      "name": "永兴材料",
+      "tier": "B",
+      "morning_score": 61.2,
+      "status": "downgraded",
+      "reason": "当前扫描未再出现，强度未延续",
+      "details": [
+        "盘中未进入最新候选，视为承接不足"
+      ]
+    },
+    {
+      "code": "000657",
+      "name": "中钨高新",
+      "tier": "B",
+      "morning_score": 62.5,
+      "status": "downgraded",
+      "reason": "当前扫描未再出现，强度未延续",
+      "details": [
+        "盘中未进入最新候选，视为承接不足"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+[2026-04-19 12:08:30] start 投资总控简报
+[2026-04-19 12:08:30] command: bash skills/invest-flow/scripts/run_command_brief.sh
+brief -> data/history/reports/command_brief/prism_command_brief_2026-04-19_12-08-30.txt
+report -> data/history/reports/command_brief/prism_command_brief_2026-04-19_12-08-30.md
+json -> data/history/command_brief/prism_command_brief_2026-04-19_12-08-30.json

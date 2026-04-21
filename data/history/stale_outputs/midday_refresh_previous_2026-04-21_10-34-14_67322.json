@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-04-21 10:32:20",
+  "run_stamp": "2026-04-21_10-31-26_67165",
+  "validation_status": "ok",
+  "validation_errors": [],
+  "runner_status": "completed",
+  "scan_result_path": "runtime/stock-screener/data/scan_result.json",
+  "ai_output_path": "runtime/stock-screener/data/ai_screening_result.json",
+  "scan_timestamp": "2026-04-21 10:32:20",
+  "ai_timestamp": "2026-04-21 10:32:20",
+  "source_scan_timestamp": "2026-04-21 10:32:20",
+  "selected_message_path": "/tmp/stock_midday_refresh.txt",
+  "selected_brief_path": "data/history/reports/screener/stock_recommendation_midday_2026-04-21_10-31-26_67165.txt",
+  "selected_report_path": "data/history/reports/screener/stock_recommendation_midday_2026-04-21_10-31-26_67165.md",
+  "selected_sendable_path": "data/history/reports/screener/stock_recommendation_midday_2026-04-21_10-31-26_67165.docx"
+}

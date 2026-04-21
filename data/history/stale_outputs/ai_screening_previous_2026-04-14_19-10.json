@@ -1,0 +1,4321 @@
+{
+  "timestamp": "2026-04-14 17:32:02",
+  "source_scan_timestamp": "2026-04-14 17:32:02",
+  "pool": "aggressive",
+  "pool_label": "进攻型池(中证500+沪深300)",
+  "market_regime": {
+    "score": 7,
+    "label": "进攻环境较强",
+    "regime": "aggressive",
+    "attack_ok": true,
+    "summary": "市场活跃度和强势股占比都不错，可正常做进攻型观察。",
+    "basis": "pool",
+    "sample_size": 77,
+    "metrics": {
+      "positive_ratio": 0.714,
+      "avg_change_pct": 1.53,
+      "avg_turnover": 2.54,
+      "strong_ratio": 0.312
+    },
+    "candidate_view": {
+      "score": 8,
+      "label": "进攻环境较强",
+      "regime": "aggressive",
+      "attack_ok": true,
+      "summary": "市场活跃度和强势股占比都不错，可正常做进攻型观察。",
+      "basis": "candidate",
+      "sample_size": 30,
+      "metrics": {
+        "positive_ratio": 0.967,
+        "avg_change_pct": 3.6,
+        "avg_turnover": 3.54,
+        "strong_ratio": 0.7
+      }
+    },
+    "candidate_score_gap": 1,
+    "candidate_gap_note": "候选口径与整体股票池接近，可把候选强度当作环境的辅助参考。"
+  },
+  "market_themes": {
+    "top_theme": "AI硬件链",
+    "summary": "今日偏双主线：主攻 AI硬件链，次主线 新能源链。 主线持续性：持续增强（19分）。",
+    "themes": [
+      {
+        "theme": "AI硬件链",
+        "score": 66.4,
+        "count": 5,
+        "weighted_count": 9.15,
+        "leader_codes": [
+          "工业富联(601138)",
+          "生益科技(600183)",
+          "长电科技(600584)"
+        ],
+        "persistence": {
+          "score": 19,
+          "label": "持续增强",
+          "summary": "主题权重增强；龙头稳定；连续两段维持",
+          "trend": "up",
+          "leader_stability": 0.67
+        },
+        "metrics": {
+          "count_score": 14.42,
+          "leader_score": 23.19,
+          "capital_score": 5.54,
+          "structure_score": 15,
+          "purity_score": 8.25,
+          "persistence_score": 19,
+          "total_flow_yi": 31.46,
+          "avg_flow_yi": 6.29,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 1.0,
+          "hot_ratio": 0.58
+        }
+      },
+      {
+        "theme": "新能源链",
+        "score": 65.14,
+        "count": 4,
+        "weighted_count": 7.76,
+        "leader_codes": [
+          "华友钴业(603799)",
+          "赣锋锂业(002460)",
+          "天齐锂业(002466)"
+        ],
+        "persistence": {
+          "score": 20,
+          "label": "持续增强",
+          "summary": "主题权重增强；主题分提升；龙头稳定",
+          "trend": "up",
+          "leader_stability": 1.0
+        },
+        "metrics": {
+          "count_score": 12.23,
+          "leader_score": 25,
+          "capital_score": 2.33,
+          "structure_score": 15,
+          "purity_score": 10.58,
+          "persistence_score": 20,
+          "total_flow_yi": 12.92,
+          "avg_flow_yi": 3.23,
+          "preferred_ratio": 0.5,
+          "keep_ratio": 1.0,
+          "hot_ratio": 0.19
+        }
+      },
+      {
+        "theme": "其他",
+        "score": 51.02,
+        "count": 13,
+        "weighted_count": 17.43,
+        "leader_codes": [
+          "天赐材料(002709)",
+          "金风科技(002202)",
+          "大华股份(002236)"
+        ],
+        "persistence": {
+          "score": 20,
+          "label": "持续增强",
+          "summary": "主题权重增强；主题分提升；龙头部分延续",
+          "trend": "up",
+          "leader_stability": 0.33
+        },
+        "metrics": {
+          "count_score": 25,
+          "leader_score": 22.9,
+          "capital_score": 5.46,
+          "structure_score": 15,
+          "purity_score": 2.5,
+          "persistence_score": 20,
+          "total_flow_yi": 32.86,
+          "avg_flow_yi": 2.53,
+          "preferred_ratio": 0.11,
+          "keep_ratio": 0.75,
+          "hot_ratio": 0.19
+        }
+      },
+      {
+        "theme": "有色资源链",
+        "score": 45.46,
+        "count": 2,
+        "weighted_count": 3.45,
+        "leader_codes": [
+          "紫金矿业(601899)",
+          "洛阳钼业(603993)"
+        ],
+        "persistence": {
+          "score": 18,
+          "label": "持续增强",
+          "summary": "主题权重增强；主题分提升；龙头部分延续",
+          "trend": "up",
+          "leader_stability": 0.5
+        },
+        "metrics": {
+          "count_score": 5.43,
+          "leader_score": 23.14,
+          "capital_score": 2.39,
+          "structure_score": 9,
+          "purity_score": 5.5,
+          "persistence_score": 18,
+          "total_flow_yi": 11.93,
+          "avg_flow_yi": 5.96,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 1.0,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "农业养殖链",
+        "score": 39.82,
+        "count": 2,
+        "weighted_count": 2.78,
+        "leader_codes": [
+          "新 希 望(000876)",
+          "牧原股份(002714)"
+        ],
+        "persistence": {
+          "score": 20,
+          "label": "持续增强",
+          "summary": "主题权重增强；主题分提升；龙头稳定",
+          "trend": "up",
+          "leader_stability": 1.0
+        },
+        "metrics": {
+          "count_score": 4.38,
+          "leader_score": 20.61,
+          "capital_score": 0.83,
+          "structure_score": 9,
+          "purity_score": 5.0,
+          "persistence_score": 20,
+          "total_flow_yi": 4.16,
+          "avg_flow_yi": 2.08,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 1.0,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "电网设备链",
+        "score": 26.73,
+        "count": 1,
+        "weighted_count": 1.35,
+        "leader_codes": [
+          "特变电工(600089)"
+        ],
+        "persistence": {
+          "score": 8,
+          "label": "延续但分化",
+          "summary": "更多依赖当前截面强度，历史延续性一般",
+          "trend": "neutral",
+          "leader_stability": 0.0
+        },
+        "metrics": {
+          "count_score": 2.12,
+          "leader_score": 19.12,
+          "capital_score": 0.49,
+          "structure_score": 0,
+          "purity_score": 5.0,
+          "persistence_score": 8,
+          "total_flow_yi": 2.03,
+          "avg_flow_yi": 2.03,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 1.0,
+          "hot_ratio": 0.0
+        }
+      }
+    ]
+  },
+  "screening_rules_applied": [
+    "保留 scan.py 已筛出的进攻型候选，按策略分别做二次过滤",
+    "成交额不足或底层 attack_profile 已淘汰的股票，直接排除",
+    "估值过热且盈利偏弱的股票，直接排除或降级观察",
+    "资金延续性不足、短线过热、进攻纯度一般的股票，降级观察",
+    "根据 market_regime 做攻守切换：弱势日压制进攻型通过率，中性日避免满仓追高",
+    "跨策略去重后生成 shortlist，并给出建议送 analyzer 的前 3"
+  ],
+  "strategies": {
+    "conservative": {
+      "label": "稳健",
+      "original_count": 0,
+      "selected_count": 0,
+      "approved_count": 0,
+      "caution_count": 0,
+      "excluded_count": 0,
+      "selected_stocks": [],
+      "top_stocks": [],
+      "excluded_stocks": []
+    },
+    "growth": {
+      "label": "成长",
+      "original_count": 3,
+      "selected_count": 3,
+      "approved_count": 2,
+      "caution_count": 1,
+      "excluded_count": 0,
+      "selected_stocks": [
+        {
+          "code": "603799",
+          "name": "华友钴业",
+          "score": 103.05,
+          "change_pct": 3.03,
+          "amount_yi": 79.9,
+          "theme": "新能源链",
+          "signals": [
+            "均线强多头",
+            "放量",
+            "接近突破",
+            "主力流入29576.2亿",
+            "PE偏低(20.0)"
+          ],
+          "strategy": "growth",
+          "strategy_label": "成长",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 2.96,
+            "consistency_score": 9,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 2.96,
+            "five_day_total_yi": 4.55
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 12,
+            "tags": [
+              "高换手",
+              "资金配合",
+              "连续2日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 9,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 19.97,
+            "roe": null,
+            "pb": 2.53,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "600584",
+          "name": "长电科技",
+          "score": 85.8,
+          "change_pct": 3.48,
+          "amount_yi": 36.4,
+          "theme": "AI硬件链",
+          "signals": [
+            "均线多头",
+            "强放量",
+            "接近突破",
+            "主力流入57020.3亿"
+          ],
+          "strategy": "growth",
+          "strategy_label": "成长",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "今日流入",
+            "flow_today_yi": 5.7,
+            "consistency_score": 8,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "今日流入",
+            "today_yi": 5.7,
+            "five_day_total_yi": 5.7
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 10,
+            "tags": [
+              "高换手",
+              "资金配合",
+              "单日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 50.69,
+            "roe": null,
+            "pb": 2.77,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "002709",
+          "name": "天赐材料",
+          "score": 89.25,
+          "change_pct": 5.65,
+          "amount_yi": 61.2,
+          "theme": "其他",
+          "signals": [
+            "均线强多头",
+            "高换手",
+            "接近突破",
+            "主力流入71142.4亿",
+            "爆量过热"
+          ],
+          "strategy": "growth",
+          "strategy_label": "成长",
+          "screening": {
+            "status": "caution",
+            "reason": "公告风险：诉讼",
+            "notes": [
+              "公告风险：诉讼",
+              "公告存在明确风险事件，限制直接推荐",
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [
+              "公告风险：诉讼",
+              "公告存在明确风险事件，限制直接推荐"
+            ],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "今日流入",
+            "flow_today_yi": 7.11,
+            "consistency_score": 4,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "公告风险：诉讼；爆量后可能冲高回落",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "今日流入",
+            "today_yi": 7.11,
+            "five_day_total_yi": 7.11
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 20,
+            "tags": [
+              "偏好行业:材料",
+              "高换手",
+              "涨幅强",
+              "资金配合"
+            ]
+          },
+          "consistency": {
+            "score": 4,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 73.87,
+            "roe": null,
+            "pb": 5.63,
+            "net_profit": null
+          },
+          "notice_risk_tags": [
+            {
+              "label": "诉讼",
+              "title": "关于公司提起诉讼的公告",
+              "date": "2026-04-02"
+            }
+          ]
+        }
+      ],
+      "top_stocks": [
+        {
+          "code": "603799",
+          "name": "华友钴业",
+          "score": 103.05,
+          "change_pct": 3.03,
+          "amount_yi": 79.9,
+          "theme": "新能源链",
+          "signals": [
+            "均线强多头",
+            "放量",
+            "接近突破",
+            "主力流入29576.2亿",
+            "PE偏低(20.0)"
+          ],
+          "strategy": "growth",
+          "strategy_label": "成长",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 2.96,
+            "consistency_score": 9,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 2.96,
+            "five_day_total_yi": 4.55
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 12,
+            "tags": [
+              "高换手",
+              "资金配合",
+              "连续2日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 9,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 19.97,
+            "roe": null,
+            "pb": 2.53,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "600584",
+          "name": "长电科技",
+          "score": 85.8,
+          "change_pct": 3.48,
+          "amount_yi": 36.4,
+          "theme": "AI硬件链",
+          "signals": [
+            "均线多头",
+            "强放量",
+            "接近突破",
+            "主力流入57020.3亿"
+          ],
+          "strategy": "growth",
+          "strategy_label": "成长",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "今日流入",
+            "flow_today_yi": 5.7,
+            "consistency_score": 8,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "今日流入",
+            "today_yi": 5.7,
+            "five_day_total_yi": 5.7
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 10,
+            "tags": [
+              "高换手",
+              "资金配合",
+              "单日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 50.69,
+            "roe": null,
+            "pb": 2.77,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "002709",
+          "name": "天赐材料",
+          "score": 89.25,
+          "change_pct": 5.65,
+          "amount_yi": 61.2,
+          "theme": "其他",
+          "signals": [
+            "均线强多头",
+            "高换手",
+            "接近突破",
+            "主力流入71142.4亿",
+            "爆量过热"
+          ],
+          "strategy": "growth",
+          "strategy_label": "成长",
+          "screening": {
+            "status": "caution",
+            "reason": "公告风险：诉讼",
+            "notes": [
+              "公告风险：诉讼",
+              "公告存在明确风险事件，限制直接推荐",
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [
+              "公告风险：诉讼",
+              "公告存在明确风险事件，限制直接推荐"
+            ],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "今日流入",
+            "flow_today_yi": 7.11,
+            "consistency_score": 4,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "公告风险：诉讼；爆量后可能冲高回落",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "今日流入",
+            "today_yi": 7.11,
+            "five_day_total_yi": 7.11
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 20,
+            "tags": [
+              "偏好行业:材料",
+              "高换手",
+              "涨幅强",
+              "资金配合"
+            ]
+          },
+          "consistency": {
+            "score": 4,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 73.87,
+            "roe": null,
+            "pb": 5.63,
+            "net_profit": null
+          },
+          "notice_risk_tags": [
+            {
+              "label": "诉讼",
+              "title": "关于公司提起诉讼的公告",
+              "date": "2026-04-02"
+            }
+          ]
+        }
+      ],
+      "excluded_stocks": []
+    },
+    "rebound": {
+      "label": "反弹",
+      "original_count": 0,
+      "selected_count": 0,
+      "approved_count": 0,
+      "caution_count": 0,
+      "excluded_count": 0,
+      "selected_stocks": [],
+      "top_stocks": [],
+      "excluded_stocks": []
+    },
+    "hot": {
+      "label": "热门",
+      "original_count": 9,
+      "selected_count": 9,
+      "approved_count": 4,
+      "caution_count": 5,
+      "excluded_count": 0,
+      "selected_stocks": [
+        {
+          "code": "603799",
+          "name": "华友钴业",
+          "score": 103.05,
+          "change_pct": 3.03,
+          "amount_yi": 79.9,
+          "theme": "新能源链",
+          "signals": [
+            "均线强多头",
+            "放量",
+            "接近突破",
+            "主力流入29576.2亿",
+            "PE偏低(20.0)"
+          ],
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 2.96,
+            "consistency_score": 9,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 2.96,
+            "five_day_total_yi": 4.55
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 12,
+            "tags": [
+              "高换手",
+              "资金配合",
+              "连续2日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 9,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 19.97,
+            "roe": null,
+            "pb": 2.53,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "002202",
+          "name": "金风科技",
+          "score": 87.9,
+          "change_pct": 4.8,
+          "amount_yi": 69.4,
+          "theme": "其他",
+          "signals": [
+            "站上MA5",
+            "强放量",
+            "高换手",
+            "低位反弹",
+            "主力流入46801.8亿"
+          ],
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "今日流入",
+            "flow_today_yi": 4.68,
+            "consistency_score": 8,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "低位活跃反弹 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负",
+          "capital_flow": {
+            "trend": "今日流入",
+            "today_yi": 4.68,
+            "five_day_total_yi": 4.68
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 6,
+            "tags": [
+              "高换手",
+              "资金配合",
+              "单日流入",
+              "仍在低位"
+            ]
+          },
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 38.52,
+            "roe": null,
+            "pb": 2.75,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "600183",
+          "name": "生益科技",
+          "score": 87.7,
+          "change_pct": 5.28,
+          "amount_yi": 53.1,
+          "theme": "AI硬件链",
+          "signals": [
+            "均线多头",
+            "接近突破",
+            "主力流入34765.7亿"
+          ],
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 3.48,
+            "consistency_score": 9,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 成交额充足",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 3.48,
+            "five_day_total_yi": 5.97
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 12,
+            "tags": [
+              "涨幅强",
+              "资金配合",
+              "连续2日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 9,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 48.68,
+            "roe": null,
+            "pb": 10.45,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "600584",
+          "name": "长电科技",
+          "score": 85.8,
+          "change_pct": 3.48,
+          "amount_yi": 36.4,
+          "theme": "AI硬件链",
+          "signals": [
+            "均线多头",
+            "强放量",
+            "接近突破",
+            "主力流入57020.3亿"
+          ],
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "今日流入",
+            "flow_today_yi": 5.7,
+            "consistency_score": 8,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "今日流入",
+            "today_yi": 5.7,
+            "five_day_total_yi": 5.7
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 10,
+            "tags": [
+              "高换手",
+              "资金配合",
+              "单日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 50.69,
+            "roe": null,
+            "pb": 2.77,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "002460",
+          "name": "赣锋锂业",
+          "score": 89.4,
+          "change_pct": 4.62,
+          "amount_yi": 78.6,
+          "theme": "新能源链",
+          "signals": [
+            "均线强多头",
+            "接近突破",
+            "主力流入66162.5亿",
+            "资金反转",
+            "PE偏高(114.8)"
+          ],
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "screening": {
+            "status": "caution",
+            "reason": "估值过热，等待业绩验证",
+            "notes": [
+              "估值过热，等待业绩验证",
+              "公告风险：质押",
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [
+              "估值过热，等待业绩验证",
+              "公告风险：质押"
+            ],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "由负转正",
+            "flow_today_yi": 6.62,
+            "consistency_score": 4,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "公告风险：质押；估值偏高；周期波动较大",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "由负转正",
+            "today_yi": 6.62,
+            "five_day_total_yi": 0.16
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 13,
+            "tags": [
+              "偏好行业:锂",
+              "高换手",
+              "资金修复",
+              "资金配合"
+            ]
+          },
+          "consistency": {
+            "score": 4,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 114.75,
+            "roe": null,
+            "pb": 4.1,
+            "net_profit": null
+          },
+          "notice_risk_tags": [
+            {
+              "label": "质押",
+              "title": "关于股东部分股份解除质押的公告",
+              "date": "2026-04-02"
+            }
+          ]
+        },
+        {
+          "code": "002709",
+          "name": "天赐材料",
+          "score": 89.25,
+          "change_pct": 5.65,
+          "amount_yi": 61.2,
+          "theme": "其他",
+          "signals": [
+            "均线强多头",
+            "高换手",
+            "接近突破",
+            "主力流入71142.4亿",
+            "爆量过热"
+          ],
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "screening": {
+            "status": "caution",
+            "reason": "公告风险：诉讼",
+            "notes": [
+              "公告风险：诉讼",
+              "公告存在明确风险事件，限制直接推荐",
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [
+              "公告风险：诉讼",
+              "公告存在明确风险事件，限制直接推荐"
+            ],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "今日流入",
+            "flow_today_yi": 7.11,
+            "consistency_score": 4,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "公告风险：诉讼；爆量后可能冲高回落",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "今日流入",
+            "today_yi": 7.11,
+            "five_day_total_yi": 7.11
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 20,
+            "tags": [
+              "偏好行业:材料",
+              "高换手",
+              "涨幅强",
+              "资金配合"
+            ]
+          },
+          "consistency": {
+            "score": 4,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 73.87,
+            "roe": null,
+            "pb": 5.63,
+            "net_profit": null
+          },
+          "notice_risk_tags": [
+            {
+              "label": "诉讼",
+              "title": "关于公司提起诉讼的公告",
+              "date": "2026-04-02"
+            }
+          ]
+        },
+        {
+          "code": "002466",
+          "name": "天齐锂业",
+          "score": 87.0,
+          "change_pct": 3.91,
+          "amount_yi": 48.0,
+          "theme": "新能源链",
+          "signals": [
+            "均线强多头",
+            "接近突破",
+            "主力流入10395.1亿",
+            "PE偏高(238.0)"
+          ],
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "screening": {
+            "status": "caution",
+            "reason": "估值过热，等待业绩验证",
+            "notes": [
+              "估值过热，等待业绩验证",
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [
+              "估值过热，等待业绩验证"
+            ],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 1.04,
+            "consistency_score": 6,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "估值偏高；周期波动较大",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 1.04,
+            "five_day_total_yi": 3.65
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 14,
+            "tags": [
+              "偏好行业:锂",
+              "高换手",
+              "资金配合",
+              "连续2日流入"
+            ]
+          },
+          "consistency": {
+            "score": 6,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 238.0,
+            "roe": null,
+            "pb": 2.6,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "002812",
+          "name": "恩捷股份",
+          "score": 82.25,
+          "change_pct": 5.71,
+          "amount_yi": 29.6,
+          "theme": "新能源链",
+          "signals": [
+            "均线多头",
+            "主力流入23053.1亿"
+          ],
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "screening": {
+            "status": "caution",
+            "reason": "业绩仍未修复，先观察",
+            "notes": [
+              "业绩仍未修复，先观察",
+              "公告风险：质押",
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [
+              "业绩仍未修复，先观察",
+              "公告风险：质押"
+            ],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "今日流入",
+            "flow_today_yi": 2.31,
+            "consistency_score": 6,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "资金驱动走强 + 换手充分",
+          "main_risk": "公告风险：质押；留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负",
+          "capital_flow": {
+            "trend": "今日流入",
+            "today_yi": 2.31,
+            "five_day_total_yi": 2.31
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 13,
+            "tags": [
+              "高换手",
+              "涨幅强",
+              "资金配合",
+              "单日流入"
+            ]
+          },
+          "consistency": {
+            "score": 6,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": -124.03,
+            "roe": null,
+            "pb": 2.77,
+            "net_profit": null
+          },
+          "notice_risk_tags": [
+            {
+              "label": "质押",
+              "title": "关于股东部分股份质押变动的公告",
+              "date": "2026-03-28"
+            }
+          ]
+        },
+        {
+          "code": "603986",
+          "name": "兆易创新",
+          "score": 74.5,
+          "change_pct": 6.82,
+          "amount_yi": 128.6,
+          "theme": "其他",
+          "signals": [
+            "均线多头",
+            "主力流入153250.6亿",
+            "PE偏高(119.1)"
+          ],
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "screening": {
+            "status": "caution",
+            "reason": "估值过热，等待业绩验证",
+            "notes": [
+              "估值过热，等待业绩验证",
+              "公告风险：减持",
+              "公告存在明确风险事件，限制直接推荐",
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [
+              "估值过热，等待业绩验证",
+              "公告风险：减持",
+              "公告存在明确风险事件，限制直接推荐"
+            ],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "今日流入",
+            "flow_today_yi": 15.33,
+            "consistency_score": 2,
+            "consistency_label": "中一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ]
+          },
+          "entry_reason": "资金驱动走强 + 换手充分",
+          "main_risk": "公告风险：减持；估值偏高",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负",
+          "capital_flow": {
+            "trend": "今日流入",
+            "today_yi": 15.33,
+            "five_day_total_yi": 15.33
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 8,
+            "tags": [
+              "高换手",
+              "涨幅强",
+              "资金配合",
+              "单日流入"
+            ]
+          },
+          "consistency": {
+            "score": 2,
+            "label": "中一致性",
+            "notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 119.12,
+            "roe": null,
+            "pb": 10.33,
+            "net_profit": null
+          },
+          "notice_risk_tags": [
+            {
+              "label": "减持",
+              "title": "兆易创新股东减持股份计划公告",
+              "date": "2026-04-08"
+            }
+          ]
+        }
+      ],
+      "top_stocks": [
+        {
+          "code": "603799",
+          "name": "华友钴业",
+          "score": 103.05,
+          "change_pct": 3.03,
+          "amount_yi": 79.9,
+          "theme": "新能源链",
+          "signals": [
+            "均线强多头",
+            "放量",
+            "接近突破",
+            "主力流入29576.2亿",
+            "PE偏低(20.0)"
+          ],
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 2.96,
+            "consistency_score": 9,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 2.96,
+            "five_day_total_yi": 4.55
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 12,
+            "tags": [
+              "高换手",
+              "资金配合",
+              "连续2日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 9,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 19.97,
+            "roe": null,
+            "pb": 2.53,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "002202",
+          "name": "金风科技",
+          "score": 87.9,
+          "change_pct": 4.8,
+          "amount_yi": 69.4,
+          "theme": "其他",
+          "signals": [
+            "站上MA5",
+            "强放量",
+            "高换手",
+            "低位反弹",
+            "主力流入46801.8亿"
+          ],
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "今日流入",
+            "flow_today_yi": 4.68,
+            "consistency_score": 8,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "低位活跃反弹 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负",
+          "capital_flow": {
+            "trend": "今日流入",
+            "today_yi": 4.68,
+            "five_day_total_yi": 4.68
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 6,
+            "tags": [
+              "高换手",
+              "资金配合",
+              "单日流入",
+              "仍在低位"
+            ]
+          },
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 38.52,
+            "roe": null,
+            "pb": 2.75,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "600183",
+          "name": "生益科技",
+          "score": 87.7,
+          "change_pct": 5.28,
+          "amount_yi": 53.1,
+          "theme": "AI硬件链",
+          "signals": [
+            "均线多头",
+            "接近突破",
+            "主力流入34765.7亿"
+          ],
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 3.48,
+            "consistency_score": 9,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 成交额充足",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 3.48,
+            "five_day_total_yi": 5.97
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 12,
+            "tags": [
+              "涨幅强",
+              "资金配合",
+              "连续2日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 9,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 48.68,
+            "roe": null,
+            "pb": 10.45,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "600584",
+          "name": "长电科技",
+          "score": 85.8,
+          "change_pct": 3.48,
+          "amount_yi": 36.4,
+          "theme": "AI硬件链",
+          "signals": [
+            "均线多头",
+            "强放量",
+            "接近突破",
+            "主力流入57020.3亿"
+          ],
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "今日流入",
+            "flow_today_yi": 5.7,
+            "consistency_score": 8,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "今日流入",
+            "today_yi": 5.7,
+            "five_day_total_yi": 5.7
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 10,
+            "tags": [
+              "高换手",
+              "资金配合",
+              "单日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 50.69,
+            "roe": null,
+            "pb": 2.77,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "002460",
+          "name": "赣锋锂业",
+          "score": 89.4,
+          "change_pct": 4.62,
+          "amount_yi": 78.6,
+          "theme": "新能源链",
+          "signals": [
+            "均线强多头",
+            "接近突破",
+            "主力流入66162.5亿",
+            "资金反转",
+            "PE偏高(114.8)"
+          ],
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "screening": {
+            "status": "caution",
+            "reason": "估值过热，等待业绩验证",
+            "notes": [
+              "估值过热，等待业绩验证",
+              "公告风险：质押",
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [
+              "估值过热，等待业绩验证",
+              "公告风险：质押"
+            ],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "由负转正",
+            "flow_today_yi": 6.62,
+            "consistency_score": 4,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "公告风险：质押；估值偏高；周期波动较大",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "由负转正",
+            "today_yi": 6.62,
+            "five_day_total_yi": 0.16
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 13,
+            "tags": [
+              "偏好行业:锂",
+              "高换手",
+              "资金修复",
+              "资金配合"
+            ]
+          },
+          "consistency": {
+            "score": 4,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 114.75,
+            "roe": null,
+            "pb": 4.1,
+            "net_profit": null
+          },
+          "notice_risk_tags": [
+            {
+              "label": "质押",
+              "title": "关于股东部分股份解除质押的公告",
+              "date": "2026-04-02"
+            }
+          ]
+        }
+      ],
+      "excluded_stocks": []
+    },
+    "combined": {
+      "label": "综合",
+      "original_count": 10,
+      "selected_count": 10,
+      "approved_count": 6,
+      "caution_count": 4,
+      "excluded_count": 0,
+      "selected_stocks": [
+        {
+          "code": "603799",
+          "name": "华友钴业",
+          "score": 103.05,
+          "change_pct": 3.03,
+          "amount_yi": 79.9,
+          "theme": "新能源链",
+          "signals": [
+            "均线强多头",
+            "放量",
+            "接近突破",
+            "主力流入29576.2亿",
+            "PE偏低(20.0)"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 2.96,
+            "consistency_score": 9,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 2.96,
+            "five_day_total_yi": 4.55
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 12,
+            "tags": [
+              "高换手",
+              "资金配合",
+              "连续2日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 9,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 19.97,
+            "roe": null,
+            "pb": 2.53,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "002202",
+          "name": "金风科技",
+          "score": 87.9,
+          "change_pct": 4.8,
+          "amount_yi": 69.4,
+          "theme": "其他",
+          "signals": [
+            "站上MA5",
+            "强放量",
+            "高换手",
+            "低位反弹",
+            "主力流入46801.8亿"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "今日流入",
+            "flow_today_yi": 4.68,
+            "consistency_score": 8,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "低位活跃反弹 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负",
+          "capital_flow": {
+            "trend": "今日流入",
+            "today_yi": 4.68,
+            "five_day_total_yi": 4.68
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 6,
+            "tags": [
+              "高换手",
+              "资金配合",
+              "单日流入",
+              "仍在低位"
+            ]
+          },
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 38.52,
+            "roe": null,
+            "pb": 2.75,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "600183",
+          "name": "生益科技",
+          "score": 87.7,
+          "change_pct": 5.28,
+          "amount_yi": 53.1,
+          "theme": "AI硬件链",
+          "signals": [
+            "均线多头",
+            "接近突破",
+            "主力流入34765.7亿"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 3.48,
+            "consistency_score": 9,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 成交额充足",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 3.48,
+            "five_day_total_yi": 5.97
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 12,
+            "tags": [
+              "涨幅强",
+              "资金配合",
+              "连续2日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 9,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 48.68,
+            "roe": null,
+            "pb": 10.45,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "600584",
+          "name": "长电科技",
+          "score": 85.8,
+          "change_pct": 3.48,
+          "amount_yi": 36.4,
+          "theme": "AI硬件链",
+          "signals": [
+            "均线多头",
+            "强放量",
+            "接近突破",
+            "主力流入57020.3亿"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "今日流入",
+            "flow_today_yi": 5.7,
+            "consistency_score": 8,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "今日流入",
+            "today_yi": 5.7,
+            "five_day_total_yi": 5.7
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 10,
+            "tags": [
+              "高换手",
+              "资金配合",
+              "单日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 50.69,
+            "roe": null,
+            "pb": 2.77,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "002938",
+          "name": "鹏鼎控股",
+          "score": 85.7,
+          "change_pct": 4.2,
+          "amount_yi": 31.4,
+          "theme": "AI硬件链",
+          "signals": [
+            "均线强多头",
+            "接近突破",
+            "主力流入6402.5亿"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 0.64,
+            "consistency_score": 9,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 成交额充足",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 0.64,
+            "five_day_total_yi": 1.5
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 5,
+            "tags": [
+              "低换手脉冲",
+              "资金配合",
+              "连续2日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 9,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 37.41,
+            "roe": null,
+            "pb": 4.1,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "002236",
+          "name": "大华股份",
+          "score": 81.45,
+          "change_pct": 3.05,
+          "amount_yi": 9.6,
+          "theme": "其他",
+          "signals": [
+            "均线强多头",
+            "放量",
+            "接近突破",
+            "主力流入4700.8亿",
+            "PE偏低(15.6)"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "今日流入",
+            "flow_today_yi": 0.47,
+            "consistency_score": 8,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "今日流入",
+            "today_yi": 0.47,
+            "five_day_total_yi": 0.47
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 6,
+            "tags": [
+              "资金配合",
+              "单日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 15.55,
+            "roe": null,
+            "pb": 1.57,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "002460",
+          "name": "赣锋锂业",
+          "score": 89.4,
+          "change_pct": 4.62,
+          "amount_yi": 78.6,
+          "theme": "新能源链",
+          "signals": [
+            "均线强多头",
+            "接近突破",
+            "主力流入66162.5亿",
+            "资金反转",
+            "PE偏高(114.8)"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "caution",
+            "reason": "估值过热，等待业绩验证",
+            "notes": [
+              "估值过热，等待业绩验证",
+              "公告风险：质押",
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [
+              "估值过热，等待业绩验证",
+              "公告风险：质押"
+            ],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "由负转正",
+            "flow_today_yi": 6.62,
+            "consistency_score": 4,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "公告风险：质押；估值偏高；周期波动较大",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "由负转正",
+            "today_yi": 6.62,
+            "five_day_total_yi": 0.16
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 13,
+            "tags": [
+              "偏好行业:锂",
+              "高换手",
+              "资金修复",
+              "资金配合"
+            ]
+          },
+          "consistency": {
+            "score": 4,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 114.75,
+            "roe": null,
+            "pb": 4.1,
+            "net_profit": null
+          },
+          "notice_risk_tags": [
+            {
+              "label": "质押",
+              "title": "关于股东部分股份解除质押的公告",
+              "date": "2026-04-02"
+            }
+          ]
+        },
+        {
+          "code": "002709",
+          "name": "天赐材料",
+          "score": 89.25,
+          "change_pct": 5.65,
+          "amount_yi": 61.2,
+          "theme": "其他",
+          "signals": [
+            "均线强多头",
+            "高换手",
+            "接近突破",
+            "主力流入71142.4亿",
+            "爆量过热"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "caution",
+            "reason": "公告风险：诉讼",
+            "notes": [
+              "公告风险：诉讼",
+              "公告存在明确风险事件，限制直接推荐",
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [
+              "公告风险：诉讼",
+              "公告存在明确风险事件，限制直接推荐"
+            ],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "今日流入",
+            "flow_today_yi": 7.11,
+            "consistency_score": 4,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "公告风险：诉讼；爆量后可能冲高回落",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "今日流入",
+            "today_yi": 7.11,
+            "five_day_total_yi": 7.11
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 20,
+            "tags": [
+              "偏好行业:材料",
+              "高换手",
+              "涨幅强",
+              "资金配合"
+            ]
+          },
+          "consistency": {
+            "score": 4,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 73.87,
+            "roe": null,
+            "pb": 5.63,
+            "net_profit": null
+          },
+          "notice_risk_tags": [
+            {
+              "label": "诉讼",
+              "title": "关于公司提起诉讼的公告",
+              "date": "2026-04-02"
+            }
+          ]
+        },
+        {
+          "code": "002466",
+          "name": "天齐锂业",
+          "score": 87.0,
+          "change_pct": 3.91,
+          "amount_yi": 48.0,
+          "theme": "新能源链",
+          "signals": [
+            "均线强多头",
+            "接近突破",
+            "主力流入10395.1亿",
+            "PE偏高(238.0)"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "caution",
+            "reason": "估值过热，等待业绩验证",
+            "notes": [
+              "估值过热，等待业绩验证",
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [
+              "估值过热，等待业绩验证"
+            ],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 1.04,
+            "consistency_score": 6,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "估值偏高；周期波动较大",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 1.04,
+            "five_day_total_yi": 3.65
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 14,
+            "tags": [
+              "偏好行业:锂",
+              "高换手",
+              "资金配合",
+              "连续2日流入"
+            ]
+          },
+          "consistency": {
+            "score": 6,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 238.0,
+            "roe": null,
+            "pb": 2.6,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "002812",
+          "name": "恩捷股份",
+          "score": 82.25,
+          "change_pct": 5.71,
+          "amount_yi": 29.6,
+          "theme": "新能源链",
+          "signals": [
+            "均线多头",
+            "主力流入23053.1亿"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "caution",
+            "reason": "业绩仍未修复，先观察",
+            "notes": [
+              "业绩仍未修复，先观察",
+              "公告风险：质押",
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [
+              "业绩仍未修复，先观察",
+              "公告风险：质押"
+            ],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "今日流入",
+            "flow_today_yi": 2.31,
+            "consistency_score": 6,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "资金驱动走强 + 换手充分",
+          "main_risk": "公告风险：质押；留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负",
+          "capital_flow": {
+            "trend": "今日流入",
+            "today_yi": 2.31,
+            "five_day_total_yi": 2.31
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 13,
+            "tags": [
+              "高换手",
+              "涨幅强",
+              "资金配合",
+              "单日流入"
+            ]
+          },
+          "consistency": {
+            "score": 6,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": -124.03,
+            "roe": null,
+            "pb": 2.77,
+            "net_profit": null
+          },
+          "notice_risk_tags": [
+            {
+              "label": "质押",
+              "title": "关于股东部分股份质押变动的公告",
+              "date": "2026-03-28"
+            }
+          ]
+        }
+      ],
+      "top_stocks": [
+        {
+          "code": "603799",
+          "name": "华友钴业",
+          "score": 103.05,
+          "change_pct": 3.03,
+          "amount_yi": 79.9,
+          "theme": "新能源链",
+          "signals": [
+            "均线强多头",
+            "放量",
+            "接近突破",
+            "主力流入29576.2亿",
+            "PE偏低(20.0)"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 2.96,
+            "consistency_score": 9,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 2.96,
+            "five_day_total_yi": 4.55
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 12,
+            "tags": [
+              "高换手",
+              "资金配合",
+              "连续2日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 9,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 19.97,
+            "roe": null,
+            "pb": 2.53,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "002202",
+          "name": "金风科技",
+          "score": 87.9,
+          "change_pct": 4.8,
+          "amount_yi": 69.4,
+          "theme": "其他",
+          "signals": [
+            "站上MA5",
+            "强放量",
+            "高换手",
+            "低位反弹",
+            "主力流入46801.8亿"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "今日流入",
+            "flow_today_yi": 4.68,
+            "consistency_score": 8,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "低位活跃反弹 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负",
+          "capital_flow": {
+            "trend": "今日流入",
+            "today_yi": 4.68,
+            "five_day_total_yi": 4.68
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 6,
+            "tags": [
+              "高换手",
+              "资金配合",
+              "单日流入",
+              "仍在低位"
+            ]
+          },
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 38.52,
+            "roe": null,
+            "pb": 2.75,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "600183",
+          "name": "生益科技",
+          "score": 87.7,
+          "change_pct": 5.28,
+          "amount_yi": 53.1,
+          "theme": "AI硬件链",
+          "signals": [
+            "均线多头",
+            "接近突破",
+            "主力流入34765.7亿"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入",
+              "主题与价格共振"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 3.48,
+            "consistency_score": 9,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 成交额充足",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 3.48,
+            "five_day_total_yi": 5.97
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 12,
+            "tags": [
+              "涨幅强",
+              "资金配合",
+              "连续2日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 9,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 48.68,
+            "roe": null,
+            "pb": 10.45,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "600584",
+          "name": "长电科技",
+          "score": 85.8,
+          "change_pct": 3.48,
+          "amount_yi": 36.4,
+          "theme": "AI硬件链",
+          "signals": [
+            "均线多头",
+            "强放量",
+            "接近突破",
+            "主力流入57020.3亿"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "今日流入",
+            "flow_today_yi": 5.7,
+            "consistency_score": 8,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "今日流入",
+            "today_yi": 5.7,
+            "five_day_total_yi": 5.7
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 10,
+            "tags": [
+              "高换手",
+              "资金配合",
+              "单日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 50.69,
+            "roe": null,
+            "pb": 2.77,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        },
+        {
+          "code": "002938",
+          "name": "鹏鼎控股",
+          "score": 85.7,
+          "change_pct": 4.2,
+          "amount_yi": 31.4,
+          "theme": "AI硬件链",
+          "signals": [
+            "均线强多头",
+            "接近突破",
+            "主力流入6402.5亿"
+          ],
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "screening": {
+            "status": "approved",
+            "reason": "成交额充足",
+            "notes": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "hard_reasons": [],
+            "caution_reasons": [],
+            "positive_signals": [
+              "成交额充足",
+              "主力资金仍为净流入"
+            ],
+            "capital_trend": "连续2日流入",
+            "flow_today_yi": 0.64,
+            "consistency_score": 9,
+            "consistency_label": "高一致性",
+            "consistency_notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "entry_reason": "趋势突破+资金配合 + 成交额充足",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+          "capital_flow": {
+            "trend": "连续2日流入",
+            "today_yi": 0.64,
+            "five_day_total_yi": 1.5
+          },
+          "attack_profile": {
+            "status": "keep",
+            "bias_score": 5,
+            "tags": [
+              "低换手脉冲",
+              "资金配合",
+              "连续2日流入",
+              "趋势突破区"
+            ]
+          },
+          "consistency": {
+            "score": 9,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          },
+          "fundamentals": {
+            "pe_ttm": 37.41,
+            "roe": null,
+            "pb": 4.1,
+            "net_profit": null
+          },
+          "notice_risk_tags": []
+        }
+      ],
+      "excluded_stocks": []
+    }
+  },
+  "shortlist": [
+    {
+      "code": "603799",
+      "name": "华友钴业",
+      "best_score": 103.05,
+      "change_pct": 3.03,
+      "amount_yi": 79.9,
+      "strategy_hits": [
+        "growth",
+        "hot",
+        "combined"
+      ],
+      "strategy_labels": [
+        "成长",
+        "热门",
+        "综合"
+      ],
+      "themes": [
+        "新能源链"
+      ],
+      "entry_reason": "趋势突破+资金配合 + 换手充分",
+      "main_risk": "留意次日承接强度",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "signals": [
+        "均线强多头",
+        "放量",
+        "接近突破",
+        "主力流入29576.2亿",
+        "PE偏低(20.0)"
+      ],
+      "screening_reasons": [
+        "成交额充足"
+      ],
+      "capital_flow": {
+        "trend": "连续2日流入",
+        "today_yi": 2.96,
+        "five_day_total_yi": 4.55
+      },
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 12,
+        "tags": [
+          "高换手",
+          "资金配合",
+          "连续2日流入",
+          "趋势突破区"
+        ]
+      },
+      "fundamentals": {
+        "pe_ttm": 19.97,
+        "roe": null,
+        "pb": 2.53,
+        "net_profit": null
+      },
+      "consistency": {
+        "score": 9,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "流动性支持",
+          "进攻风格匹配"
+        ]
+      },
+      "variants": [
+        {
+          "strategy": "growth",
+          "strategy_label": "成长",
+          "score": 103.05,
+          "status": "approved",
+          "reason": "成交额充足",
+          "consistency": {
+            "score": 9,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        },
+        {
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "score": 103.05,
+          "status": "approved",
+          "reason": "成交额充足",
+          "consistency": {
+            "score": 9,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        },
+        {
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "score": 103.05,
+          "status": "approved",
+          "reason": "成交额充足",
+          "consistency": {
+            "score": 9,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        }
+      ],
+      "screening_status": "approved",
+      "screening_note": "成交额充足",
+      "strategy_count": 3,
+      "approved_hits": 3,
+      "caution_hits": 0,
+      "priority_score": 134.55,
+      "tier": "A",
+      "tier_note": "可直接送 analyzer",
+      "tier_rank": 3
+    },
+    {
+      "code": "600584",
+      "name": "长电科技",
+      "best_score": 85.8,
+      "change_pct": 3.48,
+      "amount_yi": 36.4,
+      "strategy_hits": [
+        "growth",
+        "hot",
+        "combined"
+      ],
+      "strategy_labels": [
+        "成长",
+        "热门",
+        "综合"
+      ],
+      "themes": [
+        "AI硬件链"
+      ],
+      "entry_reason": "趋势突破+资金配合 + 换手充分",
+      "main_risk": "留意次日承接强度",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "signals": [
+        "均线多头",
+        "强放量",
+        "接近突破",
+        "主力流入57020.3亿"
+      ],
+      "screening_reasons": [
+        "成交额充足"
+      ],
+      "capital_flow": {
+        "trend": "今日流入",
+        "today_yi": 5.7,
+        "five_day_total_yi": 5.7
+      },
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 10,
+        "tags": [
+          "高换手",
+          "资金配合",
+          "单日流入",
+          "趋势突破区"
+        ]
+      },
+      "fundamentals": {
+        "pe_ttm": 50.69,
+        "roe": null,
+        "pb": 2.77,
+        "net_profit": null
+      },
+      "consistency": {
+        "score": 8,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "流动性支持",
+          "进攻风格匹配"
+        ]
+      },
+      "variants": [
+        {
+          "strategy": "growth",
+          "strategy_label": "成长",
+          "score": 85.8,
+          "status": "approved",
+          "reason": "成交额充足",
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        },
+        {
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "score": 85.8,
+          "status": "approved",
+          "reason": "成交额充足",
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        },
+        {
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "score": 85.8,
+          "status": "approved",
+          "reason": "成交额充足",
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        }
+      ],
+      "screening_status": "approved",
+      "screening_note": "成交额充足",
+      "strategy_count": 3,
+      "approved_hits": 3,
+      "caution_hits": 0,
+      "priority_score": 115.8,
+      "tier": "A",
+      "tier_note": "可直接送 analyzer",
+      "tier_rank": 3
+    },
+    {
+      "code": "600183",
+      "name": "生益科技",
+      "best_score": 87.7,
+      "change_pct": 5.28,
+      "amount_yi": 53.1,
+      "strategy_hits": [
+        "hot",
+        "combined"
+      ],
+      "strategy_labels": [
+        "热门",
+        "综合"
+      ],
+      "themes": [
+        "AI硬件链"
+      ],
+      "entry_reason": "趋势突破+资金配合 + 成交额充足",
+      "main_risk": "留意次日承接强度",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "signals": [
+        "均线多头",
+        "接近突破",
+        "主力流入34765.7亿"
+      ],
+      "screening_reasons": [
+        "成交额充足"
+      ],
+      "capital_flow": {
+        "trend": "连续2日流入",
+        "today_yi": 3.48,
+        "five_day_total_yi": 5.97
+      },
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 12,
+        "tags": [
+          "涨幅强",
+          "资金配合",
+          "连续2日流入",
+          "趋势突破区"
+        ]
+      },
+      "fundamentals": {
+        "pe_ttm": 48.68,
+        "roe": null,
+        "pb": 10.45,
+        "net_profit": null
+      },
+      "consistency": {
+        "score": 9,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "流动性支持",
+          "进攻风格匹配"
+        ]
+      },
+      "variants": [
+        {
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "score": 87.7,
+          "status": "approved",
+          "reason": "成交额充足",
+          "consistency": {
+            "score": 9,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        },
+        {
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "score": 87.7,
+          "status": "approved",
+          "reason": "成交额充足",
+          "consistency": {
+            "score": 9,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        }
+      ],
+      "screening_status": "approved",
+      "screening_note": "成交额充足",
+      "strategy_count": 2,
+      "approved_hits": 2,
+      "caution_hits": 0,
+      "priority_score": 113.2,
+      "tier": "A",
+      "tier_note": "可直接送 analyzer",
+      "tier_rank": 3
+    },
+    {
+      "code": "002202",
+      "name": "金风科技",
+      "best_score": 87.9,
+      "change_pct": 4.8,
+      "amount_yi": 69.4,
+      "strategy_hits": [
+        "hot",
+        "combined"
+      ],
+      "strategy_labels": [
+        "热门",
+        "综合"
+      ],
+      "themes": [
+        "其他"
+      ],
+      "entry_reason": "低位活跃反弹 + 换手充分",
+      "main_risk": "留意次日承接强度",
+      "watch_condition": "继续放量上攻再确认；主力资金别转负",
+      "signals": [
+        "站上MA5",
+        "强放量",
+        "高换手",
+        "低位反弹",
+        "主力流入46801.8亿"
+      ],
+      "screening_reasons": [
+        "成交额充足"
+      ],
+      "capital_flow": {
+        "trend": "今日流入",
+        "today_yi": 4.68,
+        "five_day_total_yi": 4.68
+      },
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 6,
+        "tags": [
+          "高换手",
+          "资金配合",
+          "单日流入",
+          "仍在低位"
+        ]
+      },
+      "fundamentals": {
+        "pe_ttm": 38.52,
+        "roe": null,
+        "pb": 2.75,
+        "net_profit": null
+      },
+      "consistency": {
+        "score": 8,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "流动性支持",
+          "进攻风格匹配"
+        ]
+      },
+      "variants": [
+        {
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "score": 87.9,
+          "status": "approved",
+          "reason": "成交额充足",
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        },
+        {
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "score": 87.9,
+          "status": "approved",
+          "reason": "成交额充足",
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        }
+      ],
+      "screening_status": "approved",
+      "screening_note": "成交额充足",
+      "strategy_count": 2,
+      "approved_hits": 2,
+      "caution_hits": 0,
+      "priority_score": 111.9,
+      "tier": "A",
+      "tier_note": "可直接送 analyzer",
+      "tier_rank": 3
+    },
+    {
+      "code": "002938",
+      "name": "鹏鼎控股",
+      "best_score": 85.7,
+      "change_pct": 4.2,
+      "amount_yi": 31.4,
+      "strategy_hits": [
+        "combined"
+      ],
+      "strategy_labels": [
+        "综合"
+      ],
+      "themes": [
+        "AI硬件链"
+      ],
+      "entry_reason": "趋势突破+资金配合 + 成交额充足",
+      "main_risk": "留意次日承接强度",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "signals": [
+        "均线强多头",
+        "接近突破",
+        "主力流入6402.5亿"
+      ],
+      "screening_reasons": [
+        "成交额充足"
+      ],
+      "capital_flow": {
+        "trend": "连续2日流入",
+        "today_yi": 0.64,
+        "five_day_total_yi": 1.5
+      },
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 5,
+        "tags": [
+          "低换手脉冲",
+          "资金配合",
+          "连续2日流入",
+          "趋势突破区"
+        ]
+      },
+      "fundamentals": {
+        "pe_ttm": 37.41,
+        "roe": null,
+        "pb": 4.1,
+        "net_profit": null
+      },
+      "consistency": {
+        "score": 9,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "流动性支持",
+          "进攻风格匹配"
+        ]
+      },
+      "variants": [
+        {
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "score": 85.7,
+          "status": "approved",
+          "reason": "成交额充足",
+          "consistency": {
+            "score": 9,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        }
+      ],
+      "screening_status": "approved",
+      "screening_note": "成交额充足",
+      "strategy_count": 1,
+      "approved_hits": 1,
+      "caution_hits": 0,
+      "priority_score": 105.2,
+      "tier": "B",
+      "tier_note": "通过二筛，建议盘中确认后再跟",
+      "tier_rank": 2
+    },
+    {
+      "code": "002236",
+      "name": "大华股份",
+      "best_score": 81.45,
+      "change_pct": 3.05,
+      "amount_yi": 9.6,
+      "strategy_hits": [
+        "combined"
+      ],
+      "strategy_labels": [
+        "综合"
+      ],
+      "themes": [
+        "其他"
+      ],
+      "entry_reason": "趋势突破+资金配合",
+      "main_risk": "留意次日承接强度",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "signals": [
+        "均线强多头",
+        "放量",
+        "接近突破",
+        "主力流入4700.8亿",
+        "PE偏低(15.6)"
+      ],
+      "screening_reasons": [
+        "成交额充足"
+      ],
+      "capital_flow": {
+        "trend": "今日流入",
+        "today_yi": 0.47,
+        "five_day_total_yi": 0.47
+      },
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 6,
+        "tags": [
+          "资金配合",
+          "单日流入",
+          "趋势突破区"
+        ]
+      },
+      "fundamentals": {
+        "pe_ttm": 15.55,
+        "roe": null,
+        "pb": 1.57,
+        "net_profit": null
+      },
+      "consistency": {
+        "score": 8,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "流动性支持",
+          "进攻风格匹配"
+        ]
+      },
+      "variants": [
+        {
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "score": 81.45,
+          "status": "approved",
+          "reason": "成交额充足",
+          "consistency": {
+            "score": 8,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        }
+      ],
+      "screening_status": "approved",
+      "screening_note": "成交额充足",
+      "strategy_count": 1,
+      "approved_hits": 1,
+      "caution_hits": 0,
+      "priority_score": 99.45,
+      "tier": "B",
+      "tier_note": "通过二筛，建议盘中确认后再跟",
+      "tier_rank": 2
+    },
+    {
+      "code": "002709",
+      "name": "天赐材料",
+      "best_score": 89.25,
+      "change_pct": 5.65,
+      "amount_yi": 61.2,
+      "strategy_hits": [
+        "growth",
+        "hot",
+        "combined"
+      ],
+      "strategy_labels": [
+        "成长",
+        "热门",
+        "综合"
+      ],
+      "themes": [
+        "其他"
+      ],
+      "entry_reason": "趋势突破+资金配合 + 换手充分",
+      "main_risk": "公告风险：诉讼；爆量后可能冲高回落",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "signals": [
+        "均线强多头",
+        "高换手",
+        "接近突破",
+        "主力流入71142.4亿",
+        "爆量过热"
+      ],
+      "screening_reasons": [
+        "公告风险：诉讼"
+      ],
+      "capital_flow": {
+        "trend": "今日流入",
+        "today_yi": 7.11,
+        "five_day_total_yi": 7.11
+      },
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 20,
+        "tags": [
+          "偏好行业:材料",
+          "高换手",
+          "涨幅强",
+          "资金配合"
+        ]
+      },
+      "fundamentals": {
+        "pe_ttm": 73.87,
+        "roe": null,
+        "pb": 5.63,
+        "net_profit": null
+      },
+      "consistency": {
+        "score": 4,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "流动性支持",
+          "进攻风格匹配"
+        ]
+      },
+      "variants": [
+        {
+          "strategy": "growth",
+          "strategy_label": "成长",
+          "score": 89.25,
+          "status": "caution",
+          "reason": "公告风险：诉讼",
+          "consistency": {
+            "score": 4,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        },
+        {
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "score": 89.25,
+          "status": "caution",
+          "reason": "公告风险：诉讼",
+          "consistency": {
+            "score": 4,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        },
+        {
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "score": 89.25,
+          "status": "caution",
+          "reason": "公告风险：诉讼",
+          "consistency": {
+            "score": 4,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        }
+      ],
+      "screening_status": "caution",
+      "screening_note": "公告风险：诉讼",
+      "strategy_count": 3,
+      "approved_hits": 0,
+      "caution_hits": 3,
+      "priority_score": 107.25,
+      "tier": "C",
+      "tier_note": "仅观察，不建议直接执行",
+      "tier_rank": 1
+    },
+    {
+      "code": "002466",
+      "name": "天齐锂业",
+      "best_score": 87.0,
+      "change_pct": 3.91,
+      "amount_yi": 48.0,
+      "strategy_hits": [
+        "hot",
+        "combined"
+      ],
+      "strategy_labels": [
+        "热门",
+        "综合"
+      ],
+      "themes": [
+        "新能源链"
+      ],
+      "entry_reason": "趋势突破+资金配合 + 换手充分",
+      "main_risk": "估值偏高；周期波动较大",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "signals": [
+        "均线强多头",
+        "接近突破",
+        "主力流入10395.1亿",
+        "PE偏高(238.0)"
+      ],
+      "screening_reasons": [
+        "估值过热，等待业绩验证"
+      ],
+      "capital_flow": {
+        "trend": "连续2日流入",
+        "today_yi": 1.04,
+        "five_day_total_yi": 3.65
+      },
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 14,
+        "tags": [
+          "偏好行业:锂",
+          "高换手",
+          "资金配合",
+          "连续2日流入"
+        ]
+      },
+      "fundamentals": {
+        "pe_ttm": 238.0,
+        "roe": null,
+        "pb": 2.6,
+        "net_profit": null
+      },
+      "consistency": {
+        "score": 6,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "估值与盈利错配",
+          "资金同向",
+          "流动性支持"
+        ]
+      },
+      "variants": [
+        {
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "score": 87.0,
+          "status": "caution",
+          "reason": "估值过热，等待业绩验证",
+          "consistency": {
+            "score": 6,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ]
+          }
+        },
+        {
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "score": 87.0,
+          "status": "caution",
+          "reason": "估值过热，等待业绩验证",
+          "consistency": {
+            "score": 6,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ]
+          }
+        }
+      ],
+      "screening_status": "caution",
+      "screening_note": "估值过热，等待业绩验证",
+      "strategy_count": 2,
+      "approved_hits": 0,
+      "caution_hits": 2,
+      "priority_score": 104.0,
+      "tier": "C",
+      "tier_note": "仅观察，不建议直接执行",
+      "tier_rank": 1
+    },
+    {
+      "code": "002460",
+      "name": "赣锋锂业",
+      "best_score": 89.4,
+      "change_pct": 4.62,
+      "amount_yi": 78.6,
+      "strategy_hits": [
+        "hot",
+        "combined"
+      ],
+      "strategy_labels": [
+        "热门",
+        "综合"
+      ],
+      "themes": [
+        "新能源链"
+      ],
+      "entry_reason": "趋势突破+资金配合 + 换手充分",
+      "main_risk": "公告风险：质押；估值偏高；周期波动较大",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "signals": [
+        "均线强多头",
+        "接近突破",
+        "主力流入66162.5亿",
+        "资金反转",
+        "PE偏高(114.8)"
+      ],
+      "screening_reasons": [
+        "估值过热，等待业绩验证"
+      ],
+      "capital_flow": {
+        "trend": "由负转正",
+        "today_yi": 6.62,
+        "five_day_total_yi": 0.16
+      },
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 13,
+        "tags": [
+          "偏好行业:锂",
+          "高换手",
+          "资金修复",
+          "资金配合"
+        ]
+      },
+      "fundamentals": {
+        "pe_ttm": 114.75,
+        "roe": null,
+        "pb": 4.1,
+        "net_profit": null
+      },
+      "consistency": {
+        "score": 4,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "估值与盈利错配",
+          "资金同向",
+          "流动性支持"
+        ]
+      },
+      "variants": [
+        {
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "score": 89.4,
+          "status": "caution",
+          "reason": "估值过热，等待业绩验证",
+          "consistency": {
+            "score": 4,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ]
+          }
+        },
+        {
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "score": 89.4,
+          "status": "caution",
+          "reason": "估值过热，等待业绩验证",
+          "consistency": {
+            "score": 4,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ]
+          }
+        }
+      ],
+      "screening_status": "caution",
+      "screening_note": "估值过热，等待业绩验证",
+      "strategy_count": 2,
+      "approved_hits": 0,
+      "caution_hits": 2,
+      "priority_score": 103.4,
+      "tier": "C",
+      "tier_note": "仅观察，不建议直接执行",
+      "tier_rank": 1
+    },
+    {
+      "code": "002812",
+      "name": "恩捷股份",
+      "best_score": 82.25,
+      "change_pct": 5.71,
+      "amount_yi": 29.6,
+      "strategy_hits": [
+        "hot",
+        "combined"
+      ],
+      "strategy_labels": [
+        "热门",
+        "综合"
+      ],
+      "themes": [
+        "新能源链"
+      ],
+      "entry_reason": "资金驱动走强 + 换手充分",
+      "main_risk": "公告风险：质押；留意次日承接强度",
+      "watch_condition": "继续放量上攻再确认；主力资金别转负",
+      "signals": [
+        "均线多头",
+        "主力流入23053.1亿"
+      ],
+      "screening_reasons": [
+        "业绩仍未修复，先观察"
+      ],
+      "capital_flow": {
+        "trend": "今日流入",
+        "today_yi": 2.31,
+        "five_day_total_yi": 2.31
+      },
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 13,
+        "tags": [
+          "高换手",
+          "涨幅强",
+          "资金配合",
+          "单日流入"
+        ]
+      },
+      "fundamentals": {
+        "pe_ttm": -124.03,
+        "roe": null,
+        "pb": 2.77,
+        "net_profit": null
+      },
+      "consistency": {
+        "score": 6,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "流动性支持",
+          "进攻风格匹配"
+        ]
+      },
+      "variants": [
+        {
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "score": 82.25,
+          "status": "caution",
+          "reason": "业绩仍未修复，先观察",
+          "consistency": {
+            "score": 6,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        },
+        {
+          "strategy": "combined",
+          "strategy_label": "综合",
+          "score": 82.25,
+          "status": "caution",
+          "reason": "业绩仍未修复，先观察",
+          "consistency": {
+            "score": 6,
+            "label": "高一致性",
+            "notes": [
+              "主题持续增强",
+              "资金同向",
+              "流动性支持",
+              "进攻风格匹配"
+            ]
+          }
+        }
+      ],
+      "screening_status": "caution",
+      "screening_note": "业绩仍未修复，先观察",
+      "strategy_count": 2,
+      "approved_hits": 0,
+      "caution_hits": 2,
+      "priority_score": 99.25,
+      "tier": "C",
+      "tier_note": "仅观察，不建议直接执行",
+      "tier_rank": 1
+    },
+    {
+      "code": "603986",
+      "name": "兆易创新",
+      "best_score": 74.5,
+      "change_pct": 6.82,
+      "amount_yi": 128.6,
+      "strategy_hits": [
+        "hot"
+      ],
+      "strategy_labels": [
+        "热门"
+      ],
+      "themes": [
+        "其他"
+      ],
+      "entry_reason": "资金驱动走强 + 换手充分",
+      "main_risk": "公告风险：减持；估值偏高",
+      "watch_condition": "继续放量上攻再确认；主力资金别转负",
+      "signals": [
+        "均线多头",
+        "主力流入153250.6亿",
+        "PE偏高(119.1)"
+      ],
+      "screening_reasons": [
+        "估值过热，等待业绩验证"
+      ],
+      "capital_flow": {
+        "trend": "今日流入",
+        "today_yi": 15.33,
+        "five_day_total_yi": 15.33
+      },
+      "attack_profile": {
+        "status": "keep",
+        "bias_score": 8,
+        "tags": [
+          "高换手",
+          "涨幅强",
+          "资金配合",
+          "单日流入"
+        ]
+      },
+      "fundamentals": {
+        "pe_ttm": 119.12,
+        "roe": null,
+        "pb": 10.33,
+        "net_profit": null
+      },
+      "consistency": {
+        "score": 2,
+        "label": "中一致性",
+        "notes": [
+          "主题持续增强",
+          "估值与盈利错配",
+          "资金同向",
+          "流动性支持"
+        ]
+      },
+      "variants": [
+        {
+          "strategy": "hot",
+          "strategy_label": "热门",
+          "score": 74.5,
+          "status": "caution",
+          "reason": "估值过热，等待业绩验证",
+          "consistency": {
+            "score": 2,
+            "label": "中一致性",
+            "notes": [
+              "主题持续增强",
+              "估值与盈利错配",
+              "资金同向",
+              "流动性支持"
+            ]
+          }
+        }
+      ],
+      "screening_status": "caution",
+      "screening_note": "估值过热，等待业绩验证",
+      "strategy_count": 1,
+      "approved_hits": 0,
+      "caution_hits": 1,
+      "priority_score": 81.5,
+      "tier": "C",
+      "tier_note": "仅观察，不建议直接执行",
+      "tier_rank": 1
+    }
+  ],
+  "analyzer_candidates": [
+    {
+      "code": "603799",
+      "name": "华友钴业",
+      "best_score": 103.05,
+      "strategy_labels": [
+        "成长",
+        "热门",
+        "综合"
+      ],
+      "reason": "趋势突破+资金配合 + 换手充分",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "tier": "A",
+      "consistency": {
+        "score": 9,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "流动性支持",
+          "进攻风格匹配"
+        ]
+      },
+      "theme": "新能源链",
+      "main_risk": "留意次日承接强度"
+    },
+    {
+      "code": "600584",
+      "name": "长电科技",
+      "best_score": 85.8,
+      "strategy_labels": [
+        "成长",
+        "热门",
+        "综合"
+      ],
+      "reason": "趋势突破+资金配合 + 换手充分",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "tier": "A",
+      "consistency": {
+        "score": 8,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "流动性支持",
+          "进攻风格匹配"
+        ]
+      },
+      "theme": "AI硬件链",
+      "main_risk": "留意次日承接强度"
+    },
+    {
+      "code": "600183",
+      "name": "生益科技",
+      "best_score": 87.7,
+      "strategy_labels": [
+        "热门",
+        "综合"
+      ],
+      "reason": "趋势突破+资金配合 + 成交额充足",
+      "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负",
+      "tier": "A",
+      "consistency": {
+        "score": 9,
+        "label": "高一致性",
+        "notes": [
+          "主题持续增强",
+          "资金同向",
+          "流动性支持",
+          "进攻风格匹配"
+        ]
+      },
+      "theme": "AI硬件链",
+      "main_risk": "留意次日承接强度"
+    }
+  ],
+  "screening_summary": {
+    "total_candidates": 22,
+    "unique_candidates": 11,
+    "shortlisted_count": 11,
+    "approved_count": 6,
+    "caution_count": 5,
+    "excluded_count": 0,
+    "tier_a_count": 4,
+    "tier_b_count": 2,
+    "tier_c_count": 5
+  }
+}

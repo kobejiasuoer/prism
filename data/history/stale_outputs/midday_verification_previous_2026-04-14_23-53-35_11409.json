@@ -1,0 +1,219 @@
+{
+  "timestamp": "2026-04-14 23:46:52",
+  "validation_status": "ok",
+  "validation_errors": [],
+  "source_morning_timestamp": "2026-04-14 23:46:52",
+  "source_scan_timestamp": "2026-04-14 10:30:59",
+  "verified_against_scan_timestamp": "2026-04-14 13:46:06",
+  "target_codes": [
+    "600183",
+    "002074",
+    "002202"
+  ],
+  "confirmed": [
+    {
+      "code": "002202",
+      "name": "金风科技",
+      "tier": "B",
+      "morning_score": 53.8,
+      "status": "confirmed",
+      "reason": "涨幅仍保持为正",
+      "details": [
+        "涨幅仍保持为正",
+        "主力资金仍在配合",
+        "成交额仍在可执行区间",
+        "较晨间维持或改善（分数 +16.80）",
+        "回踩结构仍在"
+      ],
+      "snapshot": {
+        "setup_type": "pullback_continuation",
+        "setup_label": "回踩接力",
+        "price": 24.85,
+        "change_pct": 2.94,
+        "change_delta": 1.08,
+        "amount_yi": 45.9,
+        "score": 70.6,
+        "score_delta": 16.8,
+        "capital_trend": "今日流入",
+        "flow_today_yi": 2.93,
+        "morning_theme": "",
+        "current_theme": "",
+        "theme_in_play": false,
+        "active_themes": [
+          "AI硬件链",
+          "新能源链"
+        ],
+        "pullback_level": 24.59,
+        "trigger_level": 24.59,
+        "invalidate_level": 23.36,
+        "ma5": null,
+        "ma10": null,
+        "ma20": null,
+        "confirmation_label": "承接良好",
+        "positives": [
+          "涨幅仍保持为正",
+          "主力资金仍在配合",
+          "成交额仍在可执行区间"
+        ]
+      }
+    }
+  ],
+  "downgraded": [
+    {
+      "code": "600183",
+      "name": "生益科技",
+      "tier": "B",
+      "morning_score": 78.1,
+      "status": "downgraded",
+      "reason": "跌回晨间承接位下方 66.98",
+      "details": [
+        "跌回晨间承接位下方 66.98",
+        "尚未重新站稳突破位 66.98"
+      ],
+      "snapshot": {
+        "setup_type": "leader_continuation",
+        "setup_label": "热点龙头",
+        "price": 66.42,
+        "change_pct": 4.65,
+        "change_delta": -0.88,
+        "amount_yi": 44.2,
+        "score": 75.7,
+        "score_delta": -2.4,
+        "capital_trend": "连续2日流入",
+        "flow_today_yi": 3.32,
+        "morning_theme": "AI硬件链",
+        "current_theme": "AI硬件链",
+        "theme_in_play": true,
+        "active_themes": [
+          "AI硬件链",
+          "新能源链"
+        ],
+        "pullback_level": 66.98,
+        "trigger_level": 66.98,
+        "invalidate_level": 63.63,
+        "ma5": null,
+        "ma10": null,
+        "ma20": null,
+        "confirmation_label": "承接失效",
+        "positives": [
+          "涨幅仍保持为正",
+          "主力资金仍在配合",
+          "成交额仍在可执行区间"
+        ]
+      }
+    },
+    {
+      "code": "002074",
+      "name": "国轩高科",
+      "tier": "B",
+      "morning_score": 65.25,
+      "status": "downgraded",
+      "reason": "当前扫描未再出现，强度未延续",
+      "details": [
+        "盘中未进入最新候选，视为承接不足"
+      ]
+    }
+  ],
+  "items": [
+    {
+      "code": "600183",
+      "name": "生益科技",
+      "tier": "B",
+      "morning_score": 78.1,
+      "status": "downgraded",
+      "reason": "跌回晨间承接位下方 66.98",
+      "details": [
+        "跌回晨间承接位下方 66.98",
+        "尚未重新站稳突破位 66.98"
+      ],
+      "snapshot": {
+        "setup_type": "leader_continuation",
+        "setup_label": "热点龙头",
+        "price": 66.42,
+        "change_pct": 4.65,
+        "change_delta": -0.88,
+        "amount_yi": 44.2,
+        "score": 75.7,
+        "score_delta": -2.4,
+        "capital_trend": "连续2日流入",
+        "flow_today_yi": 3.32,
+        "morning_theme": "AI硬件链",
+        "current_theme": "AI硬件链",
+        "theme_in_play": true,
+        "active_themes": [
+          "AI硬件链",
+          "新能源链"
+        ],
+        "pullback_level": 66.98,
+        "trigger_level": 66.98,
+        "invalidate_level": 63.63,
+        "ma5": null,
+        "ma10": null,
+        "ma20": null,
+        "confirmation_label": "承接失效",
+        "positives": [
+          "涨幅仍保持为正",
+          "主力资金仍在配合",
+          "成交额仍在可执行区间"
+        ]
+      }
+    },
+    {
+      "code": "002074",
+      "name": "国轩高科",
+      "tier": "B",
+      "morning_score": 65.25,
+      "status": "downgraded",
+      "reason": "当前扫描未再出现，强度未延续",
+      "details": [
+        "盘中未进入最新候选，视为承接不足"
+      ]
+    },
+    {
+      "code": "002202",
+      "name": "金风科技",
+      "tier": "B",
+      "morning_score": 53.8,
+      "status": "confirmed",
+      "reason": "涨幅仍保持为正",
+      "details": [
+        "涨幅仍保持为正",
+        "主力资金仍在配合",
+        "成交额仍在可执行区间",
+        "较晨间维持或改善（分数 +16.80）",
+        "回踩结构仍在"
+      ],
+      "snapshot": {
+        "setup_type": "pullback_continuation",
+        "setup_label": "回踩接力",
+        "price": 24.85,
+        "change_pct": 2.94,
+        "change_delta": 1.08,
+        "amount_yi": 45.9,
+        "score": 70.6,
+        "score_delta": 16.8,
+        "capital_trend": "今日流入",
+        "flow_today_yi": 2.93,
+        "morning_theme": "",
+        "current_theme": "",
+        "theme_in_play": false,
+        "active_themes": [
+          "AI硬件链",
+          "新能源链"
+        ],
+        "pullback_level": 24.59,
+        "trigger_level": 24.59,
+        "invalidate_level": 23.36,
+        "ma5": null,
+        "ma10": null,
+        "ma20": null,
+        "confirmation_label": "承接良好",
+        "positives": [
+          "涨幅仍保持为正",
+          "主力资金仍在配合",
+          "成交额仍在可执行区间"
+        ]
+      }
+    }
+  ]
+}

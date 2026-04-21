@@ -1,0 +1,694 @@
+{
+  "timestamp": "2026-04-15 13:11:22",
+  "pool": "aggressive",
+  "pool_label": "进攻型池(中证500+沪深300)",
+  "stage1_count": 30,
+  "stage2_count": 30,
+  "market_regime": {
+    "score": 1,
+    "label": "偏谨慎",
+    "regime": "defensive",
+    "attack_ok": false,
+    "summary": "强势扩散不够，今天更适合精选观察，不适合激进追高。",
+    "basis": "pool",
+    "sample_size": 60,
+    "metrics": {
+      "positive_ratio": 0.45,
+      "avg_change_pct": -0.26,
+      "avg_turnover": 2.06,
+      "strong_ratio": 0.067
+    },
+    "candidate_view": {
+      "score": 1,
+      "label": "偏谨慎",
+      "regime": "defensive",
+      "attack_ok": false,
+      "summary": "强势扩散不够，今天更适合精选观察，不适合激进追高。",
+      "basis": "candidate",
+      "sample_size": 30,
+      "metrics": {
+        "positive_ratio": 0.433,
+        "avg_change_pct": -0.57,
+        "avg_turnover": 2.84,
+        "strong_ratio": 0.033
+      }
+    },
+    "candidate_score_gap": 0,
+    "candidate_gap_note": "候选口径与整体股票池接近，可把候选强度当作环境的辅助参考。",
+    "execution_gate": {
+      "status": "off",
+      "label": "进攻阀门关闭",
+      "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
+      "position_cap": "0成",
+      "allow_new_positions": false,
+      "allow_handoff": false,
+      "allowed_setups": [],
+      "risk_flags": [
+        "赚钱效应不足",
+        "平均涨幅偏弱",
+        "强势股占比过低",
+        "候选强度不足"
+      ]
+    }
+  },
+  "market_themes": {
+    "top_theme": "AI信息链",
+    "summary": "今日偏双主线：主攻 AI信息链，次主线 新能源链。 主线持续性：持续增强（18分）。",
+    "themes": [
+      {
+        "theme": "AI信息链",
+        "score": 42.98,
+        "count": 2,
+        "weighted_count": 2.62,
+        "leader_codes": [
+          "浪潮信息(000977)",
+          "紫光股份(000938)"
+        ],
+        "persistence": {
+          "score": 18,
+          "label": "持续增强",
+          "summary": "主题权重增强；主题分提升；龙头稳定",
+          "trend": "up",
+          "leader_stability": 1.0
+        },
+        "metrics": {
+          "count_score": 6.85,
+          "leader_score": 20.5,
+          "capital_score": 0.25,
+          "structure_score": 5,
+          "purity_score": 10.38,
+          "persistence_score": 18,
+          "total_flow_yi": 1.23,
+          "avg_flow_yi": 0.62,
+          "preferred_ratio": 0.74,
+          "keep_ratio": 0.74,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "新能源链",
+        "score": 41.1,
+        "count": 5,
+        "weighted_count": 3.41,
+        "leader_codes": [
+          "华友钴业(603799)",
+          "恩捷股份(002812)",
+          "赣锋锂业(002460)"
+        ],
+        "persistence": {
+          "score": 13,
+          "label": "强势延续",
+          "summary": "主题权重增强；龙头稳定",
+          "trend": "up",
+          "leader_stability": 1.0
+        },
+        "metrics": {
+          "count_score": 8.94,
+          "leader_score": 13.26,
+          "capital_score": 0.0,
+          "structure_score": 15,
+          "purity_score": 3.9,
+          "persistence_score": 13,
+          "total_flow_yi": -19.61,
+          "avg_flow_yi": -3.92,
+          "preferred_ratio": 0.34,
+          "keep_ratio": 0.0,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "有色资源链",
+        "score": 37.98,
+        "count": 2,
+        "weighted_count": 2.74,
+        "leader_codes": [
+          "洛阳钼业(603993)",
+          "紫金矿业(601899)"
+        ],
+        "persistence": {
+          "score": 7,
+          "label": "热度衰减",
+          "summary": "主题权重回落；主题分回落；龙头稳定",
+          "trend": "down",
+          "leader_stability": 1.0
+        },
+        "metrics": {
+          "count_score": 7.18,
+          "leader_score": 20.82,
+          "capital_score": 0.96,
+          "structure_score": 5,
+          "purity_score": 4.02,
+          "persistence_score": 7,
+          "total_flow_yi": 4.8,
+          "avg_flow_yi": 2.4,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 0.7,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "AI硬件链",
+        "score": 34.76,
+        "count": 3,
+        "weighted_count": 2.58,
+        "leader_codes": [
+          "生益科技(600183)",
+          "长电科技(600584)",
+          "鹏鼎控股(002938)"
+        ],
+        "persistence": {
+          "score": 14,
+          "label": "强势延续",
+          "summary": "主题权重增强；龙头稳定",
+          "trend": "up",
+          "leader_stability": 0.67
+        },
+        "metrics": {
+          "count_score": 6.77,
+          "leader_score": 15.84,
+          "capital_score": 0.22,
+          "structure_score": 8,
+          "purity_score": 3.93,
+          "persistence_score": 14,
+          "total_flow_yi": 1.17,
+          "avg_flow_yi": 0.39,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 0.49,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "化工材料链",
+        "score": 30.12,
+        "count": 3,
+        "weighted_count": 1.88,
+        "leader_codes": [
+          "中国巨石(600176)",
+          "卫星化学(002648)",
+          "新 和 成(002001)"
+        ],
+        "persistence": {
+          "score": 8,
+          "label": "延续但分化",
+          "summary": "主题权重回落；龙头稳定",
+          "trend": "down",
+          "leader_stability": 0.67
+        },
+        "metrics": {
+          "count_score": 4.93,
+          "leader_score": 10.19,
+          "capital_score": 0.0,
+          "structure_score": 15,
+          "purity_score": 0.0,
+          "persistence_score": 8,
+          "total_flow_yi": -4.95,
+          "avg_flow_yi": -1.65,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 0.0,
+          "hot_ratio": 0.0
+        }
+      },
+      {
+        "theme": "电网设备链",
+        "score": 16.86,
+        "count": 1,
+        "weighted_count": 0.93,
+        "leader_codes": [
+          "特变电工(600089)"
+        ],
+        "persistence": {
+          "score": 0,
+          "label": "一日游风险",
+          "summary": "主题权重回落；主题分回落；龙头部分延续",
+          "trend": "down",
+          "leader_stability": 1.0
+        },
+        "metrics": {
+          "count_score": 2.42,
+          "leader_score": 14.44,
+          "capital_score": 0.0,
+          "structure_score": 0,
+          "purity_score": 0.0,
+          "persistence_score": 0,
+          "total_flow_yi": -0.3,
+          "avg_flow_yi": -0.3,
+          "preferred_ratio": 0.0,
+          "keep_ratio": 0.0,
+          "hot_ratio": 0.0
+        }
+      }
+    ]
+  },
+  "strategies": {
+    "conservative": [],
+    "growth": [
+      {
+        "code": "000977",
+        "name": "浪潮信息",
+        "price": 69.43,
+        "change_pct": 2.12,
+        "score": 87.9,
+        "scores": {
+          "technical": 34,
+          "capital": 23,
+          "fundamental": 1,
+          "emotion": 15
+        },
+        "signals": [
+          "均线强多头",
+          "接近突破",
+          "主力流入38570.1亿",
+          "资金反转"
+        ],
+        "capital_flow": {
+          "today": 385700848.0,
+          "trend": "由负转正",
+          "5day_total": -775671664
+        },
+        "fundamentals": {
+          "pe_ttm": 42.3,
+          "pb": 4.61,
+          "roe": null,
+          "margin": null,
+          "total_mv": 1020.74,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 66.32,
+          "ma10": 61.92,
+          "ma20": 60.34,
+          "high20": 70.19,
+          "low20": 55.36,
+          "position_20d": 0.852
+        },
+        "amount_yi": 43.5,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 17,
+          "tags": [
+            "偏好行业:信息",
+            "高换手",
+            "资金修复",
+            "资金配合",
+            "单日流入"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": true,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 1,
+          "style_text": "name:信息 | 浪潮信息"
+        },
+        "theme": "AI信息链",
+        "announcements": [
+          {
+            "date": "2026-04-11",
+            "title": "独立董事关鑫2025年度述职报告",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-04-11",
+            "title": "关于授权董事会制定中期分红方案的公告",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-04-11",
+            "title": "独立董事刘培德2025年度述职报告",
+            "source": "东方财富"
+          }
+        ],
+        "notice_risk_tags": []
+      }
+    ],
+    "rebound": [],
+    "hot": [],
+    "combined": [
+      {
+        "code": "002236",
+        "name": "大华股份",
+        "price": 18.86,
+        "change_pct": 3.4,
+        "score": 88.65,
+        "scores": {
+          "technical": 38,
+          "capital": 21,
+          "fundamental": 6,
+          "emotion": 11
+        },
+        "signals": [
+          "均线强多头",
+          "放量",
+          "接近突破",
+          "主力流入17602.4亿",
+          "PE偏低(16.1)"
+        ],
+        "capital_flow": {
+          "today": 176024267.0,
+          "trend": "连续2日流入",
+          "5day_total": 223032366
+        },
+        "fundamentals": {
+          "pe_ttm": 16.1,
+          "pb": 1.62,
+          "roe": null,
+          "margin": null,
+          "total_mv": 620.54,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 17.61,
+          "ma10": 17.23,
+          "ma20": 17.15,
+          "high20": 18.44,
+          "low20": 16.35,
+          "position_20d": 0.904
+        },
+        "amount_yi": 9.9,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "资金配合",
+            "连续2日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 2,
+          "style_text": "大华股份"
+        },
+        "theme": "其他",
+        "announcements": [
+          {
+            "date": "2026-04-11",
+            "title": "国信证券股份有限公司关于浙江大华技术股份有限公司向特定对象发行股票限售股份解除限售并上市流通的核查意见",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-04-11",
+            "title": "关于向特定对象发行股票限售股份解除限售并上市流通的提示性公告",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-04-02",
+            "title": "关于回购公司股份的进展公告",
+            "source": "东方财富"
+          }
+        ],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "000977",
+        "name": "浪潮信息",
+        "price": 69.43,
+        "change_pct": 2.12,
+        "score": 87.9,
+        "scores": {
+          "technical": 34,
+          "capital": 23,
+          "fundamental": 1,
+          "emotion": 15
+        },
+        "signals": [
+          "均线强多头",
+          "接近突破",
+          "主力流入38570.1亿",
+          "资金反转"
+        ],
+        "capital_flow": {
+          "today": 385700848.0,
+          "trend": "由负转正",
+          "5day_total": -775671664
+        },
+        "fundamentals": {
+          "pe_ttm": 42.3,
+          "pb": 4.61,
+          "roe": null,
+          "margin": null,
+          "total_mv": 1020.74,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合 + 换手充分",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 66.32,
+          "ma10": 61.92,
+          "ma20": 60.34,
+          "high20": 70.19,
+          "low20": 55.36,
+          "position_20d": 0.852
+        },
+        "amount_yi": 43.5,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 17,
+          "tags": [
+            "偏好行业:信息",
+            "高换手",
+            "资金修复",
+            "资金配合",
+            "单日流入"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": true,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 1,
+          "style_text": "name:信息 | 浪潮信息"
+        },
+        "theme": "AI信息链",
+        "announcements": [
+          {
+            "date": "2026-04-11",
+            "title": "独立董事关鑫2025年度述职报告",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-04-11",
+            "title": "关于授权董事会制定中期分红方案的公告",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-04-11",
+            "title": "独立董事刘培德2025年度述职报告",
+            "source": "东方财富"
+          }
+        ],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "600183",
+        "name": "生益科技",
+        "price": 67.9,
+        "change_pct": 1.62,
+        "score": 68.2,
+        "scores": {
+          "technical": 19,
+          "capital": 27,
+          "fundamental": 1,
+          "emotion": 10
+        },
+        "signals": [
+          "均线多头",
+          "主力流入18485.2亿",
+          "连续3日流入"
+        ],
+        "capital_flow": {
+          "today": 184852464.0,
+          "trend": "连续3日流入",
+          "5day_total": 782197168
+        },
+        "fundamentals": {
+          "pe_ttm": 49.47,
+          "pb": 10.62,
+          "roe": null,
+          "margin": null,
+          "total_mv": 1649.37,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "趋势突破+资金配合 + 成交额充足",
+          "main_risk": "留意次日承接强度",
+          "watch_condition": "明天别高开低走；量能别明显萎缩；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 61.94,
+          "ma10": 57.83,
+          "ma20": 58.01,
+          "high20": 67.66,
+          "low20": 51.2,
+          "position_20d": 0.949
+        },
+        "amount_yi": 44.3,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 8,
+          "tags": [
+            "资金配合",
+            "连续3日流入",
+            "趋势突破区"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": false,
+          "consecutive_inflows": 3,
+          "style_text": "生益科技"
+        },
+        "theme": "AI硬件链",
+        "announcements": [
+          {
+            "date": "2026-03-31",
+            "title": "生益科技关于持股5%以上股东非公开发行可交换公司债券发行完成的公告",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-03-14",
+            "title": "生益科技关于持股5%以上股东拟非公开发行可交换公司债券办理持有股份担保及信托登记的公告",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-03-12",
+            "title": "湖南绿晟环保股份有限公司关于开展境内期货套期保值业务的可行性报告",
+            "source": "东方财富"
+          }
+        ],
+        "notice_risk_tags": []
+      },
+      {
+        "code": "600362",
+        "name": "江西铜业",
+        "price": 47.21,
+        "change_pct": 1.88,
+        "score": 67.65,
+        "scores": {
+          "technical": 23,
+          "capital": 21,
+          "fundamental": 4,
+          "emotion": 10
+        },
+        "signals": [
+          "均线多头",
+          "主力流入19439.7亿",
+          "PE合理(22.9)"
+        ],
+        "capital_flow": {
+          "today": 194396736.0,
+          "trend": "连续2日流入",
+          "5day_total": 313525172
+        },
+        "fundamentals": {
+          "pe_ttm": 22.93,
+          "pb": 2.01,
+          "roe": null,
+          "margin": null,
+          "total_mv": 1635.1,
+          "industry": null,
+          "concept": null
+        },
+        "style": {
+          "industry": null,
+          "concept": null
+        },
+        "trade_note": {
+          "entry_reason": "资金驱动走强",
+          "main_risk": "周期波动较大",
+          "watch_condition": "继续放量上攻再确认；主力资金别转负"
+        },
+        "technical_state": {
+          "ma5": 45.49,
+          "ma10": 44.36,
+          "ma20": 44.69,
+          "high20": 50.19,
+          "low20": 42.2,
+          "position_20d": 0.518
+        },
+        "amount_yi": 25.9,
+        "source_pool": "hs300",
+        "has_capital_flow": true,
+        "missing_cap_penalty": 0,
+        "overheat_penalty": 0,
+        "attack_profile": {
+          "status": "keep",
+          "bias_score": 3,
+          "tags": [
+            "周期观察:铜",
+            "资金配合",
+            "连续2日流入"
+          ],
+          "reason": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "is_preferred": false,
+          "is_cyclical_soft": true,
+          "consecutive_inflows": 2,
+          "style_text": "name:铜 | 江西铜业"
+        },
+        "theme": "其他",
+        "announcements": [
+          {
+            "date": "2026-04-11",
+            "title": "江西铜业股份有限公司关于控股股东公开发行可交换公司债券发行完成的公告",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-04-04",
+            "title": "江西铜业股份有限公司关于召开2025年度业绩说明会的公告",
+            "source": "东方财富"
+          },
+          {
+            "date": "2026-03-27",
+            "title": "江西铜业股份有限公司关于控股股东拟公开发行可交换公司债券办理持有股份担保及信托登记的公告",
+            "source": "东方财富"
+          }
+        ],
+        "notice_risk_tags": []
+      }
+    ]
+  }
+}

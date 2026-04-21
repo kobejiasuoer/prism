@@ -1,0 +1,56 @@
+=== 进攻型选股 v2 工作流 ===
+[0] 清理可能复用的旧产物
+  旧产物已隔离: runtime/stock-screener/data/ai_screening_result.json -> data/history/stale_outputs/ai_screening_previous_preflight_2026-04-20_10-30.json
+  旧产物已隔离: /tmp/stock_recommendation.txt -> data/history/stale_outputs/message_previous_2026-04-20_10-30.txt
+[1] 执行 scan.py
+  旧产物已隔离: runtime/stock-screener/data/scan_result.json -> data/history/stale_outputs/scan_result_previous_2026-04-20_10-30.json
+[10:30:34] 开始进攻型池(中证500+沪深300)选股扫描
+  [fallback] 新浪 zz500 节点为空，改用中证成分 + 东方财富快照
+  [warn] akshare csindex 000905 failed: HTTPSConnectionPool(host='oss-ch.csindex.com.cn', port=443): Max retries exceeded with url: /static/html/csindex/public/uploads/file/autofile/cons/000905cons.xls (Caused by ProxyError('Unable to connect to proxy', RemoteDisconnected('Remote end closed connection without response')))
+  [fallback] 中证 000905 + EM 失败，改用 AkShare-Sina 000905
+  股票池: aggressive
+  成分股: 122只
+  [Stage1] 新浪数据初筛...
+  [Stage1] 活跃: 122只
+  [Stage1] 拉取K线(top60)...
+    K线进度: 20/60
+    K线进度: 40/60
+    K线进度: 60/60
+  [Stage1] 初筛候选: 30只
+  [Stage2] 东方财富精选(30只)...
+    [capital-flow] 批量预取命中 30/30
+    [fundamentals] 批量预取命中 30/30
+    精选进度: 10/30
+    [fallback] EM funda returned but pe/pb missing for 002465, trying THS...
+    [fallback] EM funda returned but pe/pb missing for 605358, trying THS...
+    精选进度: 20/30
+    精选进度: 30/30
+  [Stage2] 精选完成: 30只
+  conservative: 0只, top10输出
+  growth: 6只, top10输出
+  rebound: 0只, top10输出
+  hot: 12只, top10输出
+  combined: 22只, top10输出
+  自动归档: runtime/stock-screener/data/history/aggressive_all_2026-04-20_10-36.json
+  最新结果: runtime/stock-screener/data/scan_result.json
+  结果保存: runtime/stock-screener/data/scan_result.json
+[10:36:29] 扫描完成
+[2] 执行 ai_screening.py
+AI screening saved: runtime/stock-screener/data/ai_screening_result.json | shortlist=15 approved=1 caution=14 | archive=data/history/ai_history/ai_screening_2026-04-20_10-36-29.json
+[4] 生成飞书消息与 Markdown 报告
+Feishu message saved: /tmp/stock_recommendation.txt
+Feishu message saved: data/history/reports/screener/stock_recommendation_2026-04-20_10-30.md
+[5] 执行 screener → analyzer handoff
+[handoff] analyzer codes: 600549
+[handoff] report saved: <redacted-path>
+[6] 发送前质检
+完成：
+  scan_result     -> runtime/stock-screener/data/scan_result.json
+  ai_screening    -> runtime/stock-screener/data/ai_screening_result.json
+  quality_json    -> runtime/stock-screener/data/quality_gate_2026-04-20_10-30.json
+  quality_report  -> data/history/reports/screener/quality_gate_2026-04-20_10-30.md
+  feishu_message  -> /tmp/stock_recommendation.txt
+  feishu_attachment -> data/history/reports/screener/stock_recommendation_2026-04-20_10-30.txt
+  markdown_report -> data/history/reports/screener/stock_recommendation_2026-04-20_10-30.md
+  sendable_doc    -> data/history/reports/screener/stock_recommendation_2026-04-20_10-30.docx
+  analyzer_handoff -> <redacted-path>

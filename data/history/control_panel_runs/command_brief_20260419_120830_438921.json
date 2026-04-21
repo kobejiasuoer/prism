@@ -1,0 +1,28 @@
+{
+  "task_id": "command_brief_20260419_120830_438921",
+  "task_name": "command_brief",
+  "title": "投资总控简报",
+  "command": [
+    "bash",
+    "skills/invest-flow/scripts/run_command_brief.sh"
+  ],
+  "cwd": "<redacted-path>",
+  "send_to_feishu": false,
+  "status": "success",
+  "started_at": "2026-04-19 12:08:30",
+  "finished_at": "2026-04-19 12:08:30",
+  "exit_code": 0,
+  "pid": 28862,
+  "log_path": "data/history/control_panel_runs/logs/command_brief_20260419_120830_438921.log",
+  "meta_path": "data/history/control_panel_runs/command_brief_20260419_120830_438921.json",
+  "feishu_delivery": {
+    "requested": false,
+    "channel": "",
+    "target": "",
+    "source": "",
+    "job_id": "",
+    "job_name": "",
+    "resolved": false
+  },
+  "shell_env_sanitized": false
+}

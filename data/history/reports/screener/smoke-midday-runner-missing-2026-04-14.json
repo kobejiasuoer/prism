@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-04-14 18:40:34",
+  "validation_status": "missing_baseline",
+  "validation_errors": [
+    "未找到当天有效的晨间 AI shortlist 基线"
+  ],
+  "runner_status": "skipped",
+  "baseline_search_date": "2026-04-14",
+  "selected_morning_file": "",
+  "source_morning_timestamp": "",
+  "source_scan_timestamp": "",
+  "verified_against_scan_timestamp": "",
+  "target_codes": [],
+  "confirmed": [],
+  "downgraded": [],
+  "items": []
+}

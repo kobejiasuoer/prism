@@ -1,0 +1,22 @@
+=== 进攻型选股午盘确认工作流 ===
+[1] 清理旧午盘确认产物
+  旧产物已隔离: runtime/stock-screener/data/midday_verification_result.json -> data/history/stale_outputs/midday_verification_previous_2026-04-20_13-45-17_45666.json
+[2] 选择晨间基线
+  晨间基线: data/history/ai_history/ai_screening_2026-04-20_10-36-29.json
+[3] 执行实时扫描
+  旧产物已隔离: runtime/stock-screener/data/scan_result.json -> data/history/stale_outputs/scan_result_previous_midday_2026-04-20_13-45-17_45666.json
+[4] 执行午盘确认
+Midday verification saved: runtime/stock-screener/data/midday_verification_result.json | confirmed=0 downgraded=1
+Feishu message saved: /tmp/stock_midday_confirmation.txt
+Feishu message saved: data/history/reports/screener/stock_midday_confirmation_2026-04-20_13-45-17_45666.md
+完成：
+  morning_baseline -> data/history/ai_history/ai_screening_2026-04-20_10-36-29.json
+  scan_result      -> runtime/stock-screener/data/scan_result.json
+  midday_result    -> runtime/stock-screener/data/midday_verification_result.json
+  quality_json     -> runtime/stock-screener/data/quality_gate_midday_2026-04-20_13-45-17_45666.json
+  quality_report   -> data/history/reports/screener/quality_gate_midday_2026-04-20_13-45-17_45666.md
+  feishu_message   -> /tmp/stock_midday_confirmation.txt
+  feishu_attachment -> data/history/reports/screener/stock_midday_confirmation_2026-04-20_13-45-17_45666.txt
+  markdown_report  -> data/history/reports/screener/stock_midday_confirmation_2026-04-20_13-45-17_45666.md
+  sendable_doc     -> data/history/reports/screener/stock_midday_confirmation_2026-04-20_13-45-17_45666.docx
+  validation_status -> ok

@@ -1,0 +1,119 @@
+{
+  "date": "2026-04-13",
+  "stocks": {
+    "000792": {
+      "date": "2026-04-13",
+      "code": "000792",
+      "name": "000792",
+      "action": "观望",
+      "position": "0-0.5成",
+      "tech_base": "中性",
+      "flow_base": "中性",
+      "event_base": "中性",
+      "score": 18,
+      "score_kind": "技术分",
+      "signal": "中性（评分18）",
+      "hard_flags": [],
+      "watch_points": [],
+      "positives": [],
+      "support": 37.4,
+      "resistance": 39.4,
+      "stop_loss": 37.3,
+      "intraday_triggers": [
+        {
+          "name": "防守线",
+          "condition": "盘中跌破止损位 37.3 元",
+          "action": "先减仓或离场"
+        },
+        {
+          "name": "突破线",
+          "condition": "放量站上压力位 39.4 元",
+          "action": "可从观望升级为轻仓跟踪，但别追高"
+        },
+        {
+          "name": "确认线",
+          "condition": "回踩不破支撑位 37.4 元",
+          "action": "继续观察，不急着加仓"
+        }
+      ]
+    },
+    "002648": {
+      "date": "2026-04-13",
+      "code": "002648",
+      "name": "002648",
+      "action": "观望",
+      "position": "0-0.5成",
+      "tech_base": "中性",
+      "flow_base": "中性",
+      "event_base": "中性",
+      "score": 15,
+      "score_kind": "技术分",
+      "signal": "中性（评分15）",
+      "hard_flags": [
+        "追高风险"
+      ],
+      "watch_points": [],
+      "positives": [],
+      "support": 28.9,
+      "resistance": 30.3,
+      "stop_loss": 28.8,
+      "intraday_triggers": [
+        {
+          "name": "防守线",
+          "condition": "盘中跌破止损位 28.8 元",
+          "action": "先减仓或离场"
+        },
+        {
+          "name": "突破线",
+          "condition": "放量站上压力位 30.3 元",
+          "action": "可从观望升级为轻仓跟踪，但别追高"
+        },
+        {
+          "name": "确认线",
+          "condition": "回踩不破支撑位 28.9 元",
+          "action": "继续观察，不急着加仓"
+        }
+      ]
+    },
+    "600010": {
+      "date": "2026-04-13",
+      "code": "600010",
+      "name": "600010",
+      "action": "观望",
+      "position": "0-0.5成",
+      "tech_base": "中性",
+      "flow_base": "中性",
+      "event_base": "偏多",
+      "score": 15,
+      "score_kind": "技术分",
+      "signal": "中性（评分15）",
+      "hard_flags": [
+        "追高风险"
+      ],
+      "watch_points": [],
+      "positives": [
+        "股东回报"
+      ],
+      "support": 2.85,
+      "resistance": 3.0,
+      "stop_loss": 2.8,
+      "intraday_triggers": [
+        {
+          "name": "防守线",
+          "condition": "盘中跌破止损位 2.8 元",
+          "action": "先减仓或离场"
+        },
+        {
+          "name": "突破线",
+          "condition": "放量站上压力位 3.0 元",
+          "action": "可从观望升级为轻仓跟踪，但别追高"
+        },
+        {
+          "name": "确认线",
+          "condition": "回踩不破支撑位 2.85 元",
+          "action": "继续观察，不急着加仓"
+        }
+      ]
+    }
+  }
+}

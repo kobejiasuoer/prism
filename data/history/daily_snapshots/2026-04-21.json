@@ -1,0 +1,247 @@
+{
+  "date": "2026-04-21",
+  "generated_at": "2026-04-21 12:20:52",
+  "price_basis": "新浪实时行情",
+  "flow_basis": "东方财富资金流",
+  "tech_basis": "240分钟K线",
+  "stocks": {
+    "000625": {
+      "date": "2026-04-21",
+      "code": "000625",
+      "name": "长安汽车",
+      "action": "观望",
+      "position": "0-0.5成",
+      "tech_base": "中性",
+      "flow_base": "中性",
+      "event_base": "偏多",
+      "score": 12,
+      "score_kind": "技术分",
+      "signal": "中性（评分12）",
+      "hard_flags": [
+        "ROE偏弱",
+        "弱于行业"
+      ],
+      "watch_points": [
+        "资金流仅更新到 2026-04-20，先别把它当盘中确认",
+        "先观察能否站回 MA20（10.05）"
+      ],
+      "positives": [
+        "业务催化"
+      ],
+      "support": 9.95,
+      "resistance": 10.0,
+      "stop_loss": 9.85,
+      "intraday_triggers": [
+        {
+          "name": "防守线",
+          "condition": "盘中跌破止损位 9.85 元",
+          "action": "先减仓或离场"
+        },
+        {
+          "name": "突破线",
+          "condition": "放量站上压力位 10.0 元 且相对行业不再落后",
+          "action": "可从观望升级为轻仓跟踪，但别追高"
+        },
+        {
+          "name": "确认线",
+          "condition": "回踩不破支撑位 9.95 元",
+          "action": "继续观察，不急着加仓"
+        }
+      ],
+      "price_as_of": "2026-04-21 11:30:00",
+      "flow_as_of": "2026-04-20",
+      "flow_unconfirmed": true,
+      "tech_basis": "240分钟K线"
+    },
+    "601021": {
+      "date": "2026-04-21",
+      "code": "601021",
+      "name": "春秋航空",
+      "action": "观望",
+      "position": "0-0.5成",
+      "tech_base": "中性",
+      "flow_base": "中性",
+      "event_base": "偏多",
+      "score": 15,
+      "score_kind": "技术分",
+      "signal": "中性（评分15）",
+      "hard_flags": [
+        "弱于行业"
+      ],
+      "watch_points": [
+        "资金流仅更新到 2026-04-20，先别把它当盘中确认",
+        "中期仍受 MA60（51.71）压制"
+      ],
+      "positives": [
+        "股东回报",
+        "业务催化",
+        "经营改善"
+      ],
+      "support": 47.8,
+      "resistance": 48.6,
+      "stop_loss": 47.7,
+      "intraday_triggers": [
+        {
+          "name": "防守线",
+          "condition": "盘中跌破止损位 47.7 元",
+          "action": "先减仓或离场"
+        },
+        {
+          "name": "突破线",
+          "condition": "放量站上压力位 48.6 元 且相对行业不再落后",
+          "action": "可从观望升级为轻仓跟踪，但别追高"
+        },
+        {
+          "name": "确认线",
+          "condition": "回踩不破支撑位 47.8 元",
+          "action": "继续观察，不急着加仓"
+        }
+      ],
+      "price_as_of": "2026-04-21 11:30:00",
+      "flow_as_of": "2026-04-20",
+      "flow_unconfirmed": true,
+      "tech_basis": "240分钟K线"
+    },
+    "600690": {
+      "date": "2026-04-21",
+      "code": "600690",
+      "name": "海尔智家",
+      "action": "减仓观望",
+      "position": "0-0.5成",
+      "tech_base": "看空",
+      "flow_base": "偏空",
+      "event_base": "偏多",
+      "score": 0,
+      "score_kind": "技术分",
+      "signal": "看空（评分0）",
+      "hard_flags": [
+        "弱于行业"
+      ],
+      "watch_points": [
+        "留意布林下轨支撑（19.66）"
+      ],
+      "positives": [
+        "股东回报",
+        "分红催化",
+        "经营改善"
+      ],
+      "support": 19.7,
+      "resistance": 20.9,
+      "stop_loss": 19.6,
+      "intraday_triggers": [
+        {
+          "name": "防守线",
+          "condition": "盘中跌破止损位 19.6 元",
+          "action": "直接按纪律离场，不做低吸"
+        },
+        {
+          "name": "突破线",
+          "condition": "放量站上压力位 20.9 元 且相对行业不再落后",
+          "action": "只视为弱修复，先别翻多，等收盘确认"
+        },
+        {
+          "name": "确认线",
+          "condition": "回踩不破支撑位 19.7 元，但若主力继续流出则不成立",
+          "action": "没有资金确认前，不把反弹当反转"
+        }
+      ],
+      "price_as_of": "2026-04-21 11:30:00",
+      "flow_as_of": "2026-04-21",
+      "flow_unconfirmed": false,
+      "tech_basis": "240分钟K线"
+    },
+    "002179": {
+      "date": "2026-04-21",
+      "code": "002179",
+      "name": "中航光电",
+      "action": "减仓观望",
+      "position": "0-0.5成",
+      "tech_base": "看空",
+      "flow_base": "偏空",
+      "event_base": "偏多",
+      "score": 0,
+      "score_kind": "技术分",
+      "signal": "看空（评分0）",
+      "hard_flags": [],
+      "watch_points": [
+        "留意布林下轨支撑（31.84）"
+      ],
+      "positives": [
+        "股东回报",
+        "经营改善"
+      ],
+      "support": 36.2,
+      "resistance": 36.9,
+      "stop_loss": 31.7,
+      "intraday_triggers": [
+        {
+          "name": "防守线",
+          "condition": "盘中跌破止损位 31.7 元",
+          "action": "直接按纪律离场，不做低吸"
+        },
+        {
+          "name": "突破线",
+          "condition": "放量站上压力位 36.9 元",
+          "action": "只视为弱修复，先别翻多，等收盘确认"
+        },
+        {
+          "name": "确认线",
+          "condition": "回踩不破支撑位 36.2 元，但若主力继续流出则不成立",
+          "action": "没有资金确认前，不把反弹当反转"
+        }
+      ],
+      "price_as_of": "2026-04-21 11:30:00",
+      "flow_as_of": "2026-04-21",
+      "flow_unconfirmed": false,
+      "tech_basis": "240分钟K线"
+    },
+    "002487": {
+      "date": "2026-04-21",
+      "code": "002487",
+      "name": "大金重工",
+      "action": "减仓观望",
+      "position": "0-0.5成",
+      "tech_base": "中性",
+      "flow_base": "中性",
+      "event_base": "偏多",
+      "score": 8,
+      "score_kind": "技术分",
+      "signal": "中性（评分8）",
+      "hard_flags": [
+        "PE偏高",
+        "追高风险"
+      ],
+      "watch_points": [
+        "资金流仅更新到 2026-04-20，先别把它当盘中确认"
+      ],
+      "positives": [
+        "分红催化",
+        "经营改善"
+      ],
+      "support": 82.0,
+      "resistance": 89.5,
+      "stop_loss": 81.5,
+      "intraday_triggers": [
+        {
+          "name": "防守线",
+          "condition": "盘中跌破止损位 81.5 元",
+          "action": "先减仓或离场"
+        },
+        {
+          "name": "突破线",
+          "condition": "放量站上压力位 89.5 元",
+          "action": "可从观望升级为轻仓跟踪，但别追高"
+        },
+        {
+          "name": "确认线",
+          "condition": "回踩不破支撑位 82.0 元",
+          "action": "继续观察，不急着加仓"
+        }
+      ],
+      "price_as_of": "2026-04-21 11:30:00",
+      "flow_as_of": "2026-04-20",
+      "flow_unconfirmed": true,
+      "tech_basis": "240分钟K线"
+    }
+  }
+}

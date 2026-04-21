@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-04-17 13:45:00",
+  "validation_status": "scan_failed",
+  "validation_errors": ["实时扫描超时失败，技术问题"],
+  "runner_status": "failed",
+  "baseline_search_date": "2026-04-17",
+  "selected_morning_file": "data/history/ai_history/ai_screening_2026-04-17_10-31-51.json",
+  "source_morning_timestamp": "2026-04-17 10:31:51",
+  "source_scan_timestamp": "",
+  "verified_against_scan_timestamp": "",
+  "target_codes": [],
+  "confirmed": [],
+  "downgraded": [],
+  "items": []
+}

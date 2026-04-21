@@ -1,0 +1,15 @@
+[2026-04-18 22:12:50] start 自选股名单刷新
+[2026-04-18 22:12:50] command: bash skills/invest-flow/scripts/run_watchlist_refresh.sh
+[stage] refresh:start 自选股全流程已启动
+[stage] watchlist:start 正在更新自选股链路
+workflow_log=<redacted-path>
+workflow_status=ok
+[stage] watchlist:done 自选股链路已完成
+[stage] command_brief:start 正在刷新总控简报
+brief -> data/history/reports/command_brief/prism_command_brief_2026-04-18_22-12-50.txt
+report -> data/history/reports/command_brief/prism_command_brief_2026-04-18_22-12-50.md
+json -> data/history/command_brief/prism_command_brief_2026-04-18_22-12-50.json
+[stage] command_brief:done 总控简报已刷新
+[stage] refresh:done 自选股全流程已完成
+watchlist_workflow -> 2026-04-18
+command_brief -> 2026-04-18_22-12-50

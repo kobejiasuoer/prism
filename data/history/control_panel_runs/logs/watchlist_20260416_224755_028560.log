@@ -1,0 +1,8 @@
+[2026-04-16 22:47:55] start 自选股早盘摘要
+[2026-04-16 22:47:55] command: bash skills/stock-analyzer/scripts/run_watchlist_feishu_summary.sh
+[2026-04-16 22:47:55] feishu: feishu -> user:<redacted> (cron_jobs)
+report -> external/stock-analyzer/reports/analysis-report-2026-04-16.md
+Feishu summary saved: external/stock-analyzer/reports/analysis-summary-2026-04-16.txt
+summary -> external/stock-analyzer/reports/analysis-summary-2026-04-16.txt
+quality_json -> <redacted-path>
+quality_report -> external/stock-analyzer/reports/quality_gate_watchlist_2026-04-16.md

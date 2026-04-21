@@ -1,0 +1,32 @@
+{
+  "task_id": "midday_refresh_20260421_095947_237013",
+  "task_name": "midday_refresh",
+  "title": "进攻型午盘刷新",
+  "command": [
+    "bash",
+    "skills/stock-screener/scripts/run_midday_refresh.sh",
+    "--pool",
+    "aggressive",
+    "--top",
+    "10"
+  ],
+  "cwd": "<redacted-path>",
+  "send_to_feishu": false,
+  "status": "success",
+  "started_at": "2026-04-21 09:59:47",
+  "finished_at": "2026-04-21 10:00:32",
+  "exit_code": 0,
+  "pid": 64686,
+  "log_path": "data/history/control_panel_runs/logs/midday_refresh_20260421_095947_237013.log",
+  "meta_path": "data/history/control_panel_runs/midday_refresh_20260421_095947_237013.json",
+  "feishu_delivery": {
+    "requested": false,
+    "channel": "",
+    "target": "",
+    "source": "",
+    "job_id": "",
+    "job_name": "",
+    "resolved": false
+  },
+  "shell_env_sanitized": false
+}

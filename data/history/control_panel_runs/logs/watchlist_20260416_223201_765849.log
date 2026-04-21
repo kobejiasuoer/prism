@@ -1,0 +1,5 @@
+[2026-04-16 22:32:01] start 自选股早盘摘要
+[2026-04-16 22:32:01] command: bash skills/stock-analyzer/scripts/run_watchlist_feishu_summary.sh
+report -> external/stock-analyzer/reports/analysis-report-2026-04-16.md
+Feishu summary saved: external/stock-analyzer/reports/analysis-summary-2026-04-16.txt
+SEND_TO_FEISHU 已开启，但 FEISHU_TARGET 为空

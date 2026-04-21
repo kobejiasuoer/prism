@@ -1,0 +1,113 @@
+{
+  "timestamp": "2026-04-14 18:40:34",
+  "validation_status": "ok",
+  "validation_errors": [],
+  "source_morning_timestamp": "2026-04-14 17:36:32",
+  "source_scan_timestamp": "2026-04-14 10:30:59",
+  "verified_against_scan_timestamp": "2026-04-14 13:46:06",
+  "target_codes": [
+    "600183",
+    "002074",
+    "002202"
+  ],
+  "confirmed": [
+    {
+      "code": "600183",
+      "name": "生益科技",
+      "tier": "B",
+      "morning_score": 78.1,
+      "status": "confirmed",
+      "reason": "盘中延续性良好",
+      "details": [
+        "涨幅、资金、得分均维持强势"
+      ],
+      "snapshot": {
+        "change_pct": 4.65,
+        "amount_yi": 44.2,
+        "score": 75.7,
+        "capital_trend": "连续2日流入",
+        "flow_today_yi": 3.32
+      }
+    },
+    {
+      "code": "002202",
+      "name": "金风科技",
+      "tier": "B",
+      "morning_score": 53.8,
+      "status": "confirmed",
+      "reason": "盘中延续性良好",
+      "details": [
+        "涨幅、资金、得分均维持强势"
+      ],
+      "snapshot": {
+        "change_pct": 2.94,
+        "amount_yi": 45.9,
+        "score": 70.6,
+        "capital_trend": "今日流入",
+        "flow_today_yi": 2.93
+      }
+    }
+  ],
+  "downgraded": [
+    {
+      "code": "002074",
+      "name": "国轩高科",
+      "tier": "B",
+      "morning_score": 65.25,
+      "status": "downgraded",
+      "reason": "当前扫描未再出现，强度未延续",
+      "details": [
+        "盘中未进入最新候选，视为承接不足"
+      ]
+    }
+  ],
+  "items": [
+    {
+      "code": "600183",
+      "name": "生益科技",
+      "tier": "B",
+      "morning_score": 78.1,
+      "status": "confirmed",
+      "reason": "盘中延续性良好",
+      "details": [
+        "涨幅、资金、得分均维持强势"
+      ],
+      "snapshot": {
+        "change_pct": 4.65,
+        "amount_yi": 44.2,
+        "score": 75.7,
+        "capital_trend": "连续2日流入",
+        "flow_today_yi": 3.32
+      }
+    },
+    {
+      "code": "002074",
+      "name": "国轩高科",
+      "tier": "B",
+      "morning_score": 65.25,
+      "status": "downgraded",
+      "reason": "当前扫描未再出现，强度未延续",
+      "details": [
+        "盘中未进入最新候选，视为承接不足"
+      ]
+    },
+    {
+      "code": "002202",
+      "name": "金风科技",
+      "tier": "B",
+      "morning_score": 53.8,
+      "status": "confirmed",
+      "reason": "盘中延续性良好",
+      "details": [
+        "涨幅、资金、得分均维持强势"
+      ],
+      "snapshot": {
+        "change_pct": 2.94,
+        "amount_yi": 45.9,
+        "score": 70.6,
+        "capital_trend": "今日流入",
+        "flow_today_yi": 2.93
+      }
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+[2026-04-16 22:12:26] start 自选股早盘摘要
+[2026-04-16 22:12:26] command: bash skills/stock-analyzer/scripts/run_watchlist_feishu_summary.sh
+Feishu summary saved: external/stock-analyzer/reports/analysis-summary-2026-04-16.txt
+ERROR: 自选股摘要发送前质检未通过: 自选股完整报告缺少股票段落：603799；自选股完整报告缺少股票段落：002797；自选股完整报告缺少股票段落：002156
+SEND_TO_FEISHU 已开启，但 FEISHU_TARGET 为空

@@ -1,0 +1,36 @@
+[2026-04-21 12:24:46] start 进攻型午盘刷新
+[2026-04-21 12:24:46] command: bash skills/stock-screener/scripts/run_midday_refresh.sh --pool aggressive --top 10
+=== 进攻型选股午盘刷新工作流 ===
+[1] 清理旧午盘刷新状态
+  旧产物已隔离: runtime/stock-screener/data/midday_refresh_result.json -> data/history/stale_outputs/midday_refresh_previous_2026-04-21_12-24-46_78491.json
+[2] 执行午盘刷新主流程
+=== 进攻型选股 v2 工作流 ===
+[0] 清理可能复用的旧产物
+  旧产物已隔离: runtime/stock-screener/data/ai_screening_result.json -> data/history/stale_outputs/ai_screening_previous_preflight_2026-04-21_12-24.json
+  旧产物已隔离: /tmp/stock_midday_refresh.txt -> data/history/stale_outputs/message_previous_2026-04-21_12-24.txt
+[1] 执行 scan.py
+  旧产物已隔离: runtime/stock-screener/data/scan_result.json -> data/history/stale_outputs/scan_result_previous_2026-04-21_12-24.json
+[2] 执行 ai_screening.py
+AI screening saved: runtime/stock-screener/data/ai_screening_result.json | shortlist=11 approved=0 caution=11 | archive=data/history/ai_history/ai_screening_2026-04-21_12-25-31.json
+[4] 生成飞书消息与 Markdown 报告
+Feishu message saved: /tmp/stock_midday_refresh.txt
+Feishu message saved: data/history/reports/screener/stock_recommendation_midday_2026-04-21_12-24-46_78491.md
+[6] 发送前质检
+完成：
+  scan_result     -> runtime/stock-screener/data/scan_result.json
+  ai_screening    -> runtime/stock-screener/data/ai_screening_result.json
+  quality_json    -> runtime/stock-screener/data/quality_gate_2026-04-21_12-24.json
+  quality_report  -> data/history/reports/screener/quality_gate_2026-04-21_12-24.md
+  feishu_message  -> /tmp/stock_midday_refresh.txt
+  feishu_attachment -> data/history/reports/screener/stock_recommendation_midday_2026-04-21_12-24-46_78491.txt
+  markdown_report -> data/history/reports/screener/stock_recommendation_midday_2026-04-21_12-24-46_78491.md
+  sendable_doc    -> data/history/reports/screener/stock_recommendation_midday_2026-04-21_12-24-46_78491.docx
+完成：
+  scan_result      -> runtime/stock-screener/data/scan_result.json
+  ai_screening     -> runtime/stock-screener/data/ai_screening_result.json
+  refresh_result   -> runtime/stock-screener/data/midday_refresh_result.json
+  feishu_message   -> /tmp/stock_midday_refresh.txt
+  feishu_attachment -> data/history/reports/screener/stock_recommendation_midday_2026-04-21_12-24-46_78491.txt
+  markdown_report  -> data/history/reports/screener/stock_recommendation_midday_2026-04-21_12-24-46_78491.md
+  sendable_doc     -> data/history/reports/screener/stock_recommendation_midday_2026-04-21_12-24-46_78491.docx
+  validation_status -> ok
