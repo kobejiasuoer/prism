@@ -172,6 +172,12 @@ Current emphasis:
 - keep privacy scrub mechanical and auditable
 - make the repo readable enough for future cleanup and modularization
 
+## Contributing And Security
+
+If you want to contribute, start with [CONTRIBUTING.md](CONTRIBUTING.md).
+
+If you need to report a security or privacy issue, follow [SECURITY.md](SECURITY.md) and avoid opening a public issue with sensitive details.
+
 ## License
 
 Prism is released under the license included in [LICENSE](LICENSE).
