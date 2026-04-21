@@ -62,6 +62,27 @@ Important directories:
 - `data/history/`: archived real outputs including `ai_history/`, `quality_gates/`, `cron_logs/`, `reports/`, `command_brief/`, and `daily_snapshots/`
 - `docs/architecture/system.md`: concise architecture overview for the full-source repo
 
+## System Flow
+
+```mermaid
+flowchart LR
+    CP[Control Panel
+FastAPI + Jinja] --> SC[scan.py
+Candidate Universe]
+    SC --> AI[ai_screening.py
+Shortlist + Decision Context]
+    AI --> MV[midday_verify.py
+Midday Re-check]
+    MV --> LC[candidate_lifecycle.py
+Entries / Upgrades / Exits]
+    LC --> RP[Reports + Messages
+generate_feishu_message.py]
+    RP --> HS[data/history
+Scrubbed Artifacts]
+```
+
+This diagram shows the main operating loop of the public Prism repository. It focuses on the primary path that turns workflow triggers into decisions, reports, and scrubbed historical artifacts.
+
 ## Typical Flow
 
 A simplified Prism operating loop looks like this:

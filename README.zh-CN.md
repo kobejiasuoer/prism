@@ -62,6 +62,27 @@ prism/
 - `data/history/`：真实归档产物，包括 `ai_history/`、`quality_gates/`、`cron_logs/`、`reports/`、`command_brief/`、`daily_snapshots/`
 - `docs/architecture/system.md`：完整开源仓的简要架构说明
 
+## 系统流程图
+
+```mermaid
+flowchart LR
+    CP[控制台
+FastAPI + Jinja] --> SC[scan.py
+候选池生成]
+    SC --> AI[ai_screening.py
+Shortlist 与判断上下文]
+    AI --> MV[midday_verify.py
+午盘二次确认]
+    MV --> LC[candidate_lifecycle.py
+进入 / 升级 / 退出]
+    LC --> RP[报告与消息
+generate_feishu_message.py]
+    RP --> HS[data/history
+脱敏后的历史产物]
+```
+
+这张图展示的是公开版 Prism 的主运行链路，强调的是从触发工作流到生成判断、报告以及脱敏归档的核心路径。
+
 ## 典型工作流
 
 可以把 Prism 的运行主链路理解成这样：
