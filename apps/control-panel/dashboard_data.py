@@ -2546,7 +2546,7 @@ def build_ask_case_view(
         updated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     )
 
-    return {
+    case = {
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "trade_date": current_trade_date(watchlist, screening_batch, None),
         "query": resolved.get("query"),
@@ -2574,7 +2574,6 @@ def build_ask_case_view(
         "cross_cards": cross_cards,
         "canonical_decision": canonical_decision,
         "action_tier_legend": build_action_tier_legend(),
-        "canonical_decision": canonical_decision,
         "topline": build_detail_topline(
             badge="单票结论",
             title=decision_label,
@@ -2634,6 +2633,13 @@ def build_ask_case_view(
             "candidate_detail": candidate_detail_url(code) if candidate else None,
         },
     }
+    case["surface_version"] = "ask_v2"
+    case["conclusion_card"] = build_ask_conclusion_card(case)
+    case["boundary_trio"] = build_ask_boundary_trio(case)
+    case["execution_layer"] = build_ask_execution_layer(case)
+    case["relation_layer"] = build_ask_relation_layer(case)
+    case["evidence_layer"] = build_ask_evidence_layer(case, build_ask_followup_shell(case))
+    return case
 
 
 def ask_case_cache_key(value: Any) -> str:
@@ -3433,6 +3439,76 @@ def build_reading_compass_cards(
     ]
 
 
+def build_ask_conclusion_card(case: dict[str, Any]) -> dict[str, Any]:
+    canonical = case.get("canonical_decision") or {}
+    hero = case.get("hero") or {}
+    return {
+        "eyebrow": "现在该怎么做",
+        "verdict": canonical.get("main_conclusion") or "观察",
+        "action_sentence": canonical.get("next_step") or hero.get("summary") or "先观察，不着急动。",
+        "confidence_label": hero.get("confidence_label") or "待核",
+        "confidence_note": hero.get("confidence_note") or "当前先按已有证据理解。",
+        "meta_pills": [
+            canonical.get("position_guidance") or "仓位待定",
+            canonical.get("risk_boundary") or "边界待核",
+            canonical.get("source_scope") or "live_fallback",
+        ],
+    }
+
+
+
+def build_ask_boundary_trio(case: dict[str, Any]) -> list[dict[str, str]]:
+    canonical = case.get("canonical_decision") or {}
+    return [
+        {
+            "key": "why_now",
+            "label": "为什么这么判断",
+            "title": "当前成立的核心理由",
+            "body": str(canonical.get("why_now") or "先按当前主结论理解这只票。").strip(),
+        },
+        {
+            "key": "continue_condition",
+            "label": "继续成立的条件",
+            "title": "满足这些条件再继续",
+            "body": str(canonical.get("continue_condition") or "条件未满足前，先不升级动作。").strip(),
+        },
+        {
+            "key": "stop_condition",
+            "label": "一票否决条件",
+            "title": "一旦出现就先停",
+            "body": str(canonical.get("stop_condition") or "触发后先停止原计划。").strip(),
+        },
+    ]
+
+
+
+def build_ask_execution_layer(case: dict[str, Any]) -> list[dict[str, Any]]:
+    allowed = {"现在做什么", "先不要做什么", "去哪看证据"}
+    return [item for item in (case.get("execution_loop") or []) if item.get("label") in allowed]
+
+
+
+def build_ask_relation_layer(case: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "title": "这只票和系统里的关系",
+        "cards": list(case.get("cross_cards") or [])[:4],
+        "watchlist_action": case.get("watchlist_action") or {},
+    }
+
+
+
+def build_ask_evidence_layer(case: dict[str, Any], followup: dict[str, Any] | None) -> dict[str, Any]:
+    return {
+        "title": "证据与继续追问",
+        "metric_cards": list(case.get("metric_cards") or [])[:4],
+        "level_cards": list(case.get("level_cards") or [])[:4],
+        "analysis_groups": list(case.get("analysis_groups") or [])[:6],
+        "event_groups": list(case.get("event_groups") or [])[:2],
+        "artifacts": list(case.get("artifacts") or [])[:4],
+        "followup": followup,
+    }
+
+
 def build_ask_examples(
     watchlist: dict[str, Any] | None,
     screening_batch: dict[str, Any] | None,
@@ -3693,6 +3769,13 @@ def build_ask_page_view(query: str | None = None, error: str | None = None) -> d
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "query": query_text,
         "error": ask_error,
+        "surface_mode": "result" if ask_case else "empty",
+        "search_strip": {
+            "title": "问一只股票，直接给结论和边界",
+            "promise": "先给结论，再给边界",
+            "is_compact": bool(ask_case),
+            "hint": "支持代码/名称联想，候选项会优先回填可直接分析的查询值。",
+        },
         "hero": {
             "title": "问一只股票，直接给结论和边界",
             "summary": "这页先回答今天该不该动，再把技术、资金、事件和跨系统状态拆开给你看。",
@@ -4829,12 +4912,103 @@ def build_today_evidence_rows(source_cards: list[dict[str, Any]]) -> list[dict[s
                 "action": item.get("value") or "-",
                 "trigger": item.get("detail") or "查看详情",
                 "reason": item.get("detail") or "查看详情",
-                "risk": "来源快照",
+                "risk": "证据时间",
                 "freshness": item.get("value") or "-",
                 "tone": "watch",
             }
         )
     return rows
+
+
+def build_today_command_hero(
+    *,
+    trade_date: str,
+    hero: dict[str, Any],
+    top_rows: list[dict[str, Any]],
+    brief_is_live: bool,
+) -> dict[str, Any]:
+    execute_now = next((row for row in top_rows if (row.get("tone") or "") == "positive"), None)
+    wait_trigger = next((row for row in top_rows if (row.get("tone") or "") == "watch"), None)
+    avoid_row = next((row for row in top_rows if (row.get("tone") or "") == "risk"), None)
+
+    def hero_row(
+        label: str,
+        fallback_title: str,
+        source: dict[str, Any] | None,
+        tone: str,
+    ) -> dict[str, Any]:
+        return {
+            "label": label,
+            "title": str((source or {}).get("action") or fallback_title),
+            "detail": str((source or {}).get("reason") or (source or {}).get("trigger") or "等待链路进一步确认。"),
+            "tone": tone,
+            "tier": str((source or {}).get("tier") or label),
+            "url": str((source or {}).get("url") or ""),
+        }
+
+    return {
+        "eyebrow": "今日作战指令",
+        "title": str(hero.get("title") or "先处理已有仓位，再决定要不要看新机会"),
+        "summary": str(hero.get("summary") or "今天先按优先级执行，不做无计划扩张。"),
+        "trade_date": trade_date,
+        "context_note": str(hero.get("context_note") or ""),
+        "source_state": "总控已同步" if brief_is_live else "实时链路判断",
+        "actions": [
+            hero_row("立即执行", "先处理最弱持仓", execute_now, "positive"),
+            hero_row("等触发", "只盯最强机会，不抢跑", wait_trigger, "watch"),
+            hero_row("明确回避", "今天不追高", avoid_row, "risk"),
+        ],
+    }
+
+
+def build_today_radar_cards(
+    *,
+    position_cap: str,
+    main_theme: str,
+    quality_ok: int,
+    confirmation_counts: dict[str, Any],
+    brief_is_live: bool,
+) -> list[dict[str, str]]:
+    risk_value = "低" if quality_ok >= 3 and brief_is_live else ("中" if quality_ok >= 2 else "中偏高")
+    risk_note = "链路完整，可按纪律执行" if risk_value == "低" else ("先控仓，再等更清晰确认" if risk_value == "中" else "今天先守纪律，不做激进动作")
+    midday_fresh = int(confirmation_counts.get("fresh_candidates") or 0)
+    midday_note = "暂无新增观察" if midday_fresh <= 0 else f"新增观察 {midday_fresh} 项"
+
+    return [
+        {
+            "label": "仓位上限",
+            "value": position_cap or "-",
+            "note": "今天最多能承受的动作空间",
+        },
+        {
+            "label": "主线方向",
+            "value": main_theme or "暂无主线",
+            "note": "先只围绕最强方向行动",
+        },
+        {
+            "label": "今日风险",
+            "value": risk_value,
+            "note": risk_note,
+        },
+        {
+            "label": "午盘观察",
+            "value": str(midday_fresh),
+            "note": midday_note,
+        },
+    ]
+
+
+def build_today_evidence_hint(*, brief_is_live: bool, source_cards: list[dict[str, Any]]) -> dict[str, str]:
+    source_labels = "、".join(item.get("label") or "" for item in source_cards[:3] if item.get("label"))
+    if not source_labels:
+        source_labels = "自选股快照、早盘批次与午盘确认"
+    suffix = "总控判断已同步。" if brief_is_live else "当前以实时链路为准。"
+    return {
+        "title": "今日判断已综合",
+        "summary": f"今日判断已综合{source_labels}。{suffix}",
+        "cta": "查看证据与原始入口",
+        "target": "today-evidence-fold",
+    }
 
 
 def watchlist_trigger_price(card: dict[str, Any]) -> str:
@@ -7718,36 +7892,26 @@ def build_today_view() -> dict[str, Any]:
     opportunity_rows = build_today_opportunity_rows(action_groups)
     risk_rows = build_today_risk_rows(change_view, action_groups)
     evidence_rows = build_today_evidence_rows(source_cards)
-    status_strip = build_status_strip(
-        {
-            "label": "来源",
-            "value": "总控简报" if brief_is_live else "实时链路",
-            "note": (decision_brief or {}).get("generated_at") or "等待总控",
-            "tone": "good" if brief_is_live else "warn",
-        },
-        {
-            "label": "质量",
-            "value": f"{quality_ok}/3 通过",
-            "note": "核心链路质检",
-            "tone": "good" if quality_ok >= 3 else ("warn" if quality_ok >= 2 else "risk"),
-        },
-        {
-            "label": "新鲜度",
-            "value": latest_source_freshness(source_cards),
-            "note": f"交易日 {trade_date}",
-            "tone": "good" if brief_is_live else "warn",
-        },
-    )
-    topline = build_today_dispatch_topline(
+    command_hero = build_today_command_hero(
         trade_date=trade_date,
         hero={
             "title": hero_title,
             "summary": hero_summary,
-            "gate_label": hero_gate_label,
-            "position_cap": position_cap,
+            "context_note": context_note,
         },
-        next_steps=next_steps,
-        links=links,
+        top_rows=top_rows,
+        brief_is_live=brief_is_live,
+    )
+    radar_cards = build_today_radar_cards(
+        position_cap=position_cap,
+        main_theme=main_theme,
+        quality_ok=quality_ok,
+        confirmation_counts=confirmation_counts,
+        brief_is_live=brief_is_live,
+    )
+    evidence_hint = build_today_evidence_hint(
+        brief_is_live=brief_is_live,
+        source_cards=source_cards,
     )
 
     return {
@@ -7762,10 +7926,11 @@ def build_today_view() -> dict[str, Any]:
             "main_theme": main_theme,
             "context_note": context_note,
         },
-        "action_tier_legend": build_action_tier_legend(),
+        "command_hero": command_hero,
+        "radar_cards": radar_cards,
+        "evidence_hint": evidence_hint,
         "action_groups": action_groups,
         "action_queue": action_queue,
-        "topline": topline,
         "next_steps": next_steps,
         "top_rows": top_rows,
         "primary_actions": primary_actions,
@@ -7773,7 +7938,6 @@ def build_today_view() -> dict[str, Any]:
         "opportunity_rows": opportunity_rows,
         "risk_rows": risk_rows,
         "evidence_rows": evidence_rows,
-        "status_strip": status_strip,
         "confidence_switch": build_today_confidence_switch(
             decision_brief,
             quality_status,

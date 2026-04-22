@@ -156,6 +156,13 @@ class ControlPanelSmokeTest(unittest.TestCase):
                 }
             ],
             "followup": None,
+            "surface_mode": "empty",
+            "search_strip": {
+                "title": "问一只股票，直接给结论和边界",
+                "promise": "先给结论，再给边界",
+                "is_compact": False,
+                "hint": "支持代码/名称联想，候选项会优先回填可直接分析的查询值。",
+            },
             "hero": {
                 "title": "问一只股票，直接给结论和边界",
                 "summary": "先给结论，再给边界。",
@@ -205,30 +212,147 @@ class ControlPanelSmokeTest(unittest.TestCase):
         self.assertNotIn("自选股</a>", html)
         self.assertNotIn("机会池</a>", html)
 
-    def test_today_page_prioritizes_stance_top_actions_and_structured_sections(self) -> None:
+    def test_today_page_prioritizes_command_board_and_structured_sections(self) -> None:
         response = self.client.get("/today")
         self.assertEqual(response.status_code, 200)
         html = response.text
-        self.assertIn("今日总判断", html)
-        self.assertIn("今日三大动作", html)
+        self.assertIn("今日作战指令", html)
         self.assertIn("持仓动作", html)
         self.assertIn("机会动作", html)
         self.assertIn("风险与变更", html)
-        self.assertIn("证据来源", html)
-        self.assertNotIn("下一步动作", html)
+        self.assertIn("证据与原始入口", html)
+        self.assertNotIn("今日总判断", html)
+        self.assertNotIn("今日三大动作", html)
         self.assertNotIn("状态细栏", html)
+
+    def test_today_page_uses_command_board_hero_and_demotes_evidence(self) -> None:
+        response = self.client.get("/today")
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+
+        self.assertIn("今日作战指令", html)
+        self.assertIn("立即执行", html)
+        self.assertIn("明确回避", html)
+        self.assertIn("仓位上限", html)
+        self.assertIn("午盘观察", html)
+        self.assertIn("今日判断已综合", html)
+        self.assertIn("证据与原始入口", html)
+
+        self.assertNotIn("今日总判断", html)
+        self.assertNotIn("今日三大动作", html)
+        self.assertNotIn("证据来源</strong>", html)
+        self.assertNotIn("来源快照</h3>", html)
+
+    def test_today_page_reads_command_then_holdings_then_opportunities(self) -> None:
+        response = self.client.get("/today")
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+
+        command_index = html.find("今日作战指令")
+        holdings_index = html.find("持仓动作")
+        opportunities_index = html.find("机会动作")
+        evidence_hint_index = html.find("今日判断已综合")
+        evidence_fold_index = html.find("证据与原始入口")
+
+        self.assertGreaterEqual(command_index, 0)
+        self.assertGreaterEqual(holdings_index, 0)
+        self.assertGreaterEqual(opportunities_index, 0)
+        self.assertGreaterEqual(evidence_hint_index, 0)
+        self.assertGreaterEqual(evidence_fold_index, 0)
+
+        self.assertLess(command_index, holdings_index)
+        self.assertLess(holdings_index, opportunities_index)
+        self.assertLess(opportunities_index, evidence_hint_index)
+        self.assertLess(evidence_hint_index, evidence_fold_index)
+
+    def test_today_page_exposes_command_and_radar_labels_without_report_copy(self) -> None:
+        response = self.client.get("/today")
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+
+        required_labels = [
+            "今日作战指令",
+            "立即执行",
+            "等触发",
+            "明确回避",
+            "仓位上限",
+            "主线方向",
+            "今日风险",
+            "午盘观察",
+        ]
+        forbidden_labels = [
+            "今日总判断",
+            "优先动作",
+            "来源摘要",
+            "来源快照",
+        ]
+
+        for label in required_labels:
+            self.assertIn(label, html)
+        for label in forbidden_labels:
+            self.assertNotIn(label, html)
 
     def test_ask_page_uses_decision_card_first_and_followup_as_support(self) -> None:
         response = self.client.get("/ask?q=600690")
         self.assertEqual(response.status_code, 200)
         html = response.text
-        self.assertIn("单票决策", html)
-        self.assertIn("当前结论", html)
+        self.assertIn("现在该怎么做", html)
         self.assertIn("为什么这么判断", html)
-        self.assertIn("继续做的条件", html)
-        self.assertIn("立刻停的条件", html)
-        self.assertIn("继续追问", html)
+        self.assertIn("继续成立的条件", html)
+        self.assertIn("一票否决条件", html)
+        self.assertIn("证据与继续追问", html)
+        self.assertIn("继续追问这只股票", html)
         self.assertNotIn("先看跨层状态", html)
+
+    def test_ask_result_state_reads_conclusion_then_boundary_then_execution(self) -> None:
+        response = self.client.get("/ask?q=600690")
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+
+        search_index = html.find("ask-result-search-strip")
+        conclusion_index = html.find("现在该怎么做")
+        boundary_index = html.find("为什么这么判断")
+        execution_index = html.find("现在做什么")
+        relation_index = html.find("这只票和系统里的关系")
+        evidence_index = html.find("证据与继续追问")
+
+        self.assertGreaterEqual(search_index, 0)
+        self.assertGreaterEqual(conclusion_index, 0)
+        self.assertGreaterEqual(boundary_index, 0)
+        self.assertGreaterEqual(execution_index, 0)
+        self.assertGreaterEqual(relation_index, 0)
+        self.assertGreaterEqual(evidence_index, 0)
+
+        self.assertLess(search_index, conclusion_index)
+        self.assertLess(conclusion_index, boundary_index)
+        self.assertLess(boundary_index, execution_index)
+        self.assertLess(execution_index, relation_index)
+        self.assertLess(relation_index, evidence_index)
+
+    def test_ask_followup_is_present_but_demoted_below_first_screen_sections(self) -> None:
+        response = self.client.get("/ask?q=600690")
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+
+        self.assertIn("继续追问这只股票", html)
+        self.assertIn("证据与继续追问", html)
+        self.assertNotIn(
+            "继续追问</h2>\n          </div>\n        </div>\n        <p class=\"today-panel-copy\">",
+            html[:2500],
+        )
+
+    def test_build_ask_page_view_exposes_ask_v2_surface_contract(self) -> None:
+        payload = build_ask_page_view("600690")
+        case = payload.get("case") or {}
+
+        self.assertEqual(payload.get("surface_mode"), "result")
+        self.assertEqual(case.get("surface_version"), "ask_v2")
+        self.assertIn("search_strip", payload)
+        self.assertIn("conclusion_card", case)
+        self.assertIn("boundary_trio", case)
+        self.assertIn("execution_layer", case)
+        self.assertIn("relation_layer", case)
+        self.assertIn("evidence_layer", case)
 
     def test_single_stock_surfaces_share_top_decision_skeleton(self) -> None:
         paths = [
@@ -299,9 +423,8 @@ class ControlPanelSmokeTest(unittest.TestCase):
                 for label in required_labels:
                     self.assertIn(label, html)
 
-    def test_core_surfaces_share_decision_topline_module(self) -> None:
+    def test_single_stock_and_list_surfaces_keep_primary_topline_modules(self) -> None:
         paths = [
-            "/today",
             "/ask?q=600690",
             "/watchlist/000625",
             self._first_opportunity_detail_url(),
@@ -313,17 +436,17 @@ class ControlPanelSmokeTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 html = response.text
                 self.assertIn('class="decision-topline"', html)
-                self.assertIn('class="decision-topline-pills"', html)
-                self.assertIn('class="decision-topline-cta-row"', html)
 
-    def test_core_topline_meta_fields_use_shared_priority(self) -> None:
-        today = build_today_view()
+        today_response = self.client.get("/today")
+        self.assertEqual(today_response.status_code, 200)
+        self.assertIn('today-command-board', today_response.text)
+
+    def test_today_and_single_stock_surfaces_expose_priority_meta_fields(self) -> None:
         ask = build_ask_page_view("600690")
         watchlist_detail = build_watchlist_detail_view("000625")
         candidate_detail = build_candidate_detail_view("600392")
 
         payloads = [
-            ("today", today["topline"]),
             ("ask", (ask["case"] or {})["topline"]),
             ("watchlist_detail", watchlist_detail["topline"]),
             ("candidate_detail", candidate_detail["topline"]),
@@ -336,6 +459,10 @@ class ControlPanelSmokeTest(unittest.TestCase):
                 pill_labels = [item.get("label") for item in pills]
                 self.assertEqual(pill_labels[1], "仓位建议")
                 self.assertEqual(pill_labels[2], "风险边界")
+
+        today = build_today_view()
+        radar_labels = [item.get("label") for item in today.get("radar_cards") or []]
+        self.assertEqual(radar_labels, ["仓位上限", "主线方向", "今日风险", "午盘观察"])
 
     def test_single_stock_action_copy_uses_shared_sentence_contract(self) -> None:
         ask = (build_ask_page_view("600690").get("case") or {})
@@ -565,7 +692,7 @@ class ControlPanelSmokeTest(unittest.TestCase):
 
     def test_product_pages_expose_new_layout_sections(self) -> None:
         cases = [
-            ("/today", ["今日总判断", "今日三大动作", "持仓动作", "机会动作", "风险与变更", "证据来源"]),
+            ("/today", ["今日作战指令", "持仓动作", "机会动作", "风险与变更", "证据与原始入口"]),
             ("/ask", ["股票代码或名称", "开始分析", "先输入一只股票"]),
             ("/watchlist", ["持仓总览", "持仓名单管理", "添加并刷新", "归档只隐藏", "更新快照", "原始数据入口"]),
             (
@@ -618,15 +745,17 @@ class ControlPanelSmokeTest(unittest.TestCase):
                     with self.subTest(path=path, word=word):
                         self.assertNotIn(word, response.text)
 
-    def test_today_page_uses_investor_dispatch_markers(self) -> None:
+    def test_today_page_uses_command_board_markers(self) -> None:
         response = self.client.get("/today")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("今日总判断", response.text)
-        self.assertIn("今日三大动作", response.text)
+        self.assertIn("今日作战指令", response.text)
+        self.assertIn("立即执行", response.text)
+        self.assertIn("等触发", response.text)
+        self.assertIn("明确回避", response.text)
         self.assertIn("持仓动作", response.text)
         self.assertIn("机会动作", response.text)
         self.assertIn("风险与变更", response.text)
-        self.assertIn("证据来源", response.text)
+        self.assertIn("证据与原始入口", response.text)
         self.assertNotIn("今日操作清单", response.text)
         self.assertNotIn("可信度总开关", response.text)
 
@@ -635,20 +764,23 @@ class ControlPanelSmokeTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         html = response.text
 
-        verdict_index = html.find("今日总判断")
-        top3_index = html.find("今日三大动作")
+        command_index = html.find("今日作战指令")
         holdings_index = html.find("持仓动作")
         opportunity_index = html.find("机会动作")
-        self.assertGreaterEqual(verdict_index, 0)
-        self.assertGreaterEqual(top3_index, 0)
+        evidence_hint_index = html.find("今日判断已综合")
+        evidence_fold_index = html.find("证据与原始入口")
+        self.assertGreaterEqual(command_index, 0)
         self.assertGreaterEqual(holdings_index, 0)
         self.assertGreaterEqual(opportunity_index, 0)
-        self.assertLess(verdict_index, top3_index)
-        self.assertLess(top3_index, holdings_index)
+        self.assertGreaterEqual(evidence_hint_index, 0)
+        self.assertGreaterEqual(evidence_fold_index, 0)
+        self.assertLess(command_index, holdings_index)
         self.assertLess(holdings_index, opportunity_index)
+        self.assertLess(opportunity_index, evidence_hint_index)
+        self.assertLess(evidence_hint_index, evidence_fold_index)
 
         self.assertIn("风险与变更", html)
-        self.assertIn("证据来源", html)
+        self.assertIn("证据与原始入口", html)
         self.assertIn("<details class=\"progressive-section\">", html)
         self.assertNotIn("<details class=\"progressive-section\" open", html)
 
@@ -682,9 +814,8 @@ class ControlPanelSmokeTest(unittest.TestCase):
     def test_cross_page_ctas_use_unified_action_language(self) -> None:
         today_response = self.client.get("/today")
         self.assertEqual(today_response.status_code, 200)
-        self.assertIn("去持仓看动作", today_response.text)
-        self.assertIn("去机会看候选", today_response.text)
-        self.assertIn("去复盘看依据", today_response.text)
+        self.assertIn("查看对象", today_response.text)
+        self.assertIn("查看证据与原始入口", today_response.text)
 
         watchlist_response = self.client.get("/watchlist")
         self.assertEqual(watchlist_response.status_code, 200)
@@ -1162,16 +1293,17 @@ class ControlPanelSmokeTest(unittest.TestCase):
         self.assertTrue(any(item.get("artifact_path") for item in payload["comparison_panels"]))
         self.assertEqual(payload["hero"]["title"], "扫描阀门 · 进攻阀门半开")
 
-    def test_today_api_contains_action_groups(self) -> None:
+    def test_today_api_contains_command_board_payload(self) -> None:
         response = self.client.get("/api/today")
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertIn("action_groups", payload)
         self.assertIn("action_queue", payload)
-        self.assertIn("topline", payload)
+        self.assertIn("command_hero", payload)
+        self.assertIn("radar_cards", payload)
+        self.assertIn("evidence_hint", payload)
         self.assertIn("next_steps", payload)
         self.assertIn("top_rows", payload)
-        self.assertIn("status_strip", payload)
         self.assertEqual(len(payload["action_groups"]), 3)
         self.assertEqual(
             [item["title"] for item in payload["action_groups"]],

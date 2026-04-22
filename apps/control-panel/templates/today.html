@@ -17,39 +17,46 @@
       </header>
 
       <main class="today-dispatch-main today-command-main">
-        <section class="today-quality-block today-dispatch-block stage-decision-layer">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">今日总判断</p>
+        <section class="today-command-board stage-decision-layer">
+          <div class="today-command-board-main">
+            <div class="today-command-hero">
+              <p class="eyebrow">{{ today.command_hero.eyebrow }}</p>
+              <h1 class="today-command-title">{{ today.command_hero.title }}</h1>
+              <p class="today-command-summary">{{ today.command_hero.summary }}</p>
+              <div class="today-command-meta detail-tag-list">
+                <span class="detail-tag">{{ today.command_hero.source_state }}</span>
+                <span class="detail-tag">交易日 {{ today.trade_date }}</span>
+                {% if today.hero.position_cap %}
+                <span class="detail-tag">仓位上限 {{ today.hero.position_cap }}</span>
+                {% endif %}
+              </div>
+              {% if today.command_hero.context_note %}
+              <p class="today-command-context">{{ today.command_hero.context_note }}</p>
+              {% endif %}
+              <div class="today-command-actions">
+                {% for item in today.command_hero.actions %}
+                <article class="today-command-action today-command-action-{{ item.tone }}">
+                  <span class="today-command-action-label">{{ item.label }}</span>
+                  <strong>{{ item.title }}</strong>
+                  <p>{{ item.detail }}</p>
+                  {% if item.url %}
+                  <a class="today-command-action-link" href="{{ item.url }}">查看对象</a>
+                  {% endif %}
+                </article>
+                {% endfor %}
+              </div>
             </div>
-          </div>
-          {% set verdict_badge = today.topline.verdict_badge %}
-          {% set verdict_title = today.topline.verdict_title %}
-          {% set verdict_summary = today.topline.verdict_summary %}
-          {% set meta_pills = today.topline.meta_pills %}
-          {% set cta_links = today.topline.cta_links %}
-          {% include "_decision_topline.html" %}
-          <div class="detail-tag-list today-topline-tags">
-            <span class="detail-tag">{{ today.hero.gate_label }}</span>
-            <span class="detail-tag">仓位上限 {{ today.hero.position_cap }}</span>
-            <span class="detail-tag">主线 {{ today.hero.main_theme }}</span>
-          </div>
-        </section>
 
-        <section class="today-quality-block today-dispatch-block stage-action-layer action-tier-legend-section">
-          {% set action_tier_legend = today.action_tier_legend %}
-          {% include "_action_tier_legend.html" %}
-        </section>
-
-        <section class="today-quality-block today-dispatch-block stage-decision-layer">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">优先动作</p>
-              <h2>今日三大动作</h2>
-            </div>
+            <aside class="today-command-radar" aria-label="环境雷达">
+              {% for card in today.radar_cards %}
+              <article class="today-radar-card">
+                <span>{{ card.label }}</span>
+                <strong>{{ card.value }}</strong>
+                <p>{{ card.note }}</p>
+              </article>
+              {% endfor %}
+            </aside>
           </div>
-          {% set decision_rows = today.primary_actions %}
-          {% include "_decision_rows.html" %}
         </section>
 
         <section class="today-quality-block today-dispatch-block stage-decision-layer">
@@ -88,13 +95,21 @@
           </div>
         </details>
 
-        <details class="progressive-section">
+        <section class="today-evidence-hint stage-action-layer">
+          <div>
+            <p class="eyebrow">{{ today.evidence_hint.title }}</p>
+            <p class="today-evidence-hint-copy">{{ today.evidence_hint.summary }}</p>
+          </div>
+          <a class="ghost-button link-button" href="#{{ today.evidence_hint.target }}">{{ today.evidence_hint.cta }}</a>
+        </section>
+
+        <details id="today-evidence-fold" class="progressive-section">
           <summary class="progressive-summary">
             <div class="progressive-summary-main">
               <p class="eyebrow">证据层</p>
-              <strong>证据来源</strong>
+              <strong>证据与原始入口</strong>
             </div>
-            <span class="progressive-summary-note">展开刷新、来源快照与原始入口</span>
+            <span class="progressive-summary-note">展开刷新状态、时间快照、质检与原始入口</span>
           </summary>
           <div class="progressive-body">
             <section class="prism-refresh-strip" data-refresh-panel>
@@ -119,8 +134,8 @@
               <article class="today-quality-block">
                 <div class="section-head">
                   <div>
-                    <p class="eyebrow">来源摘要</p>
-                    <h3>证据来源</h3>
+                    <p class="eyebrow">来源判断</p>
+                    <h3>证据摘要</h3>
                   </div>
                 </div>
                 {% set decision_rows = today.evidence_rows %}
@@ -131,7 +146,7 @@
                 <div class="section-head">
                   <div>
                     <p class="eyebrow">来源</p>
-                    <h3>来源快照</h3>
+                    <h3>时间快照</h3>
                   </div>
                 </div>
                 <div class="prism-source-stack">

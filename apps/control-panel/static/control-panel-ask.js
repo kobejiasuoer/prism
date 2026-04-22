@@ -44,6 +44,10 @@
     const addUrl = root.dataset.watchlistAddUrl || "";
     const restoreUrl = root.dataset.watchlistRestoreUrl || "";
 
+    if ((root.dataset.askMode || "").trim() === "result") {
+      root.classList.add("ask-mode-result");
+    }
+
     const form = root.querySelector("[data-ask-search-form]");
     const input = root.querySelector("[data-ask-search-input]");
     const submitButton = root.querySelector("[data-ask-submit-button]");
