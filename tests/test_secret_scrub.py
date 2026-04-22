@@ -19,7 +19,7 @@ def iter_text_files(root: Path):
     for path in root.rglob("*"):
         if not path.is_file():
             continue
-        if any(part in {".git", ".venv", "__pycache__"} for part in path.parts):
+        if any(part in {".git", ".venv", "__pycache__", ".superpowers"} for part in path.parts):
             continue
         if path.suffix.lower() in BINARY_SUFFIXES:
             continue

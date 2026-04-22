@@ -24,6 +24,8 @@
           {% set meta_pills = review.topline.meta_pills %}
           {% set cta_links = review.topline.cta_links %}
           {% include "_decision_topline.html" %}
+          {% set reading_compass = review.reading_compass %}
+          {% include "_reading_compass.html" %}
         </section>
 
         <section id="review-action-rules" class="today-quality-block today-dispatch-block stage-decision-layer">
@@ -74,11 +76,11 @@
         <section id="review-compare" class="today-quality-block today-dispatch-block stage-decision-layer">
           <div class="section-head">
             <div>
-              <p class="eyebrow">快照状态</p>
-              <h2>环境对比栏</h2>
+              <p class="eyebrow">环境对比</p>
+              <h2>复盘状态栏</h2>
             </div>
           </div>
-          {% set status_strip_label = "环境对比栏" %}
+          {% set status_strip_label = "复盘状态栏" %}
           {% set status_items = review.mini_compare %}
           {% include "_status_strip.html" %}
         </section>

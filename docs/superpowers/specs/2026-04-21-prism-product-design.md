@@ -281,6 +281,10 @@ Today is the main decision surface.
 
 It should answer the overall daily action question and act as the user's primary daily landing page.
 
+The page structure should follow a command-center foundation with an action-feed reading experience.
+
+That means Today should feel like a decision desk, but it must read like a practical action sheet rather than an internal dashboard.
+
 The page structure should follow this order:
 
 1. today's overall stance
@@ -290,6 +294,13 @@ The page structure should follow this order:
 5. risk and change notes
 
 Today is not a navigation shell. It is a decision page.
+
+The design implication is important:
+
+- the top section should communicate attitude, not raw metrics
+- the top three actions should be the visual center of the page
+- holdings and opportunities should remain structured sections below
+- evidence should be pushed behind the action layer rather than competing with it
 
 #### Ask
 
@@ -309,6 +320,14 @@ Ask should therefore:
 - allow follow-up questions without turning into an encyclopedia
 
 Ask is not a generic search surface. It is a fast decision surface for single-stock judgment.
+
+The preferred interaction pattern is decision-card first with some conversational continuity.
+
+That means:
+
+- the first response should be a compact stock decision card
+- follow-up interaction should exist, but it should support the conclusion rather than replace it
+- the page should feel warmer than a rigid report, without becoming a generic chatbot
 
 #### Holdings
 

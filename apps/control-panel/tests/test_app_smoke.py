@@ -19,10 +19,14 @@ from control_panel.app import TEMPLATES, app  # noqa: E402
 from control_panel.dashboard_data import (  # noqa: E402
     TODAY_ACTION_STATE_PATH,
     build_ask_followup_view,
+    build_ask_page_view,
+    build_candidate_detail_view,
     build_opportunities_view,
     build_review_action_rules,
     build_review_view,
     build_today_next_steps,
+    build_today_view,
+    build_watchlist_detail_view,
     compress_today_actions,
     normalize_review_note_text,
     resolve_ask_stock,
@@ -188,6 +192,216 @@ class ControlPanelSmokeTest(unittest.TestCase):
         self.assertNotIn("投资系统轻量控制台", html)
         self.assertNotIn("先确认主链路有没有断，再决定要不要手动重跑", html)
 
+    def test_primary_navigation_uses_stage_one_labels_and_keeps_ops_separate(self) -> None:
+        response = self.client.get("/today")
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+        self.assertIn("今日", html)
+        self.assertIn("问股", html)
+        self.assertIn("持仓", html)
+        self.assertIn("机会", html)
+        self.assertIn("复盘", html)
+        self.assertIn("控制台", html)
+        self.assertNotIn("自选股</a>", html)
+        self.assertNotIn("机会池</a>", html)
+
+    def test_today_page_prioritizes_stance_top_actions_and_structured_sections(self) -> None:
+        response = self.client.get("/today")
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+        self.assertIn("今日总判断", html)
+        self.assertIn("今日三大动作", html)
+        self.assertIn("持仓动作", html)
+        self.assertIn("机会动作", html)
+        self.assertIn("风险与变更", html)
+        self.assertIn("证据来源", html)
+        self.assertNotIn("下一步动作", html)
+        self.assertNotIn("状态细栏", html)
+
+    def test_ask_page_uses_decision_card_first_and_followup_as_support(self) -> None:
+        response = self.client.get("/ask?q=600690")
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+        self.assertIn("单票决策", html)
+        self.assertIn("当前结论", html)
+        self.assertIn("为什么这么判断", html)
+        self.assertIn("继续做的条件", html)
+        self.assertIn("立刻停的条件", html)
+        self.assertIn("继续追问", html)
+        self.assertNotIn("先看跨层状态", html)
+
+    def test_single_stock_surfaces_share_top_decision_skeleton(self) -> None:
+        paths = [
+            "/ask?q=600690",
+            "/watchlist/000625",
+            self._first_opportunity_detail_url(),
+        ]
+        required_labels = [
+            "当前结论",
+            "仓位建议",
+            "风险边界",
+            "下一步动作",
+            "为什么这么判断",
+            "继续做的条件",
+            "立刻停的条件",
+        ]
+
+        for path in paths:
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                html = response.text
+                for label in required_labels:
+                    self.assertIn(label, html)
+
+    def test_single_stock_surfaces_share_execution_loop_module(self) -> None:
+        paths = [
+            "/ask?q=600690",
+            "/watchlist/000625",
+            self._first_opportunity_detail_url(),
+        ]
+        required_labels = [
+            "执行闭环",
+            "现在做什么",
+            "为什么先做这一步",
+            "触发条件",
+            "先不要做什么",
+            "去哪看证据",
+        ]
+
+        for path in paths:
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                html = response.text
+                for label in required_labels:
+                    self.assertIn(label, html)
+
+    def test_action_tier_language_is_shared_across_core_surfaces(self) -> None:
+        paths = [
+            "/today",
+            "/ask?q=600690",
+            "/watchlist/000625",
+            self._first_opportunity_detail_url(),
+        ]
+        required_labels = [
+            "立即执行",
+            "等触发",
+            "仅观察",
+            "明确回避",
+        ]
+
+        for path in paths:
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                html = response.text
+                for label in required_labels:
+                    self.assertIn(label, html)
+
+    def test_core_surfaces_share_decision_topline_module(self) -> None:
+        paths = [
+            "/today",
+            "/ask?q=600690",
+            "/watchlist/000625",
+            self._first_opportunity_detail_url(),
+        ]
+
+        for path in paths:
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                html = response.text
+                self.assertIn('class="decision-topline"', html)
+                self.assertIn('class="decision-topline-pills"', html)
+                self.assertIn('class="decision-topline-cta-row"', html)
+
+    def test_core_topline_meta_fields_use_shared_priority(self) -> None:
+        today = build_today_view()
+        ask = build_ask_page_view("600690")
+        watchlist_detail = build_watchlist_detail_view("000625")
+        candidate_detail = build_candidate_detail_view("600392")
+
+        payloads = [
+            ("today", today["topline"]),
+            ("ask", (ask["case"] or {})["topline"]),
+            ("watchlist_detail", watchlist_detail["topline"]),
+            ("candidate_detail", candidate_detail["topline"]),
+        ]
+
+        for label, topline in payloads:
+            with self.subTest(surface=label):
+                pills = topline.get("meta_pills") or []
+                self.assertEqual(len(pills), 3)
+                pill_labels = [item.get("label") for item in pills]
+                self.assertEqual(pill_labels[1], "仓位建议")
+                self.assertEqual(pill_labels[2], "风险边界")
+
+    def test_single_stock_action_copy_uses_shared_sentence_contract(self) -> None:
+        ask = (build_ask_page_view("600690").get("case") or {})
+        watchlist_detail = build_watchlist_detail_view("000625")
+        candidate_detail = build_candidate_detail_view("600392")
+
+        payloads = [
+            ("ask", ask),
+            ("watchlist_detail", watchlist_detail),
+            ("candidate_detail", candidate_detail),
+        ]
+
+        for label, payload in payloads:
+            with self.subTest(surface=label):
+                cards = payload.get("decision_cards") or []
+                card_map = {item.get("label"): str(item.get("value") or "") for item in cards}
+                loop = payload.get("execution_loop") or []
+                loop_map = {item.get("label"): str(item.get("value") or "") for item in loop}
+
+                self.assertTrue(card_map.get("下一步动作", "").startswith("先"))
+                self.assertIn("再", loop_map.get("触发条件", ""))
+                self.assertTrue(
+                    loop_map.get("先不要做什么", "").startswith("先不要")
+                    or loop_map.get("先不要做什么", "").startswith("不要")
+                    or loop_map.get("先不要做什么", "").startswith("先停")
+                )
+
+    def test_stock_surfaces_expose_canonical_decision_fields(self) -> None:
+        ask = (build_ask_page_view("600690").get("case") or {})
+        watchlist_detail = build_watchlist_detail_view("000625")
+        candidate_detail = build_candidate_detail_view("600392")
+
+        payloads = [ask, watchlist_detail, candidate_detail]
+        required_keys = {
+            "canonical_decision",
+            "decision_cards",
+            "decision_explanation",
+            "execution_loop",
+            "topline",
+        }
+
+        for payload in payloads:
+            with self.subTest(surface=payload.get("code") or payload.get("name") or "unknown"):
+                self.assertTrue(required_keys.issubset(payload.keys()))
+                canonical = payload.get("canonical_decision") or {}
+                for key in (
+                    "stock_id",
+                    "stock_name",
+                    "trade_date",
+                    "source_scope",
+                    "main_conclusion",
+                    "action_tier",
+                    "position_guidance",
+                    "risk_boundary",
+                    "why_now",
+                    "continue_condition",
+                    "stop_condition",
+                    "next_step",
+                    "trigger_condition",
+                    "avoid_action",
+                    "evidence_entry",
+                    "confidence_note",
+                    "updated_at",
+                ):
+                    self.assertIn(key, canonical)
+
     def test_ibm_preview_mode_is_opt_in(self) -> None:
         default_dashboard = self.client.get("/")
         self.assertEqual(default_dashboard.status_code, 200)
@@ -351,9 +565,9 @@ class ControlPanelSmokeTest(unittest.TestCase):
 
     def test_product_pages_expose_new_layout_sections(self) -> None:
         cases = [
-            ("/today", ["一句总判断", "下一步动作", "Top 3 今日动作", "状态细栏"]),
+            ("/today", ["今日总判断", "今日三大动作", "持仓动作", "机会动作", "风险与变更", "证据来源"]),
             ("/ask", ["股票代码或名称", "开始分析", "先输入一只股票"]),
-            ("/watchlist", ["持仓总览", "自选股管理", "添加并刷新", "归档只隐藏", "更新快照", "原始数据入口"]),
+            ("/watchlist", ["持仓总览", "持仓名单管理", "添加并刷新", "归档只隐藏", "更新快照", "原始数据入口"]),
             (
                 "/opportunities",
                 [("Top 3 可执行候选", "Top 3 观察/午盘承接候选"), "其余观察与午盘承接", "主线雷达", "质检与原始数据"],
@@ -407,14 +621,12 @@ class ControlPanelSmokeTest(unittest.TestCase):
     def test_today_page_uses_investor_dispatch_markers(self) -> None:
         response = self.client.get("/today")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("下一步动作", response.text)
-        self.assertIn("Top 3 今日动作", response.text)
-        self.assertIn("状态细栏", response.text)
-        self.assertNotIn("<h1>一句总判断</h1>", response.text)
-        self.assertRegex(response.text, re.compile(r'today-next-step-link[\s\S]*?href="/watchlist"'))
-        self.assertRegex(response.text, re.compile(r'today-next-step-link[\s\S]*?href="/opportunities"'))
-        self.assertRegex(response.text, re.compile(r'today-next-step-link[\s\S]*?href="/review"'))
-        self.assertRegex(response.text, re.compile(r'today-next-step-link[\s\S]*?aria-current="step"'))
+        self.assertIn("今日总判断", response.text)
+        self.assertIn("今日三大动作", response.text)
+        self.assertIn("持仓动作", response.text)
+        self.assertIn("机会动作", response.text)
+        self.assertIn("风险与变更", response.text)
+        self.assertIn("证据来源", response.text)
         self.assertNotIn("今日操作清单", response.text)
         self.assertNotIn("可信度总开关", response.text)
 
@@ -423,20 +635,20 @@ class ControlPanelSmokeTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         html = response.text
 
-        verdict_index = html.find('class="decision-topline"')
-        next_step_index = html.find("下一步动作")
-        top3_index = html.find("Top 3 今日动作")
-        status_index = html.find("状态细栏")
+        verdict_index = html.find("今日总判断")
+        top3_index = html.find("今日三大动作")
+        holdings_index = html.find("持仓动作")
+        opportunity_index = html.find("机会动作")
         self.assertGreaterEqual(verdict_index, 0)
-        self.assertGreaterEqual(next_step_index, 0)
         self.assertGreaterEqual(top3_index, 0)
-        self.assertGreaterEqual(status_index, 0)
-        self.assertLess(verdict_index, next_step_index)
-        self.assertLess(next_step_index, top3_index)
-        self.assertLess(top3_index, status_index)
+        self.assertGreaterEqual(holdings_index, 0)
+        self.assertGreaterEqual(opportunity_index, 0)
+        self.assertLess(verdict_index, top3_index)
+        self.assertLess(top3_index, holdings_index)
+        self.assertLess(holdings_index, opportunity_index)
 
-        self.assertIn("更多动作/背景", html)
-        self.assertIn("来源/质量", html)
+        self.assertIn("风险与变更", html)
+        self.assertIn("证据来源", html)
         self.assertIn("<details class=\"progressive-section\">", html)
         self.assertNotIn("<details class=\"progressive-section\" open", html)
 
@@ -445,8 +657,8 @@ class ControlPanelSmokeTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("优先处理 Top 3", response.text)
         self.assertIn("其余待观察", response.text)
-        self.assertIn("打开自选股管理", response.text)
-        self.assertNotIn("自选股管理</h2>", response.text)
+        self.assertIn("打开持仓名单管理", response.text)
+        self.assertNotIn("持仓名单管理</h2>", response.text)
 
     def test_opportunities_page_promotes_top_three_candidates(self) -> None:
         response = self.client.get("/opportunities")
@@ -455,6 +667,60 @@ class ControlPanelSmokeTest(unittest.TestCase):
         self.assertIn("其余观察与午盘承接", response.text)
         self.assertNotIn("机会总览", response.text)
         self.assertNotIn("主线雷达</h2>", response.text)
+
+    def test_stage_one_list_pages_expose_unified_reading_compass(self) -> None:
+        cases = ["/watchlist", "/opportunities", "/review"]
+        for path in cases:
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("当前结论", response.text)
+                self.assertIn("动作重点", response.text)
+                self.assertIn("风险边界", response.text)
+                self.assertIn("证据入口", response.text)
+
+    def test_cross_page_ctas_use_unified_action_language(self) -> None:
+        today_response = self.client.get("/today")
+        self.assertEqual(today_response.status_code, 200)
+        self.assertIn("去持仓看动作", today_response.text)
+        self.assertIn("去机会看候选", today_response.text)
+        self.assertIn("去复盘看依据", today_response.text)
+
+        watchlist_response = self.client.get("/watchlist")
+        self.assertEqual(watchlist_response.status_code, 200)
+        self.assertIn("去看其余持仓", watchlist_response.text)
+        self.assertIn("去管理持仓名单", watchlist_response.text)
+
+        opportunities_response = self.client.get("/opportunities")
+        self.assertEqual(opportunities_response.status_code, 200)
+        self.assertIn("去看观察候选", opportunities_response.text)
+        self.assertIn("去看主线判断", opportunities_response.text)
+        self.assertIn("去看证据来源", opportunities_response.text)
+
+        review_response = self.client.get("/review")
+        self.assertEqual(review_response.status_code, 200)
+        self.assertIn("去看结论变化", review_response.text)
+        self.assertIn("去切换研究窗口", review_response.text)
+        self.assertIn("去看研究证据", review_response.text)
+
+    def test_stock_journey_ctas_use_unified_view_language(self) -> None:
+        ask_response = self.client.get("/ask?q=600690")
+        self.assertEqual(ask_response.status_code, 200)
+        self.assertIn("去看持仓视角", ask_response.text)
+        self.assertNotIn("查看自选股视角", ask_response.text)
+
+        candidate_detail_url = self._first_opportunity_detail_url()
+        candidate_response = self.client.get(candidate_detail_url)
+        self.assertEqual(candidate_response.status_code, 200)
+        self.assertIn("去看机会列表", candidate_response.text)
+        self.assertNotIn("查看持仓视角", candidate_response.text)
+        self.assertIn("继续问这只股票", candidate_response.text)
+
+        watchlist_response = self.client.get("/watchlist/000625")
+        self.assertEqual(watchlist_response.status_code, 200)
+        self.assertIn("去看持仓列表", watchlist_response.text)
+        self.assertIn("继续问这只股票", watchlist_response.text)
+        self.assertNotIn("查看候选视角", watchlist_response.text)
 
     def test_opportunities_view_gate_closed_prefers_watch_rows_even_with_approved_candidates(self) -> None:
         mocked = self._mock_opportunities_inputs(
@@ -847,6 +1113,19 @@ class ControlPanelSmokeTest(unittest.TestCase):
             ("/watchlist/000625", ["先看跨层状态", "盘中触发", "data-preview-path="]),
             (opportunity_detail_url, ["先看信号拆解", "执行计划", "资金承接", "data-preview-path="]),
             ("/opportunities/batch/screener", ["候选队列", "主线雷达", "data-preview-path="]),
+        ]
+        for path, markers in cases:
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                for marker in markers:
+                    self.assertIn(marker, response.text)
+
+    def test_detail_pages_use_unified_decision_language(self) -> None:
+        opportunity_detail_url = self._first_opportunity_detail_url()
+        cases = [
+            ("/watchlist/000625", ["当前结论", "仓位建议", "风险边界"]),
+            (opportunity_detail_url, ["当前结论", "仓位建议", "风险边界"]),
         ]
         for path, markers in cases:
             with self.subTest(path=path):

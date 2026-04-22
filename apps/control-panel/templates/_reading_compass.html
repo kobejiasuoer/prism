@@ -1,0 +1,12 @@
+{% set reading_compass = reading_compass if reading_compass is defined and reading_compass else [] %}
+{% if reading_compass %}
+<section class="reading-compass" aria-label="统一阅读罗盘">
+  {% for item in reading_compass %}
+  <article class="reading-compass-card">
+    <span>{{ item.label }}</span>
+    <strong>{{ item.value }}</strong>
+    <p>{{ item.detail }}</p>
+  </article>
+  {% endfor %}
+</section>
+{% endif %}

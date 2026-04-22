@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>棱镜·机会池</title>
+    <title>棱镜·机会</title>
     {% include "_theme_head.html" %}
     <link rel="stylesheet" href="/static/control-panel.css?v=20260420-schemec5">
   </head>
@@ -24,6 +24,8 @@
           {% set meta_pills = opportunities.topline.meta_pills %}
           {% set cta_links = opportunities.topline.cta_links %}
           {% include "_decision_topline.html" %}
+          {% set reading_compass = opportunities.reading_compass %}
+          {% include "_reading_compass.html" %}
         </section>
 
         <section id="opportunities-top-three" class="today-quality-block today-dispatch-block stage-decision-layer">
@@ -51,11 +53,11 @@
         <section class="today-quality-block today-dispatch-block stage-decision-layer">
           <div class="section-head">
             <div>
-              <p class="eyebrow">快照状态</p>
-              <h2>状态细栏</h2>
+              <p class="eyebrow">风险与节奏</p>
+              <h2>机会状态栏</h2>
             </div>
           </div>
-          {% set status_strip_label = "状态细栏" %}
+          {% set status_strip_label = "机会状态栏" %}
           {% set status_items = opportunities.status_strip %}
           {% include "_status_strip.html" %}
         </section>

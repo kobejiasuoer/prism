@@ -10,6 +10,9 @@
         <div class="decision-row-main">
           <span class="decision-row-rank">{{ "%02d"|format(loop.index) }}</span>
           <span class="decision-row-title">{{ row.title }}</span>
+          {% if row.tier %}
+          <span class="action-tier-badge action-tier-badge-{{ row.tone|default('watch') }}">{{ row.tier }}</span>
+          {% endif %}
           <strong class="decision-row-action">{{ row.action }}</strong>
           <span class="decision-row-trigger">{{ row.trigger }}</span>
         </div>

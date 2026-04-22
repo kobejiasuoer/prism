@@ -1,0 +1,16 @@
+{% set action_tier_legend = action_tier_legend if action_tier_legend is defined and action_tier_legend else [] %}
+<div class="section-head action-tier-legend-head">
+  <div>
+    <p class="eyebrow">动作等级</p>
+    <h2>动作等级说明</h2>
+  </div>
+</div>
+<p class="today-panel-copy action-tier-legend-copy">四档动作语言在今日、问股、持仓和机会页保持同一套读法，先判断强度，再决定要不要展开细节。</p>
+<div class="action-tier-legend-grid">
+  {% for item in action_tier_legend %}
+  <article class="action-tier-legend-card">
+    <em class="action-tier-inline action-tier-inline-{{ item.key }}">{{ item.label }}</em>
+    <p>{{ item.detail }}</p>
+  </article>
+  {% endfor %}
+</div>

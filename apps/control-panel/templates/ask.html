@@ -153,54 +153,19 @@
 
       {% if ask.case %}
       {% set detail = ask.case %}
-      <details class="progressive-section ask-progressive-strip">
-        <summary class="progressive-summary">
-          <div class="progressive-summary-main">
-            <p class="eyebrow">跨系统状态</p>
-            <strong>先看跨层状态</strong>
-          </div>
-          <span class="progressive-summary-note">{{ detail.cross_cards|length }} 项跨层信息</span>
-        </summary>
-        <div class="progressive-body">
-      <section class="today-source-strip ask-source-strip stage-evidence-layer">
-        {% for item in detail.cross_cards %}
-        <article class="source-card tone-{{ item.tone }}">
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-          <p>{{ item.detail }}</p>
-        </article>
-        {% endfor %}
-      </section>
-        </div>
-      </details>
-
       <section class="today-hero ask-result-hero stage-decision-layer">
         <div class="today-copy">
-          <p class="eyebrow">单票结论</p>
-          <h2>{{ detail.hero.title }}</h2>
-          <p class="today-summary">{{ detail.hero.summary }}</p>
+          <p class="eyebrow">单票决策</p>
+          {% set verdict_badge = detail.topline.verdict_badge %}
+          {% set verdict_title = detail.topline.verdict_title %}
+          {% set verdict_summary = detail.topline.verdict_summary %}
+          {% set meta_pills = detail.topline.meta_pills %}
+          {% set cta_links = detail.topline.cta_links %}
+          {% include "_decision_topline.html" %}
           <div class="detail-tag-list ask-context-tags">
             {% for tag in detail.context_tags %}
             <span class="detail-tag">{{ tag }}</span>
             {% endfor %}
-          </div>
-          <div class="today-hero-meta ask-result-meta">
-            <div class="meta-pill">
-              <span>当前结论</span>
-              <strong>{{ detail.hero.decision_label }}</strong>
-            </div>
-            <div class="meta-pill">
-              <span>建议仓位</span>
-              <strong>{{ detail.hero.position }}</strong>
-            </div>
-            <div class="meta-pill">
-              <span>可信度</span>
-              <strong>{{ detail.hero.confidence_label }}</strong>
-            </div>
-            <div class="meta-pill">
-              <span>交易日</span>
-              <strong>{{ detail.trade_date }}</strong>
-            </div>
           </div>
         </div>
 
@@ -208,14 +173,6 @@
           <span class="callout-label">可信度说明</span>
           <strong>{{ detail.hero.confidence_label }} 可信度</strong>
           <p>{{ detail.hero.confidence_note }}</p>
-          <div class="callout-actions">
-            {% if detail.links.watchlist_detail %}
-            <a class="ghost-button link-button" href="{{ detail.links.watchlist_detail }}">查看自选股视角</a>
-            {% endif %}
-            {% if detail.links.candidate_detail %}
-            <a class="ghost-button link-button" href="{{ detail.links.candidate_detail }}">查看机会池视角</a>
-            {% endif %}
-          </div>
           <section class="ask-watchlist-block tone-{{ detail.watchlist_action.tone }}">
             <span class="callout-label">自选股动作</span>
             <strong>{{ detail.watchlist_action.label }}</strong>
@@ -239,6 +196,39 @@
         </aside>
       </section>
 
+      <section class="today-quality-block action-tier-legend-section stage-action-layer">
+        {% set action_tier_legend = ask.action_tier_legend %}
+        {% include "_action_tier_legend.html" %}
+      </section>
+
+      <section class="detail-metric-grid stage-decision-layer ask-decision-grid">
+        {% for item in detail.decision_cards %}
+        <article class="today-summary-card">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+          <p>{{ item.detail }}</p>
+        </article>
+        {% endfor %}
+      </section>
+
+      <section class="detail-metric-grid stage-decision-layer ask-judgement-block">
+        <article class="today-summary-card">
+          <span>为什么这么判断</span>
+          <strong>核心理由</strong>
+          <p>{{ detail.decision_explanation.why }}</p>
+        </article>
+        <article class="today-summary-card">
+          <span>继续做的条件</span>
+          <strong>满足这些条件再继续</strong>
+          <p>{{ detail.decision_explanation.risk }}</p>
+        </article>
+        <article class="today-summary-card">
+          <span>立刻停的条件</span>
+          <strong>一旦出现就先停</strong>
+          <p>{{ detail.decision_explanation.invalid }}</p>
+        </article>
+      </section>
+
       <section class="detail-metric-grid stage-evidence-layer">
         {% for item in detail.metric_cards %}
         <article class="today-summary-card">
@@ -249,15 +239,56 @@
         {% endfor %}
       </section>
 
+      <section class="today-panel stage-action-layer">
+        <div class="today-panel-head">
+          <div>
+            <p class="eyebrow">执行闭环</p>
+            <h2>先做什么，再看什么</h2>
+          </div>
+        </div>
+        <p class="today-panel-copy">这一块只回答新人最需要的 5 件事：现在做什么、为什么先做、何时触发、先别做什么、以及去哪核对证据。</p>
+        <section class="detail-metric-grid detail-metric-grid-single execution-loop-grid">
+          {% for item in detail.execution_loop %}
+          <article class="detail-row-card execution-loop-card">
+            <span>{{ item.label }}</span>
+            <em class="action-tier-inline action-tier-inline-{{ item.tier_key|default('observe') }}">{{ item.tier }}</em>
+            <strong>{{ item.value }}</strong>
+            <p>{{ item.detail }}</p>
+          </article>
+          {% endfor %}
+        </section>
+      </section>
+
       <details class="progressive-section">
         <summary class="progressive-summary">
           <div class="progressive-summary-main">
-            <p class="eyebrow">深入展开</p>
-            <strong>分层评分、追问与证据拆解</strong>
+            <p class="eyebrow">继续追问</p>
+            <strong>追问与证据拆解</strong>
           </div>
-          <span class="progressive-summary-note">展开评分层级、连续追问、六维拆解与事件证据</span>
+          <span class="progressive-summary-note">展开连续追问、跨系统状态、六维拆解与事件证据</span>
         </summary>
         <div class="progressive-body">
+      <details class="progressive-section ask-progressive-strip">
+        <summary class="progressive-summary">
+          <div class="progressive-summary-main">
+            <p class="eyebrow">跨系统状态</p>
+            <strong>跨层背景</strong>
+          </div>
+          <span class="progressive-summary-note">{{ detail.cross_cards|length }} 项跨层信息</span>
+        </summary>
+        <div class="progressive-body">
+      <section class="today-source-strip ask-source-strip stage-evidence-layer">
+        {% for item in detail.cross_cards %}
+        <article class="source-card tone-{{ item.tone }}">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+          <p>{{ item.detail }}</p>
+        </article>
+        {% endfor %}
+      </section>
+        </div>
+      </details>
+
       <section class="detail-metric-grid stage-evidence-layer">
         {% for item in detail.level_cards %}
         <article class="today-summary-card">

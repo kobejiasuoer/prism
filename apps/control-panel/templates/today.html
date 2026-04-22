@@ -16,151 +16,75 @@
         {% include "_page_nav.html" %}
       </header>
 
-      <main class="today-dispatch-main">
+      <main class="today-dispatch-main today-command-main">
         <section class="today-quality-block today-dispatch-block stage-decision-layer">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">今日总判断</p>
+            </div>
+          </div>
           {% set verdict_badge = today.topline.verdict_badge %}
           {% set verdict_title = today.topline.verdict_title %}
           {% set verdict_summary = today.topline.verdict_summary %}
           {% set meta_pills = today.topline.meta_pills %}
           {% set cta_links = today.topline.cta_links %}
           {% include "_decision_topline.html" %}
+          <div class="detail-tag-list today-topline-tags">
+            <span class="detail-tag">{{ today.hero.gate_label }}</span>
+            <span class="detail-tag">仓位上限 {{ today.hero.position_cap }}</span>
+            <span class="detail-tag">主线 {{ today.hero.main_theme }}</span>
+          </div>
         </section>
 
-        <section class="today-quality-block today-dispatch-block stage-decision-layer">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">下一步</p>
-              <h2>下一步动作</h2>
-            </div>
-            <span class="today-next-step-current">当前最佳：{{ today.next_steps.current_label }}</span>
-          </div>
-          <div class="today-next-step-strip">
-            {% for item in today.next_steps["items"] %}
-            <a
-              class="today-next-step-card today-next-step-link {% if item.active %}today-next-step-card-active{% endif %}"
-              href="{{ item.href }}"
-              {% if item.active %}aria-current="step"{% endif %}
-            >
-              <strong>{{ item.label }}</strong>
-              <p>{{ item.detail }}</p>
-              <span>{% if item.active %}当前最佳{% else %}备选{% endif %}</span>
-            </a>
-            {% endfor %}
-          </div>
+        <section class="today-quality-block today-dispatch-block stage-action-layer action-tier-legend-section">
+          {% set action_tier_legend = today.action_tier_legend %}
+          {% include "_action_tier_legend.html" %}
         </section>
 
         <section class="today-quality-block today-dispatch-block stage-decision-layer">
           <div class="section-head">
             <div>
               <p class="eyebrow">优先动作</p>
-              <h2>Top 3 今日动作</h2>
+              <h2>今日三大动作</h2>
             </div>
           </div>
-          {% set decision_rows = today.top_rows %}
+          {% set decision_rows = today.primary_actions %}
           {% include "_decision_rows.html" %}
         </section>
 
         <section class="today-quality-block today-dispatch-block stage-decision-layer">
           <div class="section-head">
             <div>
-              <p class="eyebrow">快照状态</p>
-              <h2>状态细栏</h2>
+              <p class="eyebrow">持仓</p>
+              <h2>持仓动作</h2>
             </div>
           </div>
-          {% set status_strip_label = "状态细栏" %}
-          {% set status_items = today.status_strip %}
-          {% include "_status_strip.html" %}
+          {% set decision_rows = today.holdings_rows %}
+          {% include "_decision_rows.html" %}
+        </section>
+
+        <section class="today-quality-block today-dispatch-block stage-decision-layer">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">机会</p>
+              <h2>机会动作</h2>
+            </div>
+          </div>
+          {% set decision_rows = today.opportunity_rows %}
+          {% include "_decision_rows.html" %}
         </section>
 
         <details class="progressive-section">
           <summary class="progressive-summary">
             <div class="progressive-summary-main">
-              <p class="eyebrow">延展层</p>
-              <strong>更多动作/背景</strong>
+              <p class="eyebrow">风险层</p>
+              <strong>风险与变更</strong>
             </div>
-            <span class="progressive-summary-note">展开完整动作与变化轨迹</span>
+            <span class="progressive-summary-note">展开午盘变化与关键边界</span>
           </summary>
           <div class="progressive-body">
-            <section class="today-dispatch-secondary-grid stage-action-layer">
-              <article class="today-quality-block">
-                <div class="section-head">
-                  <div>
-                    <p class="eyebrow">动作背景</p>
-                    <h3>更多动作</h3>
-                  </div>
-                </div>
-                <div class="today-dispatch-mini-grid">
-                  {% for group in today.action_groups %}
-                  <article class="today-dispatch-mini-group">
-                    <div class="today-dispatch-mini-head">
-                      <strong>{{ group.title }}</strong>
-                      <span>{{ group.count }}</span>
-                    </div>
-                    <p class="today-dispatch-mini-copy">{{ group.subtitle }}</p>
-                    {% if group["items"] %}
-                    <ul class="today-dispatch-mini-list">
-                      {% for item in group["items"][:2] %}
-                      <li>
-                        {% if item.url %}
-                        <a href="{{ item.url }}">{{ item.title }}</a>
-                        {% else %}
-                        <span>{{ item.title }}</span>
-                        {% endif %}
-                        <em>{{ item.status }}</em>
-                      </li>
-                      {% endfor %}
-                    </ul>
-                    {% if group.count > 2 %}
-                    <p class="today-dispatch-mini-more">还有 {{ group.count - 2 }} 条未展开</p>
-                    {% endif %}
-                    {% else %}
-                    <div class="decision-empty">{{ group.empty }}</div>
-                    {% endif %}
-                  </article>
-                  {% endfor %}
-                </div>
-              </article>
-
-              <article class="today-quality-block">
-                <div class="section-head">
-                  <div>
-                    <p class="eyebrow">变化背景</p>
-                    <h3>{{ today.change_view.title }}</h3>
-                  </div>
-                </div>
-                <p class="today-panel-copy">{{ today.change_view.subtitle }}</p>
-                {% if today.change_view.meta_tags %}
-                <div class="detail-tag-list">
-                  {% for item in today.change_view.meta_tags %}
-                  <span class="detail-tag">{{ item }}</span>
-                  {% endfor %}
-                </div>
-                {% endif %}
-                <div class="today-dispatch-mini-grid">
-                  {% for group in today.change_view.groups %}
-                  <article class="today-dispatch-mini-group">
-                    <div class="today-dispatch-mini-head">
-                      <strong>{{ group.title }}</strong>
-                      <span>{{ group.count }}</span>
-                    </div>
-                    <p class="today-dispatch-mini-copy">{{ group.subtitle }}</p>
-                    {% if group.cards %}
-                    <ul class="today-dispatch-mini-list">
-                      {% for item in group.cards[:2] %}
-                      <li>
-                        <span>{{ item.name }} {{ item.code }}</span>
-                        <em>{{ item.status }}</em>
-                      </li>
-                      {% endfor %}
-                    </ul>
-                    {% else %}
-                    <div class="decision-empty">{{ group.empty }}</div>
-                    {% endif %}
-                  </article>
-                  {% endfor %}
-                </div>
-              </article>
-            </section>
+            {% set decision_rows = today.risk_rows %}
+            {% include "_decision_rows.html" %}
           </div>
         </details>
 
@@ -168,7 +92,7 @@
           <summary class="progressive-summary">
             <div class="progressive-summary-main">
               <p class="eyebrow">证据层</p>
-              <strong>来源/质量</strong>
+              <strong>证据来源</strong>
             </div>
             <span class="progressive-summary-note">展开刷新、来源快照与原始入口</span>
           </summary>
@@ -192,6 +116,17 @@
             </section>
 
             <section class="today-dispatch-secondary-grid stage-action-layer">
+              <article class="today-quality-block">
+                <div class="section-head">
+                  <div>
+                    <p class="eyebrow">来源摘要</p>
+                    <h3>证据来源</h3>
+                  </div>
+                </div>
+                {% set decision_rows = today.evidence_rows %}
+                {% include "_decision_rows.html" %}
+              </article>
+
               <article class="today-quality-block">
                 <div class="section-head">
                   <div>

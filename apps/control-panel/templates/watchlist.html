@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>棱镜·自选股</title>
+    <title>棱镜·持仓</title>
     {% include "_theme_head.html" %}
     <link rel="stylesheet" href="/static/control-panel.css?v=20260420-schemec5">
   </head>
@@ -29,12 +29,14 @@
           {% set meta_pills = watchlist.topline.meta_pills %}
           {% set cta_links = watchlist.topline.cta_links %}
           {% include "_decision_topline.html" %}
+          {% set reading_compass = watchlist.reading_compass %}
+          {% include "_reading_compass.html" %}
         </section>
 
         <section id="watchlist-priority" class="today-quality-block today-dispatch-block stage-decision-layer">
           <div class="today-panel-head">
             <div>
-              <p class="eyebrow">自选股</p>
+              <p class="eyebrow">持仓</p>
               <h2>优先处理 Top 3</h2>
             </div>
             <span class="panel-stat">{{ priority_group.count }}</span>
@@ -46,11 +48,11 @@
         <section class="today-quality-block today-dispatch-block stage-decision-layer">
           <div class="section-head">
             <div>
-              <p class="eyebrow">快照状态</p>
-              <h2>状态细栏</h2>
+              <p class="eyebrow">风险与节奏</p>
+              <h2>持仓状态栏</h2>
             </div>
           </div>
-          {% set status_strip_label = "状态细栏" %}
+          {% set status_strip_label = "持仓状态栏" %}
           {% set status_items = watchlist.status_strip %}
           {% include "_status_strip.html" %}
         </section>
@@ -96,9 +98,9 @@
           <summary class="progressive-summary">
             <div class="progressive-summary-main">
               <p class="eyebrow">管理层</p>
-              <strong>自选股管理</strong>
+              <strong>持仓名单管理</strong>
             </div>
-            <span class="progressive-summary-note">打开自选股管理（{{ manager.active_count }} 活跃）</span>
+            <span class="progressive-summary-note">打开持仓名单管理（{{ manager.active_count }} 活跃）</span>
           </summary>
           <div class="progressive-body">
             <section class="prism-refresh-strip" data-refresh-panel>

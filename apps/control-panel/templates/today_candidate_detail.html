@@ -17,9 +17,12 @@
 
         <div class="today-hero-main">
           <div class="today-copy">
-            <p class="eyebrow">机会扫描</p>
-            <h1>{{ detail.hero.title }}</h1>
-            <p class="today-summary">{{ detail.hero.summary }}</p>
+            {% set verdict_badge = detail.topline.verdict_badge %}
+            {% set verdict_title = detail.topline.verdict_title %}
+            {% set verdict_summary = detail.topline.verdict_summary %}
+            {% set meta_pills = detail.topline.meta_pills %}
+            {% set cta_links = detail.topline.cta_links %}
+            {% include "_decision_topline.html" %}
             <section class="opportunities-hero-guide">
               <p class="opportunities-hero-guide-copy">先读为什么它进入今天的执行视野，再看动作计划和资金承接，最后需要时回到批次或自选股快照核对。</p>
               <div class="panel-link-stack opportunities-hero-guide-links">
@@ -28,36 +31,12 @@
                 <a class="panel-link panel-link-subtle" href="#candidate-artifacts">回看原始文件</a>
               </div>
             </section>
-            <div class="today-hero-meta">
-              <div class="meta-pill">
-                <span>当前标签</span>
-                <strong>{{ detail.hero.status_label }}</strong>
-              </div>
-              <div class="meta-pill">
-                <span>形态</span>
-                <strong>{{ detail.hero.setup_label }}</strong>
-              </div>
-              <div class="meta-pill">
-                <span>交易日</span>
-                <strong>{{ detail.trade_date }}</strong>
-              </div>
-              <div class="meta-pill">
-                <span>代码</span>
-                <strong>{{ detail.code }}</strong>
-              </div>
-            </div>
           </div>
 
           <aside class="today-callout">
             <span class="callout-label">执行视角</span>
             <strong>先看执行质量，再看分数</strong>
             <p>这页把早盘批次、午盘确认和自选股里的同名股票状态拉到一起，避免只看单一路径。</p>
-            <div class="callout-actions">
-              <a class="ghost-button link-button" href="{{ detail.links.opportunities }}">回到机会池</a>
-              {% if detail.links.watchlist_detail %}
-              <a class="ghost-button link-button" href="{{ detail.links.watchlist_detail }}">查看持仓视角</a>
-              {% endif %}
-            </div>
           </aside>
         </div>
       </header>
@@ -72,6 +51,39 @@
         {% endfor %}
       </section>
 
+      <section class="today-quality-block detail-action-zone action-tier-legend-section">
+        {% set action_tier_legend = detail.action_tier_legend %}
+        {% include "_action_tier_legend.html" %}
+      </section>
+
+      <section class="detail-metric-grid detail-summary-zone">
+        {% for item in detail.decision_cards %}
+        <article class="today-summary-card">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+          <p>{{ item.detail }}</p>
+        </article>
+        {% endfor %}
+      </section>
+
+      <section class="detail-metric-grid detail-summary-zone ask-judgement-block">
+        <article class="today-summary-card">
+          <span>为什么这么判断</span>
+          <strong>核心理由</strong>
+          <p>{{ detail.decision_explanation.why }}</p>
+        </article>
+        <article class="today-summary-card">
+          <span>继续做的条件</span>
+          <strong>满足这些条件再继续</strong>
+          <p>{{ detail.decision_explanation.risk }}</p>
+        </article>
+        <article class="today-summary-card">
+          <span>立刻停的条件</span>
+          <strong>一旦出现就先停</strong>
+          <p>{{ detail.decision_explanation.invalid }}</p>
+        </article>
+      </section>
+
       <section class="detail-metric-grid detail-summary-zone">
         {% for item in detail.metric_cards %}
         <article class="today-summary-card">
@@ -80,6 +92,26 @@
           <p>{{ item.detail }}</p>
         </article>
         {% endfor %}
+      </section>
+
+      <section class="today-panel detail-action-zone">
+        <div class="today-panel-head">
+          <div>
+            <p class="eyebrow">执行闭环</p>
+            <h2>先观察什么，再执行什么</h2>
+          </div>
+        </div>
+        <p class="today-panel-copy">把候选动作也收成统一执行读法，先看动作、触发和回避，再决定要不要继续跟。</p>
+        <section class="detail-metric-grid detail-metric-grid-single execution-loop-grid">
+          {% for item in detail.execution_loop %}
+          <article class="detail-row-card execution-loop-card">
+            <span>{{ item.label }}</span>
+            <em class="action-tier-inline action-tier-inline-{{ item.tier_key|default('observe') }}">{{ item.tier }}</em>
+            <strong>{{ item.value }}</strong>
+            <p>{{ item.detail }}</p>
+          </article>
+          {% endfor %}
+        </section>
       </section>
 
       <section class="detail-split detail-evidence-zone">
