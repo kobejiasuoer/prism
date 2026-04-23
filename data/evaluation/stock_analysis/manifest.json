@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "program": "prism_stock_analysis_evaluation",
+  "generated_at": "2026-04-23 00:00:00",
+  "baseline_label": "2026-04-23-initial-baseline",
+  "historical_reports": [
+    {
+      "id": "aggressive_backtest_review_2026_04_15",
+      "path": "data/history/reports/screener/backtest_review_2026-04-15_11-01.md",
+      "description": "Existing aggressive screener replay report with friction-adjusted returns, gate segmentation, environment buckets, and weak-environment samples."
+    }
+  ],
+  "historical_comparisons": [
+    {
+      "id": "research_backfill_20240102_20240329_rerun_delta",
+      "baseline_path": "stock-screener/data/research_backfill/reports/research_backfill_review_20240102_20240329.md",
+      "latest_path": "stock-screener/data/research_backfill/reports/research_backfill_review_20240102_20240329_rerun.md",
+      "description": "Same-window structured comparison between the original research backfill review and the rerun review."
+    }
+  ],
+  "suites": [
+    {
+      "name": "latest_trading_day",
+      "description": "Latest operational artifacts for current-lane validation.",
+      "cases": [
+        {
+          "id": "latest_operational_case",
+          "watchlist_snapshot": "stock-analyzer/data/daily_snapshots/2026-04-21.json",
+          "screening_batch": "stock-screener/data/ai_screening_result.json",
+          "midday_confirmation": "stock-screener/data/midday_verification_result.json",
+          "decision_brief": "apps/data/command_brief/prism_command_brief_2026-04-21_12-20-48.json"
+        }
+      ]
+    },
+    {
+      "name": "historical_normal",
+      "description": "Known historical runs for regression-safe baseline comparison.",
+      "cases": [
+        {
+          "id": "historical_command_brief_2026_04_16",
+          "watchlist_snapshot": "stock-analyzer/data/daily_snapshots/2026-04-16.json",
+          "screening_batch": "stock-screener/data/ai_history/ai_screening_2026-04-16_23-35-53.json",
+          "decision_brief": "apps/data/command_brief/prism_command_brief_2026-04-16_23-57-40.json"
+        },
+        {
+          "id": "historical_command_brief_2026_04_20",
+          "watchlist_snapshot": "stock-analyzer/data/daily_snapshots/2026-04-20.json",
+          "screening_batch": "stock-screener/data/ai_history/ai_screening_2026-04-20_13-11-12.json",
+          "decision_brief": "apps/data/command_brief/prism_command_brief_2026-04-20_14-55-54.json"
+        },
+        {
+          "id": "historical_command_brief_2026_04_21",
+          "watchlist_snapshot": "stock-analyzer/data/daily_snapshots/2026-04-21.json",
+          "screening_batch": "stock-screener/data/ai_history/ai_screening_2026-04-21_10-43-32.json",
+          "decision_brief": "apps/data/command_brief/prism_command_brief_2026-04-21_10-49-18.json"
+        }
+      ]
+    },
+    {
+      "name": "weak_environment",
+      "description": "Runs where the execution gate should become defensive.",
+      "cases": [
+        {
+          "id": "weak_environment_2026_04_21_noon",
+          "screening_batch": "stock-screener/data/ai_history/ai_screening_2026-04-21_12-01-24.json"
+        },
+        {
+          "id": "weak_environment_2026_04_15_morning",
+          "screening_batch": "stock-screener/data/ai_history/ai_screening_2026-04-15_10-49-21.json"
+        }
+      ]
+    },
+    {
+      "name": "abnormal_inputs",
+      "description": "Synthetic or known-bad cases that should fail closed.",
+      "expected_failures": true,
+      "cases": [
+        {
+          "id": "missing_midday_case",
+          "watchlist_snapshot": "stock-analyzer/data/daily_snapshots/2026-04-21.json",
+          "screening_batch": "stock-screener/data/ai_screening_result.json",
+          "midday_confirmation": "stock-screener/data/does_not_exist.json",
+          "decision_brief": "apps/data/command_brief/prism_command_brief_2026-04-21_12-20-48.json"
+        }
+      ]
+    }
+  ]
+}

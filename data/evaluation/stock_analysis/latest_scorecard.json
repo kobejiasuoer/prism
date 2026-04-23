@@ -1,0 +1,524 @@
+{
+  "version": 1,
+  "program": "prism_stock_analysis_evaluation",
+  "generated_at": "2026-04-23 22:43:37",
+  "baseline_label": "2026-04-23-initial-baseline",
+  "summary": {
+    "total_score": 97,
+    "max_score": 100,
+    "tier": "professional_usable",
+    "hard_gate_failures": [],
+    "expected_abnormal_failures": [
+      "abnormal_inputs::missing_midday_case::midday_confirmation: parse_error",
+      "abnormal_inputs::missing_midday_case::midday_confirmation: unavailable"
+    ],
+    "dimension_scores": {
+      "data_governance": {
+        "earned": 20,
+        "max": 20
+      },
+      "analysis_rule_quality": {
+        "earned": 20,
+        "max": 20
+      },
+      "execution_risk_control": {
+        "earned": 20,
+        "max": 20
+      },
+      "output_usability": {
+        "earned": 15,
+        "max": 15
+      },
+      "historical_validation": {
+        "earned": 12,
+        "max": 15
+      },
+      "stability_productization": {
+        "earned": 10,
+        "max": 10
+      }
+    }
+  },
+  "historical_results": [
+    {
+      "id": "aggressive_backtest_review_2026_04_15",
+      "path": "data/history/reports/screener/backtest_review_2026-04-15_11-01.md",
+      "description": "Existing aggressive screener replay report with friction-adjusted returns, gate segmentation, environment buckets, and weak-environment samples.",
+      "status": "loaded",
+      "score": 8,
+      "evidence": [
+        "friction_adjusted",
+        "multi_horizon_metrics",
+        "gate_segmentation",
+        "environment_segmentation",
+        "tier_segmentation"
+      ],
+      "review_id": "research_review:2026-04-15T11:01:03",
+      "summary": {
+        "roundtrip_cost_pct": 1.2,
+        "ai_overall_next_day_net_pct": -1.35,
+        "ai_overall_day3_net_pct": 4.62,
+        "weak_regime_ai_next_day_net_pct": 1.74,
+        "weak_regime_ai_day5_net_pct": null
+      }
+    }
+  ],
+  "historical_comparisons": [
+    {
+      "id": "research_backfill_20240102_20240329_rerun_delta",
+      "description": "Same-window structured comparison between the original research backfill review and the rerun review.",
+      "baseline_path": "stock-screener/data/research_backfill/reports/research_backfill_review_20240102_20240329.md",
+      "latest_path": "stock-screener/data/research_backfill/reports/research_backfill_review_20240102_20240329_rerun.md",
+      "status": "loaded",
+      "score": 4,
+      "evidence": [
+        "ai_overall_multi_horizon_delta",
+        "weak_regime_delta",
+        "same_window_comparison",
+        "stable_cost_assumption"
+      ],
+      "baseline_review_id": "research_review:2026-04-15T17:20:27",
+      "latest_review_id": "research_review:2026-04-15T20:10:05",
+      "summary": {
+        "baseline_start_date": "2024-01-02",
+        "baseline_end_date": "2024-03-29",
+        "latest_start_date": "2024-01-02",
+        "latest_end_date": "2024-03-29",
+        "roundtrip_cost_pct_delta": 0.0,
+        "ai_overall_next_day_net_delta": 0.07,
+        "ai_overall_day3_net_delta": -0.53,
+        "ai_overall_day5_net_delta": -0.88,
+        "weak_regime_ai_next_day_net_delta": 0.38,
+        "weak_regime_ai_day5_net_delta": 0.57
+      }
+    }
+  ],
+  "suite_results": [
+    {
+      "name": "latest_trading_day",
+      "description": "Latest operational artifacts for current-lane validation.",
+      "expected_failures": false,
+      "cases": [
+        {
+          "id": "latest_operational_case",
+          "artifacts": {
+            "watchlist": {
+              "status": "loaded",
+              "path": "stock-analyzer/data/daily_snapshots/2026-04-21.json",
+              "error": null,
+              "summary": {
+                "generated_at": "2026-04-21 12:20:52",
+                "trade_date": "2026-04-21",
+                "stock_count": 5,
+                "priority_codes": [
+                  "002179",
+                  "002487",
+                  "600690"
+                ]
+              }
+            },
+            "screening": {
+              "status": "loaded",
+              "path": "stock-screener/data/ai_screening_result.json",
+              "error": null,
+              "summary": {
+                "generated_at": "2026-04-21 13:10:57",
+                "candidate_count": 13,
+                "approved_count": 0,
+                "caution_count": 13,
+                "excluded_count": 0,
+                "execution_gate_status": "off"
+              }
+            },
+            "midday_confirmation": {
+              "status": "loaded",
+              "path": "stock-screener/data/midday_verification_result.json",
+              "error": null,
+              "summary": {
+                "generated_at": "2026-04-21 13:46:59",
+                "validation_status": "ok",
+                "confirmed_count": 0,
+                "downgraded_count": 0,
+                "fresh_candidates_count": 3
+              }
+            },
+            "decision_brief": {
+              "status": "loaded",
+              "path": "apps/data/command_brief/prism_command_brief_2026-04-21_12-20-48.json",
+              "error": null,
+              "summary": {
+                "generated_at": "2026-04-21 12:20:53",
+                "trade_date": "2026-04-21",
+                "open_new_positions": "否，今天进攻阀门关闭。",
+                "position_cap": "0成",
+                "main_theme": "新能源链"
+              }
+            }
+          },
+          "hard_gate_failures": [],
+          "dimension_scores": {
+            "data_governance": 7,
+            "analysis_rule_quality": 9,
+            "execution_risk_control": 12,
+            "output_usability": 9,
+            "historical_validation": 0,
+            "stability_productization": 4
+          }
+        }
+      ]
+    },
+    {
+      "name": "historical_normal",
+      "description": "Known historical runs for regression-safe baseline comparison.",
+      "expected_failures": false,
+      "cases": [
+        {
+          "id": "historical_command_brief_2026_04_16",
+          "artifacts": {
+            "watchlist": {
+              "status": "loaded",
+              "path": "stock-analyzer/data/daily_snapshots/2026-04-16.json",
+              "error": null,
+              "summary": {
+                "generated_at": "2026-04-16 22:11:37",
+                "trade_date": "2026-04-16",
+                "stock_count": 3,
+                "priority_codes": [
+                  "000625",
+                  "600690"
+                ]
+              }
+            },
+            "screening": {
+              "status": "loaded",
+              "path": "stock-screener/data/ai_history/ai_screening_2026-04-16_23-35-53.json",
+              "error": null,
+              "summary": {
+                "generated_at": "2026-04-16 23:35:53",
+                "candidate_count": 14,
+                "approved_count": 3,
+                "caution_count": 11,
+                "excluded_count": 0,
+                "execution_gate_status": "on"
+              }
+            },
+            "midday_confirmation": {
+              "status": "missing",
+              "path": null,
+              "error": null,
+              "summary": {}
+            },
+            "decision_brief": {
+              "status": "loaded",
+              "path": "apps/data/command_brief/prism_command_brief_2026-04-16_23-57-40.json",
+              "error": null,
+              "summary": {
+                "generated_at": "2026-04-16 23:57:40",
+                "trade_date": "2026-04-16",
+                "open_new_positions": "可以，但先处理持仓风险，再考虑新仓。",
+                "position_cap": "0.5-0.8成试错",
+                "main_theme": "新能源链"
+              }
+            }
+          },
+          "hard_gate_failures": [],
+          "dimension_scores": {
+            "data_governance": 7,
+            "analysis_rule_quality": 9,
+            "execution_risk_control": 9,
+            "output_usability": 9,
+            "historical_validation": 0,
+            "stability_productization": 2
+          }
+        },
+        {
+          "id": "historical_command_brief_2026_04_20",
+          "artifacts": {
+            "watchlist": {
+              "status": "loaded",
+              "path": "stock-analyzer/data/daily_snapshots/2026-04-20.json",
+              "error": null,
+              "summary": {
+                "generated_at": "2026-04-20 14:55:57",
+                "trade_date": "2026-04-20",
+                "stock_count": 5,
+                "priority_codes": [
+                  "000625",
+                  "002487",
+                  "600690"
+                ]
+              }
+            },
+            "screening": {
+              "status": "loaded",
+              "path": "stock-screener/data/ai_history/ai_screening_2026-04-20_13-11-12.json",
+              "error": null,
+              "summary": {
+                "generated_at": "2026-04-20 13:11:12",
+                "candidate_count": 14,
+                "approved_count": 0,
+                "caution_count": 14,
+                "excluded_count": 0,
+                "execution_gate_status": "limited"
+              }
+            },
+            "midday_confirmation": {
+              "status": "missing",
+              "path": null,
+              "error": null,
+              "summary": {}
+            },
+            "decision_brief": {
+              "status": "loaded",
+              "path": "apps/data/command_brief/prism_command_brief_2026-04-20_14-55-54.json",
+              "error": null,
+              "summary": {
+                "generated_at": "2026-04-20 14:55:58",
+                "trade_date": "2026-04-20",
+                "open_new_positions": "可以，但先处理持仓风险，再考虑新仓。",
+                "position_cap": "0.3-0.5成以内",
+                "main_theme": "消费电子链"
+              }
+            }
+          },
+          "hard_gate_failures": [],
+          "dimension_scores": {
+            "data_governance": 7,
+            "analysis_rule_quality": 9,
+            "execution_risk_control": 9,
+            "output_usability": 9,
+            "historical_validation": 0,
+            "stability_productization": 2
+          }
+        },
+        {
+          "id": "historical_command_brief_2026_04_21",
+          "artifacts": {
+            "watchlist": {
+              "status": "loaded",
+              "path": "stock-analyzer/data/daily_snapshots/2026-04-21.json",
+              "error": null,
+              "summary": {
+                "generated_at": "2026-04-21 12:20:52",
+                "trade_date": "2026-04-21",
+                "stock_count": 5,
+                "priority_codes": [
+                  "002179",
+                  "002487",
+                  "600690"
+                ]
+              }
+            },
+            "screening": {
+              "status": "loaded",
+              "path": "stock-screener/data/ai_history/ai_screening_2026-04-21_10-43-32.json",
+              "error": null,
+              "summary": {
+                "generated_at": "2026-04-21 10:43:32",
+                "candidate_count": 6,
+                "approved_count": 0,
+                "caution_count": 6,
+                "excluded_count": 0,
+                "execution_gate_status": "off"
+              }
+            },
+            "midday_confirmation": {
+              "status": "missing",
+              "path": null,
+              "error": null,
+              "summary": {}
+            },
+            "decision_brief": {
+              "status": "loaded",
+              "path": "apps/data/command_brief/prism_command_brief_2026-04-21_10-49-18.json",
+              "error": null,
+              "summary": {
+                "generated_at": "2026-04-21 10:49:25",
+                "trade_date": "2026-04-21",
+                "open_new_positions": "否，今天进攻阀门关闭。",
+                "position_cap": "0成",
+                "main_theme": "新能源链"
+              }
+            }
+          },
+          "hard_gate_failures": [],
+          "dimension_scores": {
+            "data_governance": 7,
+            "analysis_rule_quality": 9,
+            "execution_risk_control": 9,
+            "output_usability": 9,
+            "historical_validation": 0,
+            "stability_productization": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "weak_environment",
+      "description": "Runs where the execution gate should become defensive.",
+      "expected_failures": false,
+      "cases": [
+        {
+          "id": "weak_environment_2026_04_21_noon",
+          "artifacts": {
+            "watchlist": {
+              "status": "missing",
+              "path": null,
+              "error": null,
+              "summary": {}
+            },
+            "screening": {
+              "status": "loaded",
+              "path": "stock-screener/data/ai_history/ai_screening_2026-04-21_12-01-24.json",
+              "error": null,
+              "summary": {
+                "generated_at": "2026-04-21 12:01:24",
+                "candidate_count": 11,
+                "approved_count": 0,
+                "caution_count": 11,
+                "excluded_count": 0,
+                "execution_gate_status": "off"
+              }
+            },
+            "midday_confirmation": {
+              "status": "missing",
+              "path": null,
+              "error": null,
+              "summary": {}
+            },
+            "decision_brief": {
+              "status": "missing",
+              "path": null,
+              "error": null,
+              "summary": {}
+            }
+          },
+          "hard_gate_failures": [],
+          "dimension_scores": {
+            "data_governance": 0,
+            "analysis_rule_quality": 9,
+            "execution_risk_control": 7,
+            "output_usability": 0,
+            "historical_validation": 0,
+            "stability_productization": 0
+          }
+        },
+        {
+          "id": "weak_environment_2026_04_15_morning",
+          "artifacts": {
+            "watchlist": {
+              "status": "missing",
+              "path": null,
+              "error": null,
+              "summary": {}
+            },
+            "screening": {
+              "status": "loaded",
+              "path": "stock-screener/data/ai_history/ai_screening_2026-04-15_10-49-21.json",
+              "error": null,
+              "summary": {
+                "generated_at": "2026-04-15 10:49:21",
+                "candidate_count": 0,
+                "approved_count": 0,
+                "caution_count": 0,
+                "excluded_count": 0,
+                "execution_gate_status": "off"
+              }
+            },
+            "midday_confirmation": {
+              "status": "missing",
+              "path": null,
+              "error": null,
+              "summary": {}
+            },
+            "decision_brief": {
+              "status": "missing",
+              "path": null,
+              "error": null,
+              "summary": {}
+            }
+          },
+          "hard_gate_failures": [],
+          "dimension_scores": {
+            "data_governance": 0,
+            "analysis_rule_quality": 4,
+            "execution_risk_control": 0,
+            "output_usability": 0,
+            "historical_validation": 0,
+            "stability_productization": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "abnormal_inputs",
+      "description": "Synthetic or known-bad cases that should fail closed.",
+      "expected_failures": true,
+      "cases": [
+        {
+          "id": "missing_midday_case",
+          "artifacts": {
+            "watchlist": {
+              "status": "loaded",
+              "path": "stock-analyzer/data/daily_snapshots/2026-04-21.json",
+              "error": null,
+              "summary": {
+                "generated_at": "2026-04-21 12:20:52",
+                "trade_date": "2026-04-21",
+                "stock_count": 5,
+                "priority_codes": [
+                  "002179",
+                  "002487",
+                  "600690"
+                ]
+              }
+            },
+            "screening": {
+              "status": "loaded",
+              "path": "stock-screener/data/ai_screening_result.json",
+              "error": null,
+              "summary": {
+                "generated_at": "2026-04-21 13:10:57",
+                "candidate_count": 13,
+                "approved_count": 0,
+                "caution_count": 13,
+                "excluded_count": 0,
+                "execution_gate_status": "off"
+              }
+            },
+            "midday_confirmation": {
+              "status": "error",
+              "path": "stock-screener/data/does_not_exist.json",
+              "error": "confirmation result not found",
+              "summary": {}
+            },
+            "decision_brief": {
+              "status": "loaded",
+              "path": "apps/data/command_brief/prism_command_brief_2026-04-21_12-20-48.json",
+              "error": null,
+              "summary": {
+                "generated_at": "2026-04-21 12:20:53",
+                "trade_date": "2026-04-21",
+                "open_new_positions": "否，今天进攻阀门关闭。",
+                "position_cap": "0成",
+                "main_theme": "新能源链"
+              }
+            }
+          },
+          "hard_gate_failures": [
+            "midday_confirmation: parse_error",
+            "midday_confirmation: unavailable"
+          ],
+          "dimension_scores": {
+            "data_governance": 7,
+            "analysis_rule_quality": 9,
+            "execution_risk_control": 9,
+            "output_usability": 9,
+            "historical_validation": 0,
+            "stability_productization": 2
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -821,6 +821,15 @@ def load_research_review(path: str | None = None, prefer_baseline: bool = False)
     cost_match = re.search(r"往返合计\s*([0-9.]+)%", cost_line)
     start_match = re.search(r"开始\s+(\d{4}-\d{2}-\d{2})", window_label or "")
     end_match = re.search(r"结束\s+(\d{4}-\d{2}-\d{2})", window_label or "")
+    filename_window_match = re.search(r"review_(\d{8})_(\d{8})(?:_rerun)?$", report_path.stem)
+
+    def normalize_date_token(value: str | None) -> str | None:
+        if not value or len(value) != 8:
+            return None
+        return f"{value[:4]}-{value[4:6]}-{value[6:8]}"
+
+    start_date = start_match.group(1) if start_match else normalize_date_token(filename_window_match.group(1) if filename_window_match else None)
+    end_date = end_match.group(1) if end_match else normalize_date_token(filename_window_match.group(2) if filename_window_match else None)
 
     notes_section = extract_markdown_section(text, "## 压测说明")
     notes = [line[2:].strip() for line in notes_section.splitlines() if line.strip().startswith("- ")]
@@ -842,8 +851,8 @@ def load_research_review(path: str | None = None, prefer_baseline: bool = False)
         "generated_at": generated_at,
         "pool": pool,
         "window_label": window_label,
-        "start_date": start_match.group(1) if start_match else None,
-        "end_date": end_match.group(1) if end_match else None,
+        "start_date": start_date,
+        "end_date": end_date,
         "ai_run_count": int(ai_scan_match.group(1)) if ai_scan_match else 0,
         "scan_run_count": int(ai_scan_match.group(2)) if ai_scan_match else 0,
         "roundtrip_cost_pct": safe_float(cost_match.group(1)) if cost_match else None,
