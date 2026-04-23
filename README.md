@@ -25,8 +25,10 @@ This repo is meant to show how the system is actually organized end to end:
 This repository includes the real public version of Prism:
 
 - the control-panel frontend built with FastAPI + Jinja templates
+- the decision-first `Today v2` and `Ask v2` control-panel surfaces
 - the screening and review workflow scripts
 - the real prompts, thresholds, and decision rules used by the system
+- the stock-analysis evaluation benchmark, scorecards, and launchers
 - the report-generation logic and message formatting
 - scrubbed historical outputs, logs, command briefs, and daily snapshots
 
@@ -85,6 +87,15 @@ This diagram shows the main operating loop of the public Prism repository. It fo
 
 For a fuller architectural walkthrough, see [docs/architecture/system.md](docs/architecture/system.md).
 
+## Current Product Surfaces
+
+The current public branch includes the following operator-facing surfaces:
+
+- `Today v2` at `/today`: a command-first daily surface that prioritizes today's instruction, top actions, radar, holdings actions, opportunities actions, and evidence in a fixed reading order.
+- `Ask v2` at `/ask`: a conclusion-first single-stock surface that answers `buy / hold / sell / watch` before showing the boundary trio, execution layer, cross-system relation, and follow-up evidence.
+- `Watchlist` and detail pages: holdings-focused views that connect the daily command surface with stock-level follow-up, management actions, and source links.
+- `Stock evaluation baseline`: a reproducible acceptance layer that scores Prism's stock-analysis behavior and can enforce `professional_usable` or `product_ready` gates.
+
 ## Typical Flow
 
 A simplified Prism operating loop looks like this:
@@ -129,6 +140,26 @@ If you want to explore the control panel locally, you can start it with one comm
 By default this serves `control_panel.app:app` at `http://127.0.0.1:8000`.
 You can override the bind address with environment variables such as `PRISM_HOST` and `PRISM_PORT`.
 
+Useful routes after startup:
+
+- `http://127.0.0.1:8000/today` for the Today v2 daily command surface
+- `http://127.0.0.1:8000/ask` for the Ask v2 single-stock answer surface
+- `http://127.0.0.1:8000/watchlist` for holdings and watchlist operations
+
+If you want to refresh the stock-analysis evaluation artifacts, you can use the one-click launcher:
+
+```bash
+./start_stock_evaluation.sh
+./start_stock_evaluation.sh professional
+./start_stock_evaluation.sh product
+```
+
+Modes:
+
+- `baseline`: refresh the latest evaluation report only
+- `professional`: require at least `professional_usable` and fail on hard gates
+- `product`: require at least `product_ready` and fail on hard gates
+
 ## Data And Privacy Model
 
 The repo includes real historical operating artifacts, not just curated samples. That is a deliberate part of the open-source boundary.
@@ -158,6 +189,7 @@ The public repo is verified with:
 ```bash
 pytest -q
 python3 scripts/scrub-secrets.py
+./start_stock_evaluation.sh professional
 ```
 
 Latest migration verification passed in the public repo before release.
@@ -174,6 +206,9 @@ This repository represents the first full-source public release of Prism.
 
 Current emphasis:
 
+- ship the command-first `Today v2` and conclusion-first `Ask v2` surfaces
+- keep a one-command startup path for both the UI and the evaluation workflow
+- turn stock-analysis changes into a scored acceptance flow with tiered gates
 - publish the real operating structure rather than a demo shell
 - preserve workflow transparency
 - keep privacy scrub mechanical and auditable
