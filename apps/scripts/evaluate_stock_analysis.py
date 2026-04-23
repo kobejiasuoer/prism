@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -25,12 +26,21 @@ DIMENSION_MAX = {
     "stability_productization": 10,
 }
 
+TIER_ORDER = (
+    "below_basic",
+    "basic_usable",
+    "professional_usable",
+    "product_ready",
+)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--output-json", required=True)
     parser.add_argument("--output-md", required=True)
+    parser.add_argument("--min-tier", choices=TIER_ORDER[1:])
+    parser.add_argument("--fail-on-hard-gates", action="store_true")
     return parser.parse_args()
 
 
@@ -40,6 +50,91 @@ def load_manifest(path: str) -> dict[str, Any]:
 
 def empty_dimension_scores() -> dict[str, dict[str, int]]:
     return {name: {"earned": 0, "max": max_value} for name, max_value in DIMENSION_MAX.items()}
+
+
+def tier_rank(tier: str) -> int:
+    return TIER_ORDER.index(tier)
+
+
+def tier_total_score_requirement(tier: str | None) -> int | None:
+    if tier == "basic_usable":
+        return 70
+    if tier == "professional_usable":
+        return 82
+    if tier == "product_ready":
+        return 90
+    return None
+
+
+def dimension_thresholds_for_tier(tier: str) -> dict[str, int]:
+    if tier == "professional_usable":
+        return {
+            "data_governance": math.ceil(DIMENSION_MAX["data_governance"] * 0.75),
+            "execution_risk_control": math.ceil(DIMENSION_MAX["execution_risk_control"] * 0.75),
+            "historical_validation": math.ceil(DIMENSION_MAX["historical_validation"] * 0.75),
+        }
+    if tier == "product_ready":
+        return {name: math.ceil(max_value * 0.85) for name, max_value in DIMENSION_MAX.items()}
+    return {}
+
+
+def next_tier_name(tier: str) -> str | None:
+    index = tier_rank(tier)
+    if index >= len(TIER_ORDER) - 1:
+        return None
+    return TIER_ORDER[index + 1]
+
+
+def build_tier_requirements(
+    target_tier: str | None,
+    total_score: int,
+    hard_gate_failures: list[str],
+    dimension_scores: dict[str, dict[str, int]],
+) -> list[dict[str, Any]]:
+    if not target_tier:
+        return []
+
+    requirements: list[dict[str, Any]] = []
+    if tier_rank(target_tier) >= tier_rank("basic_usable") and hard_gate_failures:
+        requirements.append(
+            {
+                "type": "hard_gates_clear",
+                "tier": target_tier,
+                "count": len(hard_gate_failures),
+                "message": f"Clear {len(hard_gate_failures)} hard gate failures before qualifying for {target_tier}.",
+            }
+        )
+
+    required_total = tier_total_score_requirement(target_tier)
+    if required_total is not None and total_score < required_total:
+        requirements.append(
+            {
+                "type": "total_score",
+                "tier": target_tier,
+                "earned": total_score,
+                "required": required_total,
+                "gap": required_total - total_score,
+                "message": f"Total score needs {required_total} (current {total_score}) for {target_tier}.",
+            }
+        )
+
+    for dimension, required in dimension_thresholds_for_tier(target_tier).items():
+        earned = dimension_scores[dimension]["earned"]
+        if earned >= required:
+            continue
+        requirements.append(
+            {
+                "type": "dimension_threshold",
+                "tier": target_tier,
+                "dimension": dimension,
+                "earned": earned,
+                "required": required,
+                "gap": required - earned,
+                "message": f"{dimension} needs {required}/{dimension_scores[dimension]['max']} (current {earned}) for {target_tier}.",
+            }
+        )
+
+    return requirements
 
 
 def summarize_payload(name: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -443,14 +538,8 @@ def resolve_tier(
     hard_gate_failures: list[str],
     dimension_scores: dict[str, dict[str, int]],
 ) -> str:
-    professional_thresholds = {
-        "data_governance": math.ceil(DIMENSION_MAX["data_governance"] * 0.75),
-        "execution_risk_control": math.ceil(DIMENSION_MAX["execution_risk_control"] * 0.75),
-        "historical_validation": math.ceil(DIMENSION_MAX["historical_validation"] * 0.75),
-    }
-    product_ready_thresholds = {
-        name: math.ceil(score["max"] * 0.85) for name, score in dimension_scores.items()
-    }
+    professional_thresholds = dimension_thresholds_for_tier("professional_usable")
+    product_ready_thresholds = dimension_thresholds_for_tier("product_ready")
 
     if hard_gate_failures:
         return "below_basic"
@@ -468,7 +557,59 @@ def resolve_tier(
     return "below_basic"
 
 
-def build_scorecard(manifest: dict[str, Any]) -> dict[str, Any]:
+def build_gate_evaluation(
+    *,
+    current_tier: str,
+    total_score: int,
+    hard_gate_failures: list[str],
+    dimension_scores: dict[str, dict[str, int]],
+    required_tier: str | None,
+    fail_on_hard_gates: bool,
+) -> dict[str, Any]:
+    if not required_tier and not fail_on_hard_gates:
+        return {
+            "status": "report_only",
+            "required_tier": None,
+            "current_tier": current_tier,
+            "fail_on_hard_gates": False,
+            "hard_gates_clear": not hard_gate_failures,
+            "passed": None,
+            "reasons": [],
+        }
+
+    reasons: list[str] = []
+    passed = True
+
+    if required_tier and tier_rank(current_tier) < tier_rank(required_tier):
+        passed = False
+        reasons.append(f"Current tier {current_tier} is below required tier {required_tier}.")
+        reasons.extend(
+            requirement["message"]
+            for requirement in build_tier_requirements(required_tier, total_score, hard_gate_failures, dimension_scores)
+        )
+
+    if fail_on_hard_gates and hard_gate_failures:
+        passed = False
+        reasons.append(f"hard gate failures present: {len(hard_gate_failures)}")
+
+    return {
+        "status": "passed" if passed else "failed",
+        "required_tier": required_tier,
+        "current_tier": current_tier,
+        "fail_on_hard_gates": fail_on_hard_gates,
+        "hard_gates_clear": not hard_gate_failures,
+        "passed": passed,
+        "reasons": reasons,
+    }
+
+
+def build_scorecard(
+    manifest: dict[str, Any],
+    *,
+    run_context: dict[str, Any] | None = None,
+    required_tier: str | None = None,
+    fail_on_hard_gates: bool = False,
+) -> dict[str, Any]:
     suite_results = []
     flattened_case_results = []
     expected_abnormal_failures = []
@@ -504,13 +645,17 @@ def build_scorecard(manifest: dict[str, Any]) -> dict[str, Any]:
             )
 
     total_score = sum(score["earned"] for score in dimension_scores.values())
+    tier = resolve_tier(total_score, hard_gate_failures, dimension_scores)
+    next_tier = next_tier_name(tier)
     summary = {
         "total_score": total_score,
         "max_score": 100,
-        "tier": resolve_tier(total_score, hard_gate_failures, dimension_scores),
+        "tier": tier,
         "hard_gate_failures": hard_gate_failures,
         "expected_abnormal_failures": expected_abnormal_failures,
         "dimension_scores": dimension_scores,
+        "next_tier": next_tier,
+        "next_tier_requirements": build_tier_requirements(next_tier, total_score, hard_gate_failures, dimension_scores),
     }
 
     return {
@@ -518,7 +663,16 @@ def build_scorecard(manifest: dict[str, Any]) -> dict[str, Any]:
         "program": "prism_stock_analysis_evaluation",
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "baseline_label": manifest.get("baseline_label"),
+        "run_context": run_context or {},
         "summary": summary,
+        "gate_evaluation": build_gate_evaluation(
+            current_tier=tier,
+            total_score=total_score,
+            hard_gate_failures=hard_gate_failures,
+            dimension_scores=dimension_scores,
+            required_tier=required_tier,
+            fail_on_hard_gates=fail_on_hard_gates,
+        ),
         "historical_results": historical_results,
         "historical_comparisons": historical_comparisons,
         "suite_results": suite_results,
@@ -526,6 +680,8 @@ def build_scorecard(manifest: dict[str, Any]) -> dict[str, Any]:
 
 
 def write_markdown(scorecard: dict[str, Any], path: str) -> None:
+    gate_evaluation = scorecard.get("gate_evaluation") or {}
+    run_context = scorecard.get("run_context") or {}
     lines = [
         "# Prism Stock Analysis Evaluation Report",
         "",
@@ -534,9 +690,28 @@ def write_markdown(scorecard: dict[str, Any], path: str) -> None:
         f"- Total Score: {scorecard['summary']['total_score']} / {scorecard['summary']['max_score']}",
         f"- Tier: {scorecard['summary']['tier']}",
         "",
+        "## Acceptance Verdict",
+        "",
+        f"- status: {gate_evaluation.get('status') or 'report_only'}",
+        f"- required_tier: {gate_evaluation.get('required_tier') or 'none'}",
+        f"- fail_on_hard_gates: {str(bool(gate_evaluation.get('fail_on_hard_gates'))).lower()}",
+        f"- hard_gates_clear: {str(bool(gate_evaluation.get('hard_gates_clear', True))).lower()}",
+        f"- passed: {'n/a' if gate_evaluation.get('passed') is None else str(bool(gate_evaluation.get('passed'))).lower()}",
+        "",
+        "## Run Context",
+        "",
+        f"- manifest_path: {run_context.get('manifest_path') or '-'}",
+        f"- required_tier: {run_context.get('required_tier') or 'none'}",
+        f"- fail_on_hard_gates: {str(bool(run_context.get('fail_on_hard_gates'))).lower()}",
+        f"- command: {run_context.get('command') or '-'}",
+        "",
         "## Dimension Scores",
         "",
     ]
+    for reason in gate_evaluation.get("reasons") or []:
+        lines.append(f"- reason: {reason}")
+    if gate_evaluation.get("reasons"):
+        lines.append("")
     for name, score in scorecard["summary"]["dimension_scores"].items():
         lines.append(f"- {name}: {score['earned']} / {score['max']}")
     lines.extend(["", "## Hard Gate Failures", ""])
@@ -577,6 +752,17 @@ def write_markdown(scorecard: dict[str, Any], path: str) -> None:
         lines.append(
             f"- {result.get('id')}: {result.get('status')} | score {result.get('score', 0)} | {delta_summary}"
         )
+    lines.extend(["", "## Upgrade Gaps", ""])
+    next_tier = scorecard["summary"].get("next_tier")
+    if not next_tier:
+        lines.append("- none")
+    else:
+        lines.append(f"- Next Tier: {next_tier}")
+        requirements = scorecard["summary"].get("next_tier_requirements") or []
+        if not requirements:
+            lines.append("- none")
+        for requirement in requirements:
+            lines.append(f"- {requirement['message']}")
     lines.extend(["", "## Suites", ""])
     for suite in scorecard["suite_results"]:
         lines.append(f"### {suite['name']}")
@@ -593,12 +779,27 @@ def write_markdown(scorecard: dict[str, Any], path: str) -> None:
 def main() -> int:
     args = parse_args()
     manifest = load_manifest(args.manifest)
-    scorecard = build_scorecard(manifest)
+    scorecard = build_scorecard(
+        manifest,
+        run_context={
+            "manifest_path": args.manifest,
+            "required_tier": args.min_tier,
+            "fail_on_hard_gates": bool(args.fail_on_hard_gates),
+            "command": " ".join(sys.argv),
+        },
+        required_tier=args.min_tier,
+        fail_on_hard_gates=bool(args.fail_on_hard_gates),
+    )
 
     output_json = Path(args.output_json)
     output_json.parent.mkdir(parents=True, exist_ok=True)
     output_json.write_text(json.dumps(scorecard, ensure_ascii=False, indent=2), encoding="utf-8")
     write_markdown(scorecard, args.output_md)
+    gate_evaluation = scorecard.get("gate_evaluation") or {}
+    if gate_evaluation.get("status") == "failed":
+        reasons = gate_evaluation.get("reasons") or ["acceptance gate failed"]
+        print("; ".join(reasons), file=sys.stderr)
+        return 2
     return 0
 
 

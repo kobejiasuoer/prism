@@ -1,8 +1,14 @@
 {
   "version": 1,
   "program": "prism_stock_analysis_evaluation",
-  "generated_at": "2026-04-23 22:43:37",
+  "generated_at": "2026-04-23 23:00:46",
   "baseline_label": "2026-04-23-initial-baseline",
+  "run_context": {
+    "manifest_path": "data/evaluation/stock_analysis/manifest.json",
+    "required_tier": null,
+    "fail_on_hard_gates": false,
+    "command": "apps/scripts/evaluate_stock_analysis.py --manifest data/evaluation/stock_analysis/manifest.json --output-json data/evaluation/stock_analysis/latest_scorecard.json --output-md data/history/reports/evaluation/prism_stock_analysis_evaluation_latest.md"
+  },
   "summary": {
     "total_score": 97,
     "max_score": 100,
@@ -37,7 +43,28 @@
         "earned": 10,
         "max": 10
       }
-    }
+    },
+    "next_tier": "product_ready",
+    "next_tier_requirements": [
+      {
+        "type": "dimension_threshold",
+        "tier": "product_ready",
+        "dimension": "historical_validation",
+        "earned": 12,
+        "required": 13,
+        "gap": 1,
+        "message": "historical_validation needs 13/15 (current 12) for product_ready."
+      }
+    ]
+  },
+  "gate_evaluation": {
+    "status": "report_only",
+    "required_tier": null,
+    "current_tier": "professional_usable",
+    "fail_on_hard_gates": false,
+    "hard_gates_clear": true,
+    "passed": null,
+    "reasons": []
   },
   "historical_results": [
     {

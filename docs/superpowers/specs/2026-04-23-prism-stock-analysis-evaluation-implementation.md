@@ -734,3 +734,63 @@ This program succeeds when Prism can make this statement for every stock-analysi
 `We know what changed, why it changed, which artifacts prove it, which risks were checked, and whether the change is safer or more useful than the previous baseline.`
 
 Until that is true, Prism should continue to be treated as an internal research assistant, not a product-ready stock-analysis system.
+
+## 15. Operational Usage
+
+The first executable baseline should be used in three modes.
+
+### 15.1 Report-Only Baseline Refresh
+
+Use this when freezing the latest baseline scorecard without enforcing a release threshold.
+
+```bash
+./.venv/bin/python apps/scripts/evaluate_stock_analysis.py \
+  --manifest data/evaluation/stock_analysis/manifest.json \
+  --output-json data/evaluation/stock_analysis/latest_scorecard.json \
+  --output-md data/history/reports/evaluation/prism_stock_analysis_evaluation_latest.md
+```
+
+Expected behavior:
+
+- exit code `0`
+- refreshed JSON scorecard
+- refreshed Markdown report
+- explicit `next_tier` and `next_tier_requirements`
+
+### 15.2 Professional-Usable Acceptance Gate
+
+Use this for most near-term Prism changes that alter rules, scoring, loaders, or command-brief output.
+
+```bash
+./.venv/bin/python apps/scripts/evaluate_stock_analysis.py \
+  --manifest data/evaluation/stock_analysis/manifest.json \
+  --output-json /tmp/prism_eval.json \
+  --output-md /tmp/prism_eval.md \
+  --min-tier professional_usable \
+  --fail-on-hard-gates
+```
+
+Expected behavior:
+
+- exit code `0` only if the result remains at least `professional_usable`
+- exit code `2` if tier regresses below `professional_usable`
+- exit code `2` if any non-expected hard gate fails
+
+### 15.3 Product-Ready Stretch Gate
+
+Use this only when evaluating whether Prism is ready for broader product exposure.
+
+```bash
+./.venv/bin/python apps/scripts/evaluate_stock_analysis.py \
+  --manifest data/evaluation/stock_analysis/manifest.json \
+  --output-json /tmp/prism_eval_product.json \
+  --output-md /tmp/prism_eval_product.md \
+  --min-tier product_ready \
+  --fail-on-hard-gates
+```
+
+Interpretation:
+
+- if this command fails, the JSON and Markdown outputs should still be reviewed
+- `next_tier_requirements` should be treated as the minimum remediation list
+- passing this command is necessary but still not sufficient for external launch, because legal, compliance, and user-safety framing are outside this benchmark

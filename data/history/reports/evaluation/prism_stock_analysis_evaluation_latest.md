@@ -1,9 +1,24 @@
 # Prism Stock Analysis Evaluation Report
 
-- Generated At: 2026-04-23 22:43:37
+- Generated At: 2026-04-23 23:00:46
 - Baseline Label: 2026-04-23-initial-baseline
 - Total Score: 97 / 100
 - Tier: professional_usable
+
+## Acceptance Verdict
+
+- status: report_only
+- required_tier: none
+- fail_on_hard_gates: false
+- hard_gates_clear: true
+- passed: n/a
+
+## Run Context
+
+- manifest_path: data/evaluation/stock_analysis/manifest.json
+- required_tier: none
+- fail_on_hard_gates: false
+- command: apps/scripts/evaluate_stock_analysis.py --manifest data/evaluation/stock_analysis/manifest.json --output-json data/evaluation/stock_analysis/latest_scorecard.json --output-md data/history/reports/evaluation/prism_stock_analysis_evaluation_latest.md
 
 ## Dimension Scores
 
@@ -30,6 +45,11 @@
 ## Historical Comparisons
 
 - research_backfill_20240102_20240329_rerun_delta: loaded | score 4 | ai_overall_next_day_net_delta=+0.0700, ai_overall_day3_net_delta=-0.5300, ai_overall_day5_net_delta=-0.8800, weak_regime_ai_next_day_net_delta=+0.3800, weak_regime_ai_day5_net_delta=+0.5700
+
+## Upgrade Gaps
+
+- Next Tier: product_ready
+- historical_validation needs 13/15 (current 12) for product_ready.
 
 ## Suites
 

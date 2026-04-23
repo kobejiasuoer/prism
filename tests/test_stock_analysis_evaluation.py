@@ -2,27 +2,36 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import Sequence
 
 sys.path.insert(0, str(Path("apps/scripts").resolve()))
 
 from evaluate_stock_analysis import resolve_tier
 
 
-def run_evaluator(output_dir: Path) -> tuple[subprocess.CompletedProcess[str], Path, Path]:
+def run_evaluator(
+    output_dir: Path,
+    *,
+    manifest_path: str = "data/evaluation/stock_analysis/manifest.json",
+    extra_args: Sequence[str] | None = None,
+) -> tuple[subprocess.CompletedProcess[str], Path, Path]:
     output_json = output_dir / "scorecard.json"
     output_md = output_dir / "scorecard.md"
+    command = [
+        "python3",
+        "apps/scripts/evaluate_stock_analysis.py",
+        "--manifest",
+        manifest_path,
+        "--output-json",
+        str(output_json),
+        "--output-md",
+        str(output_md),
+    ]
+    if extra_args:
+        command.extend(extra_args)
 
     completed = subprocess.run(
-        [
-            "python3",
-            "apps/scripts/evaluate_stock_analysis.py",
-            "--manifest",
-            "data/evaluation/stock_analysis/manifest.json",
-            "--output-json",
-            str(output_json),
-            "--output-md",
-            str(output_md),
-        ],
+        command,
         capture_output=True,
         text=True,
         check=False,
@@ -200,11 +209,76 @@ def test_evaluator_writes_human_readable_report_with_tier_and_failures(tmp_path:
 
     assert "Prism Stock Analysis Evaluation Report" in report
     assert "Tier:" in report
+    assert "Run Context" in report
     assert "Dimension Scores" in report
     assert "Hard Gate Failures" in report
     assert "Expected Abnormal Failures" in report
     assert "Historical Validation" in report
     assert "Historical Comparisons" in report
+    assert "Upgrade Gaps" in report
+
+
+def test_evaluator_reports_next_tier_requirements_for_current_baseline(tmp_path: Path) -> None:
+    completed, output_json, _ = run_evaluator(tmp_path)
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(output_json.read_text(encoding="utf-8"))
+
+    assert payload["summary"]["next_tier"] == "product_ready"
+    assert any(
+        item["type"] == "dimension_threshold"
+        and item["dimension"] == "historical_validation"
+        and item["required"] == 13
+        for item in payload["summary"]["next_tier_requirements"]
+    )
+
+
+def test_evaluator_passes_min_tier_gate_when_requirement_is_met(tmp_path: Path) -> None:
+    completed, output_json, _ = run_evaluator(tmp_path, extra_args=["--min-tier", "professional_usable"])
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(output_json.read_text(encoding="utf-8"))
+
+    assert payload["gate_evaluation"]["status"] == "passed"
+    assert payload["gate_evaluation"]["required_tier"] == "professional_usable"
+    assert payload["gate_evaluation"]["passed"] is True
+
+
+def test_evaluator_fails_min_tier_gate_when_requirement_is_not_met(tmp_path: Path) -> None:
+    completed, output_json, _ = run_evaluator(tmp_path, extra_args=["--min-tier", "product_ready"])
+
+    assert completed.returncode == 2
+    assert "required tier product_ready" in completed.stderr
+    payload = json.loads(output_json.read_text(encoding="utf-8"))
+
+    assert payload["gate_evaluation"]["status"] == "failed"
+    assert payload["gate_evaluation"]["required_tier"] == "product_ready"
+    assert payload["gate_evaluation"]["passed"] is False
+
+
+def test_evaluator_fails_on_hard_gates_when_requested(tmp_path: Path) -> None:
+    source_manifest = json.loads(Path("data/evaluation/stock_analysis/manifest.json").read_text(encoding="utf-8"))
+    manifest_path = tmp_path / "hard_gate_manifest.json"
+
+    for suite in source_manifest["suites"]:
+        if suite["name"] == "abnormal_inputs":
+            suite.pop("expected_failures", None)
+
+    manifest_path.write_text(json.dumps(source_manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    completed, output_json, _ = run_evaluator(
+        tmp_path,
+        manifest_path=str(manifest_path),
+        extra_args=["--fail-on-hard-gates"],
+    )
+
+    assert completed.returncode == 2
+    assert "hard gate failures present" in completed.stderr
+    payload = json.loads(output_json.read_text(encoding="utf-8"))
+
+    assert payload["gate_evaluation"]["status"] == "failed"
+    assert payload["gate_evaluation"]["passed"] is False
+    assert payload["gate_evaluation"]["hard_gates_clear"] is False
 
 
 def test_tier_thresholds_use_ceil_for_dimension_requirements() -> None:
