@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -35,6 +36,29 @@ def run_evaluator(
         capture_output=True,
         text=True,
         check=False,
+    )
+    return completed, output_json, output_md
+
+
+def run_evaluation_launcher(
+    output_dir: Path,
+    *,
+    mode: str = "baseline",
+    manifest_path: str = "data/evaluation/stock_analysis/manifest.json",
+) -> tuple[subprocess.CompletedProcess[str], Path, Path]:
+    output_json = output_dir / "launcher_scorecard.json"
+    output_md = output_dir / "launcher_scorecard.md"
+    env = os.environ.copy()
+    env["MANIFEST_PATH"] = manifest_path
+    env["OUTPUT_JSON_PATH"] = str(output_json)
+    env["OUTPUT_MD_PATH"] = str(output_md)
+
+    completed = subprocess.run(
+        ["bash", "start_stock_evaluation.sh", mode],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
     )
     return completed, output_json, output_md
 
@@ -279,6 +303,42 @@ def test_evaluator_fails_on_hard_gates_when_requested(tmp_path: Path) -> None:
     assert payload["gate_evaluation"]["status"] == "failed"
     assert payload["gate_evaluation"]["passed"] is False
     assert payload["gate_evaluation"]["hard_gates_clear"] is False
+
+
+def test_stock_evaluation_launcher_runs_baseline_mode(tmp_path: Path) -> None:
+    completed, output_json, output_md = run_evaluation_launcher(tmp_path)
+
+    assert completed.returncode == 0, completed.stderr
+    assert "[prism-eval] mode -> baseline" in completed.stdout
+    assert output_json.exists()
+    assert output_md.exists()
+
+    payload = json.loads(output_json.read_text(encoding="utf-8"))
+    assert payload["summary"]["tier"] == "professional_usable"
+    assert payload["gate_evaluation"]["status"] == "report_only"
+
+
+def test_stock_evaluation_launcher_runs_professional_gate_mode(tmp_path: Path) -> None:
+    completed, output_json, _ = run_evaluation_launcher(tmp_path, mode="professional")
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(output_json.read_text(encoding="utf-8"))
+
+    assert payload["gate_evaluation"]["status"] == "passed"
+    assert payload["gate_evaluation"]["required_tier"] == "professional_usable"
+    assert payload["gate_evaluation"]["passed"] is True
+
+
+def test_stock_evaluation_launcher_fails_product_gate_mode(tmp_path: Path) -> None:
+    completed, output_json, _ = run_evaluation_launcher(tmp_path, mode="product")
+
+    assert completed.returncode == 2
+    assert "required tier product_ready" in completed.stderr
+
+    payload = json.loads(output_json.read_text(encoding="utf-8"))
+    assert payload["gate_evaluation"]["status"] == "failed"
+    assert payload["gate_evaluation"]["required_tier"] == "product_ready"
+    assert payload["gate_evaluation"]["passed"] is False
 
 
 def test_tier_thresholds_use_ceil_for_dimension_requirements() -> None:

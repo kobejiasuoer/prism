@@ -743,6 +743,14 @@ The first executable baseline should be used in three modes.
 
 Use this when freezing the latest baseline scorecard without enforcing a release threshold.
 
+Preferred one-click command:
+
+```bash
+./start_stock_evaluation.sh
+```
+
+Equivalent direct command:
+
 ```bash
 ./.venv/bin/python apps/scripts/evaluate_stock_analysis.py \
   --manifest data/evaluation/stock_analysis/manifest.json \
@@ -760,6 +768,14 @@ Expected behavior:
 ### 15.2 Professional-Usable Acceptance Gate
 
 Use this for most near-term Prism changes that alter rules, scoring, loaders, or command-brief output.
+
+Preferred one-click command:
+
+```bash
+./start_stock_evaluation.sh professional
+```
+
+Equivalent direct command:
 
 ```bash
 ./.venv/bin/python apps/scripts/evaluate_stock_analysis.py \
@@ -779,6 +795,14 @@ Expected behavior:
 ### 15.3 Product-Ready Stretch Gate
 
 Use this only when evaluating whether Prism is ready for broader product exposure.
+
+Preferred one-click command:
+
+```bash
+./start_stock_evaluation.sh product
+```
+
+Equivalent direct command:
 
 ```bash
 ./.venv/bin/python apps/scripts/evaluate_stock_analysis.py \

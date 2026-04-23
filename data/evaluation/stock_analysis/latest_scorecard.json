@@ -1,7 +1,7 @@
 {
   "version": 1,
   "program": "prism_stock_analysis_evaluation",
-  "generated_at": "2026-04-23 23:00:46",
+  "generated_at": "2026-04-23 23:21:50",
   "baseline_label": "2026-04-23-initial-baseline",
   "run_context": {
     "manifest_path": "data/evaluation/stock_analysis/manifest.json",
