@@ -120,7 +120,14 @@ Run the privacy scrub pass:
 python3 scripts/scrub-secrets.py
 ```
 
-If you want to explore the control panel locally, start from the FastAPI app in `apps/control-panel/app.py` using your preferred runner.
+If you want to explore the control panel locally, you can start it with one command:
+
+```bash
+./start_prism.sh
+```
+
+By default this serves `control_panel.app:app` at `http://127.0.0.1:8000`.
+You can override the bind address with environment variables such as `PRISM_HOST` and `PRISM_PORT`.
 
 ## Data And Privacy Model
 
