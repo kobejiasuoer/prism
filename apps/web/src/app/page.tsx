@@ -1,16 +1,16 @@
 "use client";
 
-import { AlertCircle, ArrowRight, RefreshCw } from "lucide-react";
+import { AlertCircle, ArrowRight } from "lucide-react";
 import Link from "next/link";
 
 import { ActionRow, ActionRowSkeleton } from "@/components/action-row";
 import { Badge } from "@/components/badge";
+import { EvidencePanel } from "@/components/evidence-panel";
 import { MetricCard, MetricSkeleton } from "@/components/metric-card";
 import { RiskAlert } from "@/components/risk-alert";
-import { SourceCard } from "@/components/source-card";
 import { useTodayData, useUpdateTodayActionDecision } from "@/lib/hooks";
 import type { DecisionValue, MetricCardData, RiskRow } from "@/lib/types";
-import { asText, cn } from "@/lib/utils";
+import { asText } from "@/lib/utils";
 
 function inferMetricTone(card: MetricCardData, index: number) {
   const label = `${card.label} ${card.detail || ""}`;
@@ -257,35 +257,7 @@ export default function CommandCenterPage() {
             </div>
           </div>
 
-          <div>
-            <SectionHeader
-              eyebrow="数据源"
-              title="Data Sources"
-              action={
-                <button
-                  type="button"
-                  className={cn(
-                    "focus-ring inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] px-3 py-1.5 text-[12px] text-[var(--text-secondary)]",
-                    today.isFetching && "opacity-70",
-                  )}
-                  onClick={() => void today.refetch()}
-                >
-                  <RefreshCw size={13} className={today.isFetching ? "animate-spin" : ""} />
-                  刷新
-                </button>
-              }
-            />
-            <div className="flex flex-col gap-2">
-              {(data?.source_cards?.length ? data.source_cards : []).slice(0, 4).map((source, index) => (
-                <SourceCard key={`${source.label}-${index}`} source={source} />
-              ))}
-              {!data?.source_cards?.length ? (
-                <div className="surface-panel px-4 py-3 text-[13px] text-[var(--text-tertiary)]">
-                  数据源等待同步。
-                </div>
-              ) : null}
-            </div>
-          </div>
+          <EvidencePanel page="today" sources={data?.source_cards} title="数据源" eyebrow="Data Sources" />
         </section>
       </div>
     </main>

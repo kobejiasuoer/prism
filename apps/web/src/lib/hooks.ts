@@ -9,11 +9,14 @@ export const queryKeys = {
   today: ["today"] as const,
   overview: ["overview"] as const,
   watchlist: ["watchlist"] as const,
+  watchlistManager: ["watchlist-manager"] as const,
   opportunities: ["opportunities"] as const,
   review: ["review"] as const,
+  ask: (query: string) => ["ask", query] as const,
   askSuggest: (query: string) => ["ask-suggest", query] as const,
   refreshStatus: (page: string) => ["refresh-status", page] as const,
   stockProfile: (code: string) => ["stock-profile", code] as const,
+  parameters: ["parameters"] as const,
   runs: ["runs"] as const,
   health: ["health"] as const,
 };
@@ -46,6 +49,15 @@ export function useWatchlist() {
   });
 }
 
+export function useWatchlistManager() {
+  return useQuery({
+    queryKey: queryKeys.watchlistManager,
+    queryFn: api.getWatchlistManager,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
 export function useOpportunities() {
   return useQuery({
     queryKey: queryKeys.opportunities,
@@ -74,6 +86,24 @@ export function useStockProfile(code: string) {
   });
 }
 
+export function useAsk(query: string) {
+  return useQuery({
+    queryKey: queryKeys.ask(query),
+    queryFn: () => api.ask(query),
+    enabled: Boolean(query),
+    staleTime: 60_000,
+  });
+}
+
+export function useParameters() {
+  return useQuery({
+    queryKey: queryKeys.parameters,
+    queryFn: api.getParameters,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
 export function useRuns() {
   return useQuery({
     queryKey: queryKeys.runs,
@@ -92,10 +122,11 @@ export function useHealth() {
   });
 }
 
-export function useRefreshStatus(page: string) {
+export function useRefreshStatus(page: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.refreshStatus(page),
     queryFn: () => api.getRefreshStatus(page),
+    enabled: Boolean(page) && enabled,
     staleTime: 20_000,
     refetchInterval: 60_000,
   });
@@ -109,6 +140,94 @@ export function useUpdateTodayActionDecision() {
       api.updateTodayActionDecision(payload),
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.today });
+    },
+  });
+}
+
+export function useRunTask() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ taskName, payload }: { taskName: string; payload?: Record<string, unknown> }) =>
+      api.runTask(taskName, payload || {}),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.overview });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.runs });
+    },
+  });
+}
+
+export function useSaveParameters() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: { raw: string } | { value: Record<string, unknown> }) => api.saveParameters(payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.parameters });
+    },
+  });
+}
+
+export function useTriggerRefresh(page: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload?: { task_name?: string; force?: boolean }) =>
+      api.triggerRefresh({ page, ...(payload || {}) }),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.refreshStatus(page) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.overview });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.runs });
+      if (page === "today") {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.today });
+      }
+      if (page === "watchlist") {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.watchlist });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.watchlistManager });
+      }
+      if (page === "opportunities") {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.opportunities });
+      }
+    },
+  });
+}
+
+export function useAddWatchlistStock() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: { code: string; name?: string; trigger_refresh?: boolean }) =>
+      api.addWatchlistStock(payload),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.watchlist });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.watchlistManager });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.parameters });
+    },
+  });
+}
+
+export function useArchiveWatchlistStock() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: { code: string; trigger_refresh?: boolean }) => api.archiveWatchlistStock(payload),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.watchlist });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.watchlistManager });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.parameters });
+    },
+  });
+}
+
+export function useRestoreWatchlistStock() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: { code: string; trigger_refresh?: boolean }) => api.restoreWatchlistStock(payload),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.watchlist });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.watchlistManager });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.parameters });
     },
   });
 }

@@ -1,15 +1,23 @@
 import type {
+  AskFollowupResponse,
+  AskResponse,
   AskSuggestResponse,
   DecisionValue,
   HealthResponse,
   OpportunitiesData,
   OverviewData,
+  ParametersResponse,
+  PreviewPayload,
   RefreshStatus,
+  RefreshTriggerResponse,
   ReviewData,
   RunItem,
   StockProfileData,
+  TaskRunResponse,
   TodayData,
   WatchlistData,
+  WatchlistManageResponse,
+  WatchlistManagerResponse,
 } from "./types";
 
 export class ApiError extends Error {
@@ -64,6 +72,17 @@ async function fetchJson<T>(path: string, init?: RequestInit & { json?: JsonBody
   return payload as T;
 }
 
+async function fetchText(path: string): Promise<string> {
+  const response = await fetch(path);
+  const text = await response.text();
+
+  if (!response.ok) {
+    throw new ApiError(text || response.statusText || "Request failed", response.status, text);
+  }
+
+  return text;
+}
+
 export const api = {
   getToday() {
     return fetchJson<TodayData>("/api/today");
@@ -73,6 +92,27 @@ export const api = {
   },
   getWatchlist() {
     return fetchJson<WatchlistData>("/api/watchlist");
+  },
+  getWatchlistManager() {
+    return fetchJson<WatchlistManagerResponse>("/api/watchlist/manage");
+  },
+  addWatchlistStock(payload: { code: string; name?: string; trigger_refresh?: boolean }) {
+    return fetchJson<WatchlistManageResponse>("/api/watchlist/manage/add", {
+      method: "POST",
+      json: payload,
+    });
+  },
+  archiveWatchlistStock(payload: { code: string; trigger_refresh?: boolean }) {
+    return fetchJson<WatchlistManageResponse>("/api/watchlist/manage/archive", {
+      method: "POST",
+      json: payload,
+    });
+  },
+  restoreWatchlistStock(payload: { code: string; trigger_refresh?: boolean }) {
+    return fetchJson<WatchlistManageResponse>("/api/watchlist/manage/restore", {
+      method: "POST",
+      json: payload,
+    });
   },
   getWatchlistDetail(code: string) {
     return fetchJson<StockProfileData["watchlist"]>(`/api/watchlist/${encodeURIComponent(code)}`);
@@ -100,14 +140,14 @@ export const api = {
   },
   ask(query: string) {
     const q = query ? `?q=${encodeURIComponent(query)}` : "";
-    return fetchJson<unknown>(`/api/ask${q}`);
+    return fetchJson<AskResponse>(`/api/ask${q}`);
   },
   askSuggest(query: string) {
     const q = query ? `?q=${encodeURIComponent(query)}` : "";
     return fetchJson<AskSuggestResponse>(`/api/ask/suggest${q}`);
   },
   askFollowup(payload: { query: string; question: string; history?: unknown[] }) {
-    return fetchJson<unknown>("/api/ask/followup", {
+    return fetchJson<AskFollowupResponse>("/api/ask/followup", {
       method: "POST",
       json: payload,
     });
@@ -129,16 +169,16 @@ export const api = {
     });
   },
   getParameters() {
-    return fetchJson<unknown>("/api/parameters");
+    return fetchJson<ParametersResponse>("/api/parameters");
   },
-  saveParameters(payload: JsonBody) {
-    return fetchJson<unknown>("/api/parameters", {
+  saveParameters(payload: { raw: string } | { value: Record<string, unknown> }) {
+    return fetchJson<ParametersResponse>("/api/parameters", {
       method: "POST",
       json: payload,
     });
   },
   runTask(taskName: string, payload: Record<string, unknown> = {}) {
-    return fetchJson<unknown>(`/api/tasks/${encodeURIComponent(taskName)}/run`, {
+    return fetchJson<TaskRunResponse>(`/api/tasks/${encodeURIComponent(taskName)}/run`, {
       method: "POST",
       json: payload,
     });
@@ -146,11 +186,20 @@ export const api = {
   getRuns() {
     return fetchJson<{ runs: RunItem[] }>("/api/runs");
   },
+  getRunDetail(runId: string) {
+    return fetchJson<RunItem>(`/api/runs/${encodeURIComponent(runId)}`);
+  },
+  getRunLog(runId: string) {
+    return fetchText(`/api/runs/${encodeURIComponent(runId)}/log`);
+  },
+  preview(path: string) {
+    return fetchJson<PreviewPayload>(`/api/preview?path=${encodeURIComponent(path)}`);
+  },
   getRefreshStatus(page: string) {
     return fetchJson<RefreshStatus>(`/api/refresh/status?page=${encodeURIComponent(page)}`);
   },
   triggerRefresh(payload: { page: string; task_name?: string; force?: boolean }) {
-    return fetchJson<unknown>("/api/refresh/trigger", {
+    return fetchJson<RefreshTriggerResponse>("/api/refresh/trigger", {
       method: "POST",
       json: payload,
     });

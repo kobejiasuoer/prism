@@ -4,10 +4,11 @@ import { RefreshCw, WalletCards } from "lucide-react";
 
 import { Badge } from "@/components/badge";
 import { EmptyState, ErrorState, Panel, SkeletonBlock } from "@/components/data-card";
+import { EvidencePanel } from "@/components/evidence-panel";
 import { MetricCard, MetricSkeleton } from "@/components/metric-card";
 import { PageTitle } from "@/components/page-title";
-import { SourceCard } from "@/components/source-card";
 import { StockCard } from "@/components/stock-card";
+import { WatchlistManagerPanel } from "@/components/watchlist-manager-panel";
 import { useWatchlist } from "@/lib/hooks";
 
 export default function PortfolioPage() {
@@ -75,6 +76,10 @@ export default function PortfolioPage() {
               ))}
         </section>
 
+        <section id="watchlist-manager" className="mb-7">
+          <WatchlistManagerPanel />
+        </section>
+
         <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Panel title="总控焦点" eyebrow="Focus">
             <div className="surface-card p-4">
@@ -95,14 +100,7 @@ export default function PortfolioPage() {
             </div>
           </Panel>
 
-          <Panel title="数据源" eyebrow="Freshness">
-            <div className="flex flex-col gap-2">
-              {(data?.source_cards || []).map((source, index) => (
-                <SourceCard key={`${source.label}-${index}`} source={source} />
-              ))}
-              {!data?.source_cards?.length ? <EmptyState>暂无数据源状态。</EmptyState> : null}
-            </div>
-          </Panel>
+          <EvidencePanel page="watchlist" sources={data?.source_cards} title="来源校验" eyebrow="Freshness" />
         </section>
       </div>
     </main>

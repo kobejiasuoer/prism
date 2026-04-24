@@ -4,10 +4,10 @@ import { BarChart3, RefreshCw } from "lucide-react";
 
 import { Badge } from "@/components/badge";
 import { DataCard, EmptyState, ErrorState, Panel, SkeletonBlock } from "@/components/data-card";
+import { EvidencePanel } from "@/components/evidence-panel";
 import { MetricCard, MetricSkeleton } from "@/components/metric-card";
 import { PageTitle } from "@/components/page-title";
 import { RiskAlert } from "@/components/risk-alert";
-import { SourceCard } from "@/components/source-card";
 import { useReview } from "@/lib/hooks";
 
 export default function ReviewPage() {
@@ -97,14 +97,7 @@ export default function ReviewPage() {
             </div>
           </Panel>
 
-          <Panel title="数据源" eyebrow="Freshness">
-            <div className="flex flex-col gap-2">
-              {(data?.source_cards || []).map((source, index) => (
-                <SourceCard key={`${source.label}-${index}`} source={source} />
-              ))}
-              {!data?.source_cards?.length ? <EmptyState>暂无数据源状态。</EmptyState> : null}
-            </div>
-          </Panel>
+          <EvidencePanel page="review" sources={data?.source_cards} title="来源校验" eyebrow="Freshness" />
         </section>
       </div>
     </main>

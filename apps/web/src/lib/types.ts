@@ -32,12 +32,15 @@ export interface MetricCardData {
 }
 
 export interface SourceCardData {
+  key?: string;
   label: string;
   value: string;
   detail?: string;
   available?: boolean;
   stale?: boolean;
   age_label?: string;
+  age_seconds?: number;
+  stale_after_seconds?: number;
 }
 
 export interface BasicCard {
@@ -60,6 +63,7 @@ export interface BasicCard {
   detail_url?: string;
   detail_link_text?: string;
   url?: string;
+  path?: string;
 }
 
 export interface StockListCard {
@@ -230,12 +234,59 @@ export interface AskSuggestResponse {
   recent_queries?: AskSuggestion[];
 }
 
+export interface AskCaseData {
+  hero?: {
+    title?: string;
+    summary?: string;
+    status_label?: string;
+  };
+  canonical_decision?: Record<string, string | number | null | undefined>;
+  cross_cards?: MetricCardData[];
+  context_tags?: string[];
+  evidence_cards?: BasicCard[];
+  artifacts?: BasicCard[];
+  source_cards?: SourceCardData[];
+}
+
+export interface AskResponse {
+  generated_at?: string;
+  query?: string;
+  examples?: AskSuggestion[];
+  recent_queries?: AskSuggestion[];
+  case?: AskCaseData;
+  message?: string;
+}
+
+export interface AskFollowupAnswer {
+  intent?: string;
+  title?: string;
+  summary?: string;
+  bullets?: string[];
+  references?: string[];
+  tone?: Tone | string;
+  followups?: string[];
+  engine?: string;
+  engine_label?: string;
+  engine_note?: string;
+  history_used?: number;
+}
+
+export interface AskFollowupResponse {
+  query: string;
+  question: string;
+  code?: string;
+  name?: string;
+  hero_title?: string;
+  history_used?: number;
+  answer: AskFollowupAnswer;
+}
+
 export interface OverviewData {
   generated_at: string;
   workspace_root: string;
   kpis?: MetricCardData[];
   lanes?: unknown[];
-  tasks?: unknown[];
+  tasks?: TaskDefinition[];
   runs?: RunItem[];
   freshness?: SourceCardData[];
 }
@@ -264,6 +315,68 @@ export interface WatchlistData {
   focus_tags?: string[];
   avoid_points?: string[];
   links?: LinkMap;
+  manager?: WatchlistManager;
+}
+
+export interface WatchlistManagerItem {
+  code: string;
+  name: string;
+  market?: string;
+  state_label?: string;
+  state_detail?: string;
+  tone?: Tone | string;
+  updated_at?: string;
+}
+
+export interface WatchlistRefreshStep {
+  label?: string;
+  state?: string;
+  detail?: string;
+}
+
+export interface WatchlistManager {
+  summary?: string;
+  feedback_hint?: string;
+  active_count?: number;
+  archived_count?: number;
+  pending_count?: number;
+  summary_cards?: MetricCardData[];
+  refresh_status?: {
+    status?: string;
+    label?: string;
+    value?: string;
+    detail?: string;
+    tone?: Tone | string;
+    log_path?: string;
+    log_url?: string;
+    steps?: WatchlistRefreshStep[];
+  };
+  active_items?: WatchlistManagerItem[];
+  archived_items?: WatchlistManagerItem[];
+  empty_active?: string;
+  empty_archived?: string;
+  add_api?: string;
+  archive_api?: string;
+  restore_api?: string;
+}
+
+export interface WatchlistManagerResponse {
+  manager: WatchlistManager;
+}
+
+export interface WatchlistManageResponse {
+  ok: boolean;
+  action: "add" | "archive" | "restore";
+  message: string;
+  operation?: Record<string, unknown>;
+  refresh?: {
+    started?: boolean;
+    run_id?: string;
+    task_name?: string;
+    title?: string;
+    log_path?: string;
+  };
+  manager: WatchlistManager;
 }
 
 export interface OpportunitiesData {
@@ -364,12 +477,26 @@ export interface StockProfileData {
 
 export interface RunItem {
   run_id?: string;
+  task_id?: string;
   task_name?: string;
   title?: string;
   status?: string;
   started_at?: string;
   finished_at?: string;
+  log_path?: string;
+  meta_path?: string;
   summary?: string;
+  send_to_feishu?: boolean;
+}
+
+export interface TaskDefinition {
+  task_name?: string;
+  name?: string;
+  title?: string;
+  description?: string;
+  lane?: string;
+  command?: string[];
+  last_run?: RunItem;
 }
 
 export interface RefreshStatus {
@@ -394,6 +521,71 @@ export interface RefreshStatus {
     last_run_id?: string;
   };
   snapshot_signature: string;
+}
+
+export interface RefreshTriggerResponse {
+  ok: boolean;
+  page: string;
+  force: boolean;
+  task: {
+    task_name: string;
+    title: string;
+  };
+  trigger: {
+    started?: boolean;
+    run_id?: string;
+    task_name?: string;
+    title?: string;
+    log_path?: string;
+    meta_path?: string;
+  };
+  status: RefreshStatus;
+}
+
+export interface PreviewPayload {
+  path: string;
+  name: string;
+  kind: "markdown" | "json" | "binary" | "text" | string;
+  size_bytes: number;
+  mtime: string;
+  truncated: boolean;
+  text: string;
+  preview_bytes?: number;
+}
+
+export interface ParameterGroupStatus {
+  key: string;
+  label: string;
+  required?: boolean;
+  ok: boolean;
+  detail?: string;
+}
+
+export interface ParametersResponse {
+  ok: boolean;
+  saved?: boolean;
+  path: string;
+  updated_at?: string;
+  summary_cards?: MetricCardData[];
+  required_groups?: ParameterGroupStatus[];
+  validation?: {
+    ok: boolean;
+    errors?: string[];
+  };
+  value: Record<string, unknown>;
+  raw: string;
+  detail?: string;
+}
+
+export interface TaskRunResponse {
+  ok: boolean;
+  started?: boolean;
+  run_id?: string;
+  task_name?: string;
+  title?: string;
+  send_to_feishu?: boolean;
+  meta_path?: string;
+  log_path?: string;
 }
 
 export interface HealthResponse {

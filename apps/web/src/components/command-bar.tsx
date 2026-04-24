@@ -52,7 +52,7 @@ export function CommandBar({
         .askSuggest(query.trim())
         .then((payload) => {
           if (!controller.signal.aborted) {
-            setSuggestions(payload.items ?? []);
+            setSuggestions(payload.items?.length ? payload.items : payload.recent_queries ?? []);
           }
         })
         .catch(() => {
