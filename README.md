@@ -146,6 +146,62 @@ Useful routes after startup:
 - `http://127.0.0.1:8000/ask` for the Ask v2 single-stock answer surface
 - `http://127.0.0.1:8000/watchlist` for holdings and watchlist operations
 
+### Windows Startup
+
+On Windows, use PowerShell and start the FastAPI app with `uvicorn` directly:
+
+```powershell
+py -3.14 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r apps/control-panel/requirements.txt
+python -m pip install pytest
+python -m uvicorn control_panel.app:app --host 127.0.0.1 --port 8000
+```
+
+If PowerShell blocks virtualenv activation, enable scripts for the current shell only:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
+
+If `py -3.14` is not available, install Python 3.14 or newer first. A Python 3.8 fallback can run the control panel for local inspection after installing `eval_type_backport`, but it is not the supported project runtime:
+
+```powershell
+python -m pip install eval_type_backport
+python -m uvicorn control_panel.app:app --host 127.0.0.1 --port 8000
+```
+
+Confirm the server is healthy:
+
+```powershell
+Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/healthz
+```
+
+After the server starts, open the frontend in a browser:
+
+```text
+http://127.0.0.1:8000
+```
+
+Common frontend pages:
+
+- `http://127.0.0.1:8000/today` for the daily command surface
+- `http://127.0.0.1:8000/ask` for single-stock Q&A
+- `http://127.0.0.1:8000/watchlist` for watchlist management
+- `http://127.0.0.1:8000/opportunities` for opportunities
+- `http://127.0.0.1:8000/review` for review
+
+You can also open a page directly from PowerShell:
+
+```powershell
+Start-Process http://127.0.0.1:8000/today
+```
+
+If port `8000` is already in use, change the last command to `--port 8001`.
+
+The shell launchers such as `start_prism.sh` require Bash, WSL, or Git Bash. On plain PowerShell, use the `uvicorn` command above.
+
 If you want to refresh the stock-analysis evaluation artifacts, you can use the one-click launcher:
 
 ```bash

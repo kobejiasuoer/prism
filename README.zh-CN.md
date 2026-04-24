@@ -145,6 +145,62 @@ python3 scripts/scrub-secrets.py
 - `http://127.0.0.1:8000/ask`：Ask v2 单票问答页
 - `http://127.0.0.1:8000/watchlist`：持仓与自选股管理页
 
+### Windows 启动方式
+
+Windows 下建议使用 PowerShell，直接通过 `uvicorn` 启动 FastAPI 应用：
+
+```powershell
+py -3.14 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r apps/control-panel/requirements.txt
+python -m pip install pytest
+python -m uvicorn control_panel.app:app --host 127.0.0.1 --port 8000
+```
+
+如果 PowerShell 阻止虚拟环境激活，可以只对当前窗口放开脚本执行权限：
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
+
+如果本机没有 `py -3.14`，请先安装 Python 3.14 或更新版本。Python 3.8 可以作为本地预览的临时兜底方案，但不是项目声明的正式运行版本；此时需要额外安装类型标注兼容包：
+
+```powershell
+python -m pip install eval_type_backport
+python -m uvicorn control_panel.app:app --host 127.0.0.1 --port 8000
+```
+
+启动后可以用下面的命令确认服务健康：
+
+```powershell
+Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/healthz
+```
+
+服务启动成功后，直接在浏览器里打开前端页面：
+
+```text
+http://127.0.0.1:8000
+```
+
+常用前端页面：
+
+- `http://127.0.0.1:8000/today`：今日作战页
+- `http://127.0.0.1:8000/ask`：问股页
+- `http://127.0.0.1:8000/watchlist`：自选股页
+- `http://127.0.0.1:8000/opportunities`：机会页
+- `http://127.0.0.1:8000/review`：复盘页
+
+也可以在 PowerShell 里直接打开浏览器：
+
+```powershell
+Start-Process http://127.0.0.1:8000/today
+```
+
+如果 `8000` 端口已被占用，把启动命令里的 `--port 8000` 改成 `--port 8001` 即可。
+
+`start_prism.sh` 这类 shell 启动脚本需要 Bash、WSL 或 Git Bash。纯 PowerShell 环境下，直接使用上面的 `uvicorn` 命令即可。
+
 如果你想刷新股票分析验收报告，可以直接用一键脚本：
 
 ```bash

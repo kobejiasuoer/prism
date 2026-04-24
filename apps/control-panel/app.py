@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import hashlib
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -164,7 +165,7 @@ def launch_background_task(
     run_id = f"{task_name}_{now_stamp()}"
     meta_path, log_path = build_run_paths(run_id)
     launch_cmd = [
-        "python3",
+        sys.executable,
         str(TASK_RUNNER),
         "--task-id",
         run_id,
