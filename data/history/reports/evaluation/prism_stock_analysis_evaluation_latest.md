@@ -1,24 +1,24 @@
 # Prism Stock Analysis Evaluation Report
 
-- Generated At: 2026-04-23 23:21:50
+- Generated At: 2026-04-24 16:25:56
 - Baseline Label: 2026-04-23-initial-baseline
 - Total Score: 97 / 100
 - Tier: professional_usable
 
 ## Acceptance Verdict
 
-- status: report_only
-- required_tier: none
-- fail_on_hard_gates: false
+- status: passed
+- required_tier: professional_usable
+- fail_on_hard_gates: true
 - hard_gates_clear: true
-- passed: n/a
+- passed: true
 
 ## Run Context
 
 - manifest_path: data/evaluation/stock_analysis/manifest.json
-- required_tier: none
-- fail_on_hard_gates: false
-- command: apps/scripts/evaluate_stock_analysis.py --manifest data/evaluation/stock_analysis/manifest.json --output-json data/evaluation/stock_analysis/latest_scorecard.json --output-md data/history/reports/evaluation/prism_stock_analysis_evaluation_latest.md
+- required_tier: professional_usable
+- fail_on_hard_gates: true
+- command: apps/scripts/evaluate_stock_analysis.py --manifest data/evaluation/stock_analysis/manifest.json --output-json data/evaluation/stock_analysis/latest_scorecard.json --output-md data/history/reports/evaluation/prism_stock_analysis_evaluation_latest.md --min-tier professional_usable --fail-on-hard-gates
 
 ## Dimension Scores
 
