@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>棱镜·持仓</title>
     {% include "_theme_head.html" %}
-    <link rel="stylesheet" href="/static/control-panel.css?v=20260420-schemec5">
+    <link rel="stylesheet" href="/static/control-panel.css?v=20260424-summarycards1">
   </head>
   <body>
     <div class="panel-shell today-shell prism-page-shell watchlist-page-shell" data-refresh-page="watchlist">
@@ -22,7 +22,7 @@
       </header>
 
       <main class="today-dispatch-main watchlist-dispatch-main">
-        <section class="today-quality-block today-dispatch-block stage-decision-layer">
+        <section class="today-quality-block today-dispatch-block stage-decision-layer page-summary-stage watchlist-summary-stage">
           {% set verdict_badge = watchlist.topline.verdict_badge %}
           {% set verdict_title = watchlist.topline.verdict_title %}
           {% set verdict_summary = watchlist.topline.verdict_summary %}

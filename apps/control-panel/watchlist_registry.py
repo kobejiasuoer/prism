@@ -17,7 +17,7 @@ CODE_PATTERN = re.compile(r"^\d{6}$")
 SINA_QUOTE_URL = "https://hq.sinajs.cn/list={sina_code}"
 SINA_SUGGEST_URL = "https://suggest3.sinajs.cn/suggest/type=11,12,13,14,15&key={query}"
 HISTORICAL_STOCK_SEARCH_SOURCES = (
-    (STOCK_SCREENER_ROOT / "data" / "ai_history", "历史机会"),
+    (STOCK_SCREENER_ROOT / "data" / "ai_history", "历史观察"),
     (STOCK_SCREENER_ROOT / "data" / "stale_outputs", "近期记录"),
     (STOCK_SCREENER_ROOT / "data" / "research_backfill" / "ai_history", "历史回测"),
     (STOCK_SCREENER_ROOT / "data" / "research_backfill" / "history", "历史扫描"),

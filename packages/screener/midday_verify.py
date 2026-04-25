@@ -9,6 +9,11 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+try:
+    from screener.capital_flow_contract import UNIT_YUAN, capital_flow_today_yi
+except ModuleNotFoundError:
+    from capital_flow_contract import UNIT_YUAN, capital_flow_today_yi
+
 BASE = Path(__file__).resolve().parents[1]
 DEFAULT_MORNING = BASE / "data" / "ai_screening_result.json"
 DEFAULT_SCAN = BASE / "data" / "scan_result.json"
@@ -190,7 +195,7 @@ def build_fresh_candidates(scan_data, exclude_codes, active_themes=None, limit=3
                 "change_pct": change_pct,
                 "amount_yi": amount_yi,
                 "capital_trend": capital_flow.get("trend") or "资金未确认",
-                "flow_today_yi": round(safe_float(capital_flow.get("today")) / 1e8, 2),
+                "flow_today_yi": round(capital_flow_today_yi(capital_flow, legacy_source_unit=UNIT_YUAN), 2),
                 "entry_reason": trade_note.get("entry_reason") or "盘中强度较高",
                 "main_risk": trade_note.get("main_risk") or "先看二次确认，不追第一波",
                 "watch_condition": trade_note.get("watch_condition") or "先等换手和承接确认",
@@ -241,7 +246,7 @@ def verify_item(morning_item, current_item, active_themes=None):
     price = safe_float(current_item.get("price"), default=None)
     cap = current_item.get("capital_flow") or {}
     trend = cap.get("trend") or "无数据"
-    today_flow = safe_float(cap.get("today")) / 1e8
+    today_flow = capital_flow_today_yi(cap, legacy_source_unit=UNIT_YUAN)
     current_theme = theme_of(current_item)
     tech = current_item.get("technical_state") or {}
     ma5 = safe_float(tech.get("ma5"), default=None)

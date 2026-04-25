@@ -3,9 +3,9 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>棱镜·机会</title>
+    <title>棱镜·观察池</title>
     {% include "_theme_head.html" %}
-    <link rel="stylesheet" href="/static/control-panel.css?v=20260420-schemec5">
+    <link rel="stylesheet" href="/static/control-panel.css?v=20260424-summarycards1">
   </head>
   <body>
     <div class="panel-shell today-shell prism-page-shell opportunities-page-shell" data-refresh-page="opportunities">
@@ -17,7 +17,7 @@
       </header>
 
       <main class="today-dispatch-main opportunities-dispatch-main">
-        <section class="today-quality-block today-dispatch-block stage-decision-layer">
+        <section class="today-quality-block today-dispatch-block stage-decision-layer page-summary-stage opportunities-summary-stage">
           {% set verdict_badge = opportunities.topline.verdict_badge %}
           {% set verdict_title = opportunities.topline.verdict_title %}
           {% set verdict_summary = opportunities.topline.verdict_summary %}
@@ -31,20 +31,15 @@
         <section id="opportunities-top-three" class="today-quality-block today-dispatch-block stage-decision-layer">
           <div class="today-panel-head">
             <div>
-              {% if opportunities.promote_watch %}
               <p class="eyebrow">观察优先</p>
-              <h2>Top 3 观察/午盘承接候选</h2>
-              {% else %}
-              <p class="eyebrow">新仓优先</p>
-              <h2>Top 3 可执行候选</h2>
-              {% endif %}
+              <h2>Top 3 继续观察</h2>
             </div>
             <span class="panel-stat">{{ opportunities.top_rows|length }}</span>
           </div>
           {% if opportunities.promote_watch %}
-          <p class="today-panel-copy">今天没有可执行新仓。先看 3 只观察名单，再等午盘承接确认。</p>
+          <p class="today-panel-copy">今天先看 3 只继续观察的名字，再等午盘承接确认，不把候选当成直接推荐。</p>
           {% else %}
-          <p class="today-panel-copy">先看可执行候选，再决定是否继续展开其余观察与午盘承接。</p>
+          <p class="today-panel-copy">先看最值得继续观察的名字，再决定是否展开其余观察与午盘承接。</p>
           {% endif %}
           {% set decision_rows = opportunities.top_rows %}
           {% include "_decision_rows.html" %}
@@ -54,10 +49,10 @@
           <div class="section-head">
             <div>
               <p class="eyebrow">风险与节奏</p>
-              <h2>机会状态栏</h2>
+              <h2>观察池状态栏</h2>
             </div>
           </div>
-          {% set status_strip_label = "机会状态栏" %}
+          {% set status_strip_label = "观察池状态栏" %}
           {% set status_items = opportunities.status_strip %}
           {% include "_status_strip.html" %}
         </section>
@@ -178,7 +173,7 @@
                 <div class="section-head">
                   <div>
                     <p class="eyebrow">质检状态</p>
-                    <h3>机会链路质检</h3>
+                    <h3>观察池链路质检</h3>
                   </div>
                 </div>
                 <div class="quality-grid quality-grid-dual">

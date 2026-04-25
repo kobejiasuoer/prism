@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN"{% if preview_theme %} data-preview-theme="{{ preview_theme }}"{% endif %}>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>棱镜·参数</title>
+    {% include "_theme_head.html" %}
+    <link rel="stylesheet" href="/static/control-panel.css?v=20260424-parameters1">
+  </head>
+  <body>
+    <div
+      class="panel-shell today-shell prism-page-shell parameters-page-shell"
+      data-parameter-root
+      data-parameter-load-url="{{ parameters.links.api_self }}"
+      data-parameter-save-url="{{ parameters.links.api_save }}"
+    >
+      <header class="today-dispatch-nav">
+        {% set nav_active = "parameters" %}
+        {% set nav_links = parameters.links %}
+        {% set nav_api_href = parameters.links.api_self %}
+        {% set show_stage_flow = False %}
+        {% include "_page_nav.html" %}
+      </header>
+
+      <main class="today-dispatch-main parameters-dispatch-main">
+        <section class="today-quality-block today-dispatch-block stage-decision-layer">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">参数</p>
+              <h1>股票参数配置</h1>
+            </div>
+          </div>
+          <p class="today-panel-copy">{{ parameters.summary }}</p>
+          <div class="page-summary-grid">
+            {% for item in parameters.summary_cards %}
+            <article class="today-summary-card page-summary-card {% if loop.first %}page-summary-card-feature{% endif %}">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+              <p>{{ item.detail }}</p>
+            </article>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section class="today-quality-block today-dispatch-block stage-action-layer">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">运行入口</p>
+              <h2>当前读写文件</h2>
+            </div>
+          </div>
+          <div class="parameters-path-grid">
+            {% for item in parameters.paths %}
+            <article class="today-panel parameters-path-card">
+              <div class="today-panel-head">
+                <div>
+                  <p class="eyebrow">{{ item.label }}</p>
+                  <h3>{{ item.title }}</h3>
+                </div>
+              </div>
+              <p class="today-panel-copy">{{ item.path }}</p>
+              <div class="parameters-path-meta">
+                <span>最近更新 {{ item.mtime }}</span>
+              </div>
+              <button
+                class="panel-link panel-link-button"
+                type="button"
+                data-preview-path="{{ item.path }}"
+                data-preview-title="{{ item.title }}"
+                onclick="openPreviewButton(this)"
+              >
+                页内预览
+              </button>
+            </article>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section class="today-quality-block today-dispatch-block stage-action-layer">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">校验范围</p>
+              <h2>必填阈值组</h2>
+            </div>
+          </div>
+          <p class="today-panel-copy">保存前会校验这些 threshold_sets 是否齐全，避免把线上运行入口保存成半成品。</p>
+          <div class="detail-tag-list parameters-tag-list">
+            {% for item in parameters.required_sets %}
+            <span class="detail-tag">{{ item }}</span>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section class="today-quality-block today-dispatch-block stage-action-layer">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">结构盘点</p>
+              <h2>threshold_sets 当前分组</h2>
+            </div>
+          </div>
+          <div class="parameters-section-grid">
+            {% for item in parameters.sections %}
+            <article class="today-panel parameters-section-card">
+              <div class="today-panel-head">
+                <div>
+                  <p class="eyebrow">分组</p>
+                  <h3>{{ item.name }}</h3>
+                </div>
+                <span class="panel-stat">{{ item.entry_count }}</span>
+              </div>
+              <p class="today-panel-copy">{{ item.summary }}</p>
+            </article>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section class="today-quality-block today-dispatch-block stage-action-layer">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">调参入口</p>
+              <h2>原始 JSON 编辑器</h2>
+            </div>
+          </div>
+          <p class="today-panel-copy">先做最小可靠版本：直接编辑 runtime JSON，保存时做结构校验，并同步 schema 镜像里的 threshold_sets。</p>
+          <form class="parameters-editor-form" data-parameter-editor>
+            <div class="parameters-editor-toolbar">
+              <button class="ghost-button" type="button" data-parameter-reset>重新载入磁盘版本</button>
+              <button class="primary-button" type="submit" data-parameter-save>保存并同步</button>
+            </div>
+            <label class="parameters-editor-field">
+              <span>stock-parameters.json</span>
+              <textarea
+                name="raw_json"
+                spellcheck="false"
+                data-parameter-editor-input
+              >{{- parameters.raw_json -}}</textarea>
+            </label>
+            <p class="parameters-editor-feedback" data-parameter-feedback aria-live="polite">保存前会先校验结构，再落盘。</p>
+          </form>
+        </section>
+      </main>
+    </div>
+    {% include "_preview_drawer.html" %}
+    <script src="/static/control-panel-parameters.js?v=20260424-parameters1"></script>
+  </body>
+</html>

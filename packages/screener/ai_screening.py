@@ -8,6 +8,41 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+try:
+    from screener.capital_flow_contract import (
+        UNIT_YUAN,
+        capital_flow_five_day_total_wan,
+        capital_flow_today_wan,
+        capital_flow_today_yi,
+        normalize_capital_flow_payload,
+        wan_to_yi,
+    )
+    from screener.parameters import (
+        AI_SCREENING_EVALUATION_RULES,
+        ENTRY_OUTPUT_DEFAULTS,
+        EXECUTION_QUALITY_RULES,
+        SETUP_PLAN_RULES,
+        SETUP_THRESHOLDS,
+        build_execution_gate,
+    )
+except ModuleNotFoundError:
+    from capital_flow_contract import (
+        UNIT_YUAN,
+        capital_flow_five_day_total_wan,
+        capital_flow_today_wan,
+        capital_flow_today_yi,
+        normalize_capital_flow_payload,
+        wan_to_yi,
+    )
+    from parameters import (
+        AI_SCREENING_EVALUATION_RULES,
+        ENTRY_OUTPUT_DEFAULTS,
+        EXECUTION_QUALITY_RULES,
+        SETUP_PLAN_RULES,
+        SETUP_THRESHOLDS,
+        build_execution_gate,
+    )
+
 BASE = Path(__file__).resolve().parents[1]
 DEFAULT_SCAN_PATH = BASE / "data" / "scan_result.json"
 DEFAULT_OUTPUT_PATH = BASE / "data" / "ai_screening_result.json"
@@ -86,76 +121,7 @@ def execution_gate_of(market_regime=None):
     candidate_metrics = candidate_view.get("metrics") or {}
     gate = {}
     if metrics or candidate_view:
-
-        broad_score = safe_float(regime.get("score"), default=0)
-        candidate_score = safe_float(candidate_view.get("score"), default=broad_score)
-        positive_ratio = safe_float(metrics.get("positive_ratio"), default=0)
-        avg_change = safe_float(metrics.get("avg_change_pct"), default=0)
-        strong_ratio = safe_float(metrics.get("strong_ratio"), default=0)
-        avg_turnover = safe_float(metrics.get("avg_turnover"), default=0)
-        candidate_strong_ratio = safe_float(candidate_metrics.get("strong_ratio"), default=strong_ratio)
-
-        risk_flags = []
-        if positive_ratio < 0.50:
-            risk_flags.append("赚钱效应不足")
-        if avg_change < 0.20:
-            risk_flags.append("平均涨幅偏弱")
-        if strong_ratio < 0.10:
-            risk_flags.append("强势股占比过低")
-        if avg_turnover < 1.80:
-            risk_flags.append("流动性一般")
-        if candidate_score <= 4:
-            risk_flags.append("候选强度不足")
-        if candidate_strong_ratio < 0.18:
-            risk_flags.append("候选强势扩散不足")
-
-        if (
-            broad_score <= 3
-            or positive_ratio < 0.48
-            or avg_change < 0
-            or strong_ratio < 0.07
-            or candidate_score <= 3
-            or candidate_strong_ratio < 0.10
-        ):
-            gate = {
-                "status": "off",
-                "label": "进攻阀门关闭",
-                "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。",
-                "position_cap": "0成",
-                "allow_new_positions": False,
-                "allow_handoff": False,
-                "allowed_setups": [],
-                "risk_flags": risk_flags[:4],
-            }
-        elif (
-            broad_score <= 5
-            or positive_ratio < 0.63
-            or avg_change < 0.45
-            or strong_ratio < 0.22
-            or candidate_score <= 5
-            or candidate_strong_ratio < 0.22
-        ):
-            gate = {
-                "status": "limited",
-                "label": "进攻阀门半开",
-                "summary": "环境还不够顺，只允许更克制的轻仓试错，优先回踩接力和低位反转，不做强趋势追涨。",
-                "position_cap": "0.3-0.5成以内",
-                "allow_new_positions": True,
-                "allow_handoff": False,
-                "allowed_setups": ["pullback_continuation", "low_reversal"],
-                "risk_flags": risk_flags[:4],
-            }
-        else:
-            gate = {
-                "status": "on",
-                "label": "进攻阀门开启",
-                "summary": "环境允许进攻，但只放行更高质量的共振票，仍以小仓位试错为主。",
-                "position_cap": "0.5-0.8成试错",
-                "allow_new_positions": True,
-                "allow_handoff": True,
-                "allowed_setups": ["leader_continuation", "breakout_follow", "pullback_continuation", "low_reversal"],
-                "risk_flags": risk_flags[:4],
-            }
+        gate = build_execution_gate(regime, candidate_view or {"metrics": candidate_metrics})
 
     else:
         gate = regime.get("execution_gate") or {}
@@ -181,6 +147,11 @@ def normalize_strategies(scan_data):
     return {strategy: candidates}
 
 
+def _resolve_setup_copy(copy_rules, with_levels_key, without_levels_key, use_levels, **kwargs):
+    template = copy_rules[with_levels_key] if use_levels else copy_rules[without_levels_key]
+    return template.format(**kwargs) if use_levels else template
+
+
 def build_setup_plan(stock, decision, market_themes=None):
     technical_state = stock.get("technical_state") or {}
     capital_flow = stock.get("capital_flow") or {}
@@ -199,7 +170,7 @@ def build_setup_plan(stock, decision, market_themes=None):
     change_pct = safe_float(stock.get("change_pct"))
     amount_yi = safe_float(stock.get("amount_yi"))
     overheat_penalty = safe_float(stock.get("overheat_penalty"))
-    flow_today_yi = safe_float(capital_flow.get("today")) / 1e8
+    flow_today_yi = capital_flow_today_yi(capital_flow, legacy_source_unit=UNIT_YUAN)
     flow_trend = capital_flow.get("trend") or "无数据"
     signals = stock.get("signals") or []
     consistency_score = safe_float((decision or {}).get("consistency_score"), default=0.0)
@@ -210,38 +181,51 @@ def build_setup_plan(stock, decision, market_themes=None):
     recovery_price = pick_price(ma5, ma10, price)
     is_top_theme = theme != "其他" and theme in top_theme_names
 
-    setup_type = "watch_only"
-    setup_label = "观察等待"
-    setup_summary = "信号还不够集中，先等更明确的承接或主线确认。"
-    action = "先观察，不抢先手。"
-    trigger = "等主力重新转强，或分时承接明显改善后再看。"
-    avoid = "没有资金确认前不试。"
-    invalidate = "题材走弱或个股转负就取消。"
+    setup_rules = SETUP_PLAN_RULES
+    default_setup = setup_rules["default"]
+    setup_type = default_setup["setup_type"]
+    setup_label = default_setup["setup_label"]
+    setup_summary = default_setup["setup_summary"]
+    action = default_setup["action"]
+    trigger = default_setup["trigger"]
+    avoid = default_setup["avoid"]
+    invalidate = default_setup["invalidate"]
+
+    leader_thresholds = SETUP_THRESHOLDS["leader_continuation"]
+    low_reversal_thresholds = SETUP_THRESHOLDS["low_reversal"]
+    breakout_thresholds = SETUP_THRESHOLDS["breakout_follow"]
+    pullback_thresholds = SETUP_THRESHOLDS["pullback_continuation"]
 
     if (
         is_top_theme
-        and change_pct >= 4.5
-        and amount_yi >= 15
+        and change_pct >= leader_thresholds["min_change_pct"]
+        and amount_yi >= leader_thresholds["min_amount_yi"]
         and flow_today_yi > 0
         and attack_profile.get("status") == "keep"
     ):
+        leader_rules = setup_rules["leader_continuation"]
         setup_type = "leader_continuation"
-        setup_label = "热点龙头"
-        setup_summary = "主线强票，优先看分时承接和二次上冲，不做情绪顶接力。"
-        action = "只做分时回踩承接住后的二次进场。"
-        trigger = (
-            f"优先看 {fmt_price(pullback_price)} 一带承接，或再站稳 {fmt_price(trigger_price)} 后轻仓试错。"
-            if pullback_price is not None or trigger_price is not None
-            else "优先等回踩承接住，或二次放量上冲后再试。"
+        setup_label = leader_rules["setup_label"]
+        setup_summary = leader_rules["setup_summary"]
+        action = leader_rules["action"]
+        trigger = _resolve_setup_copy(
+            leader_rules,
+            "trigger_with_levels",
+            "trigger_without_levels",
+            pullback_price is not None or trigger_price is not None,
+            pullback_price=fmt_price(pullback_price),
+            trigger_price=fmt_price(trigger_price),
         )
-        avoid = "高开超 3% 或连续直线拉升不追。"
-        invalidate = (
-            f"跌破 {fmt_price(invalidate_price)} 或主力转负就取消。"
-            if invalidate_price is not None
-            else "跌回强势结构下方或主力转负就取消。"
+        avoid = leader_rules["avoid"]
+        invalidate = _resolve_setup_copy(
+            leader_rules,
+            "invalidate_with_level",
+            "invalidate_without_level",
+            invalidate_price is not None,
+            invalidate_price=fmt_price(invalidate_price),
         )
     elif (
-        pos20 <= 0.38
+        pos20 <= low_reversal_thresholds["max_position_20d"]
         and change_pct > 0
         and (
             flow_today_yi > 0
@@ -249,58 +233,83 @@ def build_setup_plan(stock, decision, market_themes=None):
             or any("低位反弹" in signal for signal in signals)
         )
     ):
+        reversal_rules = setup_rules["low_reversal"]
         setup_type = "low_reversal"
-        setup_label = "低位反转"
-        setup_summary = "位置偏低，优先看二次确认，不抢第一根情绪脉冲。"
-        action = "只做二次确认，不抢第一根。"
-        trigger = (
-            f"站回 {fmt_price(recovery_price)} 上方且资金不转负，再考虑试错。"
-            if recovery_price is not None
-            else "站回短线均线并保持资金不转负，再考虑试错。"
+        setup_label = reversal_rules["setup_label"]
+        setup_summary = reversal_rules["setup_summary"]
+        action = reversal_rules["action"]
+        trigger = _resolve_setup_copy(
+            reversal_rules,
+            "trigger_with_levels",
+            "trigger_without_levels",
+            recovery_price is not None,
+            recovery_price=fmt_price(recovery_price),
         )
-        avoid = "第一波直线拉升不追。"
-        invalidate = (
-            f"跌破 {fmt_price(invalidate_price)} 或再次放量走弱就取消。"
-            if invalidate_price is not None
-            else "跌回低位区或再次放量走弱就取消。"
+        avoid = reversal_rules["avoid"]
+        invalidate = _resolve_setup_copy(
+            reversal_rules,
+            "invalidate_with_level",
+            "invalidate_without_level",
+            invalidate_price is not None,
+            invalidate_price=fmt_price(invalidate_price),
         )
-    elif pos20 >= 0.72 and flow_today_yi > 0 and attack_profile.get("status") == "keep":
+    elif pos20 >= breakout_thresholds["min_position_20d"] and flow_today_yi > 0 and attack_profile.get("status") == "keep":
+        breakout_rules = setup_rules["breakout_follow"]
         setup_type = "breakout_follow"
-        setup_label = "突破跟随"
-        setup_summary = "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。"
-        action = "等放量站稳后再跟，不追已经拉开的阳线。"
-        trigger = (
-            f"放量站稳 {fmt_price(trigger_price)} 上方再试，若回踩 {fmt_price(pullback_price)} 不破可候补。"
-            if trigger_price is not None or pullback_price is not None
-            else "放量站稳强势区后再试，回踩不破再候补。"
+        setup_label = breakout_rules["setup_label"]
+        setup_summary = breakout_rules["setup_summary"]
+        action = breakout_rules["action"]
+        trigger = _resolve_setup_copy(
+            breakout_rules,
+            "trigger_with_levels",
+            "trigger_without_levels",
+            trigger_price is not None or pullback_price is not None,
+            trigger_price=fmt_price(trigger_price),
+            pullback_price=fmt_price(pullback_price),
         )
-        avoid = "高开高走但量能跟不上时不追。"
-        invalidate = (
-            f"跌回 {fmt_price(invalidate_price)} 下方或主力转负就取消。"
-            if invalidate_price is not None
-            else "跌回强势结构下方或主力转负就取消。"
+        avoid = breakout_rules["avoid"]
+        invalidate = _resolve_setup_copy(
+            breakout_rules,
+            "invalidate_with_level",
+            "invalidate_without_level",
+            invalidate_price is not None,
+            invalidate_price=fmt_price(invalidate_price),
         )
-    elif pos20 >= 0.45 and (flow_today_yi > 0 or "流入" in flow_trend or "转正" in flow_trend):
+    elif pos20 >= pullback_thresholds["min_position_20d"] and (flow_today_yi > 0 or "流入" in flow_trend or "转正" in flow_trend):
+        pullback_rules = setup_rules["pullback_continuation"]
         setup_type = "pullback_continuation"
-        setup_label = "回踩接力"
-        setup_summary = "趋势未坏但不适合追涨，优先看回踩承接后的接力点。"
-        action = "优先等回踩承接，不追已经发散的阳线。"
-        trigger = (
-            f"回踩 {fmt_price(pullback_price)} 一带不破，且资金继续为正，再考虑进场。"
-            if pullback_price is not None
-            else "回踩关键均线不破，且资金继续为正，再考虑进场。"
+        setup_label = pullback_rules["setup_label"]
+        setup_summary = pullback_rules["setup_summary"]
+        action = pullback_rules["action"]
+        trigger = _resolve_setup_copy(
+            pullback_rules,
+            "trigger_with_levels",
+            "trigger_without_levels",
+            pullback_price is not None,
+            pullback_price=fmt_price(pullback_price),
         )
-        avoid = "脱离支撑过远时不追。"
-        invalidate = (
-            f"跌破 {fmt_price(invalidate_price)} 或主题明显转弱就取消。"
-            if invalidate_price is not None
-            else "跌破关键支撑或主题明显转弱就取消。"
+        avoid = pullback_rules["avoid"]
+        invalidate = _resolve_setup_copy(
+            pullback_rules,
+            "invalidate_with_level",
+            "invalidate_without_level",
+            invalidate_price is not None,
+            invalidate_price=fmt_price(invalidate_price),
         )
 
-    if overheat_penalty >= 4 and setup_type in {"leader_continuation", "breakout_follow"}:
-        avoid = "情绪偏热，第一波拉高不追，优先等换手后的二次机会。"
-    if consistency_score <= 0 and setup_type != "watch_only":
-        setup_summary += " 当前一致性一般，执行上要更保守。"
+    modifier_rules = setup_rules["modifiers"]
+    overheat_modifier = modifier_rules["trend_setup_overheat"]
+    if (
+        overheat_penalty >= overheat_modifier["overheat_penalty_at_least"]
+        and setup_type in set(overheat_modifier["setup_types"])
+    ):
+        avoid = overheat_modifier["avoid"]
+    consistency_modifier = modifier_rules["low_consistency"]
+    if (
+        consistency_score <= consistency_modifier["consistency_score_at_most"]
+        and setup_type not in set(consistency_modifier["exclude_setup_types"])
+    ):
+        setup_summary += consistency_modifier["summary_suffix"]
 
     return {
         "setup_type": setup_type,
@@ -329,7 +338,7 @@ def build_execution_quality(stock, decision, setup_plan, market_regime=None, mar
     change_pct = safe_float(stock.get("change_pct"))
     amount_yi = safe_float(stock.get("amount_yi"))
     overheat_penalty = safe_float(stock.get("overheat_penalty"))
-    flow_today_yi = safe_float(capital_flow.get("today")) / 1e8
+    flow_today_yi = capital_flow_today_yi(capital_flow, legacy_source_unit=UNIT_YUAN)
     flow_trend = capital_flow.get("trend") or "无数据"
     consistency_score = safe_float((decision or {}).get("consistency_score"), default=0)
     gate_status = execution_gate_of(market_regime).get("status")
@@ -345,95 +354,115 @@ def build_execution_quality(stock, decision, setup_plan, market_regime=None, mar
     persistence = persistence_map.get(theme) or {}
     persistence_label = persistence.get("label") or ""
 
+    quality_rules = EXECUTION_QUALITY_RULES
+    amount_rules = quality_rules["amount_yi"]
+    flow_rules = quality_rules["capital_flow"]
+    consistency_rules = quality_rules["consistency"]
+    setup_rules = quality_rules["setup_type"]
+    friendly_setups = set(setup_rules["friendly_types"])
+    trend_setups = set(setup_rules["trend_types"])
+
     score = 0
     positives = []
     warnings = []
 
-    if amount_yi >= 12:
-        score += 2
-        positives.append("成交额厚")
-    elif amount_yi >= 8:
-        score += 1
-        positives.append("流动性够用")
+    if amount_yi >= amount_rules["high"]["at_least"]:
+        score += amount_rules["high"]["score"]
+        positives.append(amount_rules["high"]["positive"])
+    elif amount_yi >= amount_rules["medium"]["at_least"]:
+        score += amount_rules["medium"]["score"]
+        positives.append(amount_rules["medium"]["positive"])
     else:
-        score -= 1
-        warnings.append("成交额偏薄")
+        score += amount_rules["low"]["score"]
+        warnings.append(amount_rules["low"]["warning"])
 
     if stock.get("has_capital_flow", True):
-        if flow_today_yi >= 3:
-            score += 2
-            positives.append("资金确认强")
-        elif flow_today_yi > 0 or "转正" in flow_trend:
-            score += 1
-            positives.append("资金有承接")
+        if flow_today_yi >= flow_rules["high"]["at_least"]:
+            score += flow_rules["high"]["score"]
+            positives.append(flow_rules["high"]["positive"])
+        elif flow_today_yi > 0 or flow_rules["medium"]["trend_keyword"] in flow_trend:
+            score += flow_rules["medium"]["score"]
+            positives.append(flow_rules["medium"]["positive"])
         else:
-            score -= 1
-            warnings.append("资金确认不足")
+            score += flow_rules["low"]["score"]
+            warnings.append(flow_rules["low"]["warning"])
     else:
-        score -= 1
-        warnings.append("资金数据缺失")
+        score += flow_rules["missing"]["score"]
+        warnings.append(flow_rules["missing"]["warning"])
 
-    if consistency_score >= 5:
-        score += 2
-        positives.append("一致性高")
-    elif consistency_score >= 2:
-        score += 1
-        positives.append("一致性尚可")
+    if consistency_score >= consistency_rules["high"]["at_least"]:
+        score += consistency_rules["high"]["score"]
+        positives.append(consistency_rules["high"]["positive"])
+    elif consistency_score >= consistency_rules["medium"]["at_least"]:
+        score += consistency_rules["medium"]["score"]
+        positives.append(consistency_rules["medium"]["positive"])
     else:
-        score -= 1
-        warnings.append("一致性偏弱")
+        score += consistency_rules["low"]["score"]
+        warnings.append(consistency_rules["low"]["warning"])
 
-    if setup_type in {"pullback_continuation", "low_reversal"}:
-        score += 2
-        positives.append("位置更友好")
-    elif setup_type in {"leader_continuation", "breakout_follow"}:
-        positives.append("趋势 setup")
+    if setup_type in friendly_setups:
+        score += setup_rules["friendly"]["score"]
+        positives.append(setup_rules["friendly"]["positive"])
+    elif setup_type in trend_setups:
+        positives.append(setup_rules["trend"]["positive"])
     else:
-        score -= 1
-        warnings.append("缺少明确执行位")
+        score += setup_rules["other"]["score"]
+        warnings.append(setup_rules["other"]["warning"])
 
     if theme != "其他" and theme in top_theme_names:
-        score += 1
-        positives.append("主线题材")
+        score += quality_rules["top_theme"]["score"]
+        positives.append(quality_rules["top_theme"]["positive"])
 
-    if persistence_label in {"持续增强", "强势延续"}:
-        score += 1
-        positives.append("主题延续")
-    elif persistence_label in {"热度衰减", "一日游风险"}:
-        score -= 1
-        warnings.append("主题持续性弱")
+    persistence_rule = quality_rules["theme_persistence"].get(persistence_label)
+    if persistence_rule:
+        score += persistence_rule["score"]
+        if persistence_rule.get("positive"):
+            positives.append(persistence_rule["positive"])
+        if persistence_rule.get("warning"):
+            warnings.append(persistence_rule["warning"])
 
-    if overheat_penalty >= 6:
-        score -= 3
-        warnings.append("短线过热")
-    elif overheat_penalty >= 4:
-        score -= 2
-        warnings.append("情绪偏热")
+    overheat_rules = quality_rules["overheat_penalty"]
+    if overheat_penalty >= overheat_rules["high"]["at_least"]:
+        score += overheat_rules["high"]["score"]
+        warnings.append(overheat_rules["high"]["warning"])
+    elif overheat_penalty >= overheat_rules["medium"]["at_least"]:
+        score += overheat_rules["medium"]["score"]
+        warnings.append(overheat_rules["medium"]["warning"])
 
-    if setup_type in {"leader_continuation", "breakout_follow"}:
-        if change_pct >= 7.5:
-            score -= 2
-            warnings.append("追涨距离过大")
-        elif change_pct >= 5.5:
-            score -= 1
-            warnings.append("接近追涨区")
+    if setup_type in trend_setups:
+        chase_rules = quality_rules["trend_setup_change_pct"]
+        if change_pct >= chase_rules["high"]["at_least"]:
+            score += chase_rules["high"]["score"]
+            warnings.append(chase_rules["high"]["warning"])
+        elif change_pct >= chase_rules["medium"]["at_least"]:
+            score += chase_rules["medium"]["score"]
+            warnings.append(chase_rules["medium"]["warning"])
 
     if any("量价顶背离" in signal or "资金背离" in signal for signal in signals):
-        score -= 2
-        warnings.append("量价背离")
+        score += quality_rules["divergence"]["score"]
+        warnings.append(quality_rules["divergence"]["warning"])
 
     if notice_risk_tags:
-        score -= 2
-        warnings.append("公告风险待消化")
+        score += quality_rules["notice_risk"]["score"]
+        warnings.append(quality_rules["notice_risk"]["warning"])
 
     if gate_status == "off":
-        score -= 3
-        warnings.append("阀门关闭")
-    elif gate_status == "limited" and setup_type in {"leader_continuation", "breakout_follow"}:
-        score -= 2
-        warnings.append("半开环境不支持追强")
+        score += quality_rules["execution_gate"]["off"]["score"]
+        warnings.append(quality_rules["execution_gate"]["off"]["warning"])
+    elif gate_status == "limited" and setup_type in trend_setups:
+        score += quality_rules["execution_gate"]["limited_trend"]["score"]
+        warnings.append(quality_rules["execution_gate"]["limited_trend"]["warning"])
 
-    label = "高执行质量" if score >= 6 else ("中执行质量" if score >= 3 else "低执行质量")
+    label_rules = quality_rules["labels"]
+    label = (
+        label_rules["high"]["label"]
+        if score >= label_rules["high"]["at_least"]
+        else (
+            label_rules["medium"]["label"]
+            if score >= label_rules["medium"]["at_least"]
+            else label_rules["low"]["label"]
+        )
+    )
     return {
         "score": score,
         "label": label,
@@ -464,7 +493,7 @@ def evaluate_stock(stock, market_regime=None, market_themes=None):
     roe_raw = fundamentals.get("roe")
     roe = safe_float(roe_raw) if roe_raw is not None else None
     amount_yi = safe_float(stock.get("amount_yi"))
-    flow_today_yi = safe_float(capital_flow.get("today")) / 1e8
+    flow_today_yi = capital_flow_today_yi(capital_flow, legacy_source_unit=UNIT_YUAN)
     flow_trend = capital_flow.get("trend") or "无数据"
     attack_status = attack_profile.get("status") or "keep"
     overheat_penalty = safe_float(stock.get("overheat_penalty"))
@@ -473,18 +502,25 @@ def evaluate_stock(stock, market_regime=None, market_themes=None):
     signals = stock.get("signals") or []
     notice_risk_tags = stock.get("notice_risk_tags") or []
 
+    evaluation_rules = AI_SCREENING_EVALUATION_RULES
+    amount_rules = evaluation_rules["amount_yi"]
+    valuation_rules = evaluation_rules["valuation"]
+    flow_rules = evaluation_rules["capital_flow"]
+    theme_rules = evaluation_rules["theme"]
+    regime_rules = evaluation_rules["regime"]
+
     hard_reasons = []
     caution_reasons = []
     positives = []
     consistency = 0
     consistency_notes = []
 
-    if amount_yi < 4:
-        hard_reasons.append("成交额不足 4 亿，流动性偏弱")
-    elif amount_yi >= 8:
-        positives.append("成交额充足")
-        consistency += 1
-        consistency_notes.append("流动性支持")
+    if amount_yi < amount_rules["hard_below"]["value"]:
+        hard_reasons.append(amount_rules["hard_below"]["reason"])
+    elif amount_yi >= amount_rules["positive"]["at_least"]:
+        positives.append(amount_rules["positive"]["signal"])
+        consistency += amount_rules["positive"]["consistency_delta"]
+        consistency_notes.append(amount_rules["positive"]["note"])
 
     if attack_status == "exclude":
         hard_reasons.append("底层进攻标签已判定不匹配")
@@ -494,103 +530,106 @@ def evaluate_stock(stock, market_regime=None, market_themes=None):
         consistency += 2
         consistency_notes.append("进攻风格匹配")
 
-    if pe >= 95 and roe is not None and roe < 5:
-        hard_reasons.append("高估值且盈利弱，性价比不足")
-    elif pe >= 100 and roe is None:
-        caution_reasons.append("估值过热，等待业绩验证")
-    elif pe <= 0:
-        caution_reasons.append("业绩仍未修复，先观察")
-    elif pe >= 75 and roe is not None and roe < 8:
-        caution_reasons.append("估值偏高，业绩兑现压力较大")
+    if pe >= valuation_rules["hard_high_pe_low_roe"]["pe_at_least"] and roe is not None and roe < valuation_rules["hard_high_pe_low_roe"]["roe_below"]:
+        hard_reasons.append(valuation_rules["hard_high_pe_low_roe"]["reason"])
+    elif pe >= valuation_rules["caution_high_pe_missing_roe"]["pe_at_least"] and roe is None:
+        caution_reasons.append(valuation_rules["caution_high_pe_missing_roe"]["reason"])
+    elif pe <= valuation_rules["caution_non_positive_pe"]["pe_at_most"]:
+        caution_reasons.append(valuation_rules["caution_non_positive_pe"]["reason"])
+    elif pe >= valuation_rules["caution_high_pe_low_roe"]["pe_at_least"] and roe is not None and roe < valuation_rules["caution_high_pe_low_roe"]["roe_below"]:
+        caution_reasons.append(valuation_rules["caution_high_pe_low_roe"]["reason"])
 
     if not has_capital_flow:
-        caution_reasons.append("资金数据缺失，确认度不高")
+        caution_reasons.append(flow_rules["missing"]["reason"])
     elif flow_today_yi > 0:
-        positives.append("主力资金仍为净流入")
-        consistency += 2
-        consistency_notes.append("资金同向")
-    elif "转正" in flow_trend:
-        positives.append("资金开始修复")
-        consistency += 1
-        consistency_notes.append("资金修复")
+        positives.append(flow_rules["positive"]["signal"])
+        consistency += flow_rules["positive"]["consistency_delta"]
+        consistency_notes.append(flow_rules["positive"]["note"])
+    elif flow_rules["repair"]["trend_keyword"] in flow_trend:
+        positives.append(flow_rules["repair"]["signal"])
+        consistency += flow_rules["repair"]["consistency_delta"]
+        consistency_notes.append(flow_rules["repair"]["note"])
     else:
-        caution_reasons.append("资金延续性待确认")
-        consistency -= 2
+        caution_reasons.append(flow_rules["weak"]["reason"])
+        consistency += flow_rules["weak"]["consistency_delta"]
 
-    if overheat_penalty >= 6:
-        caution_reasons.append("情绪过热，提防次日冲高回落")
-        consistency -= 2
-    elif overheat_penalty >= 4:
-        caution_reasons.append("短线偏热，提防冲高回落")
-        consistency -= 1
+    overheat_rules = evaluation_rules["overheat_penalty"]
+    if overheat_penalty >= overheat_rules["high"]["at_least"]:
+        caution_reasons.append(overheat_rules["high"]["reason"])
+        consistency += overheat_rules["high"]["consistency_delta"]
+    elif overheat_penalty >= overheat_rules["medium"]["at_least"]:
+        caution_reasons.append(overheat_rules["medium"]["reason"])
+        consistency += overheat_rules["medium"]["consistency_delta"]
 
     if any("量价顶背离" in s or "资金背离" in s for s in signals):
-        caution_reasons.append("量价/资金背离，信号质量下降")
-        consistency -= 3
+        caution_reasons.append(evaluation_rules["divergence"]["reason"])
+        consistency += evaluation_rules["divergence"]["consistency_delta"]
 
     if notice_risk_tags:
         labels = sorted({item.get("label") for item in notice_risk_tags if item.get("label")})
         if labels:
-            caution_reasons.append("公告风险：" + "/".join(labels))
-            consistency -= 2
-            if any(label in labels for label in ["减持", "诉讼", "处罚", "业绩预警", "董监高变动"]):
-                caution_reasons.append("公告存在明确风险事件，限制直接推荐")
-                consistency -= 1
+            notice_rules = evaluation_rules["notice_risk"]
+            caution_reasons.append(notice_rules["reason_prefix"] + "/".join(labels))
+            consistency += notice_rules["consistency_delta"]
+            severe_labels = set(notice_rules["severe_labels"])
+            if any(label in severe_labels for label in labels):
+                caution_reasons.append(notice_rules["severe"]["reason"])
+                consistency += notice_rules["severe"]["consistency_delta"]
 
-    if change_pct >= 9.8:
-        caution_reasons.append("接近或已触及涨停，次日分歧风险高")
-        consistency -= 1
+    price_action_rule = evaluation_rules["price_action"]["limit_up_like"]
+    if change_pct >= price_action_rule["at_least"]:
+        caution_reasons.append(price_action_rule["reason"])
+        consistency += price_action_rule["consistency_delta"]
 
     if theme != "其他" and theme in top_theme_names:
-        consistency += 1
-        consistency_notes.append("主线主题加成")
+        consistency += theme_rules["top_theme"]["consistency_delta"]
+        consistency_notes.append(theme_rules["top_theme"]["note"])
 
     persistence_label = theme_persistence.get("label") or ""
     persistence_score = safe_float(theme_persistence.get("score"), default=0)
-    if persistence_label == "持续增强":
-        consistency += 2
-        consistency_notes.append("主题持续增强")
-    elif persistence_label == "强势延续":
-        consistency += 1
-        consistency_notes.append("主题强势延续")
-    elif persistence_label == "延续但分化":
-        consistency += 0
-        consistency_notes.append("主题延续但分化")
-    elif persistence_label == "热度衰减":
-        consistency -= 1
-        consistency_notes.append("主题热度衰减")
-    elif persistence_label == "一日游风险":
-        consistency -= 2
-        consistency_notes.append("主题一日游风险")
+    persistence_rule = theme_rules["persistence"].get(persistence_label)
+    if persistence_rule:
+        consistency += persistence_rule["consistency_delta"]
+        consistency_notes.append(persistence_rule["note"])
 
-    if persistence_score >= 16 and change_pct >= 5:
-        positives.append("主题与价格共振")
-    elif persistence_score <= 5 and change_pct >= 5:
-        caution_reasons.append("主题持续性不足，高位信号需折价")
-        consistency -= 1
+    resonance_rule = theme_rules["price_resonance"]
+    if (
+        persistence_score >= resonance_rule["persistence_score_at_least"]
+        and change_pct >= resonance_rule["change_pct_at_least"]
+    ):
+        positives.append(resonance_rule["positive"])
+    else:
+        weak_theme_rule = theme_rules["weak_persistence_discount"]
+        if (
+            persistence_score <= weak_theme_rule["persistence_score_at_most"]
+            and change_pct >= weak_theme_rule["change_pct_at_least"]
+        ):
+            caution_reasons.append(weak_theme_rule["reason"])
+            consistency += weak_theme_rule["consistency_delta"]
 
-    if pe > 0 and pe <= 50 and (roe is None or roe >= 5):
-        consistency += 1
-        consistency_notes.append("估值盈利匹配尚可")
-    elif pe >= 80 and (roe is None or roe < 8):
-        consistency -= 2
-        consistency_notes.append("估值与盈利错配")
+    if pe > 0 and pe <= valuation_rules["match"]["pe_at_most"] and (roe is None or roe >= valuation_rules["match"]["roe_at_least_if_present"]):
+        consistency += valuation_rules["match"]["consistency_delta"]
+        consistency_notes.append(valuation_rules["match"]["note"])
+    elif pe >= valuation_rules["mismatch"]["pe_at_least"] and (roe is None or roe < valuation_rules["mismatch"]["roe_below_or_missing"]):
+        consistency += valuation_rules["mismatch"]["consistency_delta"]
+        consistency_notes.append(valuation_rules["mismatch"]["note"])
 
     regime_score = safe_float((market_regime or {}).get("score"), default=0.0)
     execution_gate = execution_gate_of(market_regime)
     gate_status = execution_gate.get("status")
     if gate_status == "off":
-        caution_reasons.append("风控阀门关闭，今天只观察不执行")
-        consistency -= 3
+        caution_reasons.append(regime_rules["off"]["reason"])
+        consistency += regime_rules["off"]["consistency_delta"]
     elif gate_status == "limited":
-        caution_reasons.append("风控阀门半开，只允许轻仓试错")
-        consistency -= 1
-        if change_pct >= 5 or overheat_penalty >= 3:
-            caution_reasons.append("当前环境不适合追强，优先等回踩确认")
-            consistency -= 1
-    elif regime_score < 6 and change_pct >= 7:
-        caution_reasons.append("环境未到强进攻，高位强拉需谨慎")
-        consistency -= 1
+        caution_reasons.append(regime_rules["limited"]["reason"])
+        consistency += regime_rules["limited"]["consistency_delta"]
+        limited_guard = regime_rules["limited"]["extra_guard"]
+        if change_pct >= limited_guard["change_pct_at_least"] or overheat_penalty >= limited_guard["overheat_penalty_at_least"]:
+            caution_reasons.append(limited_guard["reason"])
+            consistency += limited_guard["consistency_delta"]
+    elif regime_score < regime_rules["on_guard"]["regime_score_below"] and change_pct >= regime_rules["on_guard"]["change_pct_at_least"]:
+        caution_reasons.append(regime_rules["on_guard"]["reason"])
+        consistency += regime_rules["on_guard"]["consistency_delta"]
 
     if not trade_note.get("watch_condition"):
         caution_reasons.append("缺少明确的次日观察条件")
@@ -605,10 +644,20 @@ def evaluate_stock(stock, market_regime=None, market_themes=None):
         status = "approved"
         reason = positives[0] if positives else "通过二次筛选"
 
-    consistency_label = "高一致性" if consistency >= 4 else ("中一致性" if consistency >= 1 else "低一致性")
-    if consistency <= -2 and status == "approved":
+    label_rules = evaluation_rules["consistency_labels"]
+    consistency_label = (
+        label_rules["high"]["label"]
+        if consistency >= label_rules["high"]["at_least"]
+        else (
+            label_rules["medium"]["label"]
+            if consistency >= label_rules["medium"]["at_least"]
+            else label_rules["low"]["label"]
+        )
+    )
+    downgrade_rule = evaluation_rules["approved_downgrade"]
+    if consistency <= downgrade_rule["at_most"] and status == "approved":
         status = "caution"
-        reason = "信号一致性偏弱，先观察"
+        reason = downgrade_rule["reason"]
         caution_reasons.append(reason)
 
     priority_note_keys = [
@@ -656,6 +705,17 @@ def build_stock_entry(stock, strategy_name, decision, market_regime=None, market
     trade_note = stock.get("trade_note") or {}
     attack_profile = stock.get("attack_profile") or {}
     capital_flow = stock.get("capital_flow") or {}
+    normalized_capital_flow = normalize_capital_flow_payload(capital_flow, legacy_source_unit=UNIT_YUAN)
+    today_wan = capital_flow_today_wan(capital_flow, legacy_source_unit=UNIT_YUAN)
+    five_day_total_wan = capital_flow_five_day_total_wan(capital_flow, legacy_source_unit=UNIT_YUAN)
+    normalized_capital_flow["trend"] = decision["capital_trend"]
+    normalized_capital_flow["today"] = today_wan
+    normalized_capital_flow["today_wan"] = today_wan
+    normalized_capital_flow["today_yi"] = decision["flow_today_yi"]
+    normalized_capital_flow["flow_today_yi"] = decision["flow_today_yi"]
+    normalized_capital_flow["5day_total"] = five_day_total_wan
+    normalized_capital_flow["five_day_total_wan"] = five_day_total_wan
+    normalized_capital_flow["five_day_total_yi"] = wan_to_yi(five_day_total_wan)
     setup_plan = build_setup_plan(stock, decision, market_themes=market_themes)
     execution_quality = build_execution_quality(
         stock,
@@ -681,14 +741,10 @@ def build_stock_entry(stock, strategy_name, decision, market_regime=None, market
         "setup_summary": setup_plan["setup_summary"],
         "entry_plan": setup_plan["entry_plan"],
         "execution_quality": execution_quality,
-        "entry_reason": trade_note.get("entry_reason") or attack_profile.get("reason") or "量价结构满足策略要求",
+        "entry_reason": trade_note.get("entry_reason") or attack_profile.get("reason") or ENTRY_OUTPUT_DEFAULTS["entry_reason"],
         "main_risk": trade_note.get("main_risk") or decision["reason"],
-        "watch_condition": trade_note.get("watch_condition") or "观察次日资金和量能是否继续配合",
-        "capital_flow": {
-            "trend": decision["capital_trend"],
-            "today_yi": decision["flow_today_yi"],
-            "five_day_total_yi": round(safe_float(capital_flow.get("5day_total")) / 1e8, 2),
-        },
+        "watch_condition": trade_note.get("watch_condition") or ENTRY_OUTPUT_DEFAULTS["watch_condition"],
+        "capital_flow": normalized_capital_flow,
         "attack_profile": {
             "status": attack_profile.get("status"),
             "bias_score": attack_profile.get("bias_score"),

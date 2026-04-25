@@ -1,0 +1,932 @@
+{
+  "version": 1,
+  "threshold_sets": {
+    "execution_gate": {
+      "risk_flags": {
+        "positive_ratio": 0.5,
+        "avg_change_pct": 0.2,
+        "strong_ratio": 0.1,
+        "avg_turnover": 1.8,
+        "candidate_score": 4.0,
+        "candidate_strong_ratio": 0.18
+      },
+      "off": {
+        "broad_score_max": 3.0,
+        "positive_ratio_max": 0.48,
+        "avg_change_pct_max": 0.0,
+        "strong_ratio_max": 0.07,
+        "candidate_score_max": 3.0,
+        "candidate_strong_ratio_max": 0.1,
+        "position_cap": "0成",
+        "allow_new_positions": false,
+        "allow_handoff": false,
+        "allowed_setups": [],
+        "label": "进攻阀门关闭",
+        "summary": "整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。"
+      },
+      "limited": {
+        "broad_score_max": 5.0,
+        "positive_ratio_max": 0.63,
+        "avg_change_pct_max": 0.45,
+        "strong_ratio_max": 0.22,
+        "candidate_score_max": 5.0,
+        "candidate_strong_ratio_max": 0.22,
+        "position_cap": "0.3-0.5成以内",
+        "allow_new_positions": true,
+        "allow_handoff": false,
+        "allowed_setups": [
+          "pullback_continuation",
+          "low_reversal"
+        ],
+        "label": "进攻阀门半开",
+        "summary": "环境还不够顺，只允许更克制的轻仓试错，优先回踩接力和低位反转，不做强趋势追涨。"
+      },
+      "on": {
+        "position_cap": "0.5-0.8成试错",
+        "allow_new_positions": true,
+        "allow_handoff": true,
+        "allowed_setups": [
+          "leader_continuation",
+          "breakout_follow",
+          "pullback_continuation",
+          "low_reversal"
+        ],
+        "label": "进攻阀门开启",
+        "summary": "环境允许进攻，但只放行更高质量的共振票，仍以小仓位试错为主。"
+      }
+    },
+    "final_score_weights": {
+      "tech_score": 1.25,
+      "capital_score": 1.2,
+      "emotion_score": 1.15,
+      "fundamental_score": 0.55
+    },
+    "setup_thresholds": {
+      "leader_continuation": {
+        "min_change_pct": 4.5,
+        "min_amount_yi": 15.0
+      },
+      "low_reversal": {
+        "max_position_20d": 0.38
+      },
+      "breakout_follow": {
+        "min_position_20d": 0.72
+      },
+      "pullback_continuation": {
+        "min_position_20d": 0.45
+      }
+    },
+    "watchlist_rule_thresholds": {
+      "roe": {
+        "negative_below": 0.0,
+        "weak_below": 8.0,
+        "strong_at_or_above": 12.0
+      },
+      "pe": {
+        "value_below": 20.0,
+        "high_above": 50.0,
+        "extreme_above": 80.0
+      },
+      "pb": {
+        "mismatch_above": 10.0,
+        "weak_roe_below": 10.0
+      },
+      "relative_strength": {
+        "weak_vs_sector_below": -0.5,
+        "strong_vs_sector_above": 0.5
+      },
+      "price_position": {
+        "chase_risk_from_high_above": -3.0,
+        "chase_risk_from_low_above": 15.0
+      },
+      "action": {
+        "reduce_severe_negatives_at": 3,
+        "avoid_severe_negatives_at": 5,
+        "track_positive_points_at": 3
+      }
+    },
+    "flow_confidence": {
+      "confirmed_label": "盘中确认",
+      "stale_label": "历史参考",
+      "unknown_label": "未知",
+      "stale_intraday_penalty": 1
+    },
+    "capital_score": {
+      "today_flow_wan": [
+        {
+          "above": 5000.0,
+          "score": 15,
+          "signal": "主力流入{value_yi:.1f}亿"
+        },
+        {
+          "above": 2000.0,
+          "score": 12,
+          "signal": "主力流入{value_yi:.2f}亿"
+        },
+        {
+          "above": 500.0,
+          "score": 8,
+          "signal": "主力流入{value_wan:.0f}万"
+        },
+        {
+          "above": 0.0,
+          "score": 4
+        }
+      ],
+      "consecutive_inflow_days": [
+        {
+          "at_least": 5,
+          "score": 15,
+          "signal": "连续5日流入"
+        },
+        {
+          "at_least": 3,
+          "score": 12,
+          "signal": "连续{days}日流入"
+        },
+        {
+          "at_least": 2,
+          "score": 6
+        }
+      ],
+      "reversal": {
+        "previous_day_below": 0.0,
+        "today_above": 0.0,
+        "score": 8,
+        "signal": "资金反转"
+      }
+    },
+    "execution_quality": {
+      "amount_yi": {
+        "high": {
+          "at_least": 12.0,
+          "score": 2,
+          "positive": "成交额厚"
+        },
+        "medium": {
+          "at_least": 8.0,
+          "score": 1,
+          "positive": "流动性够用"
+        },
+        "low": {
+          "score": -1,
+          "warning": "成交额偏薄"
+        }
+      },
+      "capital_flow": {
+        "high": {
+          "at_least": 3.0,
+          "score": 2,
+          "positive": "资金确认强"
+        },
+        "medium": {
+          "trend_keyword": "转正",
+          "score": 1,
+          "positive": "资金有承接"
+        },
+        "low": {
+          "score": -1,
+          "warning": "资金确认不足"
+        },
+        "missing": {
+          "score": -1,
+          "warning": "资金数据缺失"
+        }
+      },
+      "consistency": {
+        "high": {
+          "at_least": 5,
+          "score": 2,
+          "positive": "一致性高"
+        },
+        "medium": {
+          "at_least": 2,
+          "score": 1,
+          "positive": "一致性尚可"
+        },
+        "low": {
+          "score": -1,
+          "warning": "一致性偏弱"
+        }
+      },
+      "setup_type": {
+        "friendly_types": [
+          "pullback_continuation",
+          "low_reversal"
+        ],
+        "trend_types": [
+          "leader_continuation",
+          "breakout_follow"
+        ],
+        "friendly": {
+          "score": 2,
+          "positive": "位置更友好"
+        },
+        "trend": {
+          "positive": "趋势 setup"
+        },
+        "other": {
+          "score": -1,
+          "warning": "缺少明确执行位"
+        }
+      },
+      "top_theme": {
+        "score": 1,
+        "positive": "主线题材"
+      },
+      "theme_persistence": {
+        "持续增强": {
+          "score": 1,
+          "positive": "主题延续"
+        },
+        "强势延续": {
+          "score": 1,
+          "positive": "主题延续"
+        },
+        "热度衰减": {
+          "score": -1,
+          "warning": "主题持续性弱"
+        },
+        "一日游风险": {
+          "score": -1,
+          "warning": "主题持续性弱"
+        }
+      },
+      "overheat_penalty": {
+        "high": {
+          "at_least": 6.0,
+          "score": -3,
+          "warning": "短线过热"
+        },
+        "medium": {
+          "at_least": 4.0,
+          "score": -2,
+          "warning": "情绪偏热"
+        }
+      },
+      "trend_setup_change_pct": {
+        "high": {
+          "at_least": 7.5,
+          "score": -2,
+          "warning": "追涨距离过大"
+        },
+        "medium": {
+          "at_least": 5.5,
+          "score": -1,
+          "warning": "接近追涨区"
+        }
+      },
+      "divergence": {
+        "score": -2,
+        "warning": "量价背离"
+      },
+      "notice_risk": {
+        "score": -2,
+        "warning": "公告风险待消化"
+      },
+      "execution_gate": {
+        "off": {
+          "score": -3,
+          "warning": "阀门关闭"
+        },
+        "limited_trend": {
+          "score": -2,
+          "warning": "半开环境不支持追强"
+        }
+      },
+      "labels": {
+        "high": {
+          "at_least": 6,
+          "label": "高执行质量"
+        },
+        "medium": {
+          "at_least": 3,
+          "label": "中执行质量"
+        },
+        "low": {
+          "label": "低执行质量"
+        }
+      }
+    },
+    "ai_screening_evaluation": {
+      "amount_yi": {
+        "hard_below": {
+          "value": 4.0,
+          "reason": "成交额不足 4 亿，流动性偏弱"
+        },
+        "positive": {
+          "at_least": 8.0,
+          "signal": "成交额充足",
+          "consistency_delta": 1,
+          "note": "流动性支持"
+        }
+      },
+      "valuation": {
+        "hard_high_pe_low_roe": {
+          "pe_at_least": 95.0,
+          "roe_below": 5.0,
+          "reason": "高估值且盈利弱，性价比不足"
+        },
+        "caution_high_pe_missing_roe": {
+          "pe_at_least": 100.0,
+          "reason": "估值过热，等待业绩验证"
+        },
+        "caution_non_positive_pe": {
+          "pe_at_most": 0.0,
+          "reason": "业绩仍未修复，先观察"
+        },
+        "caution_high_pe_low_roe": {
+          "pe_at_least": 75.0,
+          "roe_below": 8.0,
+          "reason": "估值偏高，业绩兑现压力较大"
+        },
+        "match": {
+          "pe_at_most": 50.0,
+          "roe_at_least_if_present": 5.0,
+          "consistency_delta": 1,
+          "note": "估值盈利匹配尚可"
+        },
+        "mismatch": {
+          "pe_at_least": 80.0,
+          "roe_below_or_missing": 8.0,
+          "consistency_delta": -2,
+          "note": "估值与盈利错配"
+        }
+      },
+      "capital_flow": {
+        "missing": {
+          "reason": "资金数据缺失，确认度不高"
+        },
+        "positive": {
+          "signal": "主力资金仍为净流入",
+          "consistency_delta": 2,
+          "note": "资金同向"
+        },
+        "repair": {
+          "trend_keyword": "转正",
+          "signal": "资金开始修复",
+          "consistency_delta": 1,
+          "note": "资金修复"
+        },
+        "weak": {
+          "reason": "资金延续性待确认",
+          "consistency_delta": -2
+        }
+      },
+      "overheat_penalty": {
+        "high": {
+          "at_least": 6.0,
+          "reason": "情绪过热，提防次日冲高回落",
+          "consistency_delta": -2
+        },
+        "medium": {
+          "at_least": 4.0,
+          "reason": "短线偏热，提防冲高回落",
+          "consistency_delta": -1
+        }
+      },
+      "divergence": {
+        "reason": "量价/资金背离，信号质量下降",
+        "consistency_delta": -3
+      },
+      "notice_risk": {
+        "reason_prefix": "公告风险：",
+        "consistency_delta": -2,
+        "severe_labels": [
+          "减持",
+          "诉讼",
+          "处罚",
+          "业绩预警",
+          "董监高变动"
+        ],
+        "severe": {
+          "reason": "公告存在明确风险事件，限制直接推荐",
+          "consistency_delta": -1
+        }
+      },
+      "price_action": {
+        "limit_up_like": {
+          "at_least": 9.8,
+          "reason": "接近或已触及涨停，次日分歧风险高",
+          "consistency_delta": -1
+        }
+      },
+      "theme": {
+        "top_theme": {
+          "consistency_delta": 1,
+          "note": "主线主题加成"
+        },
+        "persistence": {
+          "持续增强": {
+            "consistency_delta": 2,
+            "note": "主题持续增强"
+          },
+          "强势延续": {
+            "consistency_delta": 1,
+            "note": "主题强势延续"
+          },
+          "延续但分化": {
+            "consistency_delta": 0,
+            "note": "主题延续但分化"
+          },
+          "热度衰减": {
+            "consistency_delta": -1,
+            "note": "主题热度衰减"
+          },
+          "一日游风险": {
+            "consistency_delta": -2,
+            "note": "主题一日游风险"
+          }
+        },
+        "price_resonance": {
+          "persistence_score_at_least": 16.0,
+          "change_pct_at_least": 5.0,
+          "positive": "主题与价格共振"
+        },
+        "weak_persistence_discount": {
+          "persistence_score_at_most": 5.0,
+          "change_pct_at_least": 5.0,
+          "reason": "主题持续性不足，高位信号需折价",
+          "consistency_delta": -1
+        }
+      },
+      "regime": {
+        "off": {
+          "reason": "风控阀门关闭，今天只观察不执行",
+          "consistency_delta": -3
+        },
+        "limited": {
+          "reason": "风控阀门半开，只允许轻仓试错",
+          "consistency_delta": -1,
+          "extra_guard": {
+            "change_pct_at_least": 5.0,
+            "overheat_penalty_at_least": 3.0,
+            "reason": "当前环境不适合追强，优先等回踩确认",
+            "consistency_delta": -1
+          }
+        },
+        "on_guard": {
+          "regime_score_below": 6.0,
+          "change_pct_at_least": 7.0,
+          "reason": "环境未到强进攻，高位强拉需谨慎",
+          "consistency_delta": -1
+        }
+      },
+      "consistency_labels": {
+        "high": {
+          "at_least": 4,
+          "label": "高一致性"
+        },
+        "medium": {
+          "at_least": 1,
+          "label": "中一致性"
+        },
+        "low": {
+          "label": "低一致性"
+        }
+      },
+      "approved_downgrade": {
+        "at_most": -2,
+        "reason": "信号一致性偏弱，先观察"
+      }
+    },
+    "attack_profile": {
+      "style_keywords": {
+        "preferred": [
+          "信息",
+          "电子",
+          "半导体",
+          "芯片",
+          "光电",
+          "稀土",
+          "锂",
+          "军工",
+          "能源",
+          "材料",
+          "通信",
+          "算力",
+          "服务器"
+        ],
+        "weak": [
+          "银行",
+          "保险",
+          "高速",
+          "港口",
+          "机场",
+          "电力",
+          "燃气",
+          "铁路",
+          "运营",
+          "地产",
+          "白酒"
+        ],
+        "cyclical_soft": [
+          "钢",
+          "煤",
+          "油",
+          "铜",
+          "铝",
+          "有色",
+          "化工"
+        ]
+      },
+      "style": {
+        "preferred": {
+          "delta": 6,
+          "tag_prefix": "偏好行业:"
+        },
+        "weak": {
+          "delta": -8,
+          "tag_prefix": "弱偏好:"
+        },
+        "cyclical_soft": {
+          "delta": -3,
+          "tag_prefix": "周期观察:"
+        }
+      },
+      "turnover": {
+        "high": {
+          "at_least": 4.0,
+          "delta": 4,
+          "tag": "高换手"
+        },
+        "too_low": {
+          "below": 1.8,
+          "delta": -4,
+          "tag": "换手不足"
+        },
+        "low_pulse": {
+          "below": 2.5,
+          "change_pct_at_least": 4.0,
+          "delta": -3,
+          "tag": "低换手脉冲"
+        }
+      },
+      "divergence": {
+        "top_diverge_multiplier": -3,
+        "tag_template": "量价顶背离(L{strength})"
+      },
+      "flow_transition": {
+        "negative_with_rise": {
+          "today_flow_below": 0.0,
+          "change_pct_above": 0.0,
+          "delta": -4,
+          "tag": "资金背离"
+        },
+        "repair": {
+          "today_flow_above": 0.0,
+          "previous_flow_below": 0.0,
+          "delta": 1,
+          "tag": "资金修复"
+        }
+      },
+      "change_pct": {
+        "strong": {
+          "at_least": 5.0,
+          "delta": 4,
+          "tag": "涨幅强"
+        },
+        "weak": {
+          "below": 1.0,
+          "delta": -3,
+          "tag": "涨幅弱"
+        }
+      },
+      "flow_today": {
+        "positive": {
+          "above": 0.0,
+          "delta": 3,
+          "tag": "资金配合"
+        },
+        "non_positive": {
+          "delta": -5,
+          "tag": "资金背离"
+        },
+        "missing": {
+          "delta": -1,
+          "tag": "资金缺失"
+        }
+      },
+      "consecutive_inflows": {
+        "multi_day": {
+          "at_least": 2,
+          "delta": 3,
+          "tag": "连续{days}日流入"
+        },
+        "single_day": {
+          "equals": 1,
+          "delta": 1,
+          "tag": "单日流入"
+        },
+        "non_positive_penalty": {
+          "delta": -2
+        }
+      },
+      "position_20d": {
+        "breakout": {
+          "at_least": 0.75,
+          "delta": 2,
+          "tag": "趋势突破区"
+        },
+        "low": {
+          "at_most": 0.35,
+          "delta": -2,
+          "tag": "仍在低位"
+        },
+        "mid_high": {
+          "at_least": 0.58,
+          "delta": 1,
+          "tag": "趋势中高位"
+        }
+      },
+      "valuation": {
+        "high_pe": {
+          "above": 80.0,
+          "delta": -4,
+          "tag": "估值压制"
+        }
+      },
+      "hard_rules": {
+        "weak_style_exclude_tag": "硬淘汰",
+        "cyclical_negative": {
+          "delta": -6,
+          "tag": "周期+资金背离"
+        },
+        "cyclical_non_resonance": {
+          "delta": -3,
+          "tag": "周期非共振"
+        },
+        "non_preferred_no_flow": {
+          "delta": -3,
+          "tag": "非偏好且无资金"
+        }
+      },
+      "status": {
+        "exclude_at_or_below": -7,
+        "downgrade_at_or_below": 1,
+        "reasons": {
+          "keep": "趋势、资金和弹性较匹配，适合作为进攻型候选。",
+          "exclude": "风格偏弱或与进攻型不匹配，直接淘汰。",
+          "downgrade": "有一定进攻信号，但不够纯粹，降级观察。"
+        }
+      }
+    },
+    "trade_note": {
+      "reasons": {
+        "primary": {
+          "trend_breakout": {
+            "position_20d_at_least": 0.75,
+            "today_flow_above": 0.0,
+            "text": "趋势突破+资金配合"
+          },
+          "low_rebound": {
+            "position_20d_at_most": 0.35,
+            "change_pct_above": 0.0,
+            "text": "低位活跃反弹"
+          },
+          "flow_driven": {
+            "today_flow_above": 0.0,
+            "text": "资金驱动走强"
+          },
+          "default": "量价活跃"
+        },
+        "secondary": {
+          "turnover": {
+            "at_least": 4.0,
+            "text": "换手充分"
+          },
+          "amount_yi": {
+            "at_least": 30.0,
+            "text": "成交额充足"
+          }
+        }
+      },
+      "risks": {
+        "high_move_breakout": {
+          "change_pct_at_least": 8.0,
+          "position_20d_at_least": 0.8,
+          "text": "高位大涨，次日分歧风险"
+        },
+        "blowoff": {
+          "turnover_at_least": 8.0,
+          "change_pct_at_least": 5.0,
+          "text": "爆量后可能冲高回落"
+        },
+        "high_pe": {
+          "pe_above": 80.0,
+          "text": "估值偏高"
+        },
+        "style_volatility": {
+          "keywords": [
+            "锂",
+            "有色",
+            "铝",
+            "铜",
+            "煤",
+            "油",
+            "化工"
+          ],
+          "text": "周期波动较大"
+        },
+        "default": "留意次日承接强度",
+        "notice_prefix": "公告风险："
+      },
+      "watch": {
+        "trend_breakout": {
+          "position_20d_at_least": 0.75,
+          "items": [
+            "明天别高开低走",
+            "量能别明显萎缩"
+          ]
+        },
+        "general": {
+          "items": [
+            "继续放量上攻再确认"
+          ]
+        },
+        "flow_positive": {
+          "today_flow_above": 0.0,
+          "text": "主力资金别转负"
+        },
+        "flow_non_positive": {
+          "text": "观察资金是否回流"
+        }
+      }
+    },
+    "setup_plan": {
+      "default": {
+        "setup_type": "watch_only",
+        "setup_label": "观察等待",
+        "setup_summary": "信号还不够集中，先等更明确的承接或主线确认。",
+        "action": "先观察，不抢先手。",
+        "trigger": "等主力重新转强，或分时承接明显改善后再看。",
+        "avoid": "没有资金确认前不试。",
+        "invalidate": "题材走弱或个股转负就取消。"
+      },
+      "leader_continuation": {
+        "setup_label": "热点龙头",
+        "setup_summary": "主线强票，优先看分时承接和二次上冲，不做情绪顶接力。",
+        "action": "只做分时回踩承接住后的二次进场。",
+        "trigger_with_levels": "优先看 {pullback_price} 一带承接，或再站稳 {trigger_price} 后轻仓试错。",
+        "trigger_without_levels": "优先等回踩承接住，或二次放量上冲后再试。",
+        "avoid": "高开超 3% 或连续直线拉升不追。",
+        "invalidate_with_level": "跌破 {invalidate_price} 或主力转负就取消。",
+        "invalidate_without_level": "跌回强势结构下方或主力转负就取消。"
+      },
+      "low_reversal": {
+        "setup_label": "低位反转",
+        "setup_summary": "位置偏低，优先看二次确认，不抢第一根情绪脉冲。",
+        "action": "只做二次确认，不抢第一根。",
+        "trigger_with_levels": "站回 {recovery_price} 上方且资金不转负，再考虑试错。",
+        "trigger_without_levels": "站回短线均线并保持资金不转负，再考虑试错。",
+        "avoid": "第一波直线拉升不追。",
+        "invalidate_with_level": "跌破 {invalidate_price} 或再次放量走弱就取消。",
+        "invalidate_without_level": "跌回低位区或再次放量走弱就取消。"
+      },
+      "breakout_follow": {
+        "setup_label": "突破跟随",
+        "setup_summary": "趋势票优先看放量站稳后的跟随，不追脱离支撑过远的阳线。",
+        "action": "等放量站稳后再跟，不追已经拉开的阳线。",
+        "trigger_with_levels": "放量站稳 {trigger_price} 上方再试，若回踩 {pullback_price} 不破可候补。",
+        "trigger_without_levels": "放量站稳强势区后再试，回踩不破再候补。",
+        "avoid": "高开高走但量能跟不上时不追。",
+        "invalidate_with_level": "跌回 {invalidate_price} 下方或主力转负就取消。",
+        "invalidate_without_level": "跌回强势结构下方或主力转负就取消。"
+      },
+      "pullback_continuation": {
+        "setup_label": "回踩接力",
+        "setup_summary": "趋势未坏但不适合追涨，优先看回踩承接后的接力点。",
+        "action": "优先等回踩承接，不追已经发散的阳线。",
+        "trigger_with_levels": "回踩 {pullback_price} 一带不破，且资金继续为正，再考虑进场。",
+        "trigger_without_levels": "回踩关键均线不破，且资金继续为正，再考虑进场。",
+        "avoid": "脱离支撑过远时不追。",
+        "invalidate_with_level": "跌破 {invalidate_price} 或主题明显转弱就取消。",
+        "invalidate_without_level": "跌破关键支撑或主题明显转弱就取消。"
+      },
+      "modifiers": {
+        "trend_setup_overheat": {
+          "setup_types": [
+            "leader_continuation",
+            "breakout_follow"
+          ],
+          "overheat_penalty_at_least": 4.0,
+          "avoid": "情绪偏热，第一波拉高不追，优先等换手后的二次机会。"
+        },
+        "low_consistency": {
+          "consistency_score_at_most": 0.0,
+          "exclude_setup_types": [
+            "watch_only"
+          ],
+          "summary_suffix": " 当前一致性一般，执行上要更保守。"
+        }
+      }
+    },
+    "entry_output_defaults": {
+      "entry_reason": "量价结构满足策略要求",
+      "watch_condition": "观察次日资金和量能是否继续配合"
+    },
+    "emotion_score": {
+      "change_pct": [
+        {
+          "above": 7.0,
+          "score": 10
+        },
+        {
+          "above": 5.0,
+          "score": 8
+        },
+        {
+          "above": 2.0,
+          "score": 5
+        },
+        {
+          "above": 0.0,
+          "score": 2
+        }
+      ],
+      "amount_yuan": [
+        {
+          "above": 1500000000.0,
+          "score": 6
+        },
+        {
+          "above": 800000000.0,
+          "score": 4
+        },
+        {
+          "above": 300000000.0,
+          "score": 2
+        }
+      ],
+      "turnover": [
+        {
+          "above": 8.0,
+          "score": 8
+        },
+        {
+          "above": 5.0,
+          "score": 6
+        },
+        {
+          "above": 3.0,
+          "score": 4
+        },
+        {
+          "above": 2.0,
+          "score": 2
+        }
+      ],
+      "cap": 20
+    },
+    "missing_data_penalties": {
+      "capital_flow_missing": 4
+    },
+    "overheat_penalty": {
+      "position_hot": [
+        {
+          "position_20d_at_least": 0.85,
+          "change_pct_at_least": 8.0,
+          "score": 5,
+          "tag": "高位高潮"
+        },
+        {
+          "position_20d_at_least": 0.75,
+          "change_pct_at_least": 6.0,
+          "score": 3,
+          "tag": "高位偏热"
+        }
+      ],
+      "turnover_hot": [
+        {
+          "turnover_at_least": 8.0,
+          "change_pct_at_least": 5.0,
+          "score": 3,
+          "tag": "爆量过热"
+        },
+        {
+          "turnover_at_least": 5.0,
+          "change_pct_at_least": 7.0,
+          "score": 2,
+          "tag": "放量偏热"
+        }
+      ],
+      "extension_risk": [
+        {
+          "change_pct_at_least": 9.8,
+          "score": 4,
+          "tag": "涨停退潮风险"
+        },
+        {
+          "change_pct_at_least": 7.5,
+          "position_20d_at_least": 0.7,
+          "score": 2,
+          "tag": "追高风险"
+        }
+      ]
+    },
+    "fundamental_score": {
+      "max": 12,
+      "min": -8
+    }
+  }
+}

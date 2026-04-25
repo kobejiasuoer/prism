@@ -4,6 +4,53 @@
 import os, sys, json, time, random, re, argparse
 from pathlib import Path
 
+try:
+    from screener.capital_flow_contract import (
+        AUTO_UNIT,
+        UNIT_YUAN,
+        build_capital_flow_payload,
+        normalize_capital_flow_row,
+        wan_to_yi,
+    )
+    from screener.parameters import (
+        ATTACK_PROFILE_RULES,
+        CAPITAL_SCORE_THRESHOLDS,
+        EMOTION_SCORE_RULES,
+        FUNDAMENTAL_SCORE_RULES,
+        MISSING_DATA_PENALTIES,
+        OVERHEAT_PENALTY_RULES,
+        TRADE_NOTE_RULES,
+        build_execution_gate,
+        clamp_fundamental_score,
+        compute_emotion_score,
+        compute_final_score,
+        compute_missing_cap_penalty,
+        compute_overheat_penalty,
+    )
+except ModuleNotFoundError:
+    from capital_flow_contract import (
+        AUTO_UNIT,
+        UNIT_YUAN,
+        build_capital_flow_payload,
+        normalize_capital_flow_row,
+        wan_to_yi,
+    )
+    from parameters import (
+        ATTACK_PROFILE_RULES,
+        CAPITAL_SCORE_THRESHOLDS,
+        EMOTION_SCORE_RULES,
+        FUNDAMENTAL_SCORE_RULES,
+        MISSING_DATA_PENALTIES,
+        OVERHEAT_PENALTY_RULES,
+        TRADE_NOTE_RULES,
+        build_execution_gate,
+        clamp_fundamental_score,
+        compute_emotion_score,
+        compute_final_score,
+        compute_missing_cap_penalty,
+        compute_overheat_penalty,
+    )
+
 # 清除代理环境变量 — 手动按需启用
 for k in ['http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'no_proxy', 'NO_PROXY']:
     os.environ.pop(k, None)
@@ -133,19 +180,13 @@ def _capital_flow_cache_path(code):
     return CAPITAL_FLOW_CACHE_DIR / f'{code}.json'
 
 
-def _normalize_capital_flow_rows(rows, limit=5):
+def _normalize_capital_flow_rows(rows, limit=5, source_unit=AUTO_UNIT):
     normalized = {}
     for row in rows or []:
-        if not isinstance(row, dict):
+        normalized_row = normalize_capital_flow_row(row, source_unit=source_unit)
+        if not normalized_row:
             continue
-        date = row.get('date')
-        if not date:
-            continue
-        normalized[date] = {
-            'date': date,
-            'main_net': _safe_float(row.get('main_net')),
-            'super_large': _safe_float(row.get('super_large')),
-        }
+        normalized[normalized_row['date']] = normalized_row
     ordered = [normalized[date] for date in sorted(normalized)]
     return ordered[-limit:] if limit else ordered
 
@@ -196,7 +237,7 @@ def _parse_em_capital_flow_daykline(klines, limit=5):
             'main_net': _safe_float(parts[1]),
             'super_large': _safe_float(parts[2]),
         })
-    return _normalize_capital_flow_rows(rows, limit=limit)
+    return _normalize_capital_flow_rows(rows, limit=limit, source_unit=UNIT_YUAN)
 
 
 def fetch_capital_flow_batch_today(codes):
@@ -238,11 +279,13 @@ def fetch_capital_flow_batch_today(codes):
             super_raw = item.get('f66')
             if main_raw in (None, '-') and super_raw in (None, '-'):
                 continue
-            snapshot[code] = {
+            normalized_row = normalize_capital_flow_row({
                 'date': today,
                 'main_net': _safe_float(main_raw),
                 'super_large': _safe_float(super_raw),
-            }
+            }, source_unit=UNIT_YUAN)
+            if normalized_row:
+                snapshot[code] = normalized_row
 
         if i + CAPITAL_FLOW_BATCH_SIZE < len(deduped_codes):
             time.sleep(random.uniform(0.15, 0.35))
@@ -1029,7 +1072,7 @@ def fetch_capital_flow_ths(code):
 
         if net_val is not None:
             today = datetime.now().strftime('%Y-%m-%d')
-            return [{'date': today, 'main_net': net_val, 'super_large': 0}]
+            return [normalize_capital_flow_row({'date': today, 'main_net': net_val, 'super_large': 0}, source_unit=UNIT_YUAN)]
     except Exception as e:
         print(f'    [ths-fallback] capital flow failed for {code}: {e}', file=sys.stderr)
     return None
@@ -1242,89 +1285,109 @@ def calc_cap_score(flows):
     if not flows:
         return score, signals
 
-    today = flows[-1]['main_net']
-    if today > 5000:
-        score += 15
-        signals.append(f'主力流入{today / 10000:.1f}亿')
-    elif today > 2000:
-        score += 12
-        signals.append(f'主力流入{today / 10000:.2f}亿')
-    elif today > 500:
-        score += 8
-        signals.append(f'主力流入{today:.0f}万')
-    elif today > 0:
-        score += 4
+    today = _safe_float(flows[-1].get('main_net'))
+    for rule in CAPITAL_SCORE_THRESHOLDS['today_flow_wan']:
+        if today > rule['above']:
+            score += rule['score']
+            signal = rule.get('signal')
+            if signal:
+                signals.append(
+                    signal.format(
+                        value_wan=today,
+                        value_yi=wan_to_yi(today),
+                    )
+                )
+            break
 
     consecutive = 0
     for f in flows[::-1]:
-        if f['main_net'] > 0:
+        if _safe_float(f.get('main_net')) > 0:
             consecutive += 1
         else:
             break
-    if consecutive >= 5:
-        score += 15
-        signals.append('连续5日流入')
-    elif consecutive >= 3:
-        score += 12
-        signals.append(f'连续{consecutive}日流入')
-    elif consecutive >= 2:
-        score += 6
+    for rule in CAPITAL_SCORE_THRESHOLDS['consecutive_inflow_days']:
+        if consecutive >= rule['at_least']:
+            score += rule['score']
+            signal = rule.get('signal')
+            if signal:
+                signals.append(signal.format(days=consecutive))
+            break
 
-    if len(flows) >= 2 and flows[-2]['main_net'] < 0 and today > 0:
-        score += 8
-        signals.append('资金反转')
+    reversal_rule = CAPITAL_SCORE_THRESHOLDS['reversal']
+    if (
+        len(flows) >= 2
+        and _safe_float(flows[-2].get('main_net')) < reversal_rule['previous_day_below']
+        and today > reversal_rule['today_above']
+    ):
+        score += reversal_rule['score']
+        signals.append(reversal_rule['signal'])
 
     return score, signals
 
 
 def build_trade_note(stock):
     flows = stock.get('flows') or []
-    today_flow = flows[-1]['main_net'] if flows else 0
-    f = stock.get('fundamentals') or {}
+    today_flow = _safe_float(flows[-1].get('main_net')) if flows else 0
     pos20 = stock.get('position_20d', 0.5)
     chg = stock.get('change_pct', 0) or 0
     turnover = stock.get('turnover', 0) or 0
     amount_yi = (stock.get('amount', 0) or 0) / 1e8
     pe = _get_pe(stock)
+    note_rules = TRADE_NOTE_RULES
 
     reasons = []
-    if pos20 >= 0.75 and today_flow > 0:
-        reasons.append('趋势突破+资金配合')
-    elif pos20 <= 0.35 and chg > 0:
-        reasons.append('低位活跃反弹')
-    elif today_flow > 0:
-        reasons.append('资金驱动走强')
+    primary_reason_rules = note_rules['reasons']['primary']
+    if (
+        pos20 >= primary_reason_rules['trend_breakout']['position_20d_at_least']
+        and today_flow > primary_reason_rules['trend_breakout']['today_flow_above']
+    ):
+        reasons.append(primary_reason_rules['trend_breakout']['text'])
+    elif (
+        pos20 <= primary_reason_rules['low_rebound']['position_20d_at_most']
+        and chg > primary_reason_rules['low_rebound']['change_pct_above']
+    ):
+        reasons.append(primary_reason_rules['low_rebound']['text'])
+    elif today_flow > primary_reason_rules['flow_driven']['today_flow_above']:
+        reasons.append(primary_reason_rules['flow_driven']['text'])
     else:
-        reasons.append('量价活跃')
+        reasons.append(primary_reason_rules['default'])
 
-    if turnover >= 4:
-        reasons.append('换手充分')
-    if amount_yi >= 30:
-        reasons.append('成交额充足')
+    secondary_reason_rules = note_rules['reasons']['secondary']
+    if turnover >= secondary_reason_rules['turnover']['at_least']:
+        reasons.append(secondary_reason_rules['turnover']['text'])
+    if amount_yi >= secondary_reason_rules['amount_yi']['at_least']:
+        reasons.append(secondary_reason_rules['amount_yi']['text'])
 
     risks = []
-    if chg >= 8 and pos20 >= 0.8:
-        risks.append('高位大涨，次日分歧风险')
-    if turnover >= 8 and chg >= 5:
-        risks.append('爆量后可能冲高回落')
-    if pe and pe > 80:
-        risks.append('估值偏高')
+    risk_rules = note_rules['risks']
+    if (
+        chg >= risk_rules['high_move_breakout']['change_pct_at_least']
+        and pos20 >= risk_rules['high_move_breakout']['position_20d_at_least']
+    ):
+        risks.append(risk_rules['high_move_breakout']['text'])
+    if (
+        turnover >= risk_rules['blowoff']['turnover_at_least']
+        and chg >= risk_rules['blowoff']['change_pct_at_least']
+    ):
+        risks.append(risk_rules['blowoff']['text'])
+    if pe and pe > risk_rules['high_pe']['pe_above']:
+        risks.append(risk_rules['high_pe']['text'])
     style_text = _get_style_text(stock)
-    if any(k in style_text for k in ['锂', '有色', '铝', '铜', '煤', '油', '化工']):
-        risks.append('周期波动较大')
+    if any(k in style_text for k in risk_rules['style_volatility']['keywords']):
+        risks.append(risk_rules['style_volatility']['text'])
     if not risks:
-        risks.append('留意次日承接强度')
+        risks.append(risk_rules['default'])
 
     watch = []
-    if pos20 >= 0.75:
-        watch.append('明天别高开低走')
-        watch.append('量能别明显萎缩')
+    watch_rules = note_rules['watch']
+    if pos20 >= watch_rules['trend_breakout']['position_20d_at_least']:
+        watch.extend(watch_rules['trend_breakout']['items'])
     else:
-        watch.append('继续放量上攻再确认')
-    if today_flow > 0:
-        watch.append('主力资金别转负')
+        watch.extend(watch_rules['general']['items'])
+    if today_flow > watch_rules['flow_positive']['today_flow_above']:
+        watch.append(watch_rules['flow_positive']['text'])
     else:
-        watch.append('观察资金是否回流')
+        watch.append(watch_rules['flow_non_positive']['text'])
 
     return {
         'entry_reason': ' + '.join(reasons[:2]),
@@ -1374,89 +1437,50 @@ def stage2_enrich(candidates):
         fund_score, fund_signals = calc_fund_score(funda)
 
         # 情绪面评分 (0-20)
-        emotion_score = 0
         chg = stock['change_pct']
-        if chg > 7:
-            emotion_score += 10
-        elif chg > 5:
-            emotion_score += 8
-        elif chg > 2:
-            emotion_score += 5
-        elif chg > 0:
-            emotion_score += 2
-
         amt = stock['amount']
-        if amt > 15e8:
-            emotion_score += 6
-        elif amt > 8e8:
-            emotion_score += 4
-        elif amt > 3e8:
-            emotion_score += 2
-
         turnover = stock.get('turnover', 0) or 0
-        if turnover > 8:
-            emotion_score += 8
-        elif turnover > 5:
-            emotion_score += 6
-        elif turnover > 3:
-            emotion_score += 4
-        elif turnover > 2:
-            emotion_score += 2
+        emotion_score = compute_emotion_score(change_pct=chg, amount=amt, turnover=turnover)
 
         # 进攻型不鼓励“基本面平庸但巨大权重白马”霸榜，因此基本面只保留轻权重
-        fund_score = max(min(fund_score, 12), -8)
+        fund_score = clamp_fundamental_score(fund_score)
 
         # 资金流缺失时，明确做轻微降权，避免误把“无数据”当中性
-        missing_cap_penalty = 4 if not flows else 0
+        missing_cap_penalty = compute_missing_cap_penalty(has_capital_flow=bool(flows))
 
         # 过热惩罚：高位+大涨+爆量/高换手，防止纯情绪高潮票霸榜
         # 新增：连续涨停/接近涨停的退潮惩罚，避免把高潮末端当成机会
         pos20 = stock.get('position_20d', 0.5)
-        overheat_penalty = 0
-        overheat_tags = []
-        if pos20 >= 0.85 and chg >= 8:
-            overheat_penalty += 5
-            overheat_tags.append('高位高潮')
-        elif pos20 >= 0.75 and chg >= 6:
-            overheat_penalty += 3
-            overheat_tags.append('高位偏热')
-        if turnover >= 8 and chg >= 5:
-            overheat_penalty += 3
-            overheat_tags.append('爆量过热')
-        elif turnover >= 5 and chg >= 7:
-            overheat_penalty += 2
-            overheat_tags.append('放量偏热')
-        if chg >= 9.8:
-            overheat_penalty += 4
-            overheat_tags.append('涨停退潮风险')
-        elif chg >= 7.5 and pos20 >= 0.7:
-            overheat_penalty += 2
-            overheat_tags.append('追高风险')
+        overheat_penalty, overheat_tags = compute_overheat_penalty(
+            position_20d=pos20,
+            change_pct=chg,
+            turnover=turnover,
+        )
 
         stock['cap_score'] = cap_score
         stock['cap_signals'] = cap_signals
         stock['fund_score'] = fund_score
         stock['fund_signals'] = fund_signals
-        stock['emotion_score'] = min(emotion_score, 20)
+        stock['emotion_score'] = emotion_score
         stock['missing_cap_penalty'] = missing_cap_penalty
         stock['overheat_penalty'] = overheat_penalty
         stock['overheat_tags'] = overheat_tags
 
         # 进攻型总分：技术优先 + 资金优先 + 情绪增强 + 基本面轻权重
-        stock['final_score'] = round(
-            stock['tech_score'] * 1.25 +
-            cap_score * 1.2 +
-            stock['emotion_score'] * 1.15 +
-            fund_score * 0.55 -
-            missing_cap_penalty -
-            overheat_penalty,
-            2
+        stock['final_score'] = compute_final_score(
+            tech_score=stock['tech_score'],
+            capital_score=cap_score,
+            emotion_score=stock['emotion_score'],
+            fundamental_score=fund_score,
+            missing_cap_penalty=missing_cap_penalty,
+            overheat_penalty=overheat_penalty,
         )
         stock['trade_note'] = build_trade_note(stock)
         if stock.get('notice_risk_tags'):
             notice_labels = ' / '.join(sorted({x['label'] for x in stock['notice_risk_tags']}))
             base_risk = stock['trade_note'].get('main_risk', '')
-            stock['trade_note']['main_risk'] = f"公告风险：{notice_labels}" + (f"；{base_risk}" if base_risk else '')
+            notice_prefix = TRADE_NOTE_RULES['risks']['notice_prefix']
+            stock['trade_note']['main_risk'] = f"{notice_prefix}{notice_labels}" + (f"；{base_risk}" if base_risk else '')
 
         enriched.append(stock)
         if (i + 1) % 10 == 0:
@@ -1672,7 +1696,7 @@ def assess_market_themes(stocks):
         # 2) 龙头强度分（25）
         leader_score = min(25, round(top1 * 0.16 + top3_avg * 0.1, 2))
         # 3) 资金集中度分（20）
-        capital_score = min(20, round((max(total_flow, 0) / 1e8) * 0.16 + (max(avg_flow, 0) / 1e8) * 0.08, 2))
+        capital_score = min(20, round(wan_to_yi(max(total_flow, 0)) * 0.16 + wan_to_yi(max(avg_flow, 0)) * 0.08, 2))
         # 4) 结构完整度分（15）
         structure_score = 0
         if len(items) >= 3:
@@ -1814,8 +1838,8 @@ def assess_market_themes(stocks):
                 'structure_score': structure_score,
                 'purity_score': purity_score,
                 'persistence_score': persistence_score,
-                'total_flow_yi': round(total_flow / 1e8, 2),
-                'avg_flow_yi': round(avg_flow / 1e8, 2),
+                'total_flow_yi': wan_to_yi(total_flow),
+                'avg_flow_yi': wan_to_yi(avg_flow),
                 'preferred_ratio': round(preferred_ratio, 2),
                 'keep_ratio': round(keep_ratio, 2),
                 'hot_ratio': round(hot_ratio, 2),
@@ -1927,11 +1951,12 @@ def _get_style_text(stock):
     style_parts = [f.get('industry'), f.get('concept')]
     if not any(style_parts):
         name = stock.get('name', '')
-        fallback_keywords = [
-            '信息', '电子', '半导体', '芯片', '光电', '稀土', '锂', '军工', '能源', '材料', '通信',
-            '算力', '服务器', '银行', '保险', '高速', '港口', '机场', '电力', '燃气', '铁路',
-            '运营', '地产', '白酒', '钢', '煤', '油', '铜', '铝', '有色', '化工'
-        ]
+        keyword_rules = ATTACK_PROFILE_RULES['style_keywords']
+        fallback_keywords = (
+            keyword_rules['preferred']
+            + keyword_rules['weak']
+            + keyword_rules['cyclical_soft']
+        )
         hit = [k for k in fallback_keywords if k in name]
         if hit:
             style_parts.append('name:' + '/'.join(hit[:2]))
@@ -1945,13 +1970,13 @@ def classify_attack_profile(stock):
     chg = stock.get('change_pct', 0) or 0
     pos20 = stock.get('position_20d', 0.5)
     flows = stock.get('flows') or []
-    today_flow = flows[-1]['main_net'] if flows else 0
+    today_flow = _safe_float(flows[-1].get('main_net')) if flows else 0
     pe = _get_pe(stock)
     style_text = _get_style_text(stock)
 
-    preferred_keywords = ['信息', '电子', '半导体', '芯片', '光电', '稀土', '锂', '军工', '能源', '材料', '通信', '算力', '服务器']
-    weak_keywords = ['银行', '保险', '高速', '港口', '机场', '电力', '燃气', '铁路', '运营', '地产', '白酒']
-    cyclical_soft_keywords = ['钢', '煤', '油', '铜', '铝', '有色', '化工']
+    rules = ATTACK_PROFILE_RULES
+    keyword_rules = rules['style_keywords']
+    style_rules = rules['style']
 
     bias = 0
     tags = []
@@ -1959,113 +1984,123 @@ def classify_attack_profile(stock):
     is_weak = False
     is_cyclical_soft = False
 
-    for k in preferred_keywords:
+    for k in keyword_rules['preferred']:
         if k in style_text:
-            bias += 6
+            bias += style_rules['preferred']['delta']
             is_preferred = True
-            tags.append(f'偏好行业:{k}')
+            tags.append(f"{style_rules['preferred']['tag_prefix']}{k}")
             break
-    for k in weak_keywords:
+    for k in keyword_rules['weak']:
         if k in style_text:
-            bias -= 8
+            bias += style_rules['weak']['delta']
             is_weak = True
-            tags.append(f'弱偏好:{k}')
+            tags.append(f"{style_rules['weak']['tag_prefix']}{k}")
             break
-    for k in cyclical_soft_keywords:
+    for k in keyword_rules['cyclical_soft']:
         if k in style_text:
-            bias -= 3
+            bias += style_rules['cyclical_soft']['delta']
             is_cyclical_soft = True
-            tags.append(f'周期观察:{k}')
+            tags.append(f"{style_rules['cyclical_soft']['tag_prefix']}{k}")
             break
 
-    if turnover >= 4:
-        bias += 4
-        tags.append('高换手')
-    elif turnover < 1.8:
-        bias -= 4
-        tags.append('换手不足')
-    elif turnover < 2.5 and chg >= 4:
-        bias -= 3
-        tags.append('低换手脉冲')
+    turnover_rules = rules['turnover']
+    if turnover >= turnover_rules['high']['at_least']:
+        bias += turnover_rules['high']['delta']
+        tags.append(turnover_rules['high']['tag'])
+    elif turnover < turnover_rules['too_low']['below']:
+        bias += turnover_rules['too_low']['delta']
+        tags.append(turnover_rules['too_low']['tag'])
+    elif turnover < turnover_rules['low_pulse']['below'] and chg >= turnover_rules['low_pulse']['change_pct_at_least']:
+        bias += turnover_rules['low_pulse']['delta']
+        tags.append(turnover_rules['low_pulse']['tag'])
 
     diverge_type, diverge_strength = _detect_volume_divergence(stock)
     if diverge_type == 'top_diverge':
-        bias -= 3 * diverge_strength
-        tags.append(f'量价顶背离(L{diverge_strength})')
+        divergence_rules = rules['divergence']
+        bias += divergence_rules['top_diverge_multiplier'] * diverge_strength
+        tags.append(divergence_rules['tag_template'].format(strength=diverge_strength))
 
     if len(flows) >= 2:
-        prev_flow = flows[-2]['main_net']
-        if today_flow < 0 and chg > 0:
-            bias -= 4
-            tags.append('资金背离')
-        elif today_flow > 0 and prev_flow < 0:
-            bias += 1
-            tags.append('资金修复')
+        prev_flow = _safe_float(flows[-2].get('main_net'))
+        transition_rules = rules['flow_transition']
+        if today_flow < transition_rules['negative_with_rise']['today_flow_below'] and chg > transition_rules['negative_with_rise']['change_pct_above']:
+            bias += transition_rules['negative_with_rise']['delta']
+            tags.append(transition_rules['negative_with_rise']['tag'])
+        elif today_flow > transition_rules['repair']['today_flow_above'] and prev_flow < transition_rules['repair']['previous_flow_below']:
+            bias += transition_rules['repair']['delta']
+            tags.append(transition_rules['repair']['tag'])
 
-    if chg >= 5:
-        bias += 4
-        tags.append('涨幅强')
-    elif chg < 1:
-        bias -= 3
-        tags.append('涨幅弱')
+    change_rules = rules['change_pct']
+    if chg >= change_rules['strong']['at_least']:
+        bias += change_rules['strong']['delta']
+        tags.append(change_rules['strong']['tag'])
+    elif chg < change_rules['weak']['below']:
+        bias += change_rules['weak']['delta']
+        tags.append(change_rules['weak']['tag'])
 
     consecutive_in = _consecutive_inflows(flows)
-    if today_flow > 0:
-        bias += 3
-        tags.append('资金配合')
+    flow_today_rules = rules['flow_today']
+    if today_flow > flow_today_rules['positive']['above']:
+        bias += flow_today_rules['positive']['delta']
+        tags.append(flow_today_rules['positive']['tag'])
     elif flows:
-        bias -= 5
-        tags.append('资金背离')
+        bias += flow_today_rules['non_positive']['delta']
+        tags.append(flow_today_rules['non_positive']['tag'])
     else:
-        bias -= 1
-        tags.append('资金缺失')
+        bias += flow_today_rules['missing']['delta']
+        tags.append(flow_today_rules['missing']['tag'])
 
-    if consecutive_in >= 2:
-        bias += 3
-        tags.append(f'连续{consecutive_in}日流入')
-    elif consecutive_in == 1:
-        bias += 1
-        tags.append('单日流入')
+    consecutive_rules = rules['consecutive_inflows']
+    if consecutive_in >= consecutive_rules['multi_day']['at_least']:
+        bias += consecutive_rules['multi_day']['delta']
+        tags.append(consecutive_rules['multi_day']['tag'].format(days=consecutive_in))
+    elif consecutive_in == consecutive_rules['single_day']['equals']:
+        bias += consecutive_rules['single_day']['delta']
+        tags.append(consecutive_rules['single_day']['tag'])
     elif flows and today_flow <= 0:
-        bias -= 2
+        bias += consecutive_rules['non_positive_penalty']['delta']
 
-    if pos20 >= 0.75:
-        bias += 2
-        tags.append('趋势突破区')
-    elif pos20 <= 0.35:
-        bias -= 2
-        tags.append('仍在低位')
-    elif pos20 >= 0.58:
-        bias += 1
-        tags.append('趋势中高位')
+    position_rules = rules['position_20d']
+    if pos20 >= position_rules['breakout']['at_least']:
+        bias += position_rules['breakout']['delta']
+        tags.append(position_rules['breakout']['tag'])
+    elif pos20 <= position_rules['low']['at_most']:
+        bias += position_rules['low']['delta']
+        tags.append(position_rules['low']['tag'])
+    elif pos20 >= position_rules['mid_high']['at_least']:
+        bias += position_rules['mid_high']['delta']
+        tags.append(position_rules['mid_high']['tag'])
 
-    if pe and pe > 80:
-        bias -= 4
-        tags.append('估值压制')
+    valuation_rules = rules['valuation']
+    if pe and pe > valuation_rules['high_pe']['above']:
+        bias += valuation_rules['high_pe']['delta']
+        tags.append(valuation_rules['high_pe']['tag'])
 
     # 强制负面规则：把“不够纯的进攻票”打下去
     hard_exclude = False
+    hard_rules = rules['hard_rules']
     if is_weak:
         hard_exclude = True
-        tags.append('硬淘汰')
+        tags.append(hard_rules['weak_style_exclude_tag'])
     if is_cyclical_soft and today_flow <= 0:
-        bias -= 6
-        tags.append('周期+资金背离')
+        bias += hard_rules['cyclical_negative']['delta']
+        tags.append(hard_rules['cyclical_negative']['tag'])
     if is_cyclical_soft and not is_preferred and consecutive_in == 0:
-        bias -= 3
-        tags.append('周期非共振')
+        bias += hard_rules['cyclical_non_resonance']['delta']
+        tags.append(hard_rules['cyclical_non_resonance']['tag'])
     if not is_preferred and today_flow <= 0 and chg < 5:
-        bias -= 3
-        tags.append('非偏好且无资金')
+        bias += hard_rules['non_preferred_no_flow']['delta']
+        tags.append(hard_rules['non_preferred_no_flow']['tag'])
 
     status = 'keep'
-    reason = '趋势、资金和弹性较匹配，适合作为进攻型候选。'
-    if hard_exclude or bias <= -7:
+    status_rules = rules['status']
+    reason = status_rules['reasons']['keep']
+    if hard_exclude or bias <= status_rules['exclude_at_or_below']:
         status = 'exclude'
-        reason = '风格偏弱或与进攻型不匹配，直接淘汰。'
-    elif bias <= 1:
+        reason = status_rules['reasons']['exclude']
+    elif bias <= status_rules['downgrade_at_or_below']:
         status = 'downgrade'
-        reason = '有一定进攻信号，但不够纯粹，降级观察。'
+        reason = status_rules['reasons']['downgrade']
 
     return {
         'status': status,
@@ -2250,83 +2285,6 @@ def assess_market_regime(stocks, basis='candidate'):
     }
 
 
-def build_execution_gate(broad_regime, candidate_regime):
-    broad_metrics = (broad_regime or {}).get('metrics') or {}
-    candidate_metrics = (candidate_regime or {}).get('metrics') or {}
-
-    broad_score = float((broad_regime or {}).get('score') or 0)
-    candidate_score = float((candidate_regime or {}).get('score') or 0)
-    positive_ratio = float(broad_metrics.get('positive_ratio') or 0)
-    avg_change = float(broad_metrics.get('avg_change_pct') or 0)
-    strong_ratio = float(broad_metrics.get('strong_ratio') or 0)
-    avg_turnover = float(broad_metrics.get('avg_turnover') or 0)
-    candidate_strong_ratio = float(candidate_metrics.get('strong_ratio') or 0)
-
-    risk_flags = []
-    if positive_ratio < 0.50:
-        risk_flags.append('赚钱效应不足')
-    if avg_change < 0.20:
-        risk_flags.append('平均涨幅偏弱')
-    if strong_ratio < 0.10:
-        risk_flags.append('强势股占比过低')
-    if avg_turnover < 1.80:
-        risk_flags.append('流动性一般')
-    if candidate_score <= 4:
-        risk_flags.append('候选强度不足')
-    if candidate_strong_ratio < 0.18:
-        risk_flags.append('候选强势扩散不足')
-
-    if (
-        broad_score <= 3
-        or positive_ratio < 0.48
-        or avg_change < 0
-        or strong_ratio < 0.07
-        or candidate_score <= 3
-        or candidate_strong_ratio < 0.10
-    ):
-        status = 'off'
-        label = '进攻阀门关闭'
-        position_cap = '0成'
-        allow_new_positions = False
-        allow_handoff = False
-        allowed_setups = []
-        summary = '整体环境偏弱，今天进攻型策略只保留观察，不建议开新仓。'
-    elif (
-        broad_score <= 5
-        or positive_ratio < 0.63
-        or avg_change < 0.45
-        or strong_ratio < 0.22
-        or candidate_score <= 5
-        or candidate_strong_ratio < 0.22
-    ):
-        status = 'limited'
-        label = '进攻阀门半开'
-        position_cap = '0.3-0.5成以内'
-        allow_new_positions = True
-        allow_handoff = False
-        allowed_setups = ['pullback_continuation', 'low_reversal']
-        summary = '环境还不够顺，只允许更克制的轻仓试错，优先回踩接力和低位反转，不做强趋势追涨。'
-    else:
-        status = 'on'
-        label = '进攻阀门开启'
-        position_cap = '0.5-0.8成试错'
-        allow_new_positions = True
-        allow_handoff = True
-        allowed_setups = ['leader_continuation', 'breakout_follow', 'pullback_continuation', 'low_reversal']
-        summary = '环境允许进攻，但只放行更高质量的共振票，仍以小仓位试错为主。'
-
-    return {
-        'status': status,
-        'label': label,
-        'summary': summary,
-        'position_cap': position_cap,
-        'allow_new_positions': allow_new_positions,
-        'allow_handoff': allow_handoff,
-        'allowed_setups': allowed_setups,
-        'risk_flags': risk_flags[:4],
-    }
-
-
 def build_market_regime_context(pool_stocks, candidate_stocks):
     """同时保留全池环境口径和候选强度口径。
 
@@ -2384,9 +2342,11 @@ def format_output(stocks, strategy_name, top_n):
             },
             'signals': all_signals[:8],
             'capital_flow': {
-                'today': today_flow,
-                'trend': trend,
-                '5day_total': round(sum(x['main_net'] for x in flows)) if flows else 0,
+                **build_capital_flow_payload(
+                    today_wan=today_flow,
+                    five_day_total_wan=round(sum(x['main_net'] for x in flows), 2) if flows else 0,
+                    trend=trend,
+                ),
             },
             'fundamentals': {k: round(v, 2) if isinstance(v, (int, float)) and v is not None else v for k, v in f.items()},
             'style': {

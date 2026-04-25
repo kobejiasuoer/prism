@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ detail.name }} · 棱镜机会池</title>
+    <title>{{ detail.name }} · 棱镜观察池</title>
     {% include "_theme_head.html" %}
     <link rel="stylesheet" href="/static/control-panel.css?v=20260420-schemec5">
   </head>
@@ -24,19 +24,19 @@
             {% set cta_links = detail.topline.cta_links %}
             {% include "_decision_topline.html" %}
             <section class="opportunities-hero-guide">
-              <p class="opportunities-hero-guide-copy">先读为什么它进入今天的执行视野，再看动作计划和资金承接，最后需要时回到批次或自选股快照核对。</p>
+              <p class="opportunities-hero-guide-copy">先读为什么它进入今天的观察视野，再看等待条件和资金承接，最后需要时回到批次或自选股快照核对。</p>
               <div class="panel-link-stack opportunities-hero-guide-links">
                 <a class="panel-link" href="#candidate-signals">先看信号拆解</a>
-                <a class="panel-link panel-link-subtle" href="#candidate-plan">看执行计划</a>
+                <a class="panel-link panel-link-subtle" href="#candidate-plan">看动作计划</a>
                 <a class="panel-link panel-link-subtle" href="#candidate-artifacts">回看原始文件</a>
               </div>
             </section>
           </div>
 
           <aside class="today-callout">
-            <span class="callout-label">执行视角</span>
-            <strong>先看执行质量，再看分数</strong>
-            <p>这页把早盘批次、午盘确认和自选股里的同名股票状态拉到一起，避免只看单一路径。</p>
+            <span class="callout-label">观察视角</span>
+            <strong>先看等待条件，再看分数</strong>
+            <p>这页把早盘批次、午盘确认和自选股里的同名股票状态拉到一起，先判断要不要继续盯，不把候选直接当成推荐。</p>
           </aside>
         </div>
       </header>
@@ -97,11 +97,11 @@
       <section class="today-panel detail-action-zone">
         <div class="today-panel-head">
           <div>
-            <p class="eyebrow">执行闭环</p>
-            <h2>先观察什么，再执行什么</h2>
+            <p class="eyebrow">动作闭环</p>
+            <h2>先观察什么，再考虑动作</h2>
           </div>
         </div>
-        <p class="today-panel-copy">把候选动作也收成统一执行读法，先看动作、触发和回避，再决定要不要继续跟。</p>
+        <p class="today-panel-copy">把候选处理顺序也收成统一读法，先看动作、触发和回避，再决定要不要继续跟。</p>
         <section class="detail-metric-grid detail-metric-grid-single execution-loop-grid">
           {% for item in detail.execution_loop %}
           <article class="detail-row-card execution-loop-card">
@@ -123,7 +123,7 @@
                 <h2>信号拆解</h2>
               </div>
             </div>
-            <p class="today-panel-copy">先确认主题、策略、风险和一致性为什么把它推到今天的页面，再决定是否值得执行。</p>
+            <p class="today-panel-copy">先确认主题、策略、风险和一致性为什么把它推到今天的页面，再决定是否值得继续跟。</p>
             <div class="detail-group-grid">
               {% for group in detail.insight_groups %}
               <section class="detail-group-card">
@@ -150,11 +150,11 @@
           <article id="candidate-plan" class="today-panel">
             <div class="today-panel-head">
               <div>
-                <p class="eyebrow">执行计划</p>
-                <h2>执行计划</h2>
+                <p class="eyebrow">动作计划</p>
+                <h2>观察与动作计划</h2>
               </div>
             </div>
-            <p class="today-panel-copy">动作、触发、回避和失效位全部放在一起，减少来回对照成本。</p>
+            <p class="today-panel-copy">动作、触发、回避和失效位都放在一起，减少来回对照成本。</p>
             <div class="detail-row-list detail-row-list-single">
               {% for item in detail.plan_rows %}
               <article class="detail-row-card">

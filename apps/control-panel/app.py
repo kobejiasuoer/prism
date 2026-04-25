@@ -1,18 +1,26 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import subprocess
-import hashlib
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-import json
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+PACKAGES_ROOT = REPO_ROOT / "packages"
+if str(PACKAGES_ROOT) not in sys.path:
+    sys.path.insert(0, str(PACKAGES_ROOT))
+
+import stock_parameter_config as parameter_config
 
 from control_panel.dashboard_data import (
     CONTROL_PANEL_LOGS_DIR,
@@ -38,6 +46,7 @@ from control_panel.dashboard_data import (
     ensure_runtime_dirs,
     list_runs,
     parse_timestamp,
+    today_nav_links,
     update_today_action_decision,
 )
 from watchlist_registry import archive_watchlist_stock, restore_watchlist_stock, upsert_watchlist_stock
@@ -95,6 +104,7 @@ def should_apply_preview_theme(url: str) -> bool:
         or url.startswith("/api/")
         or url.startswith("/today")
         or url.startswith("/ask")
+        or url.startswith("/parameters")
         or url.startswith("/watchlist")
         or url.startswith("/opportunities")
         or url.startswith("/review")
@@ -141,6 +151,101 @@ def preview_template_response(request: Request, template_name: str, context: dic
             **preview_context,
         },
     )
+
+
+def format_file_mtime(path: Path) -> str:
+    return datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def summarize_parameter_section(section: dict[str, Any], *, limit: int = 4) -> str:
+    keys = [str(key) for key in section.keys()]
+    if not keys:
+        return "当前为空对象"
+    preview = " / ".join(keys[:limit])
+    if len(keys) > limit:
+        preview += f" / +{len(keys) - limit}"
+    return preview
+
+
+def build_parameters_view() -> dict[str, Any]:
+    payload = parameter_config.load_parameter_config()
+    threshold_sets = payload["threshold_sets"]
+    config_path = parameter_config.PARAMETER_CONFIG_PATH
+    schema_path = parameter_config.PARAMETER_SCHEMA_PATH
+
+    links = {
+        **today_nav_links(),
+        "parameters": "/parameters",
+        "api_self": "/api/parameters",
+        "api_save": "/api/parameters",
+    }
+
+    sections = [
+        {
+            "name": name,
+            "entry_count": len(section),
+            "summary": summarize_parameter_section(section),
+        }
+        for name, section in threshold_sets.items()
+    ]
+
+    return {
+        "links": links,
+        "summary": "运行中的股票参数已经脱离 Python 常量，当前以 JSON 作为唯一运行源；这里先提供查看、校验、保存入口。",
+        "summary_cards": [
+            {
+                "label": "运行版本",
+                "value": str(payload.get("version") or "-"),
+                "detail": "当前 runtime 配置版本号",
+            },
+            {
+                "label": "阈值组",
+                "value": str(len(threshold_sets)),
+                "detail": "threshold_sets 当前已加载分组数",
+            },
+            {
+                "label": "运行配置",
+                "value": config_path.name,
+                "detail": f"最近更新 {format_file_mtime(config_path)}",
+            },
+            {
+                "label": "Schema 镜像",
+                "value": schema_path.name,
+                "detail": f"最近更新 {format_file_mtime(schema_path)}",
+            },
+        ],
+        "paths": [
+            {
+                "label": "运行配置源",
+                "path": str(config_path),
+                "mtime": format_file_mtime(config_path),
+                "title": "运行参数 JSON",
+            },
+            {
+                "label": "Schema 镜像",
+                "path": str(schema_path),
+                "mtime": format_file_mtime(schema_path),
+                "title": "参数 Schema 镜像",
+            },
+        ],
+        "required_sets": sorted(parameter_config.REQUIRED_THRESHOLD_SETS),
+        "sections": sections,
+        "raw_json": json.dumps(payload, ensure_ascii=False, indent=2),
+    }
+
+
+def parse_parameter_payload(raw_json: str) -> dict[str, Any]:
+    try:
+        payload = json.loads(raw_json)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"JSON 解析失败：第 {exc.lineno} 行，第 {exc.colno} 列，{exc.msg}",
+        ) from exc
+
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="参数配置必须是 JSON 对象。")
+    return payload
 
 
 def build_run_paths(run_id: str) -> tuple[Path, Path]:
@@ -493,7 +598,7 @@ def pick_recommended_task(page: str, freshness: list[dict[str, Any]], market_mod
     stale_labels = {str(item.get("label") or "") for item in freshness if item.get("stale")}
     if {"自选股", "自选股快照"} & stale_labels:
         return "watchlist_refresh"
-    if {"机会扫描", "早盘批次", "午盘确认"} & stale_labels:
+    if {"观察池", "机会扫描", "早盘批次", "午盘确认"} & stale_labels:
         return "midday_refresh" if market_mode != "off" else "aggressive"
     return "command_brief"
 
@@ -904,6 +1009,48 @@ async def api_refresh_trigger(request: Request) -> JSONResponse:
             },
             "trigger": result,
             "status": build_refresh_status_payload(page),
+        }
+    )
+
+
+@app.get("/parameters", response_class=HTMLResponse)
+async def parameters_page(request: Request) -> HTMLResponse:
+    return preview_template_response(
+        request,
+        "parameters.html",
+        {
+            "parameters": build_parameters_view(),
+        },
+    )
+
+
+@app.get("/api/parameters")
+async def api_parameters() -> JSONResponse:
+    return JSONResponse(build_parameters_view())
+
+
+@app.post("/api/parameters")
+async def api_save_parameters(request: Request) -> JSONResponse:
+    try:
+        incoming: dict[str, Any] = await request.json()
+    except Exception:
+        incoming = {}
+
+    raw_json = str(incoming.get("raw_json") or "").strip()
+    if not raw_json:
+        raise HTTPException(status_code=400, detail="缺少 raw_json。")
+
+    payload = parse_parameter_payload(raw_json)
+    try:
+        parameter_config.save_parameter_config(payload)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return JSONResponse(
+        {
+            "ok": True,
+            "message": "已保存运行参数，并同步 schema 镜像。",
+            "parameters": build_parameters_view(),
         }
     )
 

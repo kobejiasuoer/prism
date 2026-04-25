@@ -18,6 +18,7 @@ if str(INVEST_FLOW_ROOT) not in sys.path:
 from control_panel.app import TEMPLATES, app  # noqa: E402
 from control_panel.dashboard_data import (  # noqa: E402
     TODAY_ACTION_STATE_PATH,
+    ask_catalog_source_tag,
     build_ask_followup_view,
     build_ask_page_view,
     build_candidate_detail_view,
@@ -107,6 +108,7 @@ class ControlPanelSmokeTest(unittest.TestCase):
             "/",
             "/today",
             "/ask",
+            "/parameters",
             "/watchlist",
             "/opportunities",
             "/review",
@@ -124,7 +126,7 @@ class ControlPanelSmokeTest(unittest.TestCase):
     def test_review_page_exposes_extended_sections(self) -> None:
         response = self.client.get("/review")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("三条动作规则", response.text)
+        self.assertIn("三条校准规则", response.text)
         self.assertIn("最近结论变化", response.text)
         self.assertIn("打开详细研究", response.text)
         self.assertIn("data-preview-path=", response.text)
@@ -136,7 +138,7 @@ class ControlPanelSmokeTest(unittest.TestCase):
     def test_ask_first_paint_is_search_first(self) -> None:
         response = self.client.get("/ask")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("先给结论，再给边界", response.text)
+        self.assertIn("先给结论，再给下一步", response.text)
         self.assertNotIn("使用方式", response.text)
         self.assertNotIn("你会先看到什么", response.text)
         self.assertNotIn("首版范围", response.text)
@@ -158,14 +160,14 @@ class ControlPanelSmokeTest(unittest.TestCase):
             "followup": None,
             "surface_mode": "empty",
             "search_strip": {
-                "title": "问一只股票，直接给结论和边界",
-                "promise": "先给结论，再给边界",
+                "title": "先给这只股票一个主结论，再展开原因",
+                "promise": "先给结论，再给下一步",
                 "is_compact": False,
-                "hint": "支持代码/名称联想，候选项会优先回填可直接分析的查询值。",
+                "hint": "支持代码/名称联想，候选项会优先回填便于继续查看的查询值。",
             },
             "hero": {
-                "title": "问一只股票，直接给结论和边界",
-                "summary": "先给结论，再给边界。",
+                "title": "先给这只股票一个主结论，再展开原因",
+                "summary": "先给结论，再给下一步。",
             },
             "manager": {
                 "add_api": "/api/watchlist/manage/add",
@@ -206,11 +208,12 @@ class ControlPanelSmokeTest(unittest.TestCase):
         self.assertIn("今日", html)
         self.assertIn("问股", html)
         self.assertIn("持仓", html)
-        self.assertIn("机会", html)
+        self.assertIn("观察池", html)
         self.assertIn("复盘", html)
+        self.assertIn("参数", html)
         self.assertIn("控制台", html)
         self.assertNotIn("自选股</a>", html)
-        self.assertNotIn("机会池</a>", html)
+        self.assertNotIn(">机会</a>", html)
 
     def test_today_page_prioritizes_command_board_and_structured_sections(self) -> None:
         response = self.client.get("/today")
@@ -218,7 +221,7 @@ class ControlPanelSmokeTest(unittest.TestCase):
         html = response.text
         self.assertIn("今日作战指令", html)
         self.assertIn("持仓动作", html)
-        self.assertIn("机会动作", html)
+        self.assertIn("观察池动作", html)
         self.assertIn("风险与变更", html)
         self.assertIn("证据与原始入口", html)
         self.assertNotIn("今日总判断", html)
@@ -231,7 +234,7 @@ class ControlPanelSmokeTest(unittest.TestCase):
         html = response.text
 
         self.assertIn("今日作战指令", html)
-        self.assertIn("立即执行", html)
+        self.assertIn("优先处理", html)
         self.assertIn("明确回避", html)
         self.assertIn("仓位上限", html)
         self.assertIn("午盘观察", html)
@@ -250,7 +253,7 @@ class ControlPanelSmokeTest(unittest.TestCase):
 
         command_index = html.find("今日作战指令")
         holdings_index = html.find("持仓动作")
-        opportunities_index = html.find("机会动作")
+        opportunities_index = html.find("观察池动作")
         evidence_hint_index = html.find("今日判断已综合")
         evidence_fold_index = html.find("证据与原始入口")
 
@@ -272,7 +275,7 @@ class ControlPanelSmokeTest(unittest.TestCase):
 
         required_labels = [
             "今日作战指令",
-            "立即执行",
+            "优先处理",
             "等触发",
             "明确回避",
             "仓位上限",
@@ -297,11 +300,14 @@ class ControlPanelSmokeTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         html = response.text
         self.assertIn("现在该怎么做", html)
+        self.assertIn("系统位置", html)
         self.assertIn("为什么这么判断", html)
         self.assertIn("继续成立的条件", html)
         self.assertIn("一票否决条件", html)
         self.assertIn("证据与继续追问", html)
         self.assertIn("继续追问这只股票", html)
+        self.assertNotIn("<strong>holdings</strong>", html)
+        self.assertNotIn("<strong>live_fallback</strong>", html)
         self.assertNotIn("先看跨层状态", html)
 
     def test_ask_result_state_reads_conclusion_then_boundary_then_execution(self) -> None:
@@ -384,21 +390,19 @@ class ControlPanelSmokeTest(unittest.TestCase):
             "/watchlist/000625",
             self._first_opportunity_detail_url(),
         ]
-        required_labels = [
-            "执行闭环",
-            "现在做什么",
-            "为什么先做这一步",
-            "触发条件",
-            "先不要做什么",
-            "去哪看证据",
-        ]
-
         for path in paths:
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
                 html = response.text
-                for label in required_labels:
+                self.assertTrue(any(label in html for label in ("动作闭环", "处理闭环")))
+                for label in (
+                    "现在做什么",
+                    "为什么先做这一步",
+                    "触发条件",
+                    "先不要做什么",
+                    "去哪看证据",
+                ):
                     self.assertIn(label, html)
 
     def test_action_tier_language_is_shared_across_core_surfaces(self) -> None:
@@ -409,7 +413,7 @@ class ControlPanelSmokeTest(unittest.TestCase):
             self._first_opportunity_detail_url(),
         ]
         required_labels = [
-            "立即执行",
+            "优先处理",
             "等触发",
             "仅观察",
             "明确回避",
@@ -554,7 +558,13 @@ class ControlPanelSmokeTest(unittest.TestCase):
         self.assertIn("IBM 预览", ask_response.text)
 
     def test_ibm_preview_mode_extends_to_core_product_surfaces(self) -> None:
-        for path in ("/today?theme=ibm-preview", "/watchlist?theme=ibm-preview", "/opportunities?theme=ibm-preview", "/review?theme=ibm-preview"):
+        for path in (
+            "/today?theme=ibm-preview",
+            "/watchlist?theme=ibm-preview",
+            "/opportunities?theme=ibm-preview",
+            "/review?theme=ibm-preview",
+            "/parameters?theme=ibm-preview",
+        ):
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
@@ -571,6 +581,7 @@ class ControlPanelSmokeTest(unittest.TestCase):
         self.assertIn('href="/watchlist?theme=ibm-preview"', html)
         self.assertIn('href="/opportunities?theme=ibm-preview"', html)
         self.assertIn('href="/review?theme=ibm-preview"', html)
+        self.assertIn('href="/parameters?theme=ibm-preview"', html)
 
     def test_ask_and_dashboard_keep_preview_surfaces(self) -> None:
         ask_response = self.client.get("/ask?q=600690")
@@ -586,7 +597,7 @@ class ControlPanelSmokeTest(unittest.TestCase):
     def test_review_page_promotes_action_rules_and_real_change_log(self) -> None:
         response = self.client.get("/review")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("三条动作规则", response.text)
+        self.assertIn("三条校准规则", response.text)
         self.assertIn("最近结论变化", response.text)
         self.assertIn("打开详细研究", response.text)
         self.assertNotIn("研究窗口与对比", response.text)
@@ -680,6 +691,24 @@ class ControlPanelSmokeTest(unittest.TestCase):
         self.assertEqual(rules[1]["action"], "轻仓试错")
         self.assertEqual(rules[2]["action"], "先等确认")
 
+    def test_build_review_action_rules_downgrades_positive_attack_wording(self) -> None:
+        rules = build_review_action_rules(
+            [
+                {
+                    "title": "进攻环境转暖，但先按阀门控量",
+                    "subtitle": "进攻环境",
+                    "status": "进攻",
+                    "tone": "positive",
+                    "copy": "历史样本在改善，但仍先按阀门看。",
+                    "foot": "先按阀门控制动作节奏。",
+                    "metrics": ["Q1 +0.2%", "当前 +0.8%"],
+                }
+            ],
+            freshness="2026-04-21 10:00:00",
+        )
+        self.assertEqual(rules[0]["action"], "按阀门分档")
+        self.assertNotIn("放手做", rules[0]["action"])
+
     def test_normalize_review_note_text_only_rewrites_targeted_history_phrase(self) -> None:
         self.assertEqual(
             normalize_review_note_text("避免在线接口回看历史时漂移或超时"),
@@ -692,12 +721,12 @@ class ControlPanelSmokeTest(unittest.TestCase):
 
     def test_product_pages_expose_new_layout_sections(self) -> None:
         cases = [
-            ("/today", ["今日作战指令", "持仓动作", "机会动作", "风险与变更", "证据与原始入口"]),
+            ("/today", ["今日作战指令", "持仓动作", "观察池动作", "风险与变更", "证据与原始入口"]),
             ("/ask", ["股票代码或名称", "开始分析", "先输入一只股票"]),
             ("/watchlist", ["持仓总览", "持仓名单管理", "添加并刷新", "归档只隐藏", "更新快照", "原始数据入口"]),
             (
                 "/opportunities",
-                [("Top 3 可执行候选", "Top 3 观察/午盘承接候选"), "其余观察与午盘承接", "主线雷达", "质检与原始数据"],
+                ["Top 3 继续观察", "其余观察与午盘承接", "主线雷达", "质检与原始数据"],
             ),
         ]
         for path, markers in cases:
@@ -749,11 +778,11 @@ class ControlPanelSmokeTest(unittest.TestCase):
         response = self.client.get("/today")
         self.assertEqual(response.status_code, 200)
         self.assertIn("今日作战指令", response.text)
-        self.assertIn("立即执行", response.text)
+        self.assertIn("优先处理", response.text)
         self.assertIn("等触发", response.text)
         self.assertIn("明确回避", response.text)
         self.assertIn("持仓动作", response.text)
-        self.assertIn("机会动作", response.text)
+        self.assertIn("观察池动作", response.text)
         self.assertIn("风险与变更", response.text)
         self.assertIn("证据与原始入口", response.text)
         self.assertNotIn("今日操作清单", response.text)
@@ -766,7 +795,7 @@ class ControlPanelSmokeTest(unittest.TestCase):
 
         command_index = html.find("今日作战指令")
         holdings_index = html.find("持仓动作")
-        opportunity_index = html.find("机会动作")
+        opportunity_index = html.find("观察池动作")
         evidence_hint_index = html.find("今日判断已综合")
         evidence_fold_index = html.find("证据与原始入口")
         self.assertGreaterEqual(command_index, 0)
@@ -795,7 +824,7 @@ class ControlPanelSmokeTest(unittest.TestCase):
     def test_opportunities_page_promotes_top_three_candidates(self) -> None:
         response = self.client.get("/opportunities")
         self.assertEqual(response.status_code, 200)
-        self.assertTrue("Top 3 可执行候选" in response.text or "Top 3 观察/午盘承接候选" in response.text)
+        self.assertIn("Top 3 继续观察", response.text)
         self.assertIn("其余观察与午盘承接", response.text)
         self.assertNotIn("机会总览", response.text)
         self.assertNotIn("主线雷达</h2>", response.text)
@@ -824,7 +853,7 @@ class ControlPanelSmokeTest(unittest.TestCase):
 
         opportunities_response = self.client.get("/opportunities")
         self.assertEqual(opportunities_response.status_code, 200)
-        self.assertIn("去看观察候选", opportunities_response.text)
+        self.assertIn("去看其余观察", opportunities_response.text)
         self.assertIn("去看主线判断", opportunities_response.text)
         self.assertIn("去看证据来源", opportunities_response.text)
 
@@ -843,7 +872,7 @@ class ControlPanelSmokeTest(unittest.TestCase):
         candidate_detail_url = self._first_opportunity_detail_url()
         candidate_response = self.client.get(candidate_detail_url)
         self.assertEqual(candidate_response.status_code, 200)
-        self.assertIn("去看机会列表", candidate_response.text)
+        self.assertIn("去看观察池", candidate_response.text)
         self.assertNotIn("查看持仓视角", candidate_response.text)
         self.assertIn("继续问这只股票", candidate_response.text)
 
@@ -911,8 +940,9 @@ class ControlPanelSmokeTest(unittest.TestCase):
         top_titles = [str(row.get("title") or "") for row in payload["top_rows"]]
         self.assertTrue(any("观察标的 300001" in title for title in top_titles))
         self.assertFalse(any("通过标的 600001" in title for title in top_titles))
-        self.assertEqual(payload["topline"]["verdict_title"], "今天没有可执行新仓。")
-        self.assertEqual(payload["topline"]["meta_pills"][2]["value"], "0")
+        self.assertEqual(payload["hero"]["summary"], "优先看优先触发条件")
+        self.assertEqual(payload["topline"]["verdict_title"], "今天先看观察名单，不急着开新仓。")
+        self.assertEqual(payload["topline"]["meta_pills"][2]["label"], "早盘候选")
 
     def test_opportunities_page_uses_watch_fallback_copy_when_no_approved_candidates(self) -> None:
         mocked = self._mock_opportunities_inputs(
@@ -948,8 +978,8 @@ class ControlPanelSmokeTest(unittest.TestCase):
             response = self.client.get("/opportunities")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Top 3 观察/午盘承接候选", response.text)
-        self.assertIn("今天没有可执行新仓。先看 3 只观察名单，再等午盘承接确认。", response.text)
+        self.assertIn("Top 3 继续观察", response.text)
+        self.assertIn("今天先看 3 只继续观察的名字，再等午盘承接确认，不把候选当成直接推荐。", response.text)
         self.assertNotIn("通过标的 600001", response.text)
 
     def test_opportunities_page_cta_anchor_contract_supports_open_on_anchor(self) -> None:
@@ -987,7 +1017,7 @@ class ControlPanelSmokeTest(unittest.TestCase):
                     "key": "do-now",
                     "items": [
                         {"title": "长安汽车 000625", "source": "持仓优先", "url": "/watchlist/000625"},
-                        {"title": "包钢股份 600010", "source": "早盘通过", "url": "/opportunities/600010"},
+                        {"title": "包钢股份 600010", "source": "早盘进入候选", "url": "/opportunities/600010"},
                     ],
                 },
                 {"key": "watch", "items": []},
@@ -1003,8 +1033,8 @@ class ControlPanelSmokeTest(unittest.TestCase):
                 {
                     "key": "do-now",
                     "items": [
-                        {"title": "包钢股份 600010", "source": "早盘通过", "url": "/opportunities/600010"},
-                        {"title": "华友钴业 603799", "source": "午盘保留", "url": "/opportunities/603799"},
+                        {"title": "包钢股份 600010", "source": "早盘进入候选", "url": "/opportunities/600010"},
+                        {"title": "华友钴业 603799", "source": "午盘仍可跟踪", "url": "/opportunities/603799"},
                     ],
                 },
                 {"key": "watch", "items": []},
@@ -1073,6 +1103,7 @@ class ControlPanelSmokeTest(unittest.TestCase):
         self.assertIn('href="/watchlist"', response.text)
         self.assertIn('href="/opportunities"', response.text)
         self.assertIn('href="/review"', response.text)
+        self.assertIn('href="/parameters"', response.text)
         self.assertNotIn('class="nav-chip" href="/"', response.text)
 
     def test_stage_flow_is_compact_and_action_oriented(self) -> None:
@@ -1099,6 +1130,7 @@ class ControlPanelSmokeTest(unittest.TestCase):
                 "watchlist": "/watchlist",
                 "opportunities": "/opportunities",
                 "review": "/review",
+                "parameters": "/parameters",
                 "ops": "/",
             },
             show_api_link=False,
@@ -1106,12 +1138,67 @@ class ControlPanelSmokeTest(unittest.TestCase):
         )
         self.assertRegex(page_nav_html, re.compile(r'<a[^>]*class="[^"]*nav-ops-link[^"]*"[^>]*href="/"[^>]*aria-current="page"'))
 
+    def test_parameter_page_exposes_runtime_editor_without_stage_flow(self) -> None:
+        response = self.client.get("/parameters")
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+        self.assertIn("股票参数配置", html)
+        self.assertIn("原始 JSON 编辑器", html)
+        self.assertIn("保存并同步", html)
+        self.assertIn("data-parameter-root", html)
+        self.assertIn("/static/control-panel-parameters.js", html)
+        self.assertNotIn("阶段 1/5", html)
+
+    def test_parameter_api_returns_runtime_payload(self) -> None:
+        response = self.client.get("/api/parameters")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("summary_cards", payload)
+        self.assertIn("sections", payload)
+        self.assertIn("raw_json", payload)
+        self.assertTrue(str(payload["paths"][0]["path"]).endswith("data/config/stock-parameters.json"))
+
+    def test_parameter_api_save_updates_config_and_schema(self) -> None:
+        source_config = json.loads(Path("data/config/stock-parameters.json").read_text(encoding="utf-8"))
+        source_schema = json.loads(Path("data/schemas/stock-parameters.json").read_text(encoding="utf-8"))
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            config_path = tmp_root / "stock-parameters.json"
+            schema_path = tmp_root / "stock-parameters.schema.json"
+            config_path.write_text(json.dumps(source_config, ensure_ascii=False, indent=2), encoding="utf-8")
+            schema_path.write_text(json.dumps(source_schema, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            updated = json.loads(json.dumps(source_config, ensure_ascii=False))
+            updated["version"] = 99
+            updated["threshold_sets"]["final_score_weights"]["tech_score"] = 0.41
+
+            with patch("control_panel.app.parameter_config.PARAMETER_CONFIG_PATH", config_path), patch(
+                "control_panel.app.parameter_config.PARAMETER_SCHEMA_PATH", schema_path
+            ):
+                response = self.client.post(
+                    "/api/parameters",
+                    json={"raw_json": json.dumps(updated, ensure_ascii=False, indent=2)},
+                )
+
+            self.assertEqual(response.status_code, 200)
+            payload = response.json()
+            self.assertTrue(payload["ok"])
+            self.assertIn("已保存运行参数", payload["message"])
+
+            saved_config = json.loads(config_path.read_text(encoding="utf-8"))
+            saved_schema = json.loads(schema_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved_config["version"], 99)
+            self.assertEqual(saved_schema["version"], 99)
+            self.assertEqual(saved_config["threshold_sets"]["final_score_weights"]["tech_score"], 0.41)
+            self.assertEqual(saved_schema["threshold_sets"]["final_score_weights"]["tech_score"], 0.41)
+
     def test_shared_partials_expose_generic_decision_shell_contracts(self) -> None:
         status_strip_html = TEMPLATES.env.get_template("_status_strip.html").render(
             status_strip_label="来源/质量/新鲜度",
             status_items=[
                 {"label": "来源", "value": "Canonical", "note": "today-brief", "tone": "good"},
-                {"label": "质量", "value": "通过", "note": "gate ok", "tone": "good"},
+                {"label": "质量", "value": "就绪", "note": "gate ok", "tone": "good"},
                 {"label": "新鲜度", "value": "14:35", "note": "5m", "tone": "warn"},
             ],
         )
@@ -1123,13 +1210,13 @@ class ControlPanelSmokeTest(unittest.TestCase):
 
         decision_topline_html = TEMPLATES.env.get_template("_decision_topline.html").render(
             verdict_badge="一句判断",
-            verdict_title="先处理持仓风险，再看新增机会",
+            verdict_title="先处理持仓风险，再看观察池",
             verdict_summary="今天先做收缩动作。",
             meta_pills=[{"label": "仓位", "value": "0.3-0.5成"}, {"label": "阀门", "value": "半开"}],
             cta_links=[{"label": "查看证据", "href": "/today"}],
         )
         self.assertIn("decision-topline-title", decision_topline_html)
-        self.assertIn("先处理持仓风险，再看新增机会", decision_topline_html)
+        self.assertIn("先处理持仓风险，再看观察池", decision_topline_html)
         self.assertIn("0.3-0.5成", decision_topline_html)
         self.assertIn('href="/today"', decision_topline_html)
         self.assertNotIn("上一步", decision_topline_html)
@@ -1234,6 +1321,7 @@ class ControlPanelSmokeTest(unittest.TestCase):
             "/review/detail?section=ai_bucket_rows&label=AI%20shortlist%28%E9%80%9A%E8%BF%87%29"
         )
         self.assertEqual(response.status_code, 200)
+        self.assertIn("先看变化摘要", response.text)
         self.assertIn("对比窗口", response.text)
         self.assertIn("AI 分桶", response.text)
         self.assertIn("data-preview-path=", response.text)
@@ -1242,7 +1330,7 @@ class ControlPanelSmokeTest(unittest.TestCase):
         opportunity_detail_url = self._first_opportunity_detail_url()
         cases = [
             ("/watchlist/000625", ["先看跨层状态", "盘中触发", "data-preview-path="]),
-            (opportunity_detail_url, ["先看信号拆解", "执行计划", "资金承接", "data-preview-path="]),
+            (opportunity_detail_url, ["先看信号拆解", "观察与动作计划", "资金承接", "data-preview-path="]),
             ("/opportunities/batch/screener", ["候选队列", "主线雷达", "data-preview-path="]),
         ]
         for path, markers in cases:
@@ -1307,7 +1395,7 @@ class ControlPanelSmokeTest(unittest.TestCase):
         self.assertEqual(len(payload["action_groups"]), 3)
         self.assertEqual(
             [item["title"] for item in payload["action_groups"]],
-            ["立即处理", "只观察", "今日回避"],
+            ["优先处理", "只观察", "今日回避"],
         )
         self.assertIn("items", payload["action_queue"])
         self.assertIn("counts", payload["action_queue"])
@@ -1406,6 +1494,12 @@ class ControlPanelSmokeTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertTrue(any(item.get("code") == "000786" for item in payload.get("items") or []))
+
+    def test_ask_catalog_source_tag_downgrades_historical_opportunity_label(self) -> None:
+        self.assertEqual(
+            ask_catalog_source_tag({"sources": ["historical_catalog"], "history_label": "历史观察"}),
+            "历史观察",
+        )
 
     def test_ask_html_with_query_exposes_followup_surface(self) -> None:
         response = self.client.get("/ask?q=600690")

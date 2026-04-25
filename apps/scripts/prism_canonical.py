@@ -11,12 +11,16 @@ from typing import Any
 SCHEMA_VERSION = "1.0.0"
 
 BASE_DIR = Path(__file__).resolve().parents[1]
+PACKAGES_ROOT = BASE_DIR.parent / "packages"
 STOCK_ANALYZER_ROOT = BASE_DIR.parent / "stock-analyzer"
 STOCK_SCREENER_ROOT = BASE_DIR.parent / "stock-screener"
 
+if str(PACKAGES_ROOT) not in sys.path:
+    sys.path.insert(0, str(PACKAGES_ROOT))
 if str(STOCK_ANALYZER_ROOT) not in sys.path:
     sys.path.insert(0, str(STOCK_ANALYZER_ROOT))
 
+from screener.capital_flow_contract import UNIT_YUAN, normalize_capital_flow_payload
 from watchlist_registry import load_active_watchlist_codes
 
 WATCHLIST_SNAPSHOT_DIR = STOCK_ANALYZER_ROOT / "data" / "daily_snapshots"
@@ -237,8 +241,14 @@ def load_watchlist_snapshot(path: str | None = None, trade_date: str | None = No
     raw = load_json(snapshot_path)
     stocks = raw.get("stocks") or {}
     active_codes = set(load_active_watchlist_codes())
-    if active_codes or stocks:
+    target_code = str(code or "").strip()
+    target_stock = stocks.get(target_code) if target_code else None
+    if active_codes:
         stocks = {stock_code: item for stock_code, item in stocks.items() if stock_code in active_codes}
+        # Allow direct detail views to keep rendering the last known snapshot,
+        # even when the active watchlist has already rotated away from that code.
+        if target_code and target_stock is not None and target_code not in stocks:
+            stocks[target_code] = target_stock
     normalized = [normalize_watchlist_stock(stock_code, item or {}) for stock_code, item in stocks.items()]
     normalized.sort(key=lambda item: (action_rank(item.get("action")), item.get("code", "")))
 
@@ -274,6 +284,7 @@ def candidate_risk_flags(raw: dict[str, Any]) -> list[str]:
 
 
 def normalize_candidate(raw: dict[str, Any], batch_id: str) -> dict[str, Any]:
+    capital_flow = normalize_capital_flow_payload(raw.get("capital_flow") or {}, legacy_source_unit=UNIT_YUAN)
     return {
         "entity": "candidate",
         "schema_version": SCHEMA_VERSION,
@@ -299,7 +310,7 @@ def normalize_candidate(raw: dict[str, Any], batch_id: str) -> dict[str, Any]:
         "screening_note": raw.get("screening_note"),
         "consistency": raw.get("consistency") or {},
         "execution_quality": raw.get("execution_quality") or {},
-        "capital_flow": raw.get("capital_flow") or {},
+        "capital_flow": capital_flow,
     }
 
 
@@ -527,10 +538,10 @@ def find_candidate_detail(code: str, path: str | None = None) -> dict[str, Any]:
                 "screening_note": None,
                 "consistency": {},
                 "execution_quality": {},
-                "capital_flow": {
+                "capital_flow": normalize_capital_flow_payload({
                     "trend": item.get("capital_trend"),
-                    "flow_today_yi": item.get("flow_today_yi"),
-                },
+                    "today_yi": item.get("flow_today_yi"),
+                }),
             }
 
     raise KeyError(f"candidate not found: {target}")

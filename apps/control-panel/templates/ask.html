@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>棱镜·问股</title>
     {% include "_theme_head.html" %}
-    <link rel="stylesheet" href="/static/control-panel.css?v=20260420-schemec5">
+    <link rel="stylesheet" href="/static/control-panel.css?v=20260424-askhero4">
   </head>
   <body>
     <div
@@ -78,7 +78,7 @@
             <section class="ask-quick-block">
               <div class="ask-quick-head">
                 <span>快速选择</span>
-                <em>点卡片可直接分析</em>
+                <em>点卡片可快速带入</em>
               </div>
 
               {% if ask.examples %}
@@ -174,8 +174,8 @@
           <div class="decision-topline-pills ask-conclusion-pills">
             {% for pill in detail.conclusion_card.meta_pills %}
             <article class="decision-pill">
-              <span>边界</span>
-              <strong>{{ pill }}</strong>
+              <span>{{ pill.label }}</span>
+              <strong>{{ pill.value }}</strong>
             </article>
             {% endfor %}
           </div>
@@ -195,11 +195,11 @@
       <section class="today-panel stage-action-layer ask-execution-layer">
         <div class="today-panel-head">
           <div>
-            <p class="eyebrow">执行动作</p>
+            <p class="eyebrow">动作顺序</p>
             <h2>先做什么，再别做什么</h2>
           </div>
         </div>
-        <p class="today-panel-copy">先执行最靠前的动作，再盯真正会改变结论的边界，不把解释和纪律混成一层。</p>
+        <p class="today-panel-copy">先看最靠前的动作，再盯真正会改变判断的边界，不把解释和纪律混成一层。</p>
         <section class="detail-metric-grid detail-metric-grid-single ask-execution-grid">
           {% for item in detail.execution_layer %}
           <article class="detail-row-card execution-loop-card">
@@ -305,8 +305,8 @@
           <section class="today-panel stage-action-layer ask-shared-execution-loop">
             <div class="today-panel-head">
               <div>
-                <p class="eyebrow">执行闭环</p>
-                <h2>共享执行闭环</h2>
+                <p class="eyebrow">动作闭环</p>
+                <h2>共享动作闭环</h2>
               </div>
             </div>
             <section class="detail-metric-grid detail-metric-grid-single execution-loop-grid">
@@ -539,7 +539,7 @@
             <h2>先输入一只股票</h2>
           </div>
         </div>
-        <p class="today-panel-copy">先给结论，再给边界。输入 6 位代码或股票名称后，页面会直接返回当前结论、执行边界，以及是否已进入自选股或机会池。</p>
+        <p class="today-panel-copy">先给结论，再给下一步。输入 6 位代码或股票名称后，页面会先返回当前判断、下一步动作，以及它是否已进入自选股或观察池。</p>
       </section>
       {% endif %}
     </div>

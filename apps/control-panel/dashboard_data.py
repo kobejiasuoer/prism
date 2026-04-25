@@ -73,7 +73,7 @@ ACTION_DECISION_TONES = {
 }
 
 ACTION_TIER_LABELS = {
-    "act_now": "立即执行",
+    "act_now": "优先处理",
     "wait_trigger": "等触发",
     "observe": "仅观察",
     "avoid": "明确回避",
@@ -730,7 +730,7 @@ def latest_midday_refresh_status() -> dict[str, Any] | None:
         "checked_at": data.get("timestamp") or "",
         "expected_timestamp": data.get("scan_timestamp") or data.get("source_scan_timestamp") or data.get("ai_timestamp") or "",
         "status": status,
-        "status_label": "通过" if status == "ok" else ("待查" if status == "unknown" else "拦截"),
+        "status_label": "就绪" if status == "ok" else ("待查" if status == "unknown" else "拦截"),
         "errors": data.get("validation_errors") or [],
         "warnings": [],
         "paths": {
@@ -1161,6 +1161,7 @@ def api_today_batch_detail_url(kind: str) -> str:
 def today_nav_links() -> dict[str, str]:
     return {
         "ops": "/",
+        "parameters": "/parameters",
         "today": "/today",
         "ask": ask_page_url(),
         "watchlist": watchlist_page_url(),
@@ -1171,6 +1172,7 @@ def today_nav_links() -> dict[str, str]:
         "api_watchlist": api_watchlist_page_url(),
         "api_opportunities": api_opportunities_page_url(),
         "api_review": api_review_page_url(),
+        "api_parameters": "/api/parameters",
         "screener_batch": today_batch_detail_url("screener"),
         "confirmation_batch": today_batch_detail_url("confirmation"),
         "api_screener_batch": api_today_batch_detail_url("screener"),
@@ -1189,10 +1191,10 @@ def action_tone(action: str | None) -> str:
 
 def candidate_status_label(status: str | None) -> str:
     mapping = {
-        "approved": "通过",
-        "caution": "谨慎",
+        "approved": "进入候选",
+        "caution": "继续观察",
         "excluded": "排除",
-        "confirmed": "保留",
+        "confirmed": "仍可跟踪",
         "downgraded": "降级",
         "fresh_candidate": "新增观察",
         "unknown": "待查",
@@ -1583,6 +1585,20 @@ def normalize_review_note_text(text: str) -> str:
     return normalized
 
 
+def normalize_stock_ui_copy(text: Any) -> str:
+    normalized = str(text or "").strip()
+    if not normalized:
+        return ""
+    replacements = {
+        "高质量候选": "优先观察名单",
+        "高质量触发": "优先触发条件",
+        "条件化放量": "条件化处理",
+    }
+    for source, target in replacements.items():
+        normalized = normalized.replace(source, target)
+    return normalized
+
+
 def find_watchlist_stock(watchlist: dict[str, Any] | None, code: str) -> dict[str, Any] | None:
     target = code.strip()
     for item in (watchlist or {}).get("stocks") or []:
@@ -1594,7 +1610,7 @@ def find_watchlist_stock(watchlist: dict[str, Any] | None, code: str) -> dict[st
 def find_confirmation_match(confirmation: dict[str, Any] | None, code: str) -> dict[str, Any] | None:
     target = code.strip()
     for key, label in (
-        ("confirmed", "保留"),
+        ("confirmed", "仍可跟踪"),
         ("downgraded", "降级"),
         ("fresh_candidates", "新增观察"),
     ):
@@ -1652,7 +1668,7 @@ def first_text(*values: Any) -> str | None:
     return None
 
 
-def normalize_next_step_sentence(value: Any, fallback: str = "先执行当前最靠前的一步。") -> str:
+def normalize_next_step_sentence(value: Any, fallback: str = "先处理当前最靠前的一步。") -> str:
     text = str(detail_value(value, fallback)).strip()
     if not text:
         return fallback
@@ -1696,6 +1712,15 @@ def normalize_main_conclusion(value: Any) -> str:
     if any(token in text for token in ("持有", "保留")):
         return "持有"
     return "观察"
+
+
+def source_scope_label(value: Any) -> str:
+    normalized = str(detail_value(value, "live_fallback")).strip()
+    return {
+        "holdings": "自选股链路",
+        "opportunity": "观察池链路",
+        "live_fallback": "临时分析",
+    }.get(normalized, normalized or "临时分析")
 
 
 def normalize_canonical_action_tier(
@@ -1776,7 +1801,7 @@ def ask_context_tags(
     if watchlist_stock:
         tags.append("已命中自选股")
     if candidate:
-        tags.append("已命中机会池")
+        tags.append("已命中观察池")
     if confirmation_match:
         tags.append(f"午盘{confirmation_match.get('group_label')}")
     if stock and "historical_catalog" in (stock.get("sources") or []):
@@ -1801,7 +1826,7 @@ def ask_catalog_source_tag(item: dict[str, Any]) -> str:
     if "watchlist_snapshot" in sources or "watchlist_config" in sources:
         return "自选股" if item.get("watchlist_active", True) else "归档自选"
     if "screening_batch" in sources:
-        return "机会池"
+        return "观察池"
     if any(str(source).startswith("confirmation:") for source in sources):
         return "午盘确认"
     if "historical_catalog" in sources:
@@ -1815,7 +1840,7 @@ def ask_catalog_priority(item: dict[str, Any]) -> int:
     tag = ask_catalog_source_tag(item)
     return {
         "自选股": 0,
-        "机会池": 1,
+        "观察池": 1,
         "午盘确认": 2,
         "归档自选": 3,
         "全市场搜索": 4,
@@ -2127,15 +2152,15 @@ def ask_decision_from_candidate(candidate: dict[str, Any], confirmation_match: d
     if "不开新仓" in entry_action or "观察" in entry_action:
         return "只观察不执行", entry_action
     if status == "approved":
-        return "轻仓跟踪", first_text(candidate.get("entry_reason"), entry_action) or "当前进入早盘通过名单。"
+        return "轻仓跟踪", first_text(candidate.get("entry_reason"), entry_action) or "当前进入早盘候选名单。"
     if status == "excluded":
-        return "回避", first_text(candidate.get("main_risk"), candidate.get("screening_note")) or "当前不在可执行名单。"
+        return "回避", first_text(candidate.get("main_risk"), candidate.get("screening_note")) or "当前不在继续跟踪名单。"
     return "只观察不执行", first_text(candidate.get("screening_note"), candidate.get("entry_reason")) or "当前只保留观察。"
 
 
 def ask_state_tone(value: str | None) -> str:
     text = str(value or "").strip()
-    if any(keyword in text for keyword in ("看多", "偏多", "通过", "保留", "轻仓", "买入")):
+    if any(keyword in text for keyword in ("看多", "偏多", "进入候选", "仍可跟踪", "轻仓", "买入")):
         return "positive"
     if any(keyword in text for keyword in ("看空", "偏空", "回避", "降级", "减仓")):
         return "risk"
@@ -2368,7 +2393,7 @@ def build_ask_case_view(
             "detail": detail_value((watchlist_stock or {}).get("position"), "当前不在自选股快照"),
         },
         {
-            "label": "机会池",
+            "label": "观察池",
             "value": detail_value(candidate_status_label((candidate or {}).get("screening_status")) if candidate else None, "未进入"),
             "tone": candidate_tone(candidate or {}) if candidate else "watch",
             "detail": detail_value((candidate or {}).get("setup_label"), "当前不在早盘候选池"),
@@ -2380,10 +2405,10 @@ def build_ask_case_view(
             "detail": detail_value((((confirmation_match or {}).get("item") or {}).get("main_risk")), "尚未进入午盘确认链路"),
         },
         {
-            "label": "今日执行队列",
+            "label": "今日动作队列",
             "value": detail_value((today_match or {}).get("group_title"), "未进入"),
             "tone": str((today_match or {}).get("tone") or "watch"),
-            "detail": detail_value((today_match or {}).get("detail"), "当前不在今日优先队列"),
+            "detail": detail_value((today_match or {}).get("detail"), "当前不在今日动作队列"),
         },
     ]
 
@@ -2585,7 +2610,7 @@ def build_ask_case_view(
             ),
             cta_links=[
                 {"label": "去看持仓视角", "href": watchlist_detail_url(code)} if watchlist_stock else None,
-                {"label": "去看机会视角", "href": candidate_detail_url(code)} if candidate else None,
+                {"label": "去看观察池视角", "href": candidate_detail_url(code)} if candidate else None,
                 {"label": "去看持仓列表", "href": watchlist_page_url()},
             ],
         ),
@@ -2597,7 +2622,7 @@ def build_ask_case_view(
             risk_boundary=(invalid_row or {}).get("value") or confidence.get("detail"),
             risk_detail="先守住失效位和纪律边界，再决定是否继续执行。",
             next_step=(action_row or {}).get("value"),
-            next_step_detail="先执行当前最靠前的一步，再决定要不要展开更多证据。",
+            next_step_detail="先处理当前最靠前的一步，再决定要不要展开更多证据。",
         ),
         "decision_explanation": build_decision_explanation_block(
             why=decision_summary,
@@ -3065,7 +3090,7 @@ def detect_ask_followup_intent(question: str, history: list[dict[str, Any]] | No
         return "fundamentals"
     if any(token in text for token in ("可信", "置信", "靠谱吗", "数据完整", "完整")):
         return "confidence"
-    if any(token in text for token in ("自选股", "机会池", "午盘", "执行队列", "链路", "系统里")):
+    if any(token in text for token in ("自选股", "观察池", "机会池", "午盘", "执行队列", "链路", "系统里")):
         return "cross"
     for item in reversed(history or []):
         if str(item.get("role") or "").strip() != "assistant":
@@ -3196,7 +3221,7 @@ def build_ask_followup_answer(
         references = ask_followup_references(case, [f"当前结论 {hero.get('decision_label')}", f"建议仓位 {hero.get('position')}"])
     elif intent == "cross":
         title = "这只票在系统里的位置"
-        summary = "先看它是不是已进入自选股、机会池、午盘确认或今日执行队列，再决定优先级。"
+        summary = "先看它是不是已进入自选股、观察池、午盘确认或今日动作队列，再决定优先级。"
         bullets = [
             f"{item.get('label')}：{item.get('value')}；{item.get('detail')}"
             for item in cross_cards
@@ -3398,8 +3423,8 @@ def build_detail_decision_cards(
         },
         {
             "label": "下一步动作",
-            "value": normalize_next_step_sentence(next_step, "先执行当前最靠前的一步。"),
-            "detail": detail_value(next_step_detail, "先执行当前最靠前的一步。"),
+            "value": normalize_next_step_sentence(next_step, "先处理当前最靠前的一步。"),
+            "detail": detail_value(next_step_detail, "先处理当前最靠前的一步。"),
         },
     ]
 
@@ -3449,9 +3474,9 @@ def build_ask_conclusion_card(case: dict[str, Any]) -> dict[str, Any]:
         "confidence_label": hero.get("confidence_label") or "待核",
         "confidence_note": hero.get("confidence_note") or "当前先按已有证据理解。",
         "meta_pills": [
-            canonical.get("position_guidance") or "仓位待定",
-            canonical.get("risk_boundary") or "边界待核",
-            canonical.get("source_scope") or "live_fallback",
+            {"label": "仓位建议", "value": canonical.get("position_guidance") or "仓位待定"},
+            {"label": "风险边界", "value": canonical.get("risk_boundary") or "边界待核"},
+            {"label": "系统位置", "value": source_scope_label(canonical.get("source_scope"))},
         ],
     }
 
@@ -3536,7 +3561,7 @@ def build_ask_examples(
         if len(examples) >= 4:
             break
     for item in (screening_batch or {}).get("candidates") or []:
-        add_item(item.get("code"), item.get("name"), "机会池")
+        add_item(item.get("code"), item.get("name"), "观察池")
         if len(examples) >= 8:
             break
     for item in (confirmation or {}).get("fresh_candidates") or []:
@@ -3622,7 +3647,7 @@ def build_ask_suggestions(
                     "code": code,
                     "name": str(example.get("name") or code).strip() or code,
                     "tag": str(example.get("tag") or "系统样例").strip() or "系统样例",
-                    "detail": f"{code} · 可直接开看",
+                    "detail": f"{code} · 可快速带入",
                     "url": ask_page_url(code),
                     "fill_value": ask_search_fill_value(example.get("name"), code),
                 }
@@ -3771,14 +3796,14 @@ def build_ask_page_view(query: str | None = None, error: str | None = None) -> d
         "error": ask_error,
         "surface_mode": "result" if ask_case else "empty",
         "search_strip": {
-            "title": "问一只股票，直接给结论和边界",
-            "promise": "先给结论，再给边界",
+            "title": "先给这只股票一个主结论，再展开原因",
+            "promise": "先给结论，再给下一步",
             "is_compact": bool(ask_case),
-            "hint": "支持代码/名称联想，候选项会优先回填可直接分析的查询值。",
+            "hint": "支持代码/名称联想，候选项会优先回填便于继续查看的查询值。",
         },
         "hero": {
-            "title": "问一只股票，直接给结论和边界",
-            "summary": "这页先回答今天该不该动，再把技术、资金、事件和跨系统状态拆开给你看。",
+            "title": "先给这只股票一个主结论，再展开原因",
+            "summary": "这页先回答这只股票现在该不该动，再把技术、资金、事件和跨系统状态拆开给你看。",
         },
         "examples": build_ask_examples(watchlist, screening_batch, confirmation),
         "recent_queries": build_ask_recent_queries(watchlist, screening_batch, confirmation),
@@ -3824,7 +3849,7 @@ def quality_status_tone(status: Any) -> str:
 def quality_status_label(status: Any) -> str:
     normalized = str(status or "unknown").strip().lower()
     return {
-        "ok": "通过",
+        "ok": "就绪",
         "blocked": "拦截",
         "failed": "失败",
         "invalid": "无效",
@@ -3928,13 +3953,13 @@ def build_today_confidence_switch(
     elif brief_is_live:
         tone = "positive"
         status = "总控同步"
-        label = "可执行"
-        summary = "总控和三条核心链路都已同步，今天可以先按这页结论收束动作。"
+        label = "先按当前页整理"
+        summary = "总控和三条核心链路都已同步，今天可以先把这页当动作整理入口。"
     else:
         tone = "watch"
         status = "实时回退"
         label = "先看实时"
-        summary = "总控没更新到当日，但实时自选股、早盘和午盘链路都可用，可先按实时结论判断。"
+        summary = "总控没更新到当日，但实时自选股、早盘和午盘链路都可用，可先按实时链路整理判断。"
 
     issue_url = first_issue_quality_url(
         lanes.get("watchlist"),
@@ -3992,13 +4017,13 @@ def build_watchlist_confidence_switch(
     elif brief_is_live:
         tone = "positive"
         status = "持仓层同步"
-        label = "可执行"
-        summary = "总控持仓层和自选股质检都已同步，这页可作为今天的持仓判断主页面。"
+        label = "按持仓动作使用"
+        summary = "总控持仓层和自选股质检都已同步，这页可作为今天的持仓判断主参考页。"
     else:
         tone = "watch"
         status = "实时快照"
         label = "按快照使用"
-        summary = "总控没更新到当日，但自选股快照和质检可用，当前页可先按实时持仓判断使用。"
+        summary = "总控没更新到当日，但自选股快照和质检可用，当前页可先作为实时持仓整理入口。"
 
     return build_confidence_switch(
         status=status,
@@ -4016,7 +4041,7 @@ def build_watchlist_confidence_switch(
         ],
         actions=[
             build_confidence_action("打开质检 JSON", artifact_url((quality or {}).get("path")), external=True),
-            build_confidence_action("看机会池", links.get("opportunities")),
+            build_confidence_action("看观察池", links.get("opportunities")),
         ],
     )
 
@@ -4063,14 +4088,14 @@ def build_opportunities_confidence_switch(
         summary = "早盘和午盘链路都可用，但进攻阀门关闭，今天这里主要承担观察池角色。"
     elif brief_is_live:
         tone = "positive"
-        status = "机会层同步"
-        label = "可执行"
-        summary = "总控机会层已同步，早盘和午盘链路都通过，可以先看高执行质量的新仓候选。"
+        status = "观察层同步"
+        label = "仅轻仓试错"
+        summary = "总控观察层已同步，早盘和午盘链路都已就绪，先看优先观察名单，盘中条件继续确认后再考虑轻仓试错。"
     else:
         tone = "watch"
-        status = "实时机会链路"
+        status = "实时观察链路"
         label = "按实时链路看"
-        summary = "总控没更新到当日，但实时早盘和午盘链路可用，可先按实时候选池判断。"
+        summary = "总控没更新到当日，但实时早盘和午盘链路可用，可先按实时观察池判断。"
 
     issue_url = first_issue_quality_url(aggressive_quality, midday_quality)
     return build_confidence_switch(
@@ -4121,12 +4146,12 @@ def build_review_confidence_switch(
         tone = "risk"
         status = "窗口不完整"
         label = "先补窗口"
-        summary = "基准窗口或对比窗口缺失，这页暂时不适合直接拿来下比较结论。"
+        summary = "基准窗口或对比窗口缺失，这页暂时不适合用来收束比较判断。"
     elif same_window:
         tone = "watch"
         status = "单窗口模式"
         label = "先看结构"
-        summary = "当前基准窗口和对比窗口是同一份研究，更适合看结构，不适合直接看变化结论。"
+        summary = "当前基准窗口和对比窗口是同一份研究，更适合先看结构，不适合直接看变化结论。"
     elif lifecycle_fallback:
         tone = "watch"
         status = "变化回放回退"
@@ -4135,8 +4160,8 @@ def build_review_confidence_switch(
     else:
         tone = "positive"
         status = "窗口可比"
-        label = "可执行"
-        summary = "基准窗口、对比窗口和变化回放都已就位，可以先看上层结论，再决定要不要钻细节。"
+        label = "先做校准"
+        summary = "基准窗口、对比窗口和变化回放都已就位，可以先用这页校准判断，再决定要不要钻细节。"
 
     latest_review_url = artifact_url((latest_review or {}).get("path"))
     baseline_review_url = artifact_url((baseline_review or {}).get("path"))
@@ -4227,11 +4252,11 @@ def build_watchlist_stock_card(
     )
     cross_status: list[str] = []
     if screening_item:
-        cross_status.append(f"机会扫描 {screening_item.get('screening_status') or '候选'}")
+        cross_status.append(f"观察池 {screening_item.get('screening_status') or '候选'}")
     if confirmation_match:
         cross_status.append(f"午盘确认 {(confirmation_match or {}).get('group_label') or '已进入'}")
     if not cross_status:
-        cross_status.append("当前未进入机会链路")
+        cross_status.append("当前未进入观察池链路")
 
     return {
         "code": item.get("code"),
@@ -4301,7 +4326,7 @@ def build_today_task_context(
     if confidence_note:
         note = confidence_note
     elif normalized_status == "ok":
-        note = "当前链路已通过质检。"
+        note = "当前链路已完成质检。"
     else:
         note = "当前链路建议先核对再下结论。"
     return {
@@ -4543,7 +4568,7 @@ def build_today_action_groups(
                 do_now,
                 do_now_seen,
                 attach_today_task_context(
-                    build_today_confirmation_task_item(item, source="午盘保留"),
+                    build_today_confirmation_task_item(item, source="午盘仍可跟踪"),
                     confirmation_context,
                 ),
                 limit=3,
@@ -4553,7 +4578,7 @@ def build_today_action_groups(
                 do_now,
                 do_now_seen,
                 attach_today_task_context(
-                    build_today_screening_task_item(item, source="早盘通过"),
+                    build_today_screening_task_item(item, source="早盘进入候选"),
                     screening_context,
                 ),
                 limit=3,
@@ -4604,7 +4629,7 @@ def build_today_action_groups(
             observe,
             observe_seen,
             attach_today_task_context(
-                build_today_screening_task_item(item, source="机会观察"),
+                build_today_screening_task_item(item, source="观察池观察"),
                 screening_context,
             ),
             limit=3,
@@ -4612,7 +4637,7 @@ def build_today_action_groups(
     if allow_new_positions:
         for item in approved:
             observe_item = attach_today_task_context(
-                build_today_screening_task_item(item, source="早盘通过"),
+                build_today_screening_task_item(item, source="早盘进入候选"),
                 screening_context,
             )
             if observe_item.get("key") in do_now_seen:
@@ -4703,7 +4728,7 @@ def build_today_action_groups(
             attach_today_task_context(
                 build_today_system_task_item(
                     key=f"brief:avoid:{index}",
-                    title="执行提醒",
+                    title="动作提醒",
                     source="总控提醒",
                     status="别做",
                     tone="risk",
@@ -4718,11 +4743,11 @@ def build_today_action_groups(
         {
             "key": "do-now",
             "eyebrow": "先做",
-            "title": "立即处理",
+            "title": "优先处理",
             "count": len(do_now),
             "subtitle": "先处理持仓动作和今天必须先定的事，再决定有没有资格看新仓。",
             "items": do_now,
-            "empty": "当前没有必须立刻处理的动作。",
+            "empty": "当前没有必须优先处理的动作。",
         },
         {
             "key": "watch",
@@ -4811,7 +4836,7 @@ def build_today_action_queue(action_groups: list[dict[str, Any]], trade_date: st
     counts["last_updated"] = fmt_dt(last_updated) if last_updated else "-"
 
     return {
-        "title": "今日执行队列",
+        "title": "今日动作队列",
         "subtitle": "先把今天真正要确认的动作收成 3-5 条，避免在全页信息里来回切换。",
         "note": "每条卡片都直接带上来源、更新时间和可信度；确认状态会按交易日记在控制台本地状态里。",
         "items": selected_items,
@@ -4948,15 +4973,15 @@ def build_today_command_hero(
 
     return {
         "eyebrow": "今日作战指令",
-        "title": str(hero.get("title") or "先处理已有仓位，再决定要不要看新机会"),
-        "summary": str(hero.get("summary") or "今天先按优先级执行，不做无计划扩张。"),
+        "title": str(hero.get("title") or "先处理已有仓位，再决定要不要看观察池"),
+        "summary": str(hero.get("summary") or "今天先按优先级处理，不做无计划扩张。"),
         "trade_date": trade_date,
         "context_note": str(hero.get("context_note") or ""),
         "source_state": "总控已同步" if brief_is_live else "实时链路判断",
         "actions": [
-            hero_row("立即执行", "先处理最弱持仓", execute_now, "positive"),
-            hero_row("等触发", "只盯最强机会，不抢跑", wait_trigger, "watch"),
-            hero_row("明确回避", "今天不追高", avoid_row, "risk"),
+            hero_row(ACTION_TIER_LABELS["act_now"], "先处理最弱持仓", execute_now, "positive"),
+            hero_row(ACTION_TIER_LABELS["wait_trigger"], "只盯最强候选，不抢跑", wait_trigger, "watch"),
+            hero_row(ACTION_TIER_LABELS["avoid"], "今天不追高", avoid_row, "risk"),
         ],
     }
 
@@ -5128,14 +5153,14 @@ def build_today_next_steps(action_groups: list[dict[str, Any]], *, links: dict[s
         {
             "key": "new_positions",
             "label": "再看新仓",
-            "detail": f"再筛机会与观察名单（{new_positions_count} 条）。",
+            "detail": f"再看观察池与观察名单（{new_positions_count} 条）。",
             "href": links.get("opportunities"),
             "active": current == "new_positions",
         },
         {
             "key": "stand_down",
             "label": "先站住",
-            "detail": f"优先执行回避和等待纪律（{stand_down_count} 条）。",
+            "detail": f"优先处理回避和等待纪律（{stand_down_count} 条）。",
             "href": links.get("review"),
             "active": current == "stand_down",
         },
@@ -5214,7 +5239,7 @@ def build_today_dispatch_topline(
 ) -> dict[str, Any]:
     dispatch_titles = {
         "old_positions": "今天先处理旧仓，再决定是否看新仓",
-        "new_positions": "今天先看新仓，但只做高质量承接",
+        "new_positions": "今天先看观察名单，需要动作也只轻仓",
         "stand_down": "今天先收手，优先等承接",
     }
     verdict_title = dispatch_titles.get(
@@ -5224,7 +5249,7 @@ def build_today_dispatch_topline(
     return {
         "verdict_badge": "一句总判断",
         "verdict_title": verdict_title,
-        "verdict_summary": f"先执行「{next_steps.get('current_label') or '先站住'}」，再看其余信息。",
+        "verdict_summary": f"先按「{next_steps.get('current_label') or '先站住'}」往下看，再看其余信息。",
         "meta_pills": build_topline_meta_pills(
             freshness=trade_date,
             position=hero.get("position_cap"),
@@ -5232,8 +5257,8 @@ def build_today_dispatch_topline(
         ),
         "cta_links": [
             {"label": "去持仓看动作", "href": links.get("watchlist")},
-            {"label": "去机会看候选", "href": links.get("opportunities")},
-            {"label": "去复盘看依据", "href": links.get("review")},
+            {"label": "去看观察池", "href": links.get("opportunities")},
+            {"label": "去问一只股票", "href": links.get("ask")},
         ],
     }
 
@@ -5500,7 +5525,7 @@ def build_lifecycle_group(group_key: str, lifecycle: dict[str, Any] | None) -> d
         "key": group_key,
         "title": lifecycle_group_title(group_key),
         "subtitle": {
-            "entered": "新增进入当前机会池的名字",
+            "entered": "新增进入当前观察池的名字",
             "upgraded": "同一批次里强度或状态更好的名字",
             "downgraded": "盘中承接变弱，需要降级对待",
             "exited": "已经从当前 shortlist 离开的名字",
@@ -5960,18 +5985,18 @@ def build_review_verdict_cards(
                 f"当前 {signed_pct(trial_latest_value)}",
                 f"变化 {review_delta_label(trial_delta)}",
             ],
-            "foot": "先把试错环境当默认可做区，再回到单票执行质量。",
+            "foot": "先把试错环境当默认试单区，再回到单票执行质量。",
             "detail_url": review_row_detail_link(trial_latest or trial_base, "ai_regime_rows", baseline_id, window_id),
         },
         {
-            "title": "当前切片没有进攻环境样本" if attack_latest is None else ("进攻环境可以放量" if attack_latest_value is not None and attack_latest_value > 0 else "进攻环境别追高"),
+            "title": "当前切片没有进攻环境样本" if attack_latest is None else ("进攻环境转暖，但先按阀门控量" if attack_latest_value is not None and attack_latest_value > 0 else "进攻环境别追高"),
             "subtitle": detail_value((attack_latest or attack_base or {}).get("label"), "进攻环境"),
             "status": "缺样本" if attack_latest is None else "进攻",
             "tone": attack_tone,
             "copy": (
                 "最新窗口里没有 6-8 进攻环境样本，别把主观进攻冲动当成已经验证过的优势。"
                 if attack_latest is None
-                else f"当前进攻环境 5日净为 {signed_pct(attack_latest_value)}，需要先看历史是否真的支持放量。"
+                else f"当前进攻环境 5日净为 {signed_pct(attack_latest_value)}，需要先看历史是否真的支持升级动作。"
             ),
             "metrics": [
                 f"Q1 {signed_pct(attack_base_value)}",
@@ -6022,7 +6047,7 @@ def build_review_verdict_cards(
 def review_action_from_tone(tone: str | None) -> str:
     normalized = (tone or "").strip().lower()
     if normalized in {"positive", "good"}:
-        return "可以放手做"
+        return "按阀门分档"
     if normalized == "risk":
         return "少动，先防守"
     if normalized in {"watch", "warn"}:
@@ -6041,7 +6066,7 @@ def review_action_from_card(card: dict[str, Any]) -> str:
         return "先等确认"
     if status == "进攻":
         normalized = str(tone or "").strip().lower()
-        return "可以放手做" if normalized in {"positive", "good"} else "先等确认"
+        return "按阀门分档" if normalized in {"positive", "good"} else "先等确认"
     return review_action_from_tone(tone)
 
 
@@ -6074,7 +6099,7 @@ def build_review_action_rules(verdict_cards: list[dict[str, Any]], *, freshness:
                 ),
                 "action": review_action_from_card(card),
                 "trigger": trigger,
-                "reason": detail_value(card.get("copy"), "先回看明细再决定是否放量。"),
+                "reason": detail_value(card.get("copy"), "先回看明细再决定是否升级动作。"),
                 "risk": detail_value(card.get("foot"), "条件变化时降档处理。"),
                 "freshness": freshness,
                 "url": card.get("detail_url"),
@@ -6107,7 +6132,7 @@ def build_review_action_rules(verdict_cards: list[dict[str, Any]], *, freshness:
             "title": "进攻环境规则",
             "action": "先等确认",
             "trigger": "进攻环境样本还不稳定",
-            "reason": "先确认样本和阀门，再决定要不要放量。",
+            "reason": "先确认样本和阀门，再决定是否升级动作。",
             "risk": "样本缺失时把主观冲动当优势最容易放大回撤。",
             "freshness": freshness,
             "url": None,
@@ -6160,7 +6185,7 @@ def build_review_detail_view(
         raise KeyError(f"review row not found: {section_key} / {label}")
 
     if active_baseline_id and active_window_id and active_baseline_id == active_window_id:
-        comparison_note = "当前基准窗口和对比窗口选的是同一份报告，变化值只剩定位作用，更适合直接看原始行。"
+        comparison_note = "当前基准窗口和对比窗口选的是同一份报告，变化值只剩定位作用，更适合先看原始行。"
     else:
         comparison_note = "这页只对比同一个分组；如果某一侧缺行，会明确展示为空，不把缺失误写成 0。"
 
@@ -6411,18 +6436,18 @@ def build_watchlist_page_view() -> dict[str, Any]:
     stocks = watchlist.get("stocks") or []
 
     if brief_is_live:
-        hero_title = ((decision_brief or {}).get("summary") or {}).get("watchlist_summary") or "今日持仓判断已同步"
-        hero_summary = "当前页面优先展示完整持仓动作，而不是今日总览里的缩略判断。"
+        hero_title = normalize_stock_ui_copy(((decision_brief or {}).get("summary") or {}).get("watchlist_summary")) or "先处理风险和仓位，再决定是否继续拿"
+        hero_summary = "当前页面优先展示完整持仓动作，只回答已有股票今天怎么管。"
         context_note = f"总控持仓焦点：{'、'.join(brief_focus) if brief_focus else '暂无额外焦点'}。"
     else:
-        hero_title = f"{len(priority_codes)} 只优先处理，其余按信号分组观察"
-        hero_summary = "当前页面直接读取最新自选股快照，按优先处理、跟踪增强、继续观察展开。"
+        hero_title = "先处理风险和仓位，再决定是否继续拿"
+        hero_summary = f"当前页面直接读取最新自选股快照，优先处理 {len(priority_codes)} 只，其余按轻仓跟踪和继续观察展开。"
         context_note = "总控层若未更新到当日，持仓页仍以实时自选股快照为准。"
 
     groups = []
     for key, title, subtitle, empty_copy in (
         ("priority", "优先处理", "先处理风险和仓位", "当前没有优先处理股票。"),
-        ("follow", "跟踪增强", "允许轻仓跟踪的标的", "当前没有进入跟踪增强的股票。"),
+        ("follow", "跟踪增强", "允许轻仓跟踪的标的", "当前没有进入轻仓跟踪的股票。"),
         ("observe", "继续观察", "暂不动作，等待明确信号", "当前没有继续观察股票。"),
     ):
         if key == "priority":
@@ -6469,9 +6494,9 @@ def build_watchlist_page_view() -> dict[str, Any]:
             "detail": "已同步" if brief_is_live else "数据偏旧",
         },
         {
-            "label": "机会链路",
+            "label": "观察池链路",
             "value": str(in_discovery),
-            "detail": "进入早盘机会链路的自选股数量",
+            "detail": "进入早盘观察池链路的自选股数量",
         },
         {
             "label": "午盘链路",
@@ -6547,7 +6572,7 @@ def build_watchlist_page_view() -> dict[str, Any]:
             else "当前无强制优先持仓，先保持观察节奏。"
         ),
         "verdict_summary": (
-            "首屏只保留最先执行的持仓动作，其他管理与回源入口全部折叠到后续层。"
+            "首屏只保留最靠前的持仓动作，其他管理与回源入口全部折叠到后续层。"
         ),
         "meta_pills": [
             {"label": "交易日", "value": trade_date},
@@ -6629,17 +6654,19 @@ def build_opportunities_view() -> dict[str, Any]:
     fresh_candidates = (confirmation or {}).get("fresh_candidates") or []
 
     if gate.get("allow_new_positions"):
-        hero_title = "今天能动，先看高执行质量候选"
+        hero_title = "今天值得继续盯的名字"
     else:
         hero_title = "阀门关闭，今天只保留观察名单"
 
     hero_summary = (
-        gate.get("summary")
-        or (((decision_brief or {}).get("summary") or {}).get("gate_summary"))
-        or "当前页面聚合早盘候选和午盘新增观察。"
+        normalize_stock_ui_copy(
+            gate.get("summary")
+            or (((decision_brief or {}).get("summary") or {}).get("gate_summary"))
+        )
+        or "这里只展示候选观察，不代表直接推荐开新仓。"
     )
     context_note = (
-        f"总控机会焦点：{'、'.join(focus) if focus else '暂无额外焦点'}。"
+        f"总控观察焦点：{'、'.join(focus) if focus else '暂无额外焦点'}。"
         if brief_is_live
         else "若总控层未更新到当日，这里仍以实时早盘扫描和午盘确认链路为准。"
     )
@@ -6675,16 +6702,16 @@ def build_opportunities_view() -> dict[str, Any]:
     ]
     groups = [
         {
-            "title": "早盘通过",
+            "title": "早盘进入候选",
             "count": len(approved),
             "cards": [build_screening_candidate_card(item) for item in approved],
-            "empty": "当前没有早盘通过的候选。",
+            "empty": "当前没有早盘进入候选的名字。",
         },
         {
-            "title": "谨慎观察",
+            "title": "继续观察",
             "count": len(caution),
             "cards": [build_screening_candidate_card(item) for item in caution],
-            "empty": "当前没有谨慎观察候选。",
+            "empty": "当前没有继续观察候选。",
         },
         {
             "title": "午盘新增观察",
@@ -6693,10 +6720,10 @@ def build_opportunities_view() -> dict[str, Any]:
             "empty": "当前没有午盘新增观察。",
         },
         {
-            "title": "午盘保留",
+            "title": "午盘仍可跟踪",
             "count": len(confirmed),
             "cards": [build_confirmation_candidate_card(item) for item in confirmed],
-            "empty": "当前没有午盘保留候选。",
+            "empty": "当前没有午盘仍可跟踪候选。",
         },
     ]
     quality_cards = [
@@ -6723,13 +6750,13 @@ def build_opportunities_view() -> dict[str, Any]:
         top_rows = compress_opportunity_group(watch_mix, limit=3, fallback_freshness=confirmation_freshness)
 
     if allow_new_positions and not promote_watch:
-        verdict_title = "今天可执行新仓，先看 Top 3 可执行候选。"
-        verdict_summary = "先处理最先可执行的三只候选，再决定是否扩展到观察与午盘承接。"
+        verdict_title = "今天继续看观察名单，如要动作也仅限轻仓试错。"
+        verdict_summary = "先看最值得继续观察的三只名字，再决定是否扩展到其余观察与午盘承接。"
     elif allow_new_positions:
-        verdict_title = "今天没有可执行新仓。"
-        verdict_summary = "先看 3 只观察名单，等待更强承接后再决定是否开新仓。"
+        verdict_title = "今天先看观察名单，不急着开新仓。"
+        verdict_summary = "先看 3 只继续观察的名字，等待更强承接后再决定是否轻仓试错。"
     else:
-        verdict_title = "今天没有可执行新仓。"
+        verdict_title = "今天先看观察名单，不急着开新仓。"
         verdict_summary = "进攻阀门关闭，先看观察与午盘承接，不主动开新仓。"
 
     quality_ok = sum(1 for item in quality_cards if str(item.get("status") or "").strip().lower() == "ok")
@@ -6743,7 +6770,7 @@ def build_opportunities_view() -> dict[str, Any]:
         },
         {
             "label": "质量",
-            "value": f"{quality_ok}/2 通过",
+            "value": f"{quality_ok}/2 就绪",
             "note": "早盘+午盘质检",
             "tone": quality_tone,
         },
@@ -6787,9 +6814,9 @@ def build_opportunities_view() -> dict[str, Any]:
         "reading_compass": build_reading_compass_cards(
             conclusion=verdict_title,
             conclusion_detail=verdict_summary,
-            action_focus=("Top 3 观察/午盘承接" if promote_watch else "Top 3 可执行候选"),
+            action_focus="Top 3 继续观察",
             action_detail=(
-                "先看最先可执行的候选，再决定是否展开观察与午盘承接。"
+                "先看优先观察的名字，再决定是否展开观察与午盘承接。"
                 if not promote_watch
                 else "今天先保留观察与午盘承接，不主动切到新仓执行。"
             ),
@@ -6809,37 +6836,37 @@ def build_opportunities_view() -> dict[str, Any]:
         "source_cards": source_cards,
         "summary_cards": [
             {
-                "label": "早盘通过",
+                "label": "早盘进入候选",
                 "value": str(summary.get("approved_count") or len(approved)),
                 "detail": "优先看的早盘候选",
             },
             {
-                "label": "谨慎观察",
+                "label": "继续观察",
                 "value": str(summary.get("caution_count") or len(caution)),
                 "detail": "需要更强确认",
             },
             {
                 "label": "午盘新增观察",
                 "value": str((confirmation or {}).get("counts", {}).get("fresh_candidates") or len(fresh_candidates)),
-                "detail": "午盘新进入机会视野",
+                "detail": "午盘新进入观察视野",
             },
             {
-                "label": "午盘保留",
+                "label": "午盘仍可跟踪",
                 "value": str((confirmation or {}).get("counts", {}).get("confirmed") or len(confirmed)),
                 "detail": "午盘承接继续成立",
             },
         ],
         "topline": {
-            "verdict_badge": "开新仓结论",
+            "verdict_badge": "观察池结论",
             "verdict_title": verdict_title,
             "verdict_summary": verdict_summary,
             "meta_pills": [
                 {"label": "交易日", "value": trade_date},
                 {"label": "进攻阀门", "value": gate.get("label") or "实时判断"},
-                {"label": "可执行", "value": str(len(groups[0].get("cards") or []) if allow_new_positions else 0)},
+                {"label": "早盘候选", "value": str(len(groups[0].get("cards") or []))},
             ],
             "cta_links": [
-                {"label": "去看观察候选", "href": "#opportunities-secondary"},
+                {"label": "去看其余观察", "href": "#opportunities-secondary"},
                 {"label": "去看主线判断", "href": "#opportunities-themes"},
                 {"label": "去看证据来源", "href": "#opportunities-support"},
             ],
@@ -6899,7 +6926,7 @@ def build_review_view(baseline_id: str | None = None, window_id: str | None = No
     if baseline_ai_day5 is not None and baseline_ai_day5 < 0 and (baseline_weak_day5 is None or baseline_weak_day5 <= 0):
         hero_title = "历史优势还没跨过摩擦成本，弱环境必须收手"
     elif baseline_ai_day5 is not None and baseline_ai_day5 > 0:
-        hero_title = "历史优势已经转正，可以继续做条件化放量"
+        hero_title = "历史优势已经转正，但仍要按条件控制节奏"
     else:
         hero_title = "历史优势要分环境看，不能只看总分"
 
@@ -6980,16 +7007,16 @@ def build_review_view(baseline_id: str | None = None, window_id: str | None = No
 
     if latest_weak_day5 is None or latest_weak_day5 < 0:
         topline_title = "弱环境仍未转正：少动，先守仓位和节奏。"
-        topline_summary = "今天先执行防守型规则，只在试错环境给出正反馈时轻仓试单。"
+        topline_summary = "今天先按防守型规则处理，只在试错环境给出正反馈时轻仓试单。"
     elif latest_attack_day5 is not None and latest_attack_day5 > 0:
-        topline_title = "试错与进攻环境都转正：可以按阀门放手做。"
-        topline_summary = "先按最优阀门与策略执行，弱环境回撤时立刻降档，不做主观冲动交易。"
+        topline_title = "试错与进攻环境都转正：先按阀门分档处理。"
+        topline_summary = "先按最优阀门与策略排优先级，弱环境回撤时立刻降档，不做主观冲动交易。"
     elif latest_trial_day5 is not None and latest_trial_day5 > 0:
-        topline_title = "仅试错环境有优势：可以做，但保持轻仓分批。"
+        topline_title = "仅试错环境有优势：只做轻仓试单。"
         topline_summary = "弱环境继续少动，进攻环境样本不足前不追高，把动作集中在可验证的 setup。"
     else:
         topline_title = "环境优势不稳定：今天以少动为主。"
-        topline_summary = "先控制回撤与执行纪律，等优势结构更清晰后再考虑放量。"
+        topline_summary = "先控制回撤并守住纪律，等优势结构更清晰后再考虑是否升级动作。"
 
     mini_compare = [
         {
@@ -7041,8 +7068,8 @@ def build_review_view(baseline_id: str | None = None, window_id: str | None = No
         "reading_compass": build_reading_compass_cards(
             conclusion=topline_title,
             conclusion_detail=topline_summary,
-            action_focus="三条动作规则",
-            action_detail="先执行规则结论，再决定是否展开变化、窗口和研究明细。",
+            action_focus="三条校准规则",
+            action_detail="先看规则结论，再决定是否展开变化、窗口和研究明细。",
             risk_boundary=(mini_compare[2].get("value") if len(mini_compare) > 2 else "先看弱环境"),
             risk_detail=(mini_compare[2].get("note") if len(mini_compare) > 2 else "环境变化没看清前，不要放宽执行。"),
             evidence_entry="研究与原始文件",
@@ -7081,7 +7108,7 @@ def build_review_view(baseline_id: str | None = None, window_id: str | None = No
             lifecycle_note=lifecycle_note,
             links=links,
         ),
-        "verdict_note": "把基准窗口与最新切片直接翻成可执行判断，先看这里，再决定要不要往下拆细节。",
+        "verdict_note": "把基准窗口与最新切片先翻成当前判断，先看这里，再决定要不要往下拆细节。",
         "verdict_cards": verdict_cards,
         "selector_groups": selector_groups,
         "source_cards": [
@@ -7221,7 +7248,7 @@ def build_watchlist_detail_view(code: str) -> dict[str, Any]:
 
     related_status = [
         {
-            "label": "机会扫描",
+            "label": "观察池",
             "value": candidate.get("screening_status") if candidate else "未进入当前批次",
             "tone": candidate_tone(candidate) if candidate else "watch",
             "detail": candidate.get("setup_label") if candidate else "当前早盘批次未命中",
@@ -7288,7 +7315,7 @@ def build_watchlist_detail_view(code: str) -> dict[str, Any]:
             ),
             cta_links=[
                 {"label": "去看持仓列表", "href": watchlist_page_url()},
-                {"label": "去看机会视角", "href": today_candidate_detail_url(stock.get("code"))} if candidate else None,
+                {"label": "去看观察池视角", "href": today_candidate_detail_url(stock.get("code"))} if candidate else None,
                 {"label": "继续问这只股票", "href": ask_page_url(stock.get("code"))},
             ],
         ),
@@ -7296,7 +7323,7 @@ def build_watchlist_detail_view(code: str) -> dict[str, Any]:
             conclusion=stock.get("action") or "观望",
             conclusion_detail=reason,
             position=stock.get("position"),
-            position_detail="来自持仓快照的当前执行仓位建议。",
+            position_detail="来自持仓快照的当前仓位参考。",
             risk_boundary=trade_levels.get("stop_loss") or rule_snapshot.get("signal"),
             risk_detail=(stock.get("hard_flags") or [None])[0] or "跌破纪律位或核心风险触发时，不再继续原计划。",
             next_step=next_step,
@@ -7309,9 +7336,9 @@ def build_watchlist_detail_view(code: str) -> dict[str, Any]:
         ),
         "execution_loop": build_execution_loop(
             action_now=next_step,
-            action_detail="先按持仓链路动作执行，不先切到别的分析路径。",
+            action_detail="先按持仓链路的处理顺序看，不先切到别的分析路径。",
             why_now=reason,
-            why_detail="这一步是今天最直接影响持仓处理的判断。",
+            why_detail="这一步最影响今天的持仓处理顺序。",
             trigger=next_trigger.get("condition") or trade_levels.get("support") or trade_levels.get("resistance"),
             trigger_detail="触发这些条件时，再决定是否调整动作强度。",
             avoid=(stock.get("hard_flags") or [None])[0] or "先不要脱离纪律位硬扛",
@@ -7431,7 +7458,7 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
         next_step=entry_plan.get("action") or entry_plan.get("trigger") or "先观察，不急着执行",
         trigger_condition=entry_plan.get("trigger") or candidate.get("watch_condition"),
         avoid_action=entry_plan.get("avoid") or candidate.get("main_risk"),
-        evidence_entry="看执行计划与原始文件",
+        evidence_entry="看动作计划与原始文件",
         confidence_note="先用入选主因判断今天值不值得继续跟。",
         updated_at=(screening_batch or {}).get("generated_at") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     )
@@ -7452,7 +7479,7 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
         "action_tier_legend": build_action_tier_legend(),
         "canonical_decision": canonical_decision,
         "topline": build_detail_topline(
-            badge="机会结论",
+            badge="观察池结论",
             title=(confirmation_match or {}).get("group_label")
             or candidate_status_label(candidate.get("screening_status"))
             or "继续观察",
@@ -7463,7 +7490,7 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
                 risk_boundary=(entry_plan.get("invalidate") or ((entry_plan.get("levels") or {}).get("invalidate")) or candidate.get("main_risk")),
             ),
             cta_links=[
-                {"label": "去看机会列表", "href": opportunities_page_url()},
+                {"label": "去看观察池", "href": opportunities_page_url()},
                 {"label": "去看持仓视角", "href": today_watchlist_detail_url(candidate.get("code"))} if watchlist_stock else None,
                 {"label": "继续问这只股票", "href": ask_page_url(candidate.get("code"))},
             ],
@@ -7474,7 +7501,7 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
             or "继续观察",
             conclusion_detail=summary,
             position=(entry_plan.get("sizing") or (watchlist_stock or {}).get("position") or "轻仓试错"),
-            position_detail="按执行计划控仓，没进持仓前默认以试错仓看待。",
+            position_detail="按动作计划控仓，没进持仓前默认以试错仓参考。",
             risk_boundary=(entry_plan.get("invalidate") or ((entry_plan.get("levels") or {}).get("invalidate")) or candidate.get("main_risk")),
             risk_detail=(entry_plan.get("avoid") or candidate.get("main_risk") or "触发回避条件后，取消这次执行计划。"),
             next_step=entry_plan.get("action") or entry_plan.get("trigger") or "先观察，不急着执行",
@@ -7487,15 +7514,15 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
         ),
         "execution_loop": build_execution_loop(
             action_now=entry_plan.get("action") or "先观察，不急着执行",
-            action_detail="先按候选动作计划执行，不因为分数高就直接上手。",
+            action_detail="先按候选动作计划排序，不因为分数高就贸然升级动作。",
             why_now=summary,
             why_detail="先用入选主因判断今天值不值得继续跟。",
             trigger=entry_plan.get("trigger") or candidate.get("watch_condition"),
-            trigger_detail="满足触发条件后，再把观察升级成执行。",
+            trigger_detail="满足触发条件后，再把观察升级成下一步动作。",
             avoid=entry_plan.get("avoid") or candidate.get("main_risk"),
-            avoid_detail="这些情况先不做，避免把候选误当成确定机会。",
-            evidence="看执行计划与原始文件",
-            evidence_detail="先看执行计划和资金承接，需要时回到批次、自选股或午盘确认原件。",
+            avoid_detail="这些情况先不做，避免把候选误当成直接推荐。",
+            evidence="看动作计划与原始文件",
+            evidence_detail="先看动作计划和资金承接，需要时回到批次、自选股或午盘确认原件。",
         ),
         "source_cards": [
             {
@@ -7619,7 +7646,7 @@ def build_screening_batch_view() -> dict[str, Any]:
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "kind": "screener",
         "hero": {
-            "eyebrow": "机会扫描",
+            "eyebrow": "早盘候选",
             "title": "早盘批次详情",
             "summary": detail_value(gate.get("summary"), "当前展示的是最新可用早盘批次。"),
             "status_label": detail_value(gate.get("label"), "实时阀门"),
@@ -7633,7 +7660,7 @@ def build_screening_batch_view() -> dict[str, Any]:
             {
                 "label": "候选总数",
                 "value": detail_value(screening_batch.get("candidate_count")),
-                "detail": f"通过 {detail_value(screening_batch.get('approved_count'))} / 谨慎 {detail_value(screening_batch.get('caution_count'))}",
+                "detail": f"进入候选 {detail_value(screening_batch.get('approved_count'))} / 继续观察 {detail_value(screening_batch.get('caution_count'))}",
             },
             {
                 "label": "排除数量",
@@ -7702,7 +7729,7 @@ def build_confirmation_view() -> dict[str, Any]:
                 "detail": f"对照 {detail_value(confirmation.get('verified_against_scan_timestamp'))}",
             },
             {
-                "label": "保留",
+                "label": "仍可跟踪",
                 "value": detail_value((confirmation.get("counts") or {}).get("confirmed")),
                 "detail": "维持原计划",
             },
@@ -7720,7 +7747,7 @@ def build_confirmation_view() -> dict[str, Any]:
         "theme_cards": [],
         "candidate_groups": [
             {
-                "title": "保留",
+                "title": "仍可跟踪",
                 "count": len(confirmation.get("confirmed") or []),
                 "cards": [build_confirmation_candidate_card(item) for item in (confirmation.get("confirmed") or [])],
                 "footer_link": None,
@@ -7775,19 +7802,19 @@ def build_today_view() -> dict[str, Any]:
     )
 
     if brief_is_live:
-        hero_title = brief_summary.get("open_new_positions") or (
+        hero_title = normalize_stock_ui_copy(brief_summary.get("open_new_positions")) or (
             "今天先处理旧仓，再决定是否看新仓" if gate.get("allow_new_positions") else "今天先观察，不急着开新仓"
         )
-        hero_summary = brief_summary.get("gate_summary") or "当前判断已由总控层收束。"
+        hero_summary = normalize_stock_ui_copy(brief_summary.get("gate_summary")) or "当前判断已由总控层收束。"
         hero_gate_label = brief_summary.get("gate_label") or gate.get("label") or "总控已更新"
         position_cap = brief_summary.get("position_cap") or gate.get("position_cap") or "-"
         context_note = f"当前页面基于 {brief_summary.get('generated_at') or '-'} 的总控简报。"
     else:
         if gate.get("allow_new_positions"):
-            hero_title = "可以观察新仓，但只做高质量共振票"
+            hero_title = "可以继续看新仓，但先只保留少量观察名单"
         else:
             hero_title = "先观察，不急着开新仓"
-        hero_summary = gate.get("summary") or "当前页面已回退到实时链路数据。"
+        hero_summary = normalize_stock_ui_copy(gate.get("summary")) or "当前页面已回退到实时链路数据。"
         hero_gate_label = gate.get("label") or "实时链路判断"
         position_cap = gate.get("position_cap") or "-"
         if decision_brief:
@@ -7818,7 +7845,7 @@ def build_today_view() -> dict[str, Any]:
             "detail": (watchlist or {}).get("trade_date") or "暂无快照",
         },
         {
-            "label": "机会扫描",
+            "label": "观察池基线",
             "value": (screening_batch or {}).get("generated_at") or "-",
             "detail": ((screening_batch or {}).get("pool_label") or (screening_batch or {}).get("pool") or "暂无批次"),
         },
@@ -7841,9 +7868,9 @@ def build_today_view() -> dict[str, Any]:
             "detail": "来自自选股页面",
         },
         {
-            "label": "机会候选",
+            "label": "观察池候选",
             "value": str(screening_summary.get("approved_count") or screening_summary.get("shortlisted_count") or 0),
-            "detail": (gate.get("label") or "来自机会扫描"),
+            "detail": (gate.get("label") or "来自观察池"),
         },
         {
             "label": "午盘新增观察",
@@ -7851,7 +7878,7 @@ def build_today_view() -> dict[str, Any]:
             "detail": "来自午盘确认",
         },
         {
-            "label": "质检通过",
+            "label": "质检就绪",
             "value": f"{quality_ok}/3",
             "detail": "核心链路状态",
         },

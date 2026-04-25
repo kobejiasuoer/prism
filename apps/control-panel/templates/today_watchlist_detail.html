@@ -24,7 +24,7 @@
             {% set cta_links = detail.topline.cta_links %}
             {% include "_decision_topline.html" %}
             <section class="watchlist-hero-guide">
-              <p class="watchlist-hero-guide-copy">先确认这只持仓今天和机会链路的关系，再看盘中触发条件，最后需要时直接展开原始快照或批次 JSON。</p>
+              <p class="watchlist-hero-guide-copy">先确认这只持仓今天和观察池链路的关系，再看盘中触发条件，最后需要时再展开原始快照或批次 JSON。</p>
               <div class="panel-link-stack watchlist-hero-guide-links">
                 <a class="panel-link" href="#watchlist-cross">先看跨层状态</a>
                 <a class="panel-link panel-link-subtle" href="#watchlist-triggers">看盘中触发</a>
@@ -36,7 +36,7 @@
           <aside class="today-callout">
             <span class="callout-label">跨层联动</span>
             <strong>先处理持仓，再决定是否转入候选</strong>
-            <p>这页只回答一件事：这只票今天该怎么处理，以及它是否已经进入机会扫描或午盘确认链路。</p>
+            <p>这页只回答一件事：这只票今天该怎么处理，以及它是否已经进入观察池或午盘确认链路。</p>
           </aside>
         </div>
       </header>
@@ -107,11 +107,11 @@
       <section class="today-panel detail-action-zone">
         <div class="today-panel-head">
           <div>
-            <p class="eyebrow">执行闭环</p>
+            <p class="eyebrow">处理闭环</p>
             <h2>今天先这样处理</h2>
           </div>
         </div>
-        <p class="today-panel-copy">把持仓动作收成同一套读法，先看现在做什么，再看触发和证据，避免在盘中来回切页面。</p>
+        <p class="today-panel-copy">把持仓处理顺序收成同一套读法，先看现在做什么，再看触发和证据，避免在盘中来回切页面。</p>
         <section class="detail-metric-grid detail-metric-grid-single execution-loop-grid">
           {% for item in detail.execution_loop %}
           <article class="detail-row-card execution-loop-card">

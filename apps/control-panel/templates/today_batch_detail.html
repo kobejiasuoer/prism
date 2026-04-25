@@ -23,9 +23,9 @@
             <section class="opportunities-hero-guide">
               <p class="opportunities-hero-guide-copy">
                 {% if detail.kind == "screener" %}
-                先看候选密度和主线集中度，再进入单票；如果今天阀门偏弱，优先读谨慎观察而不是直接开新仓。
+                先看候选密度和主线集中度，再进入单票；如果今天阀门偏弱，优先读继续观察，而不是急着看新仓。
                 {% else %}
-                先看保留、降级和新增观察的分布，再决定谁还能留在午盘后的执行视野里。
+                先看仍可跟踪、降级和新增观察的分布，再决定谁还能留在午盘后的观察视野里。
                 {% endif %}
               </p>
               <div class="panel-link-stack opportunities-hero-guide-links">
@@ -57,7 +57,7 @@
             <strong>{{ detail.quality.status }}</strong>
             <p>检查时间 {{ detail.quality.checked_at }}，目标锚点 {{ detail.quality.expected_timestamp }}。</p>
             <div class="callout-actions">
-              <a class="ghost-button link-button" href="{{ detail.links.opportunities }}">回到机会池</a>
+              <a class="ghost-button link-button" href="{{ detail.links.opportunities }}">回到观察池</a>
               {% if detail.kind == "screener" %}
               <a class="ghost-button link-button" href="{{ detail.links.confirmation_batch }}">看午盘确认</a>
               {% else %}
@@ -116,9 +116,9 @@
         </div>
         <p class="today-panel-copy">
           {% if detail.kind == "screener" %}
-          批次页最重要的是先看今天有哪些票还在执行视野里，再决定要不要点进单票做细看。
+          批次页最重要的是先看今天有哪些票还值得继续跟，再决定要不要点进单票做细看。
           {% else %}
-          午盘页优先回答哪些票保留、哪些降级、哪些只是新增观察，不让列表空白吞掉首屏判断。
+          午盘页优先回答哪些票仍可跟踪、哪些降级、哪些只是新增观察，不让列表空白吞掉首屏判断。
           {% endif %}
         </p>
         <div class="detail-batch-groups">

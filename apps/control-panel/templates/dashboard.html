@@ -61,6 +61,7 @@
         <div class="hero-actions dashboard-ops-actions">
           <a class="ghost-button link-button" href="/today">打开今日总览</a>
           <a class="ghost-button link-button" href="/review">打开复盘页</a>
+          <a class="ghost-button link-button" href="/parameters">打开参数页</a>
           {% if preview_theme == "ibm-preview" %}
           <a class="ghost-button link-button" href="{{ preview_theme_ask_url }}">打开问股试版</a>
           <a class="ghost-button link-button" href="{{ preview_theme_exit_url }}">返回默认主题</a>
@@ -253,7 +254,7 @@
                     <p>{{ lane.subtitle }}</p>
                   </div>
                   {% if lane.quality %}
-                  <span class="status-chip status-{{ lane.quality.status }}">{{ lane.quality.status_label or ("通过" if lane.quality.status == "ok" else "拦截") }}</span>
+                  <span class="status-chip status-{{ lane.quality.status }}">{{ lane.quality.status_label or ("就绪" if lane.quality.status == "ok" else "拦截") }}</span>
                   {% else %}
                   <span class="status-chip status-unknown">暂无质检</span>
                   {% endif %}

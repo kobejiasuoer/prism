@@ -31,6 +31,8 @@ _EM_PROXY_URL = os.getenv("OPENCLAW_EASTMONEY_PROXY") or os.getenv("EASTMONEY_PR
 _NO_PROXY = {"http": None, "https": None}
 
 SKILL_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+REPO_ROOT = os.path.abspath(os.path.join(SKILL_ROOT, ".."))
+PACKAGES_ROOT = os.path.join(REPO_ROOT, "packages")
 DATA_DIR = os.path.join(SKILL_ROOT, "data")
 SNAPSHOT_DIR = os.path.join(DATA_DIR, "daily_snapshots")
 REPORTS_DIR = os.path.join(SKILL_ROOT, "reports")
@@ -38,7 +40,11 @@ FUNDAMENTALS_CACHE_DIR = os.path.join(DATA_DIR, "fundamentals_cache")
 
 if SKILL_ROOT not in sys.path:
     sys.path.insert(0, SKILL_ROOT)
+if PACKAGES_ROOT not in sys.path:
+    sys.path.insert(0, PACKAGES_ROOT)
 
+from stock_parameters import WATCHLIST_RULE_THRESHOLDS, assess_flow_confidence
+from screener.capital_flow_contract import UNIT_WAN_YUAN, build_capital_flow_payload, resolve_amount_wan, wan_to_yi, yuan_to_wan
 from watchlist_registry import infer_market_from_code, infer_sina_code, list_active_watchlist_stocks
 
 warnings.filterwarnings("ignore")
@@ -471,35 +477,91 @@ def _load_fund_flow_cache(path):
         return None
 
 
+FLOW_AMOUNT_FIELDS = ("main_net", "super_net", "mid_large_net", "retail_net", "small_net")
+
+
+def _normalize_watchlist_flow_row(row, source_unit=UNIT_WAN_YUAN):
+    if not isinstance(row, dict):
+        return None
+
+    date = row.get("date")
+    if not date:
+        return None
+
+    normalized = {"date": date, "unit": UNIT_WAN_YUAN}
+    for field in FLOW_AMOUNT_FIELDS:
+        amount_wan = resolve_amount_wan(
+            row,
+            wan_keys=(f"{field}_wan",),
+            yi_keys=(f"{field}_yi",),
+            legacy_keys=(field,),
+            source_unit=source_unit,
+        )
+        normalized[field] = amount_wan
+        normalized[f"{field}_wan"] = amount_wan
+        normalized[f"{field}_yi"] = wan_to_yi(amount_wan)
+    return normalized
+
+
 def _merge_fund_flow_rows(*row_sets, limit=None):
     merged = {}
     for rows in row_sets:
         for row in rows or []:
-            if not isinstance(row, dict):
+            normalized_row = _normalize_watchlist_flow_row(row)
+            if not normalized_row:
                 continue
-            date = row.get("date")
-            if not date:
-                continue
-            try:
-                merged[date] = {
-                    "date": date,
-                    "main_net": round(float(row.get("main_net", 0) or 0), 2),
-                    "super_net": round(float(row.get("super_net", 0) or 0), 2),
-                    "mid_large_net": round(float(row.get("mid_large_net", 0) or 0), 2),
-                    "retail_net": round(float(row.get("retail_net", 0) or 0), 2),
-                    "small_net": round(float(row.get("small_net", 0) or 0), 2),
-                }
-            except (TypeError, ValueError):
-                continue
+            merged[normalized_row["date"]] = normalized_row
     ordered = [merged[date] for date in sorted(merged)]
     return ordered[-limit:] if limit else ordered
 
 
 def _build_main_5d(history):
     return [
-        {"date": item.get("date", ""), "net": round(float(item.get("main_net", 0) or 0), 2)}
+        {
+            "date": item.get("date", ""),
+            "net": round(float(item.get("main_net_wan", item.get("main_net", 0)) or 0), 2),
+            "net_wan": round(float(item.get("main_net_wan", item.get("main_net", 0)) or 0), 2),
+            "net_yi": wan_to_yi(item.get("main_net_wan", item.get("main_net", 0))),
+        }
         for item in reversed((history or [])[-5:])
     ]
+
+
+def _apply_watchlist_capital_flow_contract(flow):
+    if not flow:
+        return flow
+
+    main_net_wan = resolve_amount_wan(
+        flow,
+        wan_keys=("main_net_wan",),
+        yi_keys=("main_net_yi",),
+        legacy_keys=("main_net",),
+        source_unit=UNIT_WAN_YUAN,
+    )
+    five_day_total_wan = round(sum(float(item.get("net_wan", item.get("net", 0)) or 0) for item in flow.get("main_5d", [])[:5]), 2)
+    flow.update(
+        build_capital_flow_payload(
+            today_wan=main_net_wan,
+            five_day_total_wan=five_day_total_wan,
+            trend=flow.get("signal") or "无数据",
+        )
+    )
+    flow["main_net"] = main_net_wan
+    flow["main_net_wan"] = main_net_wan
+    flow["main_net_yi"] = wan_to_yi(main_net_wan)
+    for field in FLOW_AMOUNT_FIELDS[1:]:
+        amount_wan = resolve_amount_wan(
+            flow,
+            wan_keys=(f"{field}_wan",),
+            yi_keys=(f"{field}_yi",),
+            legacy_keys=(field,),
+            source_unit=UNIT_WAN_YUAN,
+        )
+        flow[field] = amount_wan
+        flow[f"{field}_wan"] = amount_wan
+        flow[f"{field}_yi"] = wan_to_yi(amount_wan)
+    flow["unit"] = UNIT_WAN_YUAN
+    return flow
 
 
 def _apply_capital_flow_signal(flow):
@@ -523,7 +585,7 @@ def _apply_capital_flow_signal(flow):
         if consecutive >= 3:
             direction = "流入" if sign > 0 else "流出"
             flow["signal"] = f"主力连续{consecutive}日{direction}"
-    return flow
+    return _apply_watchlist_capital_flow_contract(flow)
 
 
 def _build_capital_flow_from_history(history):
@@ -534,18 +596,18 @@ def _build_capital_flow_from_history(history):
         "as_of_date": latest.get("date"),
         "updated_at": latest.get("date"),
         "main_5d": _build_main_5d(history),
-        "main_net": round(float(latest.get("main_net", 0) or 0), 2),
-        "super_net": round(float(latest.get("super_net", 0) or 0), 2),
-        "mid_large_net": round(float(latest.get("mid_large_net", 0) or 0), 2),
-        "retail_net": round(float(latest.get("retail_net", 0) or 0), 2),
-        "small_net": round(float(latest.get("small_net", 0) or 0), 2),
+        "main_net": round(float(latest.get("main_net_wan", latest.get("main_net", 0)) or 0), 2),
+        "super_net": round(float(latest.get("super_net_wan", latest.get("super_net", 0)) or 0), 2),
+        "mid_large_net": round(float(latest.get("mid_large_net_wan", latest.get("mid_large_net", 0)) or 0), 2),
+        "retail_net": round(float(latest.get("retail_net_wan", latest.get("retail_net", 0)) or 0), 2),
+        "small_net": round(float(latest.get("small_net_wan", latest.get("small_net", 0)) or 0), 2),
     }
     if _is_intraday_session() and latest.get("date") != datetime.now().strftime("%Y-%m-%d"):
         preview = _apply_capital_flow_signal(dict(flow))
         flow["intraday_unconfirmed"] = True
         flow["history_signal"] = preview.get("signal")
         flow["signal"] = f"历史参考（截至{latest.get('date')}）"
-        return flow
+        return _apply_watchlist_capital_flow_contract(flow)
     return _apply_capital_flow_signal(flow)
 
 
@@ -580,18 +642,15 @@ def fetch_capital_flow(code, market):
         history = fetch_fund_flow_history(code, market, days=5)
         return _build_capital_flow_from_history(history)
 
-    def to_wan(val):
-        """元转换为万元"""
-        v = float(val) if val else 0
-        return round(v / 10000, 2)
-
     flow = {"main_5d": []}
 
     # 解析5日历史（f178字段）
     for item in flow_5d_raw[:5]:
         flow["main_5d"].append({
             "date": item.get("date", ""),
-            "net": to_wan(item.get("mainNetAmt", 0)),
+            "net": yuan_to_wan(item.get("mainNetAmt", 0)),
+            "net_wan": yuan_to_wan(item.get("mainNetAmt", 0)),
+            "net_yi": wan_to_yi(yuan_to_wan(item.get("mainNetAmt", 0))),
         })
 
     # 解析今日详细数据（kline接口）
@@ -601,11 +660,11 @@ def fetch_capital_flow(code, market):
         parts = klines[0].split(",")
         if len(parts) >= 6:
             main_net = float(parts[1])
-            flow["main_net"] = to_wan(main_net)
-            flow["super_net"] = to_wan(float(parts[2]))   # 超大单
-            flow["mid_large_net"] = to_wan(float(parts[3]))  # 中大单
-            flow["retail_net"] = to_wan(float(parts[4]))    # 散户大单
-            flow["small_net"] = to_wan(float(parts[5]))     # 小单
+            flow["main_net"] = yuan_to_wan(main_net)
+            flow["super_net"] = yuan_to_wan(float(parts[2]))   # 超大单
+            flow["mid_large_net"] = yuan_to_wan(float(parts[3]))  # 中大单
+            flow["retail_net"] = yuan_to_wan(float(parts[4]))    # 散户大单
+            flow["small_net"] = yuan_to_wan(float(parts[5]))     # 小单
         else:
             history = fetch_fund_flow_history(code, market, days=5)
             return _build_capital_flow_from_history(history)
@@ -994,12 +1053,17 @@ def format_capital_flow(flow):
     """格式化资金流向输出"""
     if not flow:
         return ""
+    main_net = resolve_amount_wan(flow, wan_keys=("main_net_wan",), yi_keys=("main_net_yi",), legacy_keys=("main_net",), source_unit=UNIT_WAN_YUAN)
+    super_net = resolve_amount_wan(flow, wan_keys=("super_net_wan",), yi_keys=("super_net_yi",), legacy_keys=("super_net",), source_unit=UNIT_WAN_YUAN)
+    mid_large_net = resolve_amount_wan(flow, wan_keys=("mid_large_net_wan",), yi_keys=("mid_large_net_yi",), legacy_keys=("mid_large_net",), source_unit=UNIT_WAN_YUAN)
+    retail_net = resolve_amount_wan(flow, wan_keys=("retail_net_wan",), yi_keys=("retail_net_yi",), legacy_keys=("retail_net",), source_unit=UNIT_WAN_YUAN)
+    small_net = resolve_amount_wan(flow, wan_keys=("small_net_wan",), yi_keys=("small_net_yi",), legacy_keys=("small_net",), source_unit=UNIT_WAN_YUAN)
     lines = ["### 资金流向", "| 类型 | 净流入(万元) |", "|------|-------------|"]
-    lines.append(f"| 主力净流入 | {flow.get('main_net', 0):+,.2f} |")
-    lines.append(f"| 超大单 | {flow.get('super_net', 0):+,.2f} |")
-    lines.append(f"| 中大单 | {flow.get('mid_large_net', 0):+,.2f} |")
-    lines.append(f"| 散户大单 | {flow.get('retail_net', 0):+,.2f} |")
-    lines.append(f"| 小单 | {flow.get('small_net', 0):+,.2f} |")
+    lines.append(f"| 主力净流入 | {main_net:+,.2f} |")
+    lines.append(f"| 超大单 | {super_net:+,.2f} |")
+    lines.append(f"| 中大单 | {mid_large_net:+,.2f} |")
+    lines.append(f"| 散户大单 | {retail_net:+,.2f} |")
+    lines.append(f"| 小单 | {small_net:+,.2f} |")
 
     # 近5日主力
     d5 = flow.get("main_5d", [])
@@ -1168,6 +1232,10 @@ def build_rule_snapshot(stock, realtime, news, announcements, tech_indicators,
         "hard_flags": [],
         "positives": [],
         "watch_points": [],
+        "flow_confidence": {
+            "label": "未知",
+            "penalty": 0,
+        },
     }
 
     tech = tech_indicators or {}
@@ -1185,7 +1253,13 @@ def build_rule_snapshot(stock, realtime, news, announcements, tech_indicators,
     snapshot["hard_flags"].extend(negative_events)
 
     flow_signal = flow.get("signal", "中性")
-    flow_reference_only = flow.get("intraday_unconfirmed")
+    flow_confidence = assess_flow_confidence(flow)
+    snapshot["flow_confidence"] = {
+        "label": flow_confidence["label"],
+        "penalty": flow_confidence["penalty"],
+        "as_of_date": flow_confidence.get("as_of_date"),
+    }
+    flow_reference_only = flow_confidence["reference_only"]
     if flow_reference_only:
         as_of_date = flow.get("as_of_date")
         if as_of_date:
@@ -1209,6 +1283,12 @@ def build_rule_snapshot(stock, realtime, news, announcements, tech_indicators,
 
     severe_negatives = 0
     positive_points = 0
+    roe_rules = WATCHLIST_RULE_THRESHOLDS["roe"]
+    pe_rules = WATCHLIST_RULE_THRESHOLDS["pe"]
+    pb_rules = WATCHLIST_RULE_THRESHOLDS["pb"]
+    relative_strength_rules = WATCHLIST_RULE_THRESHOLDS["relative_strength"]
+    price_position_rules = WATCHLIST_RULE_THRESHOLDS["price_position"]
+    action_rules = WATCHLIST_RULE_THRESHOLDS["action"]
 
     if tech_bias == "bull":
         positive_points += 2
@@ -1224,29 +1304,31 @@ def build_rule_snapshot(stock, realtime, news, announcements, tech_indicators,
         severe_negatives += len(negative_events)
     if positive_events:
         positive_points += len(positive_events)
+    if flow_confidence["penalty"] > 0:
+        severe_negatives += flow_confidence["penalty"]
 
     pe = fund.get("pe")
     pb = fund.get("pb")
     roe = fund.get("roe")
-    if roe is not None and roe < 0:
+    if roe is not None and roe < roe_rules["negative_below"]:
         snapshot["hard_flags"].append("ROE为负")
         severe_negatives += 3
-    elif roe is not None and roe < 8:
+    elif roe is not None and roe < roe_rules["weak_below"]:
         snapshot["hard_flags"].append("ROE偏弱")
         severe_negatives += 1
-    elif roe is not None and roe >= 12:
+    elif roe is not None and roe >= roe_rules["strong_at_or_above"]:
         positive_points += 1
 
-    if pe is not None and pe > 80:
+    if pe is not None and pe > pe_rules["extreme_above"]:
         snapshot["hard_flags"].append("PE极高")
         severe_negatives += 3
-    elif pe is not None and pe > 50:
+    elif pe is not None and pe > pe_rules["high_above"]:
         snapshot["hard_flags"].append("PE偏高")
         severe_negatives += 2
-    elif pe is not None and pe < 20 and roe is not None and roe >= 12:
+    elif pe is not None and pe < pe_rules["value_below"] and roe is not None and roe >= roe_rules["strong_at_or_above"]:
         positive_points += 1
 
-    if pb is not None and pb > 10 and roe is not None and roe < 10:
+    if pb is not None and pb > pb_rules["mismatch_above"] and roe is not None and roe < pb_rules["weak_roe_below"]:
         snapshot["hard_flags"].append("PB与ROE不匹配")
         severe_negatives += 2
 
@@ -1254,30 +1336,37 @@ def build_rule_snapshot(stock, realtime, news, announcements, tech_indicators,
     stock_change = rt.get("change_pct")
     if sector_change is not None and stock_change is not None:
         diff = stock_change - sector_change
-        if diff < -0.5:
+        if diff < relative_strength_rules["weak_vs_sector_below"]:
             snapshot["hard_flags"].append("弱于行业")
             severe_negatives += 1
-        elif diff > 0.5:
+        elif diff > relative_strength_rules["strong_vs_sector_above"]:
             positive_points += 1
 
     if pp:
         pct_from_high = pp.get("pct_from_high")
         pct_from_low = pp.get("pct_from_low")
         if pct_from_high is not None and pct_from_low is not None:
-            if pct_from_high > -3 and pct_from_low > 15:
+            if (
+                pct_from_high > price_position_rules["chase_risk_from_high_above"]
+                and pct_from_low > price_position_rules["chase_risk_from_low_above"]
+            ):
                 snapshot["hard_flags"].append("追高风险")
                 severe_negatives += 1
 
     snapshot["hard_flags"] = _dedupe_keep_order(snapshot["hard_flags"])
     snapshot["positives"] = _dedupe_keep_order(snapshot["positives"])
 
-    if severe_negatives >= 5:
+    if severe_negatives >= action_rules["avoid_severe_negatives_at"]:
         snapshot["action"] = "回避/逢高减仓"
         snapshot["position"] = "0成或只留观察仓"
-    elif tech_bias == "bear" or severe_negatives >= 3:
+    elif tech_bias == "bear" or severe_negatives >= action_rules["reduce_severe_negatives_at"]:
         snapshot["action"] = "减仓观望"
         snapshot["position"] = "0-0.5成"
-    elif tech_bias == "bull" and positive_points >= 3 and severe_negatives == 0:
+    elif (
+        tech_bias == "bull"
+        and positive_points >= action_rules["track_positive_points_at"]
+        and severe_negatives == 0
+    ):
         snapshot["action"] = "轻仓跟踪"
         snapshot["position"] = "0.5-1成"
     else:
@@ -1314,6 +1403,7 @@ def format_rule_snapshot(snapshot):
         "|------|------|",
         f"| 技术基线 | {snapshot.get('tech_base', '中性')} |",
         f"| 资金确认 | {snapshot.get('flow_base', '中性')} |",
+        f"| 资金时效 | {(snapshot.get('flow_confidence') or {}).get('label', '未知')} |",
         f"| 事件偏向 | {snapshot.get('event_base', '中性')} |",
         f"| 建议动作 | {snapshot.get('action', '观望')} |",
         f"| 建议仓位 | {snapshot.get('position', '0-0.5成')} |",
@@ -1564,6 +1654,17 @@ def build_snapshot_record(stock, snapshot, tech_indicators, trade_levels, intrad
     tech = tech_indicators or {}
     rt = realtime or {}
     flow = capital_flow or {}
+    flow_confidence = snapshot.get("flow_confidence") or assess_flow_confidence(flow)
+    flow_summary = {
+        "signal": flow.get("signal"),
+        "main_net_wan": flow.get("main_net_wan", flow.get("main_net")),
+        "main_net_yi": flow.get("main_net_yi"),
+        "today_wan": flow.get("today_wan"),
+        "today_yi": flow.get("today_yi"),
+        "five_day_total_wan": flow.get("five_day_total_wan"),
+        "five_day_total_yi": flow.get("five_day_total_yi"),
+        "unit": flow.get("unit"),
+    }
     return {
         "date": today,
         "code": stock["code"],
@@ -1586,6 +1687,8 @@ def build_snapshot_record(stock, snapshot, tech_indicators, trade_levels, intrad
         "price_as_of": _combine_market_timestamp(rt.get("date"), rt.get("time")),
         "flow_as_of": flow.get("updated_at") or flow.get("as_of_date"),
         "flow_unconfirmed": bool(flow.get("intraday_unconfirmed")),
+        "flow_confidence": flow_confidence,
+        "capital_flow": flow_summary,
         "tech_basis": "240分钟K线",
     }
 
