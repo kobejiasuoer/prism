@@ -1,0 +1,28 @@
+{
+  "task_id": "command_brief_20260424_223957_737373",
+  "task_name": "command_brief",
+  "title": "投资总控简报",
+  "command": [
+    "bash",
+    "skills/invest-flow/scripts/run_command_brief.sh"
+  ],
+  "cwd": "D:\\workspace",
+  "send_to_feishu": true,
+  "status": "failed",
+  "started_at": "2026-04-24 22:39:57",
+  "finished_at": "2026-04-24 22:39:58",
+  "exit_code": 1,
+  "pid": 194028,
+  "log_path": "D:\\workspace\\prism\\apps\\data\\control_panel_runs\\logs\\command_brief_20260424_223957_737373.log",
+  "meta_path": "D:\\workspace\\prism\\apps\\data\\control_panel_runs\\command_brief_20260424_223957_737373.json",
+  "feishu_delivery": {
+    "requested": true,
+    "channel": "feishu",
+    "target": "",
+    "source": "default",
+    "job_id": "",
+    "job_name": "",
+    "resolved": false
+  },
+  "shell_env_sanitized": false
+}

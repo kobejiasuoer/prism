@@ -30,6 +30,7 @@ from control_panel.dashboard_data import (
     INVEST_FLOW_ROOT,
     TASK_DEFINITIONS,
     WORKSPACE_ROOT,
+    STOCK_ANALYZER_ROOT,
     build_ask_followup_view,
     build_ask_page_view,
     build_ask_suggestions,
@@ -62,6 +63,7 @@ PREVIEW_THEME_IBM = "ibm-preview"
 PREVIEW_THEME_LABELS = {
     PREVIEW_THEME_IBM: "IBM 预览",
 }
+PARAMETERS_PATH = STOCK_ANALYZER_ROOT / "config" / "stocks.json"
 
 app = FastAPI(title="Prism Control", version="0.1.0")
 app.mount("/static", StaticFiles(directory=str(APP_ROOT / "static")), name="static")
@@ -269,7 +271,7 @@ def launch_background_task(
     run_id = f"{task_name}_{now_stamp()}"
     meta_path, log_path = build_run_paths(run_id)
     launch_cmd = [
-        "python3",
+        sys.executable,
         str(TASK_RUNNER),
         "--task-id",
         run_id,
@@ -344,6 +346,130 @@ def load_preview_text(target: Path, kind: str) -> tuple[str, bool]:
         except Exception:
             pass
     return text, truncated
+
+
+def load_parameters_value() -> dict[str, Any]:
+    if not PARAMETERS_PATH.exists():
+        raise HTTPException(status_code=404, detail="parameters file not found")
+    try:
+        payload = json.loads(PARAMETERS_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=500, detail=f"parameters json invalid: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=500, detail="parameters root must be an object")
+    return payload
+
+
+def normalize_positive_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int) and value > 0:
+        return value
+    return None
+
+
+def parameter_validation_errors(payload: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+
+    stocks = payload.get("stocks")
+    if not isinstance(stocks, list):
+        errors.append("stocks 必须是数组")
+    else:
+        for index, stock in enumerate(stocks, start=1):
+            if not isinstance(stock, dict):
+                errors.append(f"stocks[{index}] 必须是对象")
+                continue
+            code = str(stock.get("code") or "").strip()
+            name = str(stock.get("name") or "").strip()
+            if len(code) != 6 or not code.isdigit():
+                errors.append(f"stocks[{index}].code 必须是 6 位股票代码")
+            if not name:
+                errors.append(f"stocks[{index}].name 不能为空")
+
+    ma_periods = payload.get("ma_periods")
+    if not isinstance(ma_periods, list) or not ma_periods:
+        errors.append("ma_periods 必须是非空数组")
+    elif any(normalize_positive_int(item) is None for item in ma_periods):
+        errors.append("ma_periods 只能包含正整数")
+
+    if normalize_positive_int(payload.get("news_count")) is None:
+        errors.append("news_count 必须是正整数")
+    if normalize_positive_int(payload.get("kline_days")) is None:
+        errors.append("kline_days 必须是正整数")
+
+    return errors
+
+
+def parameter_group_status(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    stocks = payload.get("stocks") if isinstance(payload.get("stocks"), list) else []
+    stock_rows = [item for item in stocks if isinstance(item, dict)]
+    active_count = sum(1 for item in stock_rows if item.get("active", True) is not False)
+    archived_count = max(len(stock_rows) - active_count, 0)
+    ma_periods = payload.get("ma_periods")
+    news_count = payload.get("news_count")
+    kline_days = payload.get("kline_days")
+
+    return [
+        {
+            "key": "stocks",
+            "label": "自选股名单",
+            "required": True,
+            "ok": isinstance(stocks, list),
+            "detail": f"活跃 {active_count} / 归档 {archived_count}",
+        },
+        {
+            "key": "ma_periods",
+            "label": "均线周期",
+            "required": True,
+            "ok": isinstance(ma_periods, list)
+            and bool(ma_periods)
+            and all(normalize_positive_int(item) is not None for item in ma_periods),
+            "detail": ", ".join(str(item) for item in ma_periods) if isinstance(ma_periods, list) else "未配置",
+        },
+        {
+            "key": "news_count",
+            "label": "新闻/公告条数",
+            "required": True,
+            "ok": normalize_positive_int(news_count) is not None,
+            "detail": str(news_count or "未配置"),
+        },
+        {
+            "key": "kline_days",
+            "label": "K 线回看天数",
+            "required": True,
+            "ok": normalize_positive_int(kline_days) is not None,
+            "detail": str(kline_days or "未配置"),
+        },
+    ]
+
+
+def build_parameters_payload(value: dict[str, Any], *, saved: bool = False) -> dict[str, Any]:
+    stat = PARAMETERS_PATH.stat() if PARAMETERS_PATH.exists() else None
+    stocks = value.get("stocks") if isinstance(value.get("stocks"), list) else []
+    stock_rows = [item for item in stocks if isinstance(item, dict)]
+    active_count = sum(1 for item in stock_rows if item.get("active", True) is not False)
+    archived_count = max(len(stock_rows) - active_count, 0)
+    errors = parameter_validation_errors(value)
+
+    return {
+        "ok": not errors,
+        "saved": saved,
+        "path": str(PARAMETERS_PATH),
+        "updated_at": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S") if stat else "",
+        "summary_cards": [
+            {"label": "活跃持仓", "value": active_count, "detail": "stocks 中 active!=false", "tone": "positive"},
+            {"label": "归档名单", "value": archived_count, "detail": "stocks 中 active=false", "tone": "watch"},
+            {"label": "均线周期", "value": len(value.get("ma_periods") or []), "detail": "ma_periods", "tone": "info"},
+            {"label": "K线天数", "value": value.get("kline_days", "-"), "detail": "kline_days", "tone": "info"},
+        ],
+        "required_groups": parameter_group_status(value),
+        "validation": {
+            "ok": not errors,
+            "errors": errors,
+        },
+        "value": value,
+        "raw": json.dumps(value, ensure_ascii=False, indent=2),
+    }
 
 
 def watchlist_message(action: str, status: str, stock: dict[str, Any], refresh_started: bool) -> str:
@@ -421,6 +547,13 @@ REFRESH_PAGE_CONFIG: dict[str, dict[str, Any]] = {
         "poll_seconds": {"trading": 40, "standby": 120, "off": 300},
         "cooldown_seconds": {"trading": 600, "standby": 900, "off": 1800},
         "stale_after_seconds": {"trading": 1800, "standby": 3600, "off": 10_800},
+    },
+    "review": {
+        "allowed_tasks": {"command_brief"},
+        "related_tasks": {"command_brief"},
+        "poll_seconds": {"trading": 120, "standby": 180, "off": 600},
+        "cooldown_seconds": {"trading": 1200, "standby": 1800, "off": 3600},
+        "stale_after_seconds": {"trading": 7200, "standby": 14_400, "off": 86_400},
     },
 }
 
@@ -514,6 +647,8 @@ def read_page_source_cards(page: str) -> list[dict[str, Any]]:
         return list((build_watchlist_page_view().get("source_cards") or []))
     if page == "opportunities":
         return list((build_opportunities_view().get("source_cards") or []))
+    if page == "review":
+        return list((build_review_view().get("source_cards") or []))
     return []
 
 
@@ -594,6 +729,8 @@ def pick_recommended_task(page: str, freshness: list[dict[str, Any]], market_mod
         return "watchlist_refresh"
     if page == "opportunities":
         return "midday_refresh" if market_mode != "off" else "aggressive"
+    if page == "review":
+        return "command_brief"
 
     stale_labels = {str(item.get("label") or "") for item in freshness if item.get("stale")}
     if {"自选股", "自选股快照"} & stale_labels:
@@ -1213,6 +1350,60 @@ async def api_today_batch_detail(kind: str) -> JSONResponse:
 async def api_runs() -> JSONResponse:
     overview = build_overview()
     return JSONResponse({"runs": overview["runs"]})
+
+
+@app.get("/api/parameters")
+async def api_parameters() -> JSONResponse:
+    return JSONResponse(build_parameters_payload(load_parameters_value()))
+
+
+@app.post("/api/parameters")
+async def api_save_parameters(request: Request) -> JSONResponse:
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="request body must be json") from exc
+
+    candidate: Any = body
+    if isinstance(body, dict) and isinstance(body.get("raw"), str):
+        try:
+            candidate = json.loads(str(body["raw"]))
+        except json.JSONDecodeError as exc:
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "saved": False,
+                    "detail": f"JSON 解析失败：{exc}",
+                    "validation": {"ok": False, "errors": [str(exc)]},
+                },
+                status_code=400,
+            )
+    elif isinstance(body, dict) and isinstance(body.get("value"), dict):
+        candidate = body["value"]
+
+    if not isinstance(candidate, dict):
+        raise HTTPException(status_code=400, detail="parameters root must be an object")
+
+    errors = parameter_validation_errors(candidate)
+    if errors:
+        return JSONResponse(
+            {
+                **build_parameters_payload(candidate),
+                "ok": False,
+                "saved": False,
+                "detail": "参数校验失败",
+            },
+            status_code=400,
+        )
+
+    PARAMETERS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = PARAMETERS_PATH.with_name(f"{PARAMETERS_PATH.name}.{now_stamp()}.tmp")
+    tmp_path.write_text(
+        json.dumps(candidate, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    tmp_path.replace(PARAMETERS_PATH)
+    return JSONResponse(build_parameters_payload(candidate, saved=True))
 
 
 @app.post("/api/tasks/{task_name}/run")
