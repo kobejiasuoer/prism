@@ -8,6 +8,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { CommandBar } from "./command-bar";
 import { Sidebar, navItems } from "./sidebar";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [commandOpen, setCommandOpen] = useState(false);
@@ -79,6 +80,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   </Link>
                 );
               })}
+              <ThemeToggle className="col-span-2 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] p-2" />
             </nav>
           ) : null}
 

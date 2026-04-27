@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$BASE_DIR/.." && pwd)"
+export PYTHONPATH="$REPO_ROOT:$REPO_ROOT/packages:${PYTHONPATH:-}"
 RUN_STAMP="$(date "+%F_%H-%M-%S")_$$"
 
 POOL="aggressive"
@@ -20,6 +22,14 @@ SEND_TO_FEISHU="${SEND_TO_FEISHU:-0}"
 FEISHU_CHANNEL="${FEISHU_CHANNEL:-feishu}"
 FEISHU_TARGET="${FEISHU_TARGET:-}"
 FEISHU_APPEND_LINE="${FEISHU_APPEND_LINE:-}"
+
+if [[ -f "$SCRIPT_DIR/prism_artifact_helpers.sh" ]]; then
+  source "$SCRIPT_DIR/prism_artifact_helpers.sh"
+  prism_init_artifact_helpers "$REPO_ROOT" "$RUN_STAMP" "$(date "+%F")"
+fi
+if ! declare -F prism_mirror_artifact >/dev/null; then
+  prism_mirror_artifact() { return 0; }
+fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -85,7 +95,15 @@ quarantine_stale_output() {
     fi
     mv "$target_path" "$backup_path"
     echo "  旧产物已隔离: $target_path -> $backup_path"
+    prism_mirror_artifact "$backup_path" "screener/stale_outputs/$(basename "$backup_path")" "stale_output" "screener"
   fi
+}
+
+mirror_midday_refresh_artifacts() {
+  prism_mirror_artifact "$RESULT_OUTPUT_PATH" "screener/midday_refresh/midday_refresh_result_${RUN_STAMP}.json" "midday_refresh_result" "screener"
+  prism_mirror_artifact "$ATTACHMENT_OUTPUT_PATH" "screener/reports/$(basename "$ATTACHMENT_OUTPUT_PATH")" "midday_refresh_brief" "screener"
+  prism_mirror_artifact "$REPORT_OUTPUT_PATH" "screener/reports/$(basename "$REPORT_OUTPUT_PATH")" "midday_refresh_report" "screener"
+  prism_mirror_artifact "$SENDABLE_OUTPUT_PATH" "screener/reports/$(basename "$SENDABLE_OUTPUT_PATH")" "midday_refresh_sendable" "screener"
 }
 
 send_to_feishu() {
@@ -360,6 +378,7 @@ if [[ $workflow_exit -ne 0 ]]; then
   fi
   write_status_output "workflow_failed" "$workflow_reason" "failed"
   generate_status_reports "workflow_failed"
+  mirror_midday_refresh_artifacts
   if ! send_to_feishu; then
     exit 2
   fi
@@ -405,6 +424,7 @@ if (( ${#validation_errors[@]} > 0 )); then
   invalid_reason="${invalid_reason%；}"
   write_status_output "invalid" "$invalid_reason" "completed"
   generate_status_reports "invalid"
+  mirror_midday_refresh_artifacts
   if ! send_to_feishu; then
     exit 2
   fi
@@ -412,6 +432,7 @@ if (( ${#validation_errors[@]} > 0 )); then
 fi
 
 write_status_output "ok" "" "completed"
+mirror_midday_refresh_artifacts
 echo "完成："
 echo "  scan_result      -> $SCAN_RESULT_PATH"
 echo "  ai_screening     -> $AI_OUTPUT_PATH"

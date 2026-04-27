@@ -1435,8 +1435,7 @@ tbody tr:hover { background: var(--panel-2); }
 /* --- Hero Guides --- */
 .watchlist-hero-guide,
 .opportunities-hero-guide,
-.review-hero-guide,
-.dashboard-hero-guide {
+.review-hero-guide {
   margin-top: 0.75rem;
   padding: 0.85rem 1rem;
   border-radius: var(--radius);
@@ -1446,8 +1445,7 @@ tbody tr:hover { background: var(--panel-2); }
 
 .watchlist-hero-guide-copy,
 .opportunities-hero-guide-copy,
-.review-hero-guide-copy,
-.dashboard-hero-guide-copy {
+.review-hero-guide-copy {
   margin: 0;
   color: var(--text-soft);
   line-height: 1.6;
@@ -1457,25 +1455,6 @@ tbody tr:hover { background: var(--panel-2); }
 .watchlist-hero-guide-links,
 .opportunities-hero-guide-links,
 .review-hero-guide-links { margin-top: 0.6rem; }
-
-.dashboard-hero-guide-links { margin-top: 0.6rem; }
-
-.dashboard-hero-kpis {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.6rem;
-  margin-top: 0.75rem;
-}
-
-.dashboard-hero-kpi {
-  min-height: auto;
-  padding: 0.85rem;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-}
-
-.dashboard-hero-kpi strong { font-size: 1.25rem; }
 
 /* --- Ask Page --- */
 .ask-page-shell { }
@@ -1990,108 +1969,6 @@ tbody tr:hover { background: var(--panel-2); }
 .ask-empty-block { }
 .ask-feedback-block { }
 .ask-feedback-risk { }
-
-/* --- Dashboard Page --- */
-.dashboard-page-shell { gap: 1rem; }
-
-.dashboard-ops-header {
-  display: grid;
-  gap: 1rem;
-  padding: 2rem;
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--line);
-  background: var(--panel);
-  box-shadow: var(--shadow);
-}
-
-.dashboard-ops-copy .hero-copy {
-  max-width: 48rem;
-}
-
-.dashboard-ops-actions { align-items: center; }
-
-.ops-health-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
-  margin-top: 1rem;
-}
-
-.ops-health-card,
-.ops-blocked-item {
-  padding: 1rem;
-  border-radius: var(--radius);
-  border: 1px solid var(--line);
-  background: var(--panel);
-  box-shadow: var(--shadow-sm);
-}
-
-.ops-health-card > strong {
-  display: block;
-  margin-top: 0.25rem;
-  font-size: 1rem;
-}
-
-.ops-health-card > p {
-  margin: 0.4rem 0 0;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.ops-health-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-}
-
-.ops-health-metric {
-  padding: 0.75rem;
-  border-radius: var(--radius);
-  border: 1px solid var(--line);
-  background: var(--panel-2);
-}
-
-.ops-health-metric span,
-.ops-health-metric p { display: block; }
-
-.ops-health-metric strong {
-  display: block;
-  margin-top: 0.2rem;
-  font-size: 1.1rem;
-}
-
-.ops-health-metric p {
-  margin: 0.25rem 0 0;
-  color: var(--muted);
-  font-size: 0.8rem;
-}
-
-.ops-blocked-list { display: grid; gap: 0.5rem; }
-
-.ops-blocked-head,
-.ops-blocked-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.ops-blocked-item p {
-  margin: 0.4rem 0;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.ops-blocked-meta {
-  flex-wrap: wrap;
-  color: var(--muted);
-  font-size: 0.8rem;
-}
-
-.dashboard-lanes-section,
-.dashboard-runs-section,
-.dashboard-blocked-section { margin-top: 0; }
 
 .preview-theme-banner {
   margin-top: 0.75rem;
@@ -4195,8 +4072,7 @@ html[data-theme-applied="dark"] .ask-followup-field input:focus { border-color: 
   .today-change-summary-grid,
   .reading-compass,
   .today-source-strip,
-  .today-summary-grid,
-  .dashboard-hero-kpis {
+  .today-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -4259,8 +4135,7 @@ html[data-theme-applied="dark"] .ask-followup-field input:focus { border-color: 
   }
 
   .today-hero,
-  .today-command-board,
-  .dashboard-ops-header {
+  .today-command-board {
     padding: 1.25rem;
   }
 
@@ -4271,10 +4146,7 @@ html[data-theme-applied="dark"] .ask-followup-field input:focus { border-color: 
   .today-source-strip,
   .today-summary-grid,
   .kpi-grid,
-  .freshness-strip,
-  .ops-health-grid,
-  .ops-health-metrics,
-  .dashboard-hero-kpis {
+  .freshness-strip {
     grid-template-columns: 1fr;
   }
 
@@ -4485,10 +4357,6 @@ html[data-theme-applied="dark"] .ask-followup-field input:focus { border-color: 
   border-color: var(--line-strong);
   box-shadow: var(--shadow-sm);
 }
-
-/* --- Missing: Dashboard fold variants --- */
-.dashboard-ops-fold { margin-top: 0.75rem; }
-.dashboard-runs-fold { margin-top: 0.75rem; }
 
 /* --- Missing: Panel link subtle --- */
 .panel-link-subtle {

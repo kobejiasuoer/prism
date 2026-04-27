@@ -147,17 +147,8 @@ export const api = {
   getOpportunityDetail(code: string) {
     return fetchJson<StockProfileData["opportunity"]>(`/api/opportunities/${encodeURIComponent(code)}`);
   },
-  async getStockProfile(code: string): Promise<StockProfileData> {
-    const [watchlist, opportunity] = await Promise.allSettled([
-      api.getWatchlistDetail(code),
-      api.getOpportunityDetail(code),
-    ]);
-
-    return {
-      code,
-      watchlist: watchlist.status === "fulfilled" ? watchlist.value : undefined,
-      opportunity: opportunity.status === "fulfilled" ? opportunity.value : undefined,
-    };
+  getStockProfile(code: string) {
+    return fetchJson<StockProfileData>(`/api/stock/${encodeURIComponent(code)}`);
   },
   getReview() {
     return fetchJson<ReviewData>("/api/review");

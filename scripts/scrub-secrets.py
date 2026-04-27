@@ -9,6 +9,7 @@ SKIP_PATHS = {
     Path("tests/test_secret_scrub.py"),
     Path("scripts/scrub-secrets.py"),
 }
+SKIP_DATA_DIRS = {"runtime", "artifacts", "analytics", "cache"}
 STRING_REPLACEMENTS = {
     "http://127.0.0.1:7897": "${PRISM_PROXY_URL}",
     "/Users/yangbishang/.openclaw/workspace-invest/skills/stock-screener/reports/": "data/history/reports/screener/",
@@ -41,7 +42,11 @@ BAD_PATTERNS = [
 def should_skip(path: Path) -> bool:
     if path in SKIP_PATHS:
         return True
-    return any(part in {".git", ".venv", "__pycache__"} for part in path.parts)
+    if len(path.parts) >= 2 and path.parts[0] == "data" and path.parts[1] in SKIP_DATA_DIRS:
+        return True
+    if len(path.parts) >= 2 and path.parts[0] == "packages" and path.parts[1] in {"data", "reports"}:
+        return True
+    return any(part in {".git", ".venv", "__pycache__", "node_modules", ".next"} for part in path.parts)
 
 def iter_text_files(root: Path):
     for path in root.rglob("*"):

@@ -13,13 +13,18 @@ BAD_MARKERS = [
 
 BINARY_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".pdf", ".woff", ".woff2", ".docx", ".pyc"}
 SELF_SKIPS = {Path("tests/test_secret_scrub.py"), Path("scripts/scrub-secrets.py")}
+SKIP_DATA_DIRS = {"runtime", "artifacts", "analytics", "cache"}
 
 
 def iter_text_files(root: Path):
     for path in root.rglob("*"):
         if not path.is_file():
             continue
-        if any(part in {".git", ".venv", "__pycache__", ".superpowers"} for part in path.parts):
+        if len(path.parts) >= 2 and path.parts[0] == "data" and path.parts[1] in SKIP_DATA_DIRS:
+            continue
+        if len(path.parts) >= 2 and path.parts[0] == "packages" and path.parts[1] in {"data", "reports"}:
+            continue
+        if any(part in {".git", ".venv", "__pycache__", ".superpowers", "node_modules", ".next"} for part in path.parts):
             continue
         if path.suffix.lower() in BINARY_SUFFIXES:
             continue

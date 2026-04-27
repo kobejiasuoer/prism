@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$BASE_DIR/.." && pwd)"
+export PYTHONPATH="$REPO_ROOT:$REPO_ROOT/packages:${PYTHONPATH:-}"
 RUN_STAMP="$(date "+%F_%H-%M")"
 
 POOL="aggressive"
@@ -25,15 +27,23 @@ LIFECYCLE_REPORT_PATH="$BASE_DIR/reports/lifecycle_${RUN_STAMP}.md"
 AI_HISTORY_DIR="$BASE_DIR/data/ai_history"
 RUN_LIFECYCLE="false"
 STALE_OUTPUT_DIR="$BASE_DIR/data/stale_outputs"
-QUALITY_GATE_SCRIPT="$BASE_DIR/../invest-flow/scripts/feishu_quality_gate.py"
 QUALITY_OUTPUT_PATH="$BASE_DIR/data/quality_gate_${RUN_STAMP}.json"
 QUALITY_REPORT_PATH="${QUALITY_REPORT_PATH:-$BASE_DIR/reports/quality_gate_${RUN_STAMP}.md}"
-QUALITY_DASHBOARD_SCRIPT="$BASE_DIR/../invest-flow/scripts/quality_gate_dashboard.py"
-QUALITY_DASHBOARD_PATH="${QUALITY_DASHBOARD_PATH:-$BASE_DIR/../invest-flow/reports/feishu-quality-dashboard.md}"
+QUALITY_GATE_SCRIPT="$REPO_ROOT/apps/scripts/feishu_quality_gate.py"
+QUALITY_DASHBOARD_SCRIPT="$REPO_ROOT/apps/scripts/quality_gate_dashboard.py"
+QUALITY_DASHBOARD_PATH="${QUALITY_DASHBOARD_PATH:-$REPO_ROOT/data/history/reports/command_brief/feishu-quality-dashboard.md}"
 SEND_TO_FEISHU="${SEND_TO_FEISHU:-0}"
 FEISHU_CHANNEL="${FEISHU_CHANNEL:-feishu}"
 FEISHU_TARGET="${FEISHU_TARGET:-}"
 FEISHU_APPEND_LINE="${FEISHU_APPEND_LINE:-}"
+
+if [[ -f "$SCRIPT_DIR/prism_artifact_helpers.sh" ]]; then
+  source "$SCRIPT_DIR/prism_artifact_helpers.sh"
+  prism_init_artifact_helpers "$REPO_ROOT" "$RUN_STAMP" "$(date "+%F")"
+fi
+if ! declare -F prism_mirror_artifact >/dev/null; then
+  prism_mirror_artifact() { return 0; }
+fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -112,6 +122,23 @@ quarantine_stale_output() {
     local backup_path="$STALE_OUTPUT_DIR/${label}_${RUN_STAMP}.$(basename "$target_path" | awk -F. '{print $NF}')"
     mv "$target_path" "$backup_path"
     echo "  旧产物已隔离: $target_path -> $backup_path"
+    prism_mirror_artifact "$backup_path" "screener/stale_outputs/$(basename "$backup_path")" "stale_output" "screener"
+  fi
+}
+
+mirror_full_workflow_artifacts() {
+  prism_mirror_artifact "$ATTACHMENT_OUTPUT_PATH" "screener/reports/$(basename "$ATTACHMENT_OUTPUT_PATH")" "screener_brief" "screener"
+  prism_mirror_artifact "$REPORT_OUTPUT_PATH" "screener/reports/$(basename "$REPORT_OUTPUT_PATH")" "screener_report" "screener"
+  prism_mirror_artifact "$SENDABLE_OUTPUT_PATH" "screener/reports/$(basename "$SENDABLE_OUTPUT_PATH")" "screener_sendable" "screener"
+  prism_mirror_artifact "$QUALITY_OUTPUT_PATH" "screener/quality_gates/$(basename "$QUALITY_OUTPUT_PATH")" "quality_gate" "screener"
+  prism_mirror_artifact "$QUALITY_REPORT_PATH" "screener/quality_gates/$(basename "$QUALITY_REPORT_PATH")" "quality_gate_report" "screener"
+  if [[ "$HANDOFF_ANALYZER" == "true" ]]; then
+    prism_mirror_artifact "$HANDOFF_OUTPUT_PATH" "analyzer/handoffs/$(basename "$HANDOFF_OUTPUT_PATH")" "analyzer_handoff" "screener"
+  fi
+  if [[ "$RUN_LIFECYCLE" == "true" ]]; then
+    prism_mirror_artifact "$LIFECYCLE_JSON_PATH" "screener/lifecycle/$(basename "$LIFECYCLE_JSON_PATH")" "lifecycle_json" "screener"
+    prism_mirror_artifact "$LIFECYCLE_MD_PATH" "screener/lifecycle/$(basename "$LIFECYCLE_MD_PATH")" "lifecycle_markdown" "screener"
+    prism_mirror_artifact "$LIFECYCLE_REPORT_PATH" "screener/reports/$(basename "$LIFECYCLE_REPORT_PATH")" "lifecycle_report" "screener"
   fi
 }
 
@@ -405,10 +432,12 @@ PY
     fi
   fi
   refresh_quality_dashboard
+  mirror_full_workflow_artifacts
   exit 1
 fi
 rm -f "$QUALITY_ERR_FILE"
 refresh_quality_dashboard
+mirror_full_workflow_artifacts
 
 echo "完成："
 echo "  scan_result     -> $SCAN_RESULT_PATH"

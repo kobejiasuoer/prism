@@ -17,11 +17,14 @@ from urllib.parse import quote
 CONTROL_PANEL_ROOT = Path(__file__).resolve().parent
 INVEST_FLOW_ROOT = CONTROL_PANEL_ROOT.parent
 SKILLS_ROOT = INVEST_FLOW_ROOT.parent
-WORKSPACE_ROOT = SKILLS_ROOT.parent
+WORKSPACE_ROOT = SKILLS_ROOT
 SCRIPTS_ROOT = INVEST_FLOW_ROOT / "scripts"
 STOCK_ANALYZER_ROOT = SKILLS_ROOT / "stock-analyzer"
 STOCK_SCREENER_ROOT = SKILLS_ROOT / "stock-screener"
+PACKAGES_ROOT = SKILLS_ROOT / "packages"
 
+if str(PACKAGES_ROOT) not in sys.path:
+    sys.path.insert(0, str(PACKAGES_ROOT))
 if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
 if str(STOCK_ANALYZER_ROOT) not in sys.path:
@@ -47,16 +50,26 @@ from watchlist_registry import (
     list_watchlist_stocks,
     search_sina_stock_suggestions,
 )
+from prism_storage import AppStateRepository, ArtifactRepository, TaskRunRepository
+from prism_storage.paths import RUNTIME_ROOT, ensure_data_dirs, resolve_workspace_path
 
 RESEARCH_REPORTS_DIR = STOCK_SCREENER_ROOT / "data" / "research_backfill" / "reports"
+ARTIFACTS_ROOT = SKILLS_ROOT / "data" / "artifacts"
 
-CONTROL_PANEL_RUNS_DIR = INVEST_FLOW_ROOT / "data" / "control_panel_runs"
+LEGACY_CONTROL_PANEL_RUNS_DIR = INVEST_FLOW_ROOT / "data" / "control_panel_runs"
+LEGACY_CONTROL_PANEL_LOGS_DIR = LEGACY_CONTROL_PANEL_RUNS_DIR / "logs"
+CONTROL_PANEL_RUNS_DIR = RUNTIME_ROOT / "runs" / "control_panel"
 CONTROL_PANEL_LOGS_DIR = CONTROL_PANEL_RUNS_DIR / "logs"
+CONTROL_PANEL_RUN_DIRS = (CONTROL_PANEL_RUNS_DIR, LEGACY_CONTROL_PANEL_RUNS_DIR)
+CONTROL_PANEL_LOG_DIRS = (CONTROL_PANEL_LOGS_DIR, LEGACY_CONTROL_PANEL_LOGS_DIR)
 CONTROL_PANEL_STATE_DIR = INVEST_FLOW_ROOT / "data" / "control_panel_state"
 TODAY_ACTION_STATE_PATH = CONTROL_PANEL_STATE_DIR / "today_action_decisions.json"
 ASK_RECENT_STATE_PATH = CONTROL_PANEL_STATE_DIR / "ask_recent_queries.json"
 QUALITY_DASHBOARD_PATH = INVEST_FLOW_ROOT / "reports" / "feishu-quality-dashboard.md"
 WATCHLIST_REFRESH_TASK_NAME = "watchlist_refresh"
+APP_STATE_REPOSITORY = AppStateRepository()
+ARTIFACT_REPOSITORY = ArtifactRepository()
+TASK_RUN_REPOSITORY = TaskRunRepository()
 
 ACTION_DECISION_LABELS = {
     "pending": "待确认",
@@ -88,12 +101,12 @@ QUALITY_PATTERNS = {
 ARTIFACT_GROUPS = {
     "command_brief": {
         "title": "总控简报正文",
-        "paths": [INVEST_FLOW_ROOT / "reports"],
+        "paths": [ARTIFACTS_ROOT / "command_brief", INVEST_FLOW_ROOT / "reports"],
         "glob": "prism_command_brief_*.txt",
     },
     "command_report": {
         "title": "总控简报报告",
-        "paths": [INVEST_FLOW_ROOT / "reports"],
+        "paths": [ARTIFACTS_ROOT / "command_brief", INVEST_FLOW_ROOT / "reports"],
         "glob": "prism_command_brief_*.md",
     },
     "watchlist_summary": {
@@ -144,14 +157,14 @@ TASK_DEFINITIONS = {
     "command_brief": {
         "title": "投资总控简报",
         "lane": "command_center",
-        "command": ["bash", "skills/invest-flow/scripts/run_command_brief.sh"],
+        "command": ["bash", "apps/scripts/run_command_brief.sh"],
         "cwd": str(WORKSPACE_ROOT),
         "description": "汇总自选股、进攻型阀门与午盘状态，生成一份总决策简报。",
     },
     "watchlist": {
         "title": "自选股早盘摘要",
         "lane": "watchlist",
-        "command": ["bash", "skills/stock-analyzer/scripts/run_watchlist_feishu_summary.sh"],
+        "command": ["python3", "stock-analyzer/scripts/fetch.py"],
         "cwd": str(WORKSPACE_ROOT),
         "description": "重算自选股摘要与完整报告，默认不发飞书。",
     },
@@ -160,7 +173,7 @@ TASK_DEFINITIONS = {
         "lane": "aggressive",
         "command": [
             "bash",
-            "skills/stock-screener/scripts/run_full_workflow.sh",
+            "packages/screener/run_full_workflow.sh",
             "--pool",
             "aggressive",
             "--top",
@@ -179,7 +192,7 @@ TASK_DEFINITIONS = {
         "lane": "aggressive",
         "command": [
             "bash",
-            "skills/stock-screener/scripts/run_midday_refresh.sh",
+            "packages/screener/run_midday_refresh.sh",
             "--pool",
             "aggressive",
             "--top",
@@ -193,7 +206,7 @@ TASK_DEFINITIONS = {
         "lane": "midday_confirmation",
         "command": [
             "bash",
-            "skills/stock-screener/scripts/run_midday_confirmation.sh",
+            "packages/screener/run_midday_confirmation.sh",
             "--pool",
             "aggressive",
             "--top",
@@ -259,6 +272,7 @@ def load_log_tail(path: Path, max_bytes: int = 16_000) -> str:
 
 
 def ensure_runtime_dirs() -> None:
+    ensure_data_dirs()
     CONTROL_PANEL_RUNS_DIR.mkdir(parents=True, exist_ok=True)
     CONTROL_PANEL_LOGS_DIR.mkdir(parents=True, exist_ok=True)
     CONTROL_PANEL_STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -316,7 +330,7 @@ def latest_quality_item(lane: str) -> dict[str, Any] | None:
     return None
 
 
-def artifact_candidates(group_key: str) -> list[dict[str, Any]]:
+def scan_artifact_candidates(group_key: str) -> list[dict[str, Any]]:
     config = ARTIFACT_GROUPS[group_key]
     candidates: list[Path] = []
     for directory in config["paths"]:
@@ -338,6 +352,63 @@ def artifact_candidates(group_key: str) -> list[dict[str, Any]]:
         }
         for path in sorted(filtered, key=lambda item: item.stat().st_mtime, reverse=True)
     ]
+
+
+def sync_artifact_group(group_key: str) -> None:
+    config = ARTIFACT_GROUPS[group_key]
+    for item in scan_artifact_candidates(group_key):
+        try:
+            ARTIFACT_REPOSITORY.register_file(
+                item["path"],
+                artifact_type=group_key,
+                source="control_panel",
+                generated_at=item.get("mtime_full"),
+                metadata={
+                    "title": config["title"],
+                    "group_key": group_key,
+                    "name": item["name"],
+                },
+            )
+        except Exception:
+            continue
+
+
+def artifact_item_from_index(group_key: str, item: dict[str, Any]) -> dict[str, Any] | None:
+    path_value = item.get("path")
+    if not path_value:
+        return None
+    try:
+        path = resolve_workspace_path(path_value)
+    except Exception:
+        return None
+    if not path.exists():
+        return None
+    metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+    config = ARTIFACT_GROUPS[group_key]
+    return {
+        "key": group_key,
+        "title": metadata.get("title") or config["title"],
+        "path": str(path),
+        "name": metadata.get("name") or path.name,
+        "mtime": fmt_mtime(path),
+        "mtime_full": fmt_mtime_full(path),
+        "artifact_id": item.get("artifact_id") or "",
+    }
+
+
+def artifact_candidates(group_key: str) -> list[dict[str, Any]]:
+    try:
+        sync_artifact_group(group_key)
+        indexed = [
+            candidate
+            for item in ARTIFACT_REPOSITORY.list(artifact_type=group_key, limit=80)
+            if (candidate := artifact_item_from_index(group_key, item))
+        ]
+        if indexed:
+            return indexed
+    except Exception:
+        pass
+    return scan_artifact_candidates(group_key)
 
 
 def latest_artifact(group_key: str) -> dict[str, Any] | None:
@@ -758,10 +829,7 @@ def is_pid_alive(pid: int | None) -> bool:
 def list_runs(limit: int = 12) -> list[dict[str, Any]]:
     ensure_runtime_dirs()
     items: list[dict[str, Any]] = []
-    for path in sorted(CONTROL_PANEL_RUNS_DIR.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True):
-        data = load_json(path)
-        if not data:
-            continue
+    for data in TASK_RUN_REPOSITORY.list(legacy_dirs=CONTROL_PANEL_RUN_DIRS, limit=limit):
         if data.get("status") == "running" and not is_pid_alive(data.get("pid")):
             data["status"] = "unknown"
         data["checked_started_at"] = fmt_dt(data.get("started_at"))
@@ -1044,18 +1112,20 @@ def artifact_url(path: str | None) -> str | None:
 
 
 def watchlist_page_url() -> str:
-    return "/watchlist"
+    return "/portfolio"
 
 
 def ask_page_url(query: str | None = None) -> str:
-    base = "/ask"
     if not query:
-        return base
-    return f"{base}?q={quote(str(query), safe='')}"
+        return "/"
+    value = str(query).strip()
+    if len(value) == 6 and value.isdigit():
+        return f"/stock/{quote(value, safe='')}"
+    return "/"
 
 
 def opportunities_page_url() -> str:
-    return "/opportunities"
+    return "/discovery"
 
 
 def review_page_url() -> str:
@@ -1105,17 +1175,17 @@ def review_page_with_params(baseline_id: str | None = None, window_id: str | Non
 def watchlist_detail_url(code: str | None) -> str | None:
     if not code:
         return None
-    return f"/watchlist/{quote(str(code), safe='')}"
+    return f"/stock/{quote(str(code), safe='')}"
 
 
 def candidate_detail_url(code: str | None) -> str | None:
     if not code:
         return None
-    return f"/opportunities/{quote(str(code), safe='')}"
+    return f"/stock/{quote(str(code), safe='')}"
 
 
 def batch_detail_url(kind: str) -> str:
-    return f"/opportunities/batch/{quote(kind, safe='')}"
+    return "/discovery"
 
 
 def api_watchlist_detail_url(code: str | None) -> str | None:
@@ -1160,9 +1230,8 @@ def api_today_batch_detail_url(kind: str) -> str:
 
 def today_nav_links() -> dict[str, str]:
     return {
-        "ops": "/",
-        "parameters": "/parameters",
-        "today": "/today",
+        "parameters": "/settings",
+        "today": "/",
         "ask": ask_page_url(),
         "watchlist": watchlist_page_url(),
         "opportunities": opportunities_page_url(),
@@ -1255,7 +1324,9 @@ def infer_action_tier(*, action: Any = None, tone: Any = None, status: Any = Non
 
     if any(token in combined for token in ("回避", "别做", "不做", "清仓", "减仓")):
         return "avoid"
-    if any(token in combined for token in ("买入", "立即", "处理", "保留")):
+    if any(token in combined for token in ("买入", "开仓", "试错", "介入")):
+        return "wait_trigger"
+    if any(token in combined for token in ("立即", "处理", "保留")):
         return "act_now"
     if any(token in combined for token in ("触发", "等待", "确认", "评估")):
         return "wait_trigger"
@@ -1416,7 +1487,7 @@ def action_decision_tone(decision: str | None) -> str:
 
 def load_today_action_decision_store() -> dict[str, Any]:
     ensure_runtime_dirs()
-    data = load_json(TODAY_ACTION_STATE_PATH) or {}
+    data = APP_STATE_REPOSITORY.get("today_action_decisions", legacy_path=TODAY_ACTION_STATE_PATH, default={}) or {}
     trade_dates = data.get("trade_dates")
     if not isinstance(trade_dates, dict):
         trade_dates = {}
@@ -1442,15 +1513,12 @@ def write_today_action_decision_store(data: dict[str, Any]) -> dict[str, Any]:
         "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "trade_dates": {key: value for key, value in kept_dates},
     }
-    tmp_path = TODAY_ACTION_STATE_PATH.with_suffix(".tmp")
-    tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp_path.replace(TODAY_ACTION_STATE_PATH)
-    return payload
+    return APP_STATE_REPOSITORY.set("today_action_decisions", payload, legacy_path=TODAY_ACTION_STATE_PATH)
 
 
 def load_ask_recent_store() -> dict[str, Any]:
     ensure_runtime_dirs()
-    data = load_json(ASK_RECENT_STATE_PATH) or {}
+    data = APP_STATE_REPOSITORY.get("ask_recent_queries", legacy_path=ASK_RECENT_STATE_PATH, default={}) or {}
     items = data.get("items")
     if not isinstance(items, list):
         items = []
@@ -1487,10 +1555,7 @@ def write_ask_recent_store(data: dict[str, Any]) -> dict[str, Any]:
         "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "items": normalized_items[-12:],
     }
-    tmp_path = ASK_RECENT_STATE_PATH.with_suffix(".tmp")
-    tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp_path.replace(ASK_RECENT_STATE_PATH)
-    return payload
+    return APP_STATE_REPOSITORY.set("ask_recent_queries", payload, legacy_path=ASK_RECENT_STATE_PATH)
 
 
 def remember_ask_query(
@@ -1599,6 +1664,72 @@ def normalize_stock_ui_copy(text: Any) -> str:
     return normalized
 
 
+STOCK_RESULT_COPY_REPLACEMENTS = (
+    ("买还是卖", "按纪律怎么处理"),
+    ("要不要买", "是否满足触发条件"),
+    ("能不能买", "是否满足触发条件"),
+    ("强烈买入", "等待触发后再处理"),
+    ("建议买入", "等待触发后再处理"),
+    ("可以买入", "满足条件后再处理"),
+    ("可以买", "满足条件后再处理"),
+    ("该买", "满足条件后再处理"),
+    ("买点", "触发条件"),
+    ("卖点", "风险边界"),
+    ("买入", "等待触发"),
+    ("开新仓", "新增动作"),
+    ("开仓", "新增动作"),
+    ("介入", "纳入观察"),
+    ("轻仓试错", "小仓位验证"),
+    ("轻仓跟踪", "小仓位跟踪"),
+    ("加仓", "提高仓位前先等确认"),
+    ("满仓", "不放大仓位"),
+    ("清仓", "停止原计划"),
+    ("卖出", "风险优先处理"),
+    ("目标价", "上方观察位"),
+    ("收益预测", "表现推演"),
+    ("收益承诺", "确定性承诺"),
+    ("DCF", "估值模型"),
+)
+
+ASK_FOLLOWUP_COPY_REPLACEMENTS = (
+    ("建议仓位", "仓位参考"),
+    ("怎么操作", "怎么按纪律处理"),
+    ("今天怎么操作", "今天怎么按纪律处理"),
+    ("现在该怎么做", "现在按纪律怎么处理"),
+    ("该怎么做", "按纪律怎么处理"),
+    ("必须买", "必须等触发条件"),
+    ("马上买", "先等触发条件"),
+    ("直接买", "满足条件后再处理"),
+)
+
+
+def normalize_stock_result_copy(value: Any, fallback: str = "-") -> str:
+    text = str(detail_value(value, fallback)).strip()
+    if not text:
+        return fallback
+    text = normalize_stock_ui_copy(text)
+    for source, target in STOCK_RESULT_COPY_REPLACEMENTS:
+        text = text.replace(source, target)
+    text = text.replace("新新增动作", "新增动作")
+    return text
+
+
+def normalize_position_guidance(value: Any, fallback: str = "待定") -> str:
+    text = normalize_stock_result_copy(value, fallback)
+    if text in {"-", "待定"}:
+        return text
+    if "小仓位" in text and "不放大" not in text:
+        return f"{text}，不放大"
+    return text
+
+
+def normalize_ask_followup_copy(value: Any, fallback: str = "") -> str:
+    text = normalize_stock_result_copy(value, fallback)
+    for source, target in ASK_FOLLOWUP_COPY_REPLACEMENTS:
+        text = text.replace(source, target)
+    return text
+
+
 def find_watchlist_stock(watchlist: dict[str, Any] | None, code: str) -> dict[str, Any] | None:
     target = code.strip()
     for item in (watchlist or {}).get("stocks") or []:
@@ -1669,18 +1800,20 @@ def first_text(*values: Any) -> str | None:
 
 
 def normalize_next_step_sentence(value: Any, fallback: str = "先处理当前最靠前的一步。") -> str:
-    text = str(detail_value(value, fallback)).strip()
+    text = normalize_stock_result_copy(value, fallback)
     if not text:
         return fallback
-    if text.startswith("先"):
+    if text.startswith(("先", "今天", "当前", "午盘", "新增", "等待", "触发", "按", "继续", "暂停", "只", "不")):
         return text
     return f"先{text}"
 
 
 def normalize_trigger_sentence(value: Any, fallback: str = "先等触发条件明确，再决定下一步动作。") -> str:
-    text = str(detail_value(value, fallback)).strip()
+    text = normalize_stock_result_copy(value, fallback)
     if not text:
         return fallback
+    if text.startswith(("先", "等待", "当前没有", "暂无", "没有")):
+        return text
     if "再" in text:
         return text
     if text.endswith(("。", "！", "？", ".", "!", "?")):
@@ -1691,9 +1824,11 @@ def normalize_trigger_sentence(value: Any, fallback: str = "先等触发条件�
 
 
 def normalize_avoid_sentence(value: Any, fallback: str = "先不要做超出纪律边界的动作。") -> str:
-    text = str(detail_value(value, fallback)).strip()
+    text = normalize_stock_result_copy(value, fallback)
     if not text:
         return fallback
+    if text.startswith(("当前没有", "暂无", "没有")):
+        return text
     if text.startswith(("先不要", "不要", "先停")):
         return text
     if text.startswith("先不"):
@@ -1706,12 +1841,12 @@ def normalize_avoid_sentence(value: Any, fallback: str = "先不要做超出纪�
 def normalize_main_conclusion(value: Any) -> str:
     text = str(detail_value(value, "观察")).strip()
     if any(token in text for token in ("卖", "清仓", "退出", "减仓")):
-        return "卖出"
+        return "风险优先"
     if any(token in text for token in ("买", "试错", "开仓", "介入")):
-        return "买入"
+        return "等待触发"
     if any(token in text for token in ("持有", "保留")):
-        return "持有"
-    return "观察"
+        return "持仓纪律"
+    return "继续观察"
 
 
 def source_scope_label(value: Any) -> str:
@@ -1773,16 +1908,16 @@ def build_canonical_decision(
             status=normalized_main_conclusion,
             title=stock_name,
         ),
-        "position_guidance": str(detail_value(position_guidance, "待定")).strip(),
-        "risk_boundary": str(detail_value(risk_boundary, "先守纪律边界")).strip(),
-        "why_now": str(detail_value(why_now, "先按当前主结论理解这只股票。")).strip(),
-        "continue_condition": str(detail_value(continue_condition, "满足当前纪律前，先不升级动作。")).strip(),
-        "stop_condition": str(detail_value(stop_condition, "一旦触发失效条件，先停下来。")).strip(),
+        "position_guidance": normalize_position_guidance(position_guidance, "待定"),
+        "risk_boundary": normalize_stock_result_copy(risk_boundary, "先守纪律边界"),
+        "why_now": normalize_stock_result_copy(why_now, "先按当前主结论理解这只股票。"),
+        "continue_condition": normalize_stock_result_copy(continue_condition, "满足当前纪律前，先不升级动作。"),
+        "stop_condition": normalize_stock_result_copy(stop_condition, "一旦触发失效条件，先停下来。"),
         "next_step": normalize_next_step_sentence(next_step),
         "trigger_condition": normalize_trigger_sentence(trigger_condition),
         "avoid_action": normalize_avoid_sentence(avoid_action),
-        "evidence_entry": str(detail_value(evidence_entry, "看原始证据入口")).strip(),
-        "confidence_note": str(detail_value(confidence_note, "当前证据不完整，先别放大动作。")).strip(),
+        "evidence_entry": normalize_stock_result_copy(evidence_entry, "看原始证据入口"),
+        "confidence_note": normalize_stock_result_copy(confidence_note, "当前证据不完整，先别放大动作。"),
         "updated_at": detail_value(updated_at),
     }
 
@@ -2583,11 +2718,11 @@ def build_ask_case_view(
         "tone": action_tone(decision_label),
         "hero": {
             "title": f"{stock.get('name')} {code}",
-            "summary": decision_summary,
-            "decision_label": decision_label,
-            "position": position_value,
+            "summary": normalize_stock_result_copy(decision_summary, "先按已有证据理解这只股票。"),
+            "decision_label": normalize_main_conclusion(decision_label),
+            "position": normalize_position_guidance(position_value),
             "confidence_label": confidence.get("label"),
-            "confidence_note": confidence.get("detail"),
+            "confidence_note": normalize_stock_result_copy(confidence.get("detail"), "当前证据不完整，先别放大动作。"),
         },
         "context_tags": ask_context_tags(
             watchlist_stock,
@@ -2839,30 +2974,30 @@ def build_ask_followup_prompt_payload(
             "name": case.get("name"),
             "code": case.get("code"),
             "trade_date": case.get("trade_date"),
-            "decision": hero.get("decision_label"),
-            "position": hero.get("position"),
+            "decision": normalize_ask_followup_copy(hero.get("decision_label")),
+            "position": normalize_position_guidance(hero.get("position")),
             "confidence": hero.get("confidence_label"),
-            "confidence_note": hero.get("confidence_note"),
-            "summary": hero.get("summary"),
+            "confidence_note": normalize_ask_followup_copy(hero.get("confidence_note")),
+            "summary": normalize_ask_followup_copy(hero.get("summary")),
             "context_tags": list(case.get("context_tags") or [])[:6],
         },
         "metrics": [
-            {"label": item.get("label"), "value": item.get("value"), "detail": item.get("detail")}
+            {"label": item.get("label"), "value": normalize_ask_followup_copy(item.get("value")), "detail": normalize_ask_followup_copy(item.get("detail"))}
             for item in (case.get("metric_cards") or [])[:4]
         ],
         "levels": [
-            {"label": item.get("label"), "value": item.get("value"), "detail": item.get("detail")}
+            {"label": item.get("label"), "value": normalize_ask_followup_copy(item.get("value")), "detail": normalize_ask_followup_copy(item.get("detail"))}
             for item in (case.get("level_cards") or [])[:4]
         ],
         "plan": [
-            {"label": item.get("label"), "value": item.get("value")}
+            {"label": item.get("label"), "value": normalize_ask_followup_copy(item.get("value"))}
             for item in (case.get("plan_rows") or [])[:5]
         ],
         "analysis": [
             {
                 "title": item.get("title"),
-                "metric": item.get("metric"),
-                "items": list(item.get("items") or [])[:4],
+                "metric": normalize_ask_followup_copy(item.get("metric")),
+                "items": [normalize_ask_followup_copy(entry) for entry in list(item.get("items") or [])[:4]],
             }
             for item in (case.get("analysis_groups") or [])[:6]
         ],
@@ -2870,24 +3005,24 @@ def build_ask_followup_prompt_payload(
             {
                 "title": item.get("title"),
                 "items": [
-                    f"{entry.get('title')} | {entry.get('meta')}"
+                    normalize_ask_followup_copy(f"{entry.get('title')} | {entry.get('meta')}")
                     for entry in (item.get("items") or [])[:3]
                 ],
             }
             for item in (case.get("event_groups") or [])[:2]
         ],
         "cross_cards": [
-            {"label": item.get("label"), "value": item.get("value"), "detail": item.get("detail")}
+            {"label": item.get("label"), "value": normalize_ask_followup_copy(item.get("value")), "detail": normalize_ask_followup_copy(item.get("detail"))}
             for item in (case.get("cross_cards") or [])[:4]
         ],
         "history": history,
         "question": question,
         "rule_answer": {
             "intent": base_answer.get("intent"),
-            "title": base_answer.get("title"),
-            "summary": base_answer.get("summary"),
-            "bullets": list(base_answer.get("bullets") or [])[:6],
-            "references": list(base_answer.get("references") or [])[:6],
+            "title": normalize_ask_followup_copy(base_answer.get("title")),
+            "summary": normalize_ask_followup_copy(base_answer.get("summary")),
+            "bullets": [normalize_ask_followup_copy(item) for item in list(base_answer.get("bullets") or [])[:6]],
+            "references": [normalize_ask_followup_copy(item) for item in list(base_answer.get("references") or [])[:6]],
             "followups": list(base_answer.get("followups") or [])[:3],
         },
     }
@@ -2918,10 +3053,10 @@ def extract_first_json_object(text: str) -> dict[str, Any] | None:
 def normalize_ask_followup_llm_answer(payload: Any) -> dict[str, Any] | None:
     if not isinstance(payload, dict):
         return None
-    title = str(payload.get("title") or "").strip()
-    summary = str(payload.get("summary") or "").strip()
-    bullets = text_items(payload.get("bullets"))[:6] if isinstance(payload.get("bullets"), list) else []
-    references = text_items(payload.get("references"))[:3] if isinstance(payload.get("references"), list) else []
+    title = normalize_ask_followup_copy(payload.get("title"))
+    summary = normalize_ask_followup_copy(payload.get("summary"))
+    bullets = [normalize_ask_followup_copy(item) for item in text_items(payload.get("bullets"))[:6]] if isinstance(payload.get("bullets"), list) else []
+    references = [normalize_ask_followup_copy(item) for item in text_items(payload.get("references"))[:3]] if isinstance(payload.get("references"), list) else []
     followups = text_items(payload.get("followups"))[:3] if isinstance(payload.get("followups"), list) else []
     if not summary and not bullets:
         return None
@@ -2972,7 +3107,9 @@ def ask_followup_enhancement_from_model(
                     "你是棱镜 Prism 的问股追问增强器。"
                     "只能基于提供的 JSON 上下文回答，不能引入外部事实、不能编造公告和价格。"
                     "你的任务是补强规则答案，而不是推翻已有结论。"
-                    "必须保留原结论、仓位和风险边界。"
+                    "必须保留原有纪律口径、仓位参考和风险边界。"
+                    "不能输出强投资建议、目标价、收益预测、买入建议、开仓建议或收益承诺。"
+                    "涉及动作时只能表述为等待触发、按纪律处理、小仓位验证或风险优先。"
                     "输出纯 JSON 对象，不要 Markdown，不要额外解释。"
                     '字段格式：{"title":"可选","summary":"必填","bullets":["..."],"references":["..."],"followups":["..."]}。'
                     "summary 控制在 2 句话内；bullets 3-5 条；followups 2-3 条。"
@@ -3042,7 +3179,32 @@ def merge_ask_followup_answer(
         answer["engine_label"] = "规则托底"
         answer["engine_note"] = "当前基于页面分析和最近几轮追问直接回答。"
     answer["history_used"] = len(history)
-    return answer
+    return normalize_ask_followup_answer(answer)
+
+
+def normalize_ask_followup_answer(answer: dict[str, Any]) -> dict[str, Any]:
+    normalized = deepcopy(answer)
+    for key in ("title", "summary", "engine_note"):
+        if key in normalized:
+            normalized[key] = normalize_ask_followup_copy(normalized.get(key))
+    if isinstance(normalized.get("bullets"), list):
+        normalized["bullets"] = [
+            text
+            for text in (normalize_ask_followup_copy(item) for item in normalized["bullets"])
+            if text
+        ][:6]
+    if isinstance(normalized.get("references"), list):
+        normalized["references"] = ask_followup_references(
+            {},
+            [normalize_ask_followup_copy(item) for item in normalized["references"]],
+        )
+    if isinstance(normalized.get("followups"), list):
+        normalized["followups"] = [
+            text
+            for text in (normalize_ask_followup_copy(item) for item in normalized["followups"])
+            if text
+        ][:3]
+    return normalized
 
 
 def ask_find_analysis_group(case: dict[str, Any], title: str) -> dict[str, Any] | None:
@@ -3062,7 +3224,7 @@ def ask_find_cross_card(case: dict[str, Any], label: str) -> dict[str, Any] | No
 def ask_followup_presets(case: dict[str, Any]) -> list[dict[str, str]]:
     presets = [
         {"label": "为什么这样判断", "question": "为什么当前是这个结论？"},
-        {"label": "今天怎么做", "question": "今天怎么操作更合适？"},
+        {"label": "今天怎么做", "question": "今天怎么按纪律处理更合适？"},
         {"label": "关键位", "question": "支撑位、压力位和止损位怎么看？"},
         {"label": "主要风险", "question": "这只股票现在最主要的风险是什么？"},
         {"label": "公告新闻", "question": "最近公告和新闻里有什么值得注意？"},
@@ -3165,16 +3327,16 @@ def build_ask_followup_answer(
                 if str(item.get("value") or "").strip() not in {"", "-"}
             ]
         )
-        references = ask_followup_references(case, [f"建议仓位 {hero.get('position')}", f"当前结论 {hero.get('decision_label')}"])
+        references = ask_followup_references(case, [f"仓位参考 {hero.get('position')}", f"当前结论 {hero.get('decision_label')}"])
     elif intent == "plan":
-        title = "今天怎么操作"
-        summary = f"当前更像是按“{row_value('动作')}”去执行，先看触发，再看回避和失效，不要把盘中噪音当成新结论。"
+        title = "今天怎么按纪律处理"
+        summary = f"当前更像是按“{normalize_ask_followup_copy(row_value('动作'))}”去处理，先看触发，再看回避和失效，不要把盘中噪音当成新结论。"
         bullets = [
-            f"{item.get('label')}：{item.get('value')}"
+            f"{item.get('label')}：{normalize_ask_followup_copy(item.get('value'))}"
             for item in plan_rows
             if str(item.get("value") or "").strip()
         ]
-        references = ask_followup_references(case, [f"建议仓位 {hero.get('position')}"] + [f"{item.get('label')} {item.get('value')}" for item in plan_levels])
+        references = ask_followup_references(case, [f"仓位参考 {hero.get('position')}"] + [f"{item.get('label')} {normalize_ask_followup_copy(item.get('value'))}" for item in plan_levels])
     elif intent == "risk":
         risk_group = ask_find_analysis_group(case, "风险") or {}
         title = "主要风险在哪"
@@ -3218,7 +3380,7 @@ def build_ask_followup_answer(
             f"说明：{hero.get('confidence_note')}",
             f"上下文标签：{' / '.join(context_tags) if context_tags else '仅临时分析'}",
         ]
-        references = ask_followup_references(case, [f"当前结论 {hero.get('decision_label')}", f"建议仓位 {hero.get('position')}"])
+        references = ask_followup_references(case, [f"当前结论 {hero.get('decision_label')}", f"仓位参考 {hero.get('position')}"])
     elif intent == "cross":
         title = "这只票在系统里的位置"
         summary = "先看它是不是已进入自选股、观察池、午盘确认或今日动作队列，再决定优先级。"
@@ -3234,7 +3396,7 @@ def build_ask_followup_answer(
         title = f"为什么当前是 {hero.get('decision_label')}"
         summary = f"当前统一结论是 {hero.get('decision_label')}，核心原因还是 {str(hero.get('summary') or '当前结论来自多维度合并判断。').strip()}。"
         bullets = [
-            f"动作与仓位：{hero.get('decision_label')}；建议仓位 {hero.get('position')}",
+            f"纪律与仓位：{hero.get('decision_label')}；仓位参考 {hero.get('position')}",
             f"技术面：{first_text(*(tech_group.get('items') or []), tech_group.get('metric')) or '暂无明确技术线索'}",
             f"资金面：{first_text(*(flow_group.get('items') or []), flow_group.get('metric')) or '暂无明确资金线索'}",
             f"风险面：{first_text(*(risk_group.get('items') or []), '当前没有额外风险提示。')}",
@@ -3408,23 +3570,23 @@ def build_detail_decision_cards(
     return [
         {
             "label": "当前结论",
-            "value": detail_value(conclusion),
-            "detail": detail_value(conclusion_detail, "等待更多确认后再行动。"),
+            "value": normalize_main_conclusion(conclusion),
+            "detail": normalize_stock_result_copy(conclusion_detail, "等待更多确认后再行动。"),
         },
         {
             "label": "仓位建议",
-            "value": detail_value(position),
-            "detail": detail_value(position_detail, "结合当前结论控制仓位。"),
+            "value": normalize_position_guidance(position),
+            "detail": normalize_stock_result_copy(position_detail, "结合当前结论控制仓位。"),
         },
         {
             "label": "风险边界",
-            "value": detail_value(risk_boundary),
-            "detail": detail_value(risk_detail, "风险边界暂未明确，保持谨慎。"),
+            "value": normalize_stock_result_copy(risk_boundary),
+            "detail": normalize_stock_result_copy(risk_detail, "风险边界暂未明确，保持谨慎。"),
         },
         {
             "label": "下一步动作",
             "value": normalize_next_step_sentence(next_step, "先处理当前最靠前的一步。"),
-            "detail": detail_value(next_step_detail, "先处理当前最靠前的一步。"),
+            "detail": normalize_stock_result_copy(next_step_detail, "先处理当前最靠前的一步。"),
         },
     ]
 
@@ -3989,7 +4151,7 @@ def build_today_confidence_switch(
                 issue_url or decision_brief_url,
                 external=True,
             ),
-            build_confidence_action("进入控制台", links.get("ops")),
+            build_confidence_action("查看今日总览", links.get("today")),
         ],
     )
 
@@ -5194,8 +5356,8 @@ def build_topline_meta_pills(
 ) -> list[dict[str, Any]]:
     return [
         {"label": "交易日", "value": detail_value(freshness)},
-        {"label": "仓位建议", "value": detail_value(position, "待定")},
-        {"label": "风险边界", "value": detail_value(risk_boundary, "先守纪律边界")},
+        {"label": "仓位建议", "value": normalize_position_guidance(position, "待定")},
+        {"label": "风险边界", "value": normalize_stock_result_copy(risk_boundary, "先守纪律边界")},
     ]
 
 
@@ -5209,12 +5371,12 @@ def build_detail_topline(
 ) -> dict[str, Any]:
     return {
         "verdict_badge": detail_value(badge, "当前判断"),
-        "verdict_title": detail_value(title, "继续观察"),
-        "verdict_summary": detail_value(summary, "先看当前主结论，再决定是否展开更多细节。"),
+        "verdict_title": normalize_main_conclusion(title),
+        "verdict_summary": normalize_stock_result_copy(summary, "先看当前主结论，再决定是否展开更多细节。"),
         "meta_pills": [
             {
                 "label": detail_value(item.get("label"), "指标"),
-                "value": detail_value(item.get("value")),
+                "value": normalize_stock_result_copy(item.get("value")),
             }
             for item in (meta_pills or [])
             if item
@@ -5317,7 +5479,7 @@ def review_detail_url(
     *,
     api: bool = False,
 ) -> str:
-    base = "/api/review/detail" if api else "/review/detail"
+    base = "/api/review/detail" if api else review_page_url()
     params = [
         f"section={quote(str(section_key), safe='')}",
         f"label={quote(str(label), safe='')}",
@@ -7298,9 +7460,9 @@ def build_watchlist_detail_view(code: str) -> dict[str, Any]:
         "tone": action_tone(stock.get("action")),
         "hero": {
             "title": f"{stock.get('name')} {stock.get('code')}",
-            "summary": reason,
-            "status_label": stock.get("action") or "观望",
-            "position": stock.get("position") or "-",
+            "summary": normalize_stock_result_copy(reason, "先按持仓链路理解这只股票。"),
+            "status_label": normalize_main_conclusion(stock.get("action") or "观望"),
+            "position": normalize_position_guidance(stock.get("position") or "-"),
         },
         "action_tier_legend": build_action_tier_legend(),
         "canonical_decision": canonical_decision,
@@ -7470,10 +7632,12 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
         "tone": candidate_tone((confirmation_match or {}).get("item") or candidate),
         "hero": {
             "title": f"{candidate.get('name')} {candidate.get('code')}",
-            "summary": summary,
-            "status_label": (confirmation_match or {}).get("group_label")
-            or candidate_status_label(candidate.get("screening_status"))
-            or "候选",
+            "summary": normalize_stock_result_copy(summary, "先按观察池链路理解这只股票。"),
+            "status_label": normalize_main_conclusion(
+                (confirmation_match or {}).get("group_label")
+                or candidate_status_label(candidate.get("screening_status"))
+                or "候选"
+            ),
             "setup_label": candidate.get("setup_label") or candidate.get("setup_type") or "待确认",
         },
         "action_tier_legend": build_action_tier_legend(),
@@ -7626,6 +7790,60 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
             "api_self": api_today_candidate_detail_url(candidate.get("code")),
             "ask": ask_page_url(candidate.get("code")),
             "watchlist_detail": today_watchlist_detail_url(candidate.get("code")) if watchlist_stock else None,
+        },
+    }
+
+
+def build_stock_profile_view(code: str) -> dict[str, Any]:
+    normalized_code = str(code or "").strip()
+    if not normalized_code:
+        raise KeyError("stock code missing")
+
+    errors: dict[str, str] = {}
+    watchlist_detail: dict[str, Any] | None = None
+    opportunity_detail: dict[str, Any] | None = None
+
+    try:
+        watchlist_detail = build_watchlist_detail_view(normalized_code)
+    except Exception as exc:
+        errors["watchlist"] = str(exc)
+
+    try:
+        opportunity_detail = build_candidate_detail_view(normalized_code)
+    except Exception as exc:
+        errors["opportunity"] = str(exc)
+
+    primary_source = "watchlist" if watchlist_detail else ("opportunity" if opportunity_detail else None)
+    primary_detail = watchlist_detail or opportunity_detail
+    available_sources = [
+        key
+        for key, detail in (
+            ("watchlist", watchlist_detail),
+            ("opportunity", opportunity_detail),
+        )
+        if detail
+    ]
+
+    return {
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "code": normalized_code,
+        "trade_date": (primary_detail or {}).get("trade_date"),
+        "primary_source": primary_source,
+        "primary_source_label": {
+            "watchlist": "自选股链路",
+            "opportunity": "观察池链路",
+        }.get(str(primary_source or ""), "未命中详情"),
+        "primary_detail": primary_detail,
+        "available_sources": available_sources,
+        "watchlist": watchlist_detail,
+        "opportunity": opportunity_detail,
+        "errors": errors,
+        "links": {
+            "self": f"/stock/{normalized_code}",
+            "api_self": f"/api/stock/{normalized_code}",
+            "watchlist_detail": today_watchlist_detail_url(normalized_code) if watchlist_detail else None,
+            "opportunity_detail": today_candidate_detail_url(normalized_code) if opportunity_detail else None,
+            "ask": ask_page_url(normalized_code),
         },
     }
 

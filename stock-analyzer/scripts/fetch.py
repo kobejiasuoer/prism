@@ -47,6 +47,12 @@ from stock_parameters import WATCHLIST_RULE_THRESHOLDS, assess_flow_confidence
 from screener.capital_flow_contract import UNIT_WAN_YUAN, build_capital_flow_payload, resolve_amount_wan, wan_to_yi, yuan_to_wan
 from watchlist_registry import infer_market_from_code, infer_sina_code, list_active_watchlist_stocks
 
+try:
+    from prism_storage.mirror import artifact_mirroring_enabled, mirror_file_to_artifact_store
+except Exception:  # pragma: no cover - analyzer must keep working without storage helpers.
+    artifact_mirroring_enabled = None  # type: ignore[assignment]
+    mirror_file_to_artifact_store = None  # type: ignore[assignment]
+
 warnings.filterwarnings("ignore")
 
 HEADERS = {
@@ -1717,8 +1723,32 @@ def save_daily_snapshots(today, records, replace_existing=False):
         "tech_basis": "240分钟K线",
         "stocks": {**existing, **records},
     }
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
+    mirror_analyzer_artifact(
+        path,
+        f"analyzer/daily_snapshots/{today}.json",
+        artifact_type="daily_snapshot",
+        trade_date=today,
+    )
+
+
+def mirror_analyzer_artifact(path, relative_target, *, artifact_type, trade_date=None):
+    if mirror_file_to_artifact_store is None:
+        return
+    if artifact_mirroring_enabled is not None and not artifact_mirroring_enabled():
+        return
+    try:
+        mirror_file_to_artifact_store(
+            path,
+            relative_target,
+            artifact_type=artifact_type,
+            source="analyzer",
+            trade_date=trade_date,
+            metadata={"producer": "stock-analyzer/scripts/fetch.py"},
+        )
+    except Exception as exc:
+        print(f"[WARN] artifact mirror failed: {exc}", file=sys.stderr)
 
 
 def parse_report_snapshots(path):

@@ -12,7 +12,6 @@
     <a class="nav-ops-link {% if nav_active == 'opportunities' %}nav-ops-link-active{% endif %}" href="{{ nav_links.opportunities }}" {% if nav_active == 'opportunities' %}aria-current="page"{% endif %}>观察池</a>
     <a class="nav-ops-link nav-ops-link-meta {% if nav_active == 'review' %}nav-ops-link-active{% endif %}" href="{{ nav_links.review }}" {% if nav_active == 'review' %}aria-current="page"{% endif %}>复盘</a>
     <a class="nav-ops-link nav-ops-link-meta {% if nav_active == 'parameters' %}nav-ops-link-active{% endif %}" href="{{ nav_links.parameters }}" {% if nav_active == 'parameters' %}aria-current="page"{% endif %}>参数</a>
-    <a class="nav-ops-link {% if nav_active == 'ops' %}nav-ops-link-active{% endif %}" href="{{ nav_links.ops }}" {% if nav_active == 'ops' %}aria-current="page"{% endif %}>控制台</a>
     {% if show_api_link and nav_api_href %}
     <a class="nav-ops-link nav-ops-link-meta" href="{{ nav_api_href }}" target="_blank" rel="noopener">接口</a>
     {% endif %}

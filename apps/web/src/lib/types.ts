@@ -194,6 +194,36 @@ export interface RiskRow {
   tone?: Tone | string;
 }
 
+export interface CanonicalDecision {
+  stock_id: string;
+  stock_name: string;
+  trade_date: string;
+  source_scope: "holdings" | "opportunity" | "live_fallback" | string;
+  main_conclusion: string;
+  action_tier: string;
+  position_guidance: string;
+  risk_boundary: string;
+  why_now: string;
+  continue_condition: string;
+  stop_condition: string;
+  next_step: string;
+  trigger_condition: string;
+  avoid_action: string;
+  evidence_entry: string;
+  confidence_note: string;
+  updated_at: string;
+  [key: string]: string | number | null | undefined;
+}
+
+export interface StockTrigger {
+  label?: string;
+  name?: string;
+  value?: string;
+  condition?: string;
+  detail?: string;
+  action?: string;
+}
+
 export interface TodayCounts {
   watchlist_priority: number;
   watchlist_total: number;
@@ -235,15 +265,32 @@ export interface AskSuggestResponse {
 }
 
 export interface AskCaseData {
+  code?: string;
+  name?: string;
+  trade_date?: string;
+  tone?: Tone | string;
   hero?: {
     title?: string;
     summary?: string;
     status_label?: string;
+    decision_label?: string;
+    position?: string;
+    confidence_label?: string;
+    confidence_note?: string;
   };
-  canonical_decision?: Record<string, string | number | null | undefined>;
+  canonical_decision?: CanonicalDecision;
+  decision_cards?: MetricCardData[];
+  metric_cards?: MetricCardData[];
+  level_cards?: MetricCardData[];
   cross_cards?: MetricCardData[];
   context_tags?: string[];
   evidence_cards?: BasicCard[];
+  evidence_layer?: {
+    followup?: AskFollowupShell | null;
+    [key: string]: unknown;
+  };
+  execution_loop?: BasicCard[];
+  triggers?: StockTrigger[];
   artifacts?: BasicCard[];
   source_cards?: SourceCardData[];
 }
@@ -254,7 +301,29 @@ export interface AskResponse {
   examples?: AskSuggestion[];
   recent_queries?: AskSuggestion[];
   case?: AskCaseData;
+  followup?: AskFollowupShell | null;
   message?: string;
+}
+
+export interface AskFollowupPreset {
+  label?: string;
+  question: string;
+}
+
+export interface AskFollowupShell {
+  api?: string;
+  query?: string;
+  presets?: AskFollowupPreset[];
+  starter?: {
+    title?: string;
+    summary?: string;
+  };
+  engine_badge?: {
+    label?: string;
+    detail?: string;
+    tone?: Tone | string;
+  };
+  hint?: string;
 }
 
 export interface AskFollowupAnswer {
@@ -447,7 +516,7 @@ export interface StockDetailData {
     setup_label?: string;
     position?: string;
   };
-  canonical_decision?: Record<string, string | number | null | undefined>;
+  canonical_decision?: CanonicalDecision;
   topline?: {
     verdict_badge?: string;
     verdict_title?: string;
@@ -463,16 +532,24 @@ export interface StockDetailData {
   plan_rows?: Array<{ label: string; value: string }>;
   plan_levels?: Array<{ label: string; value: string }>;
   insight_groups?: Array<{ title: string; items?: string[]; empty?: string }>;
-  triggers?: Array<{ label?: string; value?: string; detail?: string }>;
+  triggers?: StockTrigger[];
   source_cards?: SourceCardData[];
   artifacts?: BasicCard[];
   links?: LinkMap;
 }
 
 export interface StockProfileData {
+  generated_at?: string;
   code: string;
+  trade_date?: string;
+  primary_source?: "watchlist" | "opportunity" | null;
+  primary_source_label?: string;
+  primary_detail?: StockDetailData;
+  available_sources?: Array<"watchlist" | "opportunity">;
   watchlist?: StockDetailData;
   opportunity?: StockDetailData;
+  errors?: Partial<Record<"watchlist" | "opportunity", string>>;
+  links?: LinkMap;
 }
 
 export interface RunItem {

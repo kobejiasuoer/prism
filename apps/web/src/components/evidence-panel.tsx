@@ -11,6 +11,9 @@ import { api } from "@/lib/api";
 import { useRefreshStatus, useTriggerRefresh } from "@/lib/hooks";
 import type { BasicCard, SourceCardData } from "@/lib/types";
 
+type EvidenceRefreshPage = "today" | "watchlist" | "opportunities" | "review";
+type EvidenceMode = "standard" | "ask";
+
 function artifactPath(card: BasicCard) {
   if (card.path) {
     return card.path;
@@ -28,21 +31,24 @@ function artifactTitle(card: BasicCard) {
 
 export function EvidencePanel({
   page,
+  mode = "standard",
   stockCode,
   sources,
   artifacts,
   title = "证据与刷新",
   eyebrow = "Evidence",
 }: {
-  page?: "today" | "watchlist" | "opportunities" | "review";
+  page?: EvidenceRefreshPage;
+  mode?: EvidenceMode;
   stockCode?: string;
   sources?: SourceCardData[];
   artifacts?: BasicCard[];
   title?: string;
   eyebrow?: string;
 }) {
-  const refresh = useRefreshStatus(page || "", Boolean(page));
-  const trigger = useTriggerRefresh(page || "", { stockCode });
+  const refreshPage = mode === "ask" ? "" : page || "";
+  const refresh = useRefreshStatus(refreshPage, Boolean(refreshPage));
+  const trigger = useTriggerRefresh(refreshPage, { stockCode });
   const [message, setMessage] = useState("");
   const [preview, setPreview] = useState<PreviewDrawerState>({
     open: false,
@@ -51,7 +57,7 @@ export function EvidencePanel({
 
   const mergedSources = refresh.data?.freshness?.length ? refresh.data.freshness : sources || [];
   const artifactCards = (artifacts || []).filter((card) => artifactPath(card) || card.url);
-  const canRefresh = Boolean(page && refresh.data?.recommended_task?.task_name);
+  const canRefresh = Boolean(refreshPage && refresh.data?.recommended_task?.task_name);
   const isCooling = Boolean(refresh.data && !refresh.data.cooldown?.ready);
   const runningCount = refresh.data?.running?.length || 0;
 
@@ -118,7 +124,7 @@ export function EvidencePanel({
   }
 
   function startRefresh(force = false) {
-    if (!page) {
+    if (!refreshPage) {
       return;
     }
     setMessage("");
@@ -168,7 +174,7 @@ export function EvidencePanel({
       >
         <div className="surface-card p-4">
           <div className="mb-4 flex flex-wrap items-center gap-2">
-            {page && refresh.data ? (
+            {refreshPage && refresh.data ? (
               <>
                 <Badge tone={refresh.data.stale_count ? "warning" : "positive"}>
                   {refresh.data.market_label}
@@ -180,6 +186,11 @@ export function EvidencePanel({
                 {isCooling ? (
                   <Badge tone="watch">冷却 {refresh.data.cooldown.remaining_seconds}s</Badge>
                 ) : null}
+              </>
+            ) : mode === "ask" ? (
+              <>
+                <Badge tone="warning">Ask 临时证据</Badge>
+                <Badge tone="info">仅展示页内来源</Badge>
               </>
             ) : (
               <Badge tone="info">页内证据</Badge>

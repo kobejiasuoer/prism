@@ -24,8 +24,8 @@ This repo is meant to show how the system is actually organized end to end:
 
 This repository includes the real public version of Prism:
 
-- the control-panel frontend built with FastAPI + Jinja templates
-- the decision-first `Today v2` and `Ask v2` control-panel surfaces
+- the Prism frontend built with Next.js + React
+- the FastAPI backend API for data, tasks, artifacts, and runtime status
 - the screening and review workflow scripts
 - the real prompts, thresholds, and decision rules used by the system
 - the stock-analysis evaluation benchmark, scorecards, and launchers
@@ -48,7 +48,8 @@ This repository does **not** publish:
 
 ```text
 prism/
-├── apps/control-panel/        # FastAPI + Jinja control panel
+├── apps/web/                  # Next.js + React frontend
+├── apps/control-panel/        # FastAPI backend API
 ├── packages/screener/         # Real screening / review workflows
 ├── data/history/              # Scrubbed historical artifacts
 ├── docs/architecture/         # High-level system documentation
@@ -59,7 +60,8 @@ prism/
 
 Important directories:
 
-- `apps/control-panel/`: operator-facing product surface, templates, static assets, tests
+- `apps/web/`: the only official Prism frontend, including command center, portfolio, discovery, review, settings, and stock detail pages
+- `apps/control-panel/`: FastAPI backend API for data assembly, task orchestration, artifact preview, and health checks
 - `packages/screener/`: scan, AI screening, midday verification, lifecycle tracking, and message generation
 - `data/history/`: archived real outputs including `ai_history/`, `quality_gates/`, `cron_logs/`, `reports/`, `command_brief/`, and `daily_snapshots/`
 - `docs/architecture/system.md`: fuller architecture walkthrough for the full-source repo
@@ -68,8 +70,10 @@ Important directories:
 
 ```mermaid
 flowchart LR
-    CP[Control Panel
-FastAPI + Jinja] --> SC[scan.py
+    WEB[Next.js frontend
+apps/web] --> API[FastAPI API
+apps/control-panel]
+    API --> SC[scan.py
 Candidate Universe]
     SC --> AI[ai_screening.py
 Shortlist + Decision Context]
@@ -87,20 +91,25 @@ This diagram shows the main operating loop of the public Prism repository. It fo
 
 For a fuller architectural walkthrough, see [docs/architecture/system.md](docs/architecture/system.md).
 
-## Current Product Surfaces
+## Current Product Frontend
 
-The current public branch includes the following operator-facing surfaces:
+The only official Prism frontend is the Next.js app in `apps/web`. FastAPI no longer serves Jinja pages; it is the backend API.
 
-- `Today v2` at `/today`: a command-first daily surface that prioritizes today's instruction, top actions, radar, holdings actions, opportunities actions, and evidence in a fixed reading order.
-- `Ask v2` at `/ask`: a conclusion-first single-stock surface that answers `buy / hold / sell / watch` before showing the boundary trio, execution layer, cross-system relation, and follow-up evidence.
-- `Watchlist` and detail pages: holdings-focused views that connect the daily command surface with stock-level follow-up, management actions, and source links.
+- `/`: command center for today's stance, action queue, risk alerts, and data sources.
+- `/portfolio`: portfolio management, grouped holdings, list management, and refresh controls.
+- `/discovery`: opportunity discovery, morning candidates, midday confirmation, and theme radar.
+- `/review`: review dashboard for conclusion changes and rule calibration.
+- `/settings`: system settings, parameters, task runs, and health status.
+- `/stock/[code]`: stock detail page that unifies portfolio and discovery perspectives.
 - `Stock evaluation baseline`: a reproducible acceptance layer that scores Prism's stock-analysis behavior and can enforce `professional_usable` or `product_ready` gates.
+
+Legacy paths such as `/today`, `/ask`, `/watchlist`, and `/opportunities` are compatibility redirects only; they are no longer frontend implementations.
 
 ## Typical Flow
 
 A simplified Prism operating loop looks like this:
 
-1. The control panel or shell scripts trigger a workflow.
+1. The Next frontend, FastAPI API, or shell scripts trigger a workflow.
 2. `scan.py` builds a candidate universe.
 3. `ai_screening.py` refines it into a shortlist with decision context.
 4. `midday_verify.py` re-checks morning conclusions against midday conditions.
@@ -110,13 +119,21 @@ A simplified Prism operating loop looks like this:
 
 ## Quick Start
 
-Create a virtual environment and install the control-panel dependencies plus test tooling:
+Create a virtual environment and install backend dependencies plus test tooling:
 
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -r apps/control-panel/requirements.txt
 python -m pip install pytest
+```
+
+Then install the Next frontend dependencies:
+
+```bash
+cd apps/web
+npm install
+cd ../..
 ```
 
 Run the verification suite:
@@ -131,31 +148,49 @@ Run the privacy scrub pass:
 python3 scripts/scrub-secrets.py
 ```
 
-If you want to explore the control panel locally, you can start it with one command:
+If you want to explore Prism locally, start the full stack with one command:
 
 ```bash
 ./start_prism.sh
 ```
 
-By default this serves `control_panel.app:app` at `http://127.0.0.1:8000`.
-You can override the bind address with environment variables such as `PRISM_HOST` and `PRISM_PORT`.
+By default this starts the Next frontend at `http://127.0.0.1:8000` and the FastAPI backend API at `http://127.0.0.1:8001`.
+You can override the bind addresses with environment variables such as `PRISM_WEB_PORT`, `PRISM_BACKEND_PORT`, and `PRISM_BACKEND_ORIGIN`.
 
 Useful routes after startup:
 
-- `http://127.0.0.1:8000/today` for the Today v2 daily command surface
-- `http://127.0.0.1:8000/ask` for the Ask v2 single-stock answer surface
-- `http://127.0.0.1:8000/watchlist` for holdings and watchlist operations
+- `http://127.0.0.1:8000/` for the command center
+- `http://127.0.0.1:8000/portfolio` for portfolio management
+- `http://127.0.0.1:8000/discovery` for opportunities
+- `http://127.0.0.1:8000/review` for review
+- `http://127.0.0.1:8000/settings` for settings
 
 ### Windows Startup
 
-On Windows, use PowerShell and start the FastAPI app with `uvicorn` directly:
+On Windows, use PowerShell and start the FastAPI backend and Next frontend separately:
 
 ```powershell
 py -3.14 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r apps/control-panel/requirements.txt
 python -m pip install pytest
-python -m uvicorn control_panel.app:app --host 127.0.0.1 --port 8000
+python -m uvicorn control_panel.app:app --host 127.0.0.1 --port 8001
+```
+
+Then open another PowerShell window for the web app:
+
+```powershell
+cd apps\web
+pnpm install
+$env:PRISM_BACKEND_ORIGIN="http://127.0.0.1:8001"
+pnpm dev -- --hostname 127.0.0.1 --port 8000
+```
+
+If `pnpm` is not available, use `npm install` in `apps\web`, then run the local Next binary:
+
+```powershell
+$env:PRISM_BACKEND_ORIGIN="http://127.0.0.1:8001"
+.\node_modules\.bin\next dev --hostname 127.0.0.1 --port 8000
 ```
 
 If PowerShell blocks virtualenv activation, enable scripts for the current shell only:
@@ -165,12 +200,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
 ```
 
-If `py -3.14` is not available, install Python 3.14 or newer first. A Python 3.8 fallback can run the control panel for local inspection after installing `eval_type_backport`, but it is not the supported project runtime:
-
-```powershell
-python -m pip install eval_type_backport
-python -m uvicorn control_panel.app:app --host 127.0.0.1 --port 8000
-```
+If `py -3.14` is not available, install Python 3.14 or newer first. The backend API should stay on `8001`; do not put FastAPI back on `8000` as the frontend.
 
 Confirm the server is healthy:
 
@@ -184,23 +214,15 @@ After the server starts, open the frontend in a browser:
 http://127.0.0.1:8000
 ```
 
-Common frontend pages:
-
-- `http://127.0.0.1:8000/today` for the daily command surface
-- `http://127.0.0.1:8000/ask` for single-stock Q&A
-- `http://127.0.0.1:8000/watchlist` for watchlist management
-- `http://127.0.0.1:8000/opportunities` for opportunities
-- `http://127.0.0.1:8000/review` for review
-
 You can also open a page directly from PowerShell:
 
 ```powershell
-Start-Process http://127.0.0.1:8000/today
+Start-Process http://127.0.0.1:8000
 ```
 
-If port `8000` is already in use, change the last command to `--port 8001`.
+If port `8000` is already in use, change the Next frontend port and set `PRISM_WEB_PORT` accordingly. Do not move the FastAPI backend back onto `8000`.
 
-The shell launchers such as `start_prism.sh` require Bash, WSL, or Git Bash. On plain PowerShell, use the `uvicorn` command above.
+The shell launchers such as `start_prism.sh` require Bash, WSL, or Git Bash. On plain PowerShell, use the two-window backend/frontend flow above.
 
 If you want to refresh the stock-analysis evaluation artifacts, you can use the one-click launcher:
 
@@ -245,6 +267,7 @@ The public repo is verified with:
 ```bash
 pytest -q
 python3 scripts/scrub-secrets.py
+cd apps/web && ./node_modules/.bin/next build
 ./start_stock_evaluation.sh professional
 ```
 
@@ -262,7 +285,7 @@ This repository represents the first full-source public release of Prism.
 
 Current emphasis:
 
-- ship the command-first `Today v2` and conclusion-first `Ask v2` surfaces
+- establish the Next.js app as Prism's only official frontend
 - keep a one-command startup path for both the UI and the evaluation workflow
 - turn stock-analysis changes into a scored acceptance flow with tiered gates
 - publish the real operating structure rather than a demo shell
