@@ -8,12 +8,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGES_ROOT = REPO_ROOT / "packages"
@@ -23,9 +20,11 @@ if str(PACKAGES_ROOT) not in sys.path:
 import stock_parameter_config as parameter_config
 
 from control_panel.dashboard_data import (
+    APP_STATE_REPOSITORY,
     CONTROL_PANEL_LOGS_DIR,
-    CONTROL_PANEL_ROOT,
+    CONTROL_PANEL_LOG_DIRS,
     CONTROL_PANEL_RUNS_DIR,
+    CONTROL_PANEL_RUN_DIRS,
     CONTROL_PANEL_STATE_DIR,
     INVEST_FLOW_ROOT,
     TASK_DEFINITIONS,
@@ -47,207 +46,31 @@ from control_panel.dashboard_data import (
     ensure_runtime_dirs,
     list_runs,
     parse_timestamp,
-    today_nav_links,
+    TASK_RUN_REPOSITORY,
     update_today_action_decision,
 )
 from watchlist_registry import archive_watchlist_stock, restore_watchlist_stock, upsert_watchlist_stock
 
 
-APP_ROOT = CONTROL_PANEL_ROOT
-TEMPLATES = Jinja2Templates(directory=str(APP_ROOT / "templates"))
 TASK_RUNNER = INVEST_FLOW_ROOT / "scripts" / "control_panel_task_runner.py"
 PREVIEW_MAX_BYTES = 220_000
-WATCHLIST_REFRESH_COMMAND = ["bash", "skills/invest-flow/scripts/run_watchlist_refresh.sh"]
-PREVIEW_THEME_QUERY_KEY = "theme"
-PREVIEW_THEME_IBM = "ibm-preview"
-PREVIEW_THEME_LABELS = {
-    PREVIEW_THEME_IBM: "IBM 预览",
-}
+WATCHLIST_REFRESH_COMMAND = ["bash", "apps/scripts/run_watchlist_refresh.sh"]
 PARAMETERS_PATH = STOCK_ANALYZER_ROOT / "config" / "stocks.json"
+WEB_ORIGIN = os.environ.get("PRISM_WEB_ORIGIN", "http://127.0.0.1:8000").rstrip("/")
 
 app = FastAPI(title="Prism Control", version="0.1.0")
-app.mount("/static", StaticFiles(directory=str(APP_ROOT / "static")), name="static")
 
 
 def now_stamp() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S_%f")
 
 
-def resolve_preview_theme(request: Request) -> str | None:
-    value = str(request.query_params.get(PREVIEW_THEME_QUERY_KEY) or "").strip()
-    return value if value in PREVIEW_THEME_LABELS else None
-
-
-def update_relative_url_query(url: str, **updates: str | None) -> str:
-    parsed = urlsplit(url)
-    params = dict(parse_qsl(parsed.query, keep_blank_values=True))
-    for key, value in updates.items():
-        if value is None:
-            params.pop(key, None)
-        else:
-            params[key] = value
-    query = urlencode(params, doseq=True)
-    return urlunsplit(("", "", parsed.path, query, parsed.fragment))
-
-
-def build_request_relative_url(request: Request, *, preview_theme: str | None) -> str:
-    raw_url = urlunsplit(("", "", request.url.path, request.url.query, ""))
-    return update_relative_url_query(raw_url, **{PREVIEW_THEME_QUERY_KEY: preview_theme})
-
-
-def should_apply_preview_theme(url: str) -> bool:
-    if not url.startswith("/"):
-        return False
-    if url.startswith("/Users/") or url.startswith("/static/"):
-        return False
-    return (
-        url == "/"
-        or url.startswith("/?")
-        or url.startswith("/api/")
-        or url.startswith("/today")
-        or url.startswith("/ask")
-        or url.startswith("/parameters")
-        or url.startswith("/watchlist")
-        or url.startswith("/opportunities")
-        or url.startswith("/review")
-        or url.startswith("/artifacts")
-    )
-
-
-def apply_preview_theme_to_urls(value: Any, preview_theme: str | None) -> Any:
-    if not preview_theme:
-        return value
-    if isinstance(value, dict):
-        return {key: apply_preview_theme_to_urls(item, preview_theme) for key, item in value.items()}
-    if isinstance(value, list):
-        return [apply_preview_theme_to_urls(item, preview_theme) for item in value]
-    if isinstance(value, tuple):
-        return tuple(apply_preview_theme_to_urls(item, preview_theme) for item in value)
-    if isinstance(value, str) and should_apply_preview_theme(value):
-        return update_relative_url_query(value, **{PREVIEW_THEME_QUERY_KEY: preview_theme})
-    return value
-
-
-def build_preview_context(request: Request) -> dict[str, str | None]:
-    preview_theme = resolve_preview_theme(request)
-    return {
-        "preview_theme": preview_theme,
-        "preview_theme_label": PREVIEW_THEME_LABELS.get(preview_theme),
-        "preview_theme_exit_url": build_request_relative_url(request, preview_theme=None),
-        "preview_theme_dashboard_url": update_relative_url_query("/", **{PREVIEW_THEME_QUERY_KEY: preview_theme}),
-        "preview_theme_ask_url": update_relative_url_query("/ask", **{PREVIEW_THEME_QUERY_KEY: preview_theme}),
-    }
-
-
-def preview_template_response(request: Request, template_name: str, context: dict[str, Any]) -> HTMLResponse:
-    preview_context = build_preview_context(request)
-    themed_context = {
-        key: apply_preview_theme_to_urls(value, preview_context["preview_theme"])
-        for key, value in context.items()
-    }
-    return TEMPLATES.TemplateResponse(
-        request,
-        template_name,
-        {
-            **themed_context,
-            **preview_context,
-        },
-    )
-
-
-def format_file_mtime(path: Path) -> str:
-    return datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
-
-
-def summarize_parameter_section(section: dict[str, Any], *, limit: int = 4) -> str:
-    keys = [str(key) for key in section.keys()]
-    if not keys:
-        return "当前为空对象"
-    preview = " / ".join(keys[:limit])
-    if len(keys) > limit:
-        preview += f" / +{len(keys) - limit}"
-    return preview
-
-
-def build_parameters_view() -> dict[str, Any]:
-    payload = parameter_config.load_parameter_config()
-    threshold_sets = payload["threshold_sets"]
-    config_path = parameter_config.PARAMETER_CONFIG_PATH
-    schema_path = parameter_config.PARAMETER_SCHEMA_PATH
-
-    links = {
-        **today_nav_links(),
-        "parameters": "/parameters",
-        "api_self": "/api/parameters",
-        "api_save": "/api/parameters",
-    }
-
-    sections = [
-        {
-            "name": name,
-            "entry_count": len(section),
-            "summary": summarize_parameter_section(section),
-        }
-        for name, section in threshold_sets.items()
-    ]
-
-    return {
-        "links": links,
-        "summary": "运行中的股票参数已经脱离 Python 常量，当前以 JSON 作为唯一运行源；这里先提供查看、校验、保存入口。",
-        "summary_cards": [
-            {
-                "label": "运行版本",
-                "value": str(payload.get("version") or "-"),
-                "detail": "当前 runtime 配置版本号",
-            },
-            {
-                "label": "阈值组",
-                "value": str(len(threshold_sets)),
-                "detail": "threshold_sets 当前已加载分组数",
-            },
-            {
-                "label": "运行配置",
-                "value": config_path.name,
-                "detail": f"最近更新 {format_file_mtime(config_path)}",
-            },
-            {
-                "label": "Schema 镜像",
-                "value": schema_path.name,
-                "detail": f"最近更新 {format_file_mtime(schema_path)}",
-            },
-        ],
-        "paths": [
-            {
-                "label": "运行配置源",
-                "path": str(config_path),
-                "mtime": format_file_mtime(config_path),
-                "title": "运行参数 JSON",
-            },
-            {
-                "label": "Schema 镜像",
-                "path": str(schema_path),
-                "mtime": format_file_mtime(schema_path),
-                "title": "参数 Schema 镜像",
-            },
-        ],
-        "required_sets": sorted(parameter_config.REQUIRED_THRESHOLD_SETS),
-        "sections": sections,
-        "raw_json": json.dumps(payload, ensure_ascii=False, indent=2),
-    }
-
-
-def parse_parameter_payload(raw_json: str) -> dict[str, Any]:
-    try:
-        payload = json.loads(raw_json)
-    except json.JSONDecodeError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail=f"JSON 解析失败：第 {exc.lineno} 行，第 {exc.colno} 列，{exc.msg}",
-        ) from exc
-
-    if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail="参数配置必须是 JSON 对象。")
-    return payload
+def web_redirect(path: str, *, query: str = "") -> RedirectResponse:
+    separator = "&" if "?" in path else "?"
+    target = f"{WEB_ORIGIN}{path}"
+    if query:
+        target = f"{target}{separator}{query}"
+    return RedirectResponse(target, status_code=307)
 
 
 def build_run_paths(run_id: str) -> tuple[Path, Path]:
@@ -255,6 +78,14 @@ def build_run_paths(run_id: str) -> tuple[Path, Path]:
     meta_path = CONTROL_PANEL_RUNS_DIR / f"{run_id}.json"
     log_path = CONTROL_PANEL_LOGS_DIR / f"{run_id}.log"
     return meta_path, log_path
+
+
+def resolve_run_log_path(run_id: str) -> Path | None:
+    for directory in CONTROL_PANEL_LOG_DIRS:
+        path = directory / f"{run_id}.log"
+        if path.exists():
+            return path
+    return None
 
 
 def launch_background_task(
@@ -595,12 +426,7 @@ def age_label(seconds: int | None) -> str:
 
 def load_refresh_state() -> dict[str, Any]:
     ensure_runtime_dirs()
-    if not REFRESH_STATE_PATH.exists():
-        return {"pages": {}}
-    try:
-        payload = json.loads(REFRESH_STATE_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        return {"pages": {}}
+    payload = APP_STATE_REPOSITORY.get("refresh_state", legacy_path=REFRESH_STATE_PATH, default={"pages": {}})
     if not isinstance(payload, dict):
         return {"pages": {}}
     pages = payload.get("pages")
@@ -611,10 +437,7 @@ def load_refresh_state() -> dict[str, Any]:
 
 def save_refresh_state(payload: dict[str, Any]) -> None:
     ensure_runtime_dirs()
-    REFRESH_STATE_PATH.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    APP_STATE_REPOSITORY.set("refresh_state", payload, legacy_path=REFRESH_STATE_PATH)
 
 
 def resolve_refresh_task(task_name: str) -> dict[str, Any]:
@@ -801,18 +624,9 @@ def save_refresh_trigger(page: str, task_name: str, run_id: str, force: bool) ->
     save_refresh_state(state)
 
 
-@app.get("/", response_class=HTMLResponse)
-async def index(request: Request) -> HTMLResponse:
-    overview = build_overview()
-    has_running = any(item.get("status") == "running" for item in overview["runs"])
-    return preview_template_response(
-        request,
-        "dashboard.html",
-        {
-            "overview": overview,
-            "has_running": has_running,
-        },
-    )
+@app.get("/", include_in_schema=False)
+async def index(request: Request) -> RedirectResponse:
+    return web_redirect("/", query=request.url.query)
 
 
 @app.get("/api/overview")
@@ -820,10 +634,9 @@ async def api_overview() -> JSONResponse:
     return JSONResponse(build_overview())
 
 
-@app.get("/today", response_class=HTMLResponse)
-async def today(request: Request) -> HTMLResponse:
-    today_view = build_today_view()
-    return preview_template_response(request, "today.html", {"today": today_view})
+@app.get("/today", include_in_schema=False)
+async def today(request: Request) -> RedirectResponse:
+    return web_redirect("/", query=request.url.query)
 
 
 @app.get("/api/today")
@@ -831,15 +644,12 @@ async def api_today() -> JSONResponse:
     return JSONResponse(build_today_view())
 
 
-@app.get("/ask", response_class=HTMLResponse)
-async def ask(request: Request, q: str | None = None) -> HTMLResponse:
-    error = None
-    try:
-        ask_view = build_ask_page_view(query=q)
-    except ValueError as exc:
-        error = str(exc)
-        ask_view = build_ask_page_view(query=q, error=error)
-    return preview_template_response(request, "ask.html", {"ask": ask_view})
+@app.get("/ask", include_in_schema=False)
+async def ask(request: Request, q: str | None = None) -> RedirectResponse:
+    query = str(q or "").strip()
+    if len(query) == 6 and query.isdigit():
+        return web_redirect(f"/stock/{query}")
+    return web_redirect("/", query=request.url.query)
 
 
 @app.get("/api/ask")
@@ -930,15 +740,9 @@ async def api_today_action_decision(request: Request) -> JSONResponse:
     )
 
 
-@app.get("/watchlist", response_class=HTMLResponse)
-async def watchlist(request: Request) -> HTMLResponse:
-    return preview_template_response(
-        request,
-        "watchlist.html",
-        {
-            "watchlist": build_watchlist_page_view(),
-        },
-    )
+@app.get("/watchlist", include_in_schema=False)
+async def watchlist(request: Request) -> RedirectResponse:
+    return web_redirect("/portfolio", query=request.url.query)
 
 
 @app.get("/api/watchlist")
@@ -1076,15 +880,9 @@ async def api_watchlist_manage_restore(request: Request) -> JSONResponse:
     )
 
 
-@app.get("/opportunities", response_class=HTMLResponse)
-async def opportunities(request: Request) -> HTMLResponse:
-    return preview_template_response(
-        request,
-        "opportunities.html",
-        {
-            "opportunities": build_opportunities_view(),
-        },
-    )
+@app.get("/opportunities", include_in_schema=False)
+async def opportunities(request: Request) -> RedirectResponse:
+    return web_redirect("/discovery", query=request.url.query)
 
 
 @app.get("/api/opportunities")
@@ -1150,57 +948,14 @@ async def api_refresh_trigger(request: Request) -> JSONResponse:
     )
 
 
-@app.get("/parameters", response_class=HTMLResponse)
-async def parameters_page(request: Request) -> HTMLResponse:
-    return preview_template_response(
-        request,
-        "parameters.html",
-        {
-            "parameters": build_parameters_view(),
-        },
-    )
+@app.get("/parameters", include_in_schema=False)
+async def parameters_page(request: Request) -> RedirectResponse:
+    return web_redirect("/settings", query=request.url.query)
 
 
-@app.get("/api/parameters")
-async def api_parameters() -> JSONResponse:
-    return JSONResponse(build_parameters_view())
-
-
-@app.post("/api/parameters")
-async def api_save_parameters(request: Request) -> JSONResponse:
-    try:
-        incoming: dict[str, Any] = await request.json()
-    except Exception:
-        incoming = {}
-
-    raw_json = str(incoming.get("raw_json") or "").strip()
-    if not raw_json:
-        raise HTTPException(status_code=400, detail="缺少 raw_json。")
-
-    payload = parse_parameter_payload(raw_json)
-    try:
-        parameter_config.save_parameter_config(payload)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    return JSONResponse(
-        {
-            "ok": True,
-            "message": "已保存运行参数，并同步 schema 镜像。",
-            "parameters": build_parameters_view(),
-        }
-    )
-
-
-@app.get("/review", response_class=HTMLResponse)
-async def review(request: Request, baseline: str | None = None, window: str | None = None) -> HTMLResponse:
-    return preview_template_response(
-        request,
-        "review.html",
-        {
-            "review": build_review_view(baseline_id=baseline, window_id=window),
-        },
-    )
+@app.get("/review", include_in_schema=False)
+async def review(request: Request) -> RedirectResponse:
+    return web_redirect("/review", query=request.url.query)
 
 
 @app.get("/api/review")
@@ -1208,19 +963,15 @@ async def api_review(baseline: str | None = None, window: str | None = None) -> 
     return JSONResponse(build_review_view(baseline_id=baseline, window_id=window))
 
 
-@app.get("/review/detail", response_class=HTMLResponse)
+@app.get("/review/detail", include_in_schema=False)
 async def review_detail(
     request: Request,
     section: str,
     label: str,
     baseline: str | None = None,
     window: str | None = None,
-) -> HTMLResponse:
-    try:
-        detail = build_review_detail_view(section, label, baseline_id=baseline, window_id=window)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return preview_template_response(request, "review_detail.html", {"detail": detail})
+) -> RedirectResponse:
+    return web_redirect("/review", query=request.url.query)
 
 
 @app.get("/api/review/detail")
@@ -1236,13 +987,9 @@ async def api_review_detail(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@app.get("/watchlist/{code}", response_class=HTMLResponse)
-async def watchlist_detail(request: Request, code: str) -> HTMLResponse:
-    try:
-        detail = build_watchlist_detail_view(code)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return preview_template_response(request, "today_watchlist_detail.html", {"detail": detail})
+@app.get("/watchlist/{code}", include_in_schema=False)
+async def watchlist_detail(request: Request, code: str) -> RedirectResponse:
+    return web_redirect(f"/stock/{code}", query=request.url.query)
 
 
 @app.get("/api/watchlist/{code}")
@@ -1253,13 +1000,9 @@ async def api_watchlist_detail(code: str) -> JSONResponse:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@app.get("/today/watchlist/{code}", response_class=HTMLResponse)
-async def today_watchlist_detail(request: Request, code: str) -> HTMLResponse:
-    try:
-        detail = build_watchlist_detail_view(code)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return preview_template_response(request, "today_watchlist_detail.html", {"detail": detail})
+@app.get("/today/watchlist/{code}", include_in_schema=False)
+async def today_watchlist_detail(request: Request, code: str) -> RedirectResponse:
+    return web_redirect(f"/stock/{code}", query=request.url.query)
 
 
 @app.get("/api/today/watchlist/{code}")
@@ -1270,16 +1013,9 @@ async def api_today_watchlist_detail(code: str) -> JSONResponse:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@app.get("/opportunities/batch/{kind}", response_class=HTMLResponse)
-async def opportunities_batch_detail(request: Request, kind: str) -> HTMLResponse:
-    if kind == "screener":
-        detail = build_screening_batch_view()
-    elif kind == "confirmation":
-        detail = build_confirmation_view()
-    else:
-        raise HTTPException(status_code=404, detail="unknown batch")
-
-    return preview_template_response(request, "today_batch_detail.html", {"detail": detail})
+@app.get("/opportunities/batch/{kind}", include_in_schema=False)
+async def opportunities_batch_detail(request: Request, kind: str) -> RedirectResponse:
+    return web_redirect("/discovery", query=request.url.query)
 
 
 @app.get("/api/opportunities/batch/{kind}")
@@ -1291,13 +1027,9 @@ async def api_opportunities_batch_detail(kind: str) -> JSONResponse:
     raise HTTPException(status_code=404, detail="unknown batch")
 
 
-@app.get("/opportunities/{code}", response_class=HTMLResponse)
-async def opportunities_candidate_detail(request: Request, code: str) -> HTMLResponse:
-    try:
-        detail = build_candidate_detail_view(code)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return preview_template_response(request, "today_candidate_detail.html", {"detail": detail})
+@app.get("/opportunities/{code}", include_in_schema=False)
+async def opportunities_candidate_detail(request: Request, code: str) -> RedirectResponse:
+    return web_redirect(f"/stock/{code}", query=request.url.query)
 
 
 @app.get("/api/opportunities/{code}")
@@ -1308,13 +1040,9 @@ async def api_opportunities_candidate_detail(code: str) -> JSONResponse:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@app.get("/today/candidates/{code}", response_class=HTMLResponse)
-async def today_candidate_detail(request: Request, code: str) -> HTMLResponse:
-    try:
-        detail = build_candidate_detail_view(code)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return preview_template_response(request, "today_candidate_detail.html", {"detail": detail})
+@app.get("/today/candidates/{code}", include_in_schema=False)
+async def today_candidate_detail(request: Request, code: str) -> RedirectResponse:
+    return web_redirect(f"/stock/{code}", query=request.url.query)
 
 
 @app.get("/api/today/candidates/{code}")
@@ -1325,16 +1053,9 @@ async def api_today_candidate_detail(code: str) -> JSONResponse:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@app.get("/today/batch/{kind}", response_class=HTMLResponse)
-async def today_batch_detail(request: Request, kind: str) -> HTMLResponse:
-    if kind == "screener":
-        detail = build_screening_batch_view()
-    elif kind == "confirmation":
-        detail = build_confirmation_view()
-    else:
-        raise HTTPException(status_code=404, detail="unknown batch")
-
-    return preview_template_response(request, "today_batch_detail.html", {"detail": detail})
+@app.get("/today/batch/{kind}", include_in_schema=False)
+async def today_batch_detail(request: Request, kind: str) -> RedirectResponse:
+    return web_redirect("/discovery", query=request.url.query)
 
 
 @app.get("/api/today/batch/{kind}")
@@ -1430,10 +1151,10 @@ async def run_task(task_name: str, request: Request) -> JSONResponse:
 
 @app.get("/api/runs/{run_id}")
 async def api_run_detail(run_id: str) -> JSONResponse:
-    meta_path = CONTROL_PANEL_RUNS_DIR / f"{run_id}.json"
-    if not meta_path.exists():
+    payload = TASK_RUN_REPOSITORY.get(run_id, legacy_dirs=CONTROL_PANEL_RUN_DIRS)
+    if not payload:
         raise HTTPException(status_code=404, detail="run not found")
-    return JSONResponse(json.loads(meta_path.read_text(encoding="utf-8")))
+    return JSONResponse(payload)
 
 
 @app.get("/api/preview")
@@ -1462,8 +1183,8 @@ async def api_preview(path: str) -> JSONResponse:
 
 @app.get("/api/runs/{run_id}/log")
 async def api_run_log(run_id: str) -> FileResponse:
-    log_path = CONTROL_PANEL_LOGS_DIR / f"{run_id}.log"
-    if not log_path.exists():
+    log_path = resolve_run_log_path(run_id)
+    if not log_path:
         raise HTTPException(status_code=404, detail="log not found")
     return FileResponse(log_path, media_type="text/plain", filename=log_path.name)
 

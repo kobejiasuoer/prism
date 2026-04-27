@@ -17,11 +17,14 @@ from urllib.parse import quote
 CONTROL_PANEL_ROOT = Path(__file__).resolve().parent
 INVEST_FLOW_ROOT = CONTROL_PANEL_ROOT.parent
 SKILLS_ROOT = INVEST_FLOW_ROOT.parent
-WORKSPACE_ROOT = SKILLS_ROOT.parent
+WORKSPACE_ROOT = SKILLS_ROOT
 SCRIPTS_ROOT = INVEST_FLOW_ROOT / "scripts"
 STOCK_ANALYZER_ROOT = SKILLS_ROOT / "stock-analyzer"
 STOCK_SCREENER_ROOT = SKILLS_ROOT / "stock-screener"
+PACKAGES_ROOT = SKILLS_ROOT / "packages"
 
+if str(PACKAGES_ROOT) not in sys.path:
+    sys.path.insert(0, str(PACKAGES_ROOT))
 if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
 if str(STOCK_ANALYZER_ROOT) not in sys.path:
@@ -47,16 +50,26 @@ from watchlist_registry import (
     list_watchlist_stocks,
     search_sina_stock_suggestions,
 )
+from prism_storage import AppStateRepository, ArtifactRepository, TaskRunRepository
+from prism_storage.paths import RUNTIME_ROOT, ensure_data_dirs, resolve_workspace_path
 
 RESEARCH_REPORTS_DIR = STOCK_SCREENER_ROOT / "data" / "research_backfill" / "reports"
+ARTIFACTS_ROOT = SKILLS_ROOT / "data" / "artifacts"
 
-CONTROL_PANEL_RUNS_DIR = INVEST_FLOW_ROOT / "data" / "control_panel_runs"
+LEGACY_CONTROL_PANEL_RUNS_DIR = INVEST_FLOW_ROOT / "data" / "control_panel_runs"
+LEGACY_CONTROL_PANEL_LOGS_DIR = LEGACY_CONTROL_PANEL_RUNS_DIR / "logs"
+CONTROL_PANEL_RUNS_DIR = RUNTIME_ROOT / "runs" / "control_panel"
 CONTROL_PANEL_LOGS_DIR = CONTROL_PANEL_RUNS_DIR / "logs"
+CONTROL_PANEL_RUN_DIRS = (CONTROL_PANEL_RUNS_DIR, LEGACY_CONTROL_PANEL_RUNS_DIR)
+CONTROL_PANEL_LOG_DIRS = (CONTROL_PANEL_LOGS_DIR, LEGACY_CONTROL_PANEL_LOGS_DIR)
 CONTROL_PANEL_STATE_DIR = INVEST_FLOW_ROOT / "data" / "control_panel_state"
 TODAY_ACTION_STATE_PATH = CONTROL_PANEL_STATE_DIR / "today_action_decisions.json"
 ASK_RECENT_STATE_PATH = CONTROL_PANEL_STATE_DIR / "ask_recent_queries.json"
 QUALITY_DASHBOARD_PATH = INVEST_FLOW_ROOT / "reports" / "feishu-quality-dashboard.md"
 WATCHLIST_REFRESH_TASK_NAME = "watchlist_refresh"
+APP_STATE_REPOSITORY = AppStateRepository()
+ARTIFACT_REPOSITORY = ArtifactRepository()
+TASK_RUN_REPOSITORY = TaskRunRepository()
 
 ACTION_DECISION_LABELS = {
     "pending": "待确认",
@@ -88,12 +101,12 @@ QUALITY_PATTERNS = {
 ARTIFACT_GROUPS = {
     "command_brief": {
         "title": "总控简报正文",
-        "paths": [INVEST_FLOW_ROOT / "reports"],
+        "paths": [ARTIFACTS_ROOT / "command_brief", INVEST_FLOW_ROOT / "reports"],
         "glob": "prism_command_brief_*.txt",
     },
     "command_report": {
         "title": "总控简报报告",
-        "paths": [INVEST_FLOW_ROOT / "reports"],
+        "paths": [ARTIFACTS_ROOT / "command_brief", INVEST_FLOW_ROOT / "reports"],
         "glob": "prism_command_brief_*.md",
     },
     "watchlist_summary": {
@@ -144,14 +157,14 @@ TASK_DEFINITIONS = {
     "command_brief": {
         "title": "投资总控简报",
         "lane": "command_center",
-        "command": ["bash", "skills/invest-flow/scripts/run_command_brief.sh"],
+        "command": ["bash", "apps/scripts/run_command_brief.sh"],
         "cwd": str(WORKSPACE_ROOT),
         "description": "汇总自选股、进攻型阀门与午盘状态，生成一份总决策简报。",
     },
     "watchlist": {
         "title": "自选股早盘摘要",
         "lane": "watchlist",
-        "command": ["bash", "skills/stock-analyzer/scripts/run_watchlist_feishu_summary.sh"],
+        "command": ["python3", "stock-analyzer/scripts/fetch.py"],
         "cwd": str(WORKSPACE_ROOT),
         "description": "重算自选股摘要与完整报告，默认不发飞书。",
     },
@@ -160,7 +173,7 @@ TASK_DEFINITIONS = {
         "lane": "aggressive",
         "command": [
             "bash",
-            "skills/stock-screener/scripts/run_full_workflow.sh",
+            "packages/screener/run_full_workflow.sh",
             "--pool",
             "aggressive",
             "--top",
@@ -179,7 +192,7 @@ TASK_DEFINITIONS = {
         "lane": "aggressive",
         "command": [
             "bash",
-            "skills/stock-screener/scripts/run_midday_refresh.sh",
+            "packages/screener/run_midday_refresh.sh",
             "--pool",
             "aggressive",
             "--top",
@@ -193,7 +206,7 @@ TASK_DEFINITIONS = {
         "lane": "midday_confirmation",
         "command": [
             "bash",
-            "skills/stock-screener/scripts/run_midday_confirmation.sh",
+            "packages/screener/run_midday_confirmation.sh",
             "--pool",
             "aggressive",
             "--top",
@@ -259,6 +272,7 @@ def load_log_tail(path: Path, max_bytes: int = 16_000) -> str:
 
 
 def ensure_runtime_dirs() -> None:
+    ensure_data_dirs()
     CONTROL_PANEL_RUNS_DIR.mkdir(parents=True, exist_ok=True)
     CONTROL_PANEL_LOGS_DIR.mkdir(parents=True, exist_ok=True)
     CONTROL_PANEL_STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -316,7 +330,7 @@ def latest_quality_item(lane: str) -> dict[str, Any] | None:
     return None
 
 
-def artifact_candidates(group_key: str) -> list[dict[str, Any]]:
+def scan_artifact_candidates(group_key: str) -> list[dict[str, Any]]:
     config = ARTIFACT_GROUPS[group_key]
     candidates: list[Path] = []
     for directory in config["paths"]:
@@ -338,6 +352,63 @@ def artifact_candidates(group_key: str) -> list[dict[str, Any]]:
         }
         for path in sorted(filtered, key=lambda item: item.stat().st_mtime, reverse=True)
     ]
+
+
+def sync_artifact_group(group_key: str) -> None:
+    config = ARTIFACT_GROUPS[group_key]
+    for item in scan_artifact_candidates(group_key):
+        try:
+            ARTIFACT_REPOSITORY.register_file(
+                item["path"],
+                artifact_type=group_key,
+                source="control_panel",
+                generated_at=item.get("mtime_full"),
+                metadata={
+                    "title": config["title"],
+                    "group_key": group_key,
+                    "name": item["name"],
+                },
+            )
+        except Exception:
+            continue
+
+
+def artifact_item_from_index(group_key: str, item: dict[str, Any]) -> dict[str, Any] | None:
+    path_value = item.get("path")
+    if not path_value:
+        return None
+    try:
+        path = resolve_workspace_path(path_value)
+    except Exception:
+        return None
+    if not path.exists():
+        return None
+    metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+    config = ARTIFACT_GROUPS[group_key]
+    return {
+        "key": group_key,
+        "title": metadata.get("title") or config["title"],
+        "path": str(path),
+        "name": metadata.get("name") or path.name,
+        "mtime": fmt_mtime(path),
+        "mtime_full": fmt_mtime_full(path),
+        "artifact_id": item.get("artifact_id") or "",
+    }
+
+
+def artifact_candidates(group_key: str) -> list[dict[str, Any]]:
+    try:
+        sync_artifact_group(group_key)
+        indexed = [
+            candidate
+            for item in ARTIFACT_REPOSITORY.list(artifact_type=group_key, limit=80)
+            if (candidate := artifact_item_from_index(group_key, item))
+        ]
+        if indexed:
+            return indexed
+    except Exception:
+        pass
+    return scan_artifact_candidates(group_key)
 
 
 def latest_artifact(group_key: str) -> dict[str, Any] | None:
@@ -758,10 +829,7 @@ def is_pid_alive(pid: int | None) -> bool:
 def list_runs(limit: int = 12) -> list[dict[str, Any]]:
     ensure_runtime_dirs()
     items: list[dict[str, Any]] = []
-    for path in sorted(CONTROL_PANEL_RUNS_DIR.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True):
-        data = load_json(path)
-        if not data:
-            continue
+    for data in TASK_RUN_REPOSITORY.list(legacy_dirs=CONTROL_PANEL_RUN_DIRS, limit=limit):
         if data.get("status") == "running" and not is_pid_alive(data.get("pid")):
             data["status"] = "unknown"
         data["checked_started_at"] = fmt_dt(data.get("started_at"))
@@ -1044,18 +1112,20 @@ def artifact_url(path: str | None) -> str | None:
 
 
 def watchlist_page_url() -> str:
-    return "/watchlist"
+    return "/portfolio"
 
 
 def ask_page_url(query: str | None = None) -> str:
-    base = "/ask"
     if not query:
-        return base
-    return f"{base}?q={quote(str(query), safe='')}"
+        return "/"
+    value = str(query).strip()
+    if len(value) == 6 and value.isdigit():
+        return f"/stock/{quote(value, safe='')}"
+    return "/"
 
 
 def opportunities_page_url() -> str:
-    return "/opportunities"
+    return "/discovery"
 
 
 def review_page_url() -> str:
@@ -1105,17 +1175,17 @@ def review_page_with_params(baseline_id: str | None = None, window_id: str | Non
 def watchlist_detail_url(code: str | None) -> str | None:
     if not code:
         return None
-    return f"/watchlist/{quote(str(code), safe='')}"
+    return f"/stock/{quote(str(code), safe='')}"
 
 
 def candidate_detail_url(code: str | None) -> str | None:
     if not code:
         return None
-    return f"/opportunities/{quote(str(code), safe='')}"
+    return f"/stock/{quote(str(code), safe='')}"
 
 
 def batch_detail_url(kind: str) -> str:
-    return f"/opportunities/batch/{quote(kind, safe='')}"
+    return "/discovery"
 
 
 def api_watchlist_detail_url(code: str | None) -> str | None:
@@ -1160,9 +1230,8 @@ def api_today_batch_detail_url(kind: str) -> str:
 
 def today_nav_links() -> dict[str, str]:
     return {
-        "ops": "/",
-        "parameters": "/parameters",
-        "today": "/today",
+        "parameters": "/settings",
+        "today": "/",
         "ask": ask_page_url(),
         "watchlist": watchlist_page_url(),
         "opportunities": opportunities_page_url(),
@@ -1416,7 +1485,7 @@ def action_decision_tone(decision: str | None) -> str:
 
 def load_today_action_decision_store() -> dict[str, Any]:
     ensure_runtime_dirs()
-    data = load_json(TODAY_ACTION_STATE_PATH) or {}
+    data = APP_STATE_REPOSITORY.get("today_action_decisions", legacy_path=TODAY_ACTION_STATE_PATH, default={}) or {}
     trade_dates = data.get("trade_dates")
     if not isinstance(trade_dates, dict):
         trade_dates = {}
@@ -1442,15 +1511,12 @@ def write_today_action_decision_store(data: dict[str, Any]) -> dict[str, Any]:
         "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "trade_dates": {key: value for key, value in kept_dates},
     }
-    tmp_path = TODAY_ACTION_STATE_PATH.with_suffix(".tmp")
-    tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp_path.replace(TODAY_ACTION_STATE_PATH)
-    return payload
+    return APP_STATE_REPOSITORY.set("today_action_decisions", payload, legacy_path=TODAY_ACTION_STATE_PATH)
 
 
 def load_ask_recent_store() -> dict[str, Any]:
     ensure_runtime_dirs()
-    data = load_json(ASK_RECENT_STATE_PATH) or {}
+    data = APP_STATE_REPOSITORY.get("ask_recent_queries", legacy_path=ASK_RECENT_STATE_PATH, default={}) or {}
     items = data.get("items")
     if not isinstance(items, list):
         items = []
@@ -1487,10 +1553,7 @@ def write_ask_recent_store(data: dict[str, Any]) -> dict[str, Any]:
         "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "items": normalized_items[-12:],
     }
-    tmp_path = ASK_RECENT_STATE_PATH.with_suffix(".tmp")
-    tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp_path.replace(ASK_RECENT_STATE_PATH)
-    return payload
+    return APP_STATE_REPOSITORY.set("ask_recent_queries", payload, legacy_path=ASK_RECENT_STATE_PATH)
 
 
 def remember_ask_query(
@@ -3989,7 +4052,7 @@ def build_today_confidence_switch(
                 issue_url or decision_brief_url,
                 external=True,
             ),
-            build_confidence_action("进入控制台", links.get("ops")),
+            build_confidence_action("查看今日总览", links.get("today")),
         ],
     )
 
@@ -5317,7 +5380,7 @@ def review_detail_url(
     *,
     api: bool = False,
 ) -> str:
-    base = "/api/review/detail" if api else "/review/detail"
+    base = "/api/review/detail" if api else review_page_url()
     params = [
         f"section={quote(str(section_key), safe='')}",
         f"label={quote(str(label), safe='')}",

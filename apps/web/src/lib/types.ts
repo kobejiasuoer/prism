@@ -235,15 +235,32 @@ export interface AskSuggestResponse {
 }
 
 export interface AskCaseData {
+  code?: string;
+  name?: string;
+  trade_date?: string;
+  tone?: Tone | string;
   hero?: {
     title?: string;
     summary?: string;
     status_label?: string;
+    decision_label?: string;
+    position?: string;
+    confidence_label?: string;
+    confidence_note?: string;
   };
   canonical_decision?: Record<string, string | number | null | undefined>;
+  decision_cards?: MetricCardData[];
+  metric_cards?: MetricCardData[];
+  level_cards?: MetricCardData[];
   cross_cards?: MetricCardData[];
   context_tags?: string[];
   evidence_cards?: BasicCard[];
+  evidence_layer?: {
+    followup?: AskFollowupShell | null;
+    [key: string]: unknown;
+  };
+  execution_loop?: BasicCard[];
+  triggers?: Array<{ label?: string; value?: string; detail?: string }>;
   artifacts?: BasicCard[];
   source_cards?: SourceCardData[];
 }
@@ -254,7 +271,29 @@ export interface AskResponse {
   examples?: AskSuggestion[];
   recent_queries?: AskSuggestion[];
   case?: AskCaseData;
+  followup?: AskFollowupShell | null;
   message?: string;
+}
+
+export interface AskFollowupPreset {
+  label?: string;
+  question: string;
+}
+
+export interface AskFollowupShell {
+  api?: string;
+  query?: string;
+  presets?: AskFollowupPreset[];
+  starter?: {
+    title?: string;
+    summary?: string;
+  };
+  engine_badge?: {
+    label?: string;
+    detail?: string;
+    tone?: Tone | string;
+  };
+  hint?: string;
 }
 
 export interface AskFollowupAnswer {

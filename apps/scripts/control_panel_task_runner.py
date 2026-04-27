@@ -8,6 +8,17 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+PACKAGES_ROOT = REPO_ROOT / "packages"
+if str(PACKAGES_ROOT) not in sys.path:
+    sys.path.insert(0, str(PACKAGES_ROOT))
+
+try:
+    from prism_storage import TaskRunRepository
+except Exception:  # pragma: no cover - task metadata JSON remains the fallback.
+    TaskRunRepository = None  # type: ignore[assignment]
 
 CRON_JOBS_PATH = Path.home() / ".openclaw" / "cron" / "jobs.json"
 TASK_JOB_NAME_PREFERENCES = {
@@ -35,9 +46,15 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def write_meta(path: Path, payload: dict) -> None:
+def write_meta(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    if TaskRunRepository is None:
+        return
+    try:
+        TaskRunRepository().upsert(payload, legacy_path=path)
+    except Exception:
+        return
 
 
 def load_cron_jobs() -> list[dict]:

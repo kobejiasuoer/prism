@@ -2,7 +2,7 @@
 
 import { Archive, FileSearch, LoaderCircle, Plus, RefreshCw, RotateCcw, SendHorizontal } from "lucide-react";
 import { useParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/badge";
 import { DataCard, EmptyState, ErrorState, Panel, SkeletonBlock } from "@/components/data-card";
@@ -22,6 +22,7 @@ import type { AskFollowupResponse, StockDetailData, WatchlistManagerItem } from 
 import { cn } from "@/lib/utils";
 
 const tabs = ["决策", "追问", "持仓", "发现", "证据"] as const;
+const followupHistoryTurnLimit = 3;
 
 function pickDetail(watchlist?: StockDetailData, opportunity?: StockDetailData, activeTab?: string) {
   if (activeTab === "发现" && opportunity) {
@@ -35,10 +36,21 @@ function findManagerItem(items: WatchlistManagerItem[] | undefined, code: string
 }
 
 function historyPayload(messages: AskFollowupResponse[]) {
-  return messages.map((item) => ({
-    question: item.question,
-    answer: item.answer?.summary || item.answer?.title || "",
-  }));
+  return messages.slice(-followupHistoryTurnLimit).flatMap((item) => [
+    {
+      role: "user",
+      title: "继续追问",
+      summary: item.question,
+    },
+    {
+      role: "assistant",
+      title: item.answer?.title || "追问回答",
+      summary: item.answer?.summary || "",
+      bullets: (item.answer?.bullets || []).slice(0, 4),
+      references: (item.answer?.references || []).slice(0, 3),
+      engine_label: item.answer?.engine_label || "",
+    },
+  ]);
 }
 
 export default function StockProfilePage() {
@@ -53,15 +65,19 @@ export default function StockProfilePage() {
   const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>("决策");
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<AskFollowupResponse[]>([]);
+  const [pendingQuestion, setPendingQuestion] = useState("");
   const [asking, setAsking] = useState(false);
   const [askError, setAskError] = useState("");
   const [manageFeedback, setManageFeedback] = useState("");
+  const threadEndRef = useRef<HTMLDivElement | null>(null);
   const detail = pickDetail(profile.data?.watchlist, profile.data?.opportunity, activeTab);
+  const askCase = ask.data?.case;
   const manager = managerQuery.data?.manager;
   const activeManagerItem = findManagerItem(manager?.active_items, code);
   const archivedManagerItem = findManagerItem(manager?.archived_items, code);
   const manageBusy = addStock.isPending || archiveStock.isPending || restoreStock.isPending;
-  const stockName = detail?.name || activeManagerItem?.name || archivedManagerItem?.name || ask.data?.case?.hero?.title || code;
+  const stockName = detail?.name || activeManagerItem?.name || archivedManagerItem?.name || askCase?.name || code;
+  const followupShell = ask.data?.followup || askCase?.evidence_layer?.followup || null;
   const allMetricCards = useMemo(() => {
     if (!detail) {
       return [];
@@ -73,10 +89,23 @@ export default function StockProfilePage() {
       ...(detail.level_cards || []),
     ];
   }, [detail]);
+  const askFallbackCards = [
+    ...(askCase?.decision_cards || []),
+    ...(askCase?.metric_cards || []),
+    ...(askCase?.level_cards || []),
+  ];
   const latestFollowups = messages.at(-1)?.answer?.followups || [];
+  const presetQuestions = (followupShell?.presets || [])
+    .map((item) => ({
+      label: item.label || item.question,
+      value: item.question,
+    }))
+    .filter((item) => item.value);
   const suggestedQuestions =
     latestFollowups.length
       ? latestFollowups.map((item) => ({ label: item, value: item }))
+      : presetQuestions.length
+        ? presetQuestions
       : [
           "这只今天要不要动？",
           "仓位和止损怎么设？",
@@ -84,13 +113,18 @@ export default function StockProfilePage() {
           "结论对应哪些证据？",
         ].map((item) => ({ label: item, value: item }));
 
+  useEffect(() => {
+    threadEndRef.current?.scrollIntoView({ block: "nearest" });
+  }, [messages, pendingQuestion]);
+
   async function submitFollowup(value?: string) {
     const text = (value ?? question).trim();
-    if (!text) {
+    if (!text || asking) {
       return;
     }
     setAsking(true);
     setAskError("");
+    setPendingQuestion(text);
     try {
       const payload = await api.askFollowup({
         query: code,
@@ -103,6 +137,7 @@ export default function StockProfilePage() {
     } catch (error) {
       setAskError(error instanceof Error ? error.message : "追问失败");
     } finally {
+      setPendingQuestion("");
       setAsking(false);
     }
   }
@@ -143,11 +178,11 @@ export default function StockProfilePage() {
     <main className="flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
       <div className="mx-auto max-w-7xl">
         <PageTitle
-          eyebrow={detail?.trade_date || code}
-          title={detail?.hero?.title || `${detail?.name || "个股档案"} · ${code}`}
-          summary={detail?.hero?.summary || detail?.topline?.verdict_summary || "统一查看这只股票的决策、持仓、发现和证据。"}
+          eyebrow={detail?.trade_date || askCase?.trade_date || code}
+          title={detail?.hero?.title || askCase?.hero?.title || `${stockName || "个股档案"} · ${code}`}
+          summary={detail?.hero?.summary || detail?.topline?.verdict_summary || askCase?.hero?.summary || "统一查看这只股票的决策、持仓、发现和证据。"}
           icon={FileSearch}
-          badge={detail?.hero?.status_label || detail?.topline?.verdict_badge || "个股档案"}
+          badge={detail?.hero?.status_label || detail?.topline?.verdict_badge || askCase?.hero?.status_label || askCase?.hero?.decision_label || "个股档案"}
           actions={
             <div className="flex flex-wrap items-center gap-2">
               {activeManagerItem ? (
@@ -199,7 +234,7 @@ export default function StockProfilePage() {
             {manageFeedback}
           </div>
         ) : null}
-        {!profile.isLoading && !detail ? <EmptyState>当前股票不在持仓或观察池详情中。</EmptyState> : null}
+        {!profile.isLoading && !ask.isLoading && !detail && !askCase ? <EmptyState>当前股票不在持仓或观察池详情中。</EmptyState> : null}
 
         <div className="mb-6 flex gap-2 overflow-x-auto rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-1">
           {tabs.map((tab) => (
@@ -229,40 +264,40 @@ export default function StockProfilePage() {
               <div className="surface-card p-4">
                 {ask.isLoading ? (
                   <SkeletonBlock className="h-32 w-full" />
-                ) : ask.data?.case ? (
+                ) : askCase ? (
                   <div className="flex flex-col gap-4">
                     <div>
                       <div className="mb-2 flex flex-wrap items-center gap-2">
                         <Badge tone="info">{stockName}</Badge>
-                        {ask.data.case.hero?.status_label ? <Badge tone="watch">{ask.data.case.hero.status_label}</Badge> : null}
+                        {askCase.hero?.status_label ? <Badge tone="watch">{askCase.hero.status_label}</Badge> : null}
                       </div>
                       <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-                        {ask.data.case.hero?.title || `${stockName} ${code}`}
+                        {askCase.hero?.title || `${stockName} ${code}`}
                       </h2>
                       <p className="mt-2 text-[13px] leading-6 text-[var(--text-secondary)]">
-                        {ask.data.case.hero?.summary || "暂无问股摘要，直接输入问题继续追问。"}
+                        {askCase.hero?.summary || "暂无问股摘要，直接输入问题继续追问。"}
                       </p>
                     </div>
 
-                    {(ask.data.case.cross_cards || []).length ? (
+                    {(askCase.cross_cards || []).length ? (
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        {ask.data.case.cross_cards?.slice(0, 4).map((card, index) => (
+                        {askCase.cross_cards?.slice(0, 4).map((card, index) => (
                           <MetricCard key={`${card.label}-${index}`} {...card} tone={card.tone || "info"} />
                         ))}
                       </div>
                     ) : null}
 
-                    {ask.data.case.context_tags?.length ? (
+                    {askCase.context_tags?.length ? (
                       <div className="flex flex-wrap gap-2">
-                        {ask.data.case.context_tags.map((item) => (
+                        {askCase.context_tags.map((item) => (
                           <Badge key={item} tone="info">{item}</Badge>
                         ))}
                       </div>
                     ) : null}
 
-                    {ask.data.case.canonical_decision ? (
+                    {askCase.canonical_decision ? (
                       <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-3">
-                        {Object.entries(ask.data.case.canonical_decision).slice(0, 8).map(([key, value]) => (
+                        {Object.entries(askCase.canonical_decision).slice(0, 8).map(([key, value]) => (
                           <div key={key} className="flex gap-3 border-b border-[var(--border-subtle)] py-2 last:border-b-0">
                             <span className="mono w-32 shrink-0 text-[11px] text-[var(--text-tertiary)]">{key}</span>
                             <span className="min-w-0 flex-1 text-[12px] text-[var(--text-secondary)]">{String(value ?? "-")}</span>
@@ -282,7 +317,13 @@ export default function StockProfilePage() {
                 <div className="min-h-0 flex-1 space-y-3 overflow-auto pr-1">
                   {!messages.length ? (
                     <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3 text-[13px] leading-6 text-[var(--text-secondary)]">
-                      可以围绕仓位、买卖点、风险和证据继续问，系统会带着本轮对话上下文回答。
+                      {followupShell?.starter?.summary || "可以围绕仓位、买卖点、风险和证据继续问，系统会带着本轮对话上下文回答。"}
+                      {followupShell?.engine_badge?.label ? (
+                        <span className="mt-2 block text-[12px] text-[var(--text-tertiary)]">
+                          {followupShell.engine_badge.label}
+                          {followupShell.engine_badge.detail ? `：${followupShell.engine_badge.detail}` : ""}
+                        </span>
+                      ) : null}
                     </div>
                   ) : null}
                   {messages.map((item, index) => (
@@ -315,6 +356,18 @@ export default function StockProfilePage() {
                       </div>
                     </div>
                   ))}
+                  {pendingQuestion ? (
+                    <div className="space-y-2">
+                      <div className="ml-auto max-w-[88%] rounded-md bg-[var(--info)] px-3 py-2 text-[13px] leading-6 text-white">
+                        {pendingQuestion}
+                      </div>
+                      <div className="inline-flex max-w-[92%] items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3 text-[13px] text-[var(--text-secondary)]">
+                        <LoaderCircle size={14} className="animate-spin" />
+                        正在整理回答
+                      </div>
+                    </div>
+                  ) : null}
+                  <div ref={threadEndRef} />
                 </div>
 
                 <div className="mt-4 border-t border-[var(--border-subtle)] pt-4">
@@ -343,6 +396,12 @@ export default function StockProfilePage() {
                     <textarea
                       value={question}
                       onChange={(event) => setQuestion(event.target.value)}
+                      onKeyDown={(event) => {
+                        if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                          event.preventDefault();
+                          void submitFollowup();
+                        }
+                      }}
                       placeholder="继续问：仓位怎么控？风险在哪？证据是什么？"
                       className="focus-ring min-h-20 flex-1 resize-y rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2 text-[13px] leading-6 text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)]"
                     />
@@ -361,6 +420,64 @@ export default function StockProfilePage() {
                     </div>
                   ) : null}
                 </div>
+              </div>
+            </Panel>
+          </div>
+        ) : null}
+
+        {!detail && askCase && activeTab === "决策" ? (
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+            <div className="flex flex-col gap-6">
+              <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {askFallbackCards.slice(0, 4).map((card, index) => (
+                  <MetricCard key={`${card.label}-${index}`} {...card} tone={index === 0 ? askCase.tone || "info" : card.tone || "watch"} />
+                ))}
+                {!askFallbackCards.length ? <EmptyState>暂无 Ask 指标卡。</EmptyState> : null}
+              </section>
+
+              <Panel
+                title="Ask 主结论"
+                eyebrow="Fallback"
+                action={
+                  <button
+                    type="button"
+                    className="focus-ring rounded-md border border-[var(--border-subtle)] px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                    onClick={() => setActiveTab("追问")}
+                  >
+                    继续追问
+                  </button>
+                }
+              >
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                  {(askCase.execution_loop || []).slice(0, 4).map((card, index) => <DataCard key={`${card.label}-${index}`} card={card} />)}
+                  {!askCase.execution_loop?.length ? (
+                    <DataCard
+                      card={{
+                        title: askCase.hero?.decision_label || "当前结论",
+                        detail: askCase.hero?.summary || "Ask 已返回单股结论，可进入追问继续拆仓位、风险和证据。",
+                        status: askCase.hero?.position,
+                        tone: askCase.tone || "watch",
+                      }}
+                    />
+                  ) : null}
+                </div>
+              </Panel>
+            </div>
+
+            <Panel title="决策摘要" eyebrow="Ask Canonical">
+              <div className="surface-card p-4">
+                {askCase.canonical_decision ? (
+                  <div className="flex flex-col gap-2">
+                    {Object.entries(askCase.canonical_decision).slice(0, 10).map(([key, value]) => (
+                      <div key={key} className="flex gap-3 border-b border-[var(--border-subtle)] py-2 last:border-b-0">
+                        <span className="mono w-36 shrink-0 text-[11px] text-[var(--text-tertiary)]">{key}</span>
+                        <span className="min-w-0 flex-1 text-[12px] text-[var(--text-secondary)]">{String(value ?? "-")}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState>暂无标准化决策。</EmptyState>
+                )}
               </div>
             </Panel>
           </div>
@@ -468,6 +585,21 @@ export default function StockProfilePage() {
             title="来源与原始证据"
             eyebrow="Evidence"
           />
+        ) : null}
+
+        {!detail && askCase && activeTab === "证据" ? (
+          <EvidencePanel
+            page="opportunities"
+            stockCode={code}
+            sources={askCase.source_cards}
+            artifacts={askCase.artifacts}
+            title="Ask 来源与原始证据"
+            eyebrow="Evidence"
+          />
+        ) : null}
+
+        {!detail && askCase && (activeTab === "持仓" || activeTab === "发现") ? (
+          <EmptyState>{activeTab === "持仓" ? "这只股票当前不在持仓名单，可用页面右上角加入。" : "这只股票当前不在观察池，先以 Ask 结论和证据为准。"}</EmptyState>
         ) : null}
       </div>
     </main>

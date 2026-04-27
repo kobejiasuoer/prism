@@ -15,8 +15,10 @@ Prism is organized around four goals:
 
 ```mermaid
 flowchart LR
-    UI["Control Panel
-FastAPI + Jinja"] --> WF["Workflow Layer
+    WEB["Next.js Frontend
+apps/web"] --> API["FastAPI Backend API
+apps/control-panel"]
+    API --> WF["Workflow Layer
 scan / screening / verify / lifecycle"]
     WF --> MSG["Report Layer
 generate_feishu_message.py"]
@@ -27,13 +29,13 @@ data/history"]
 scripts/scrub-secrets.py"] --> HIST
 ```
 
-The control panel is the operator-facing surface. It triggers workflow execution, the workflow layer produces decisions and intermediate artifacts, the report layer formats operational output, and the history layer retains scrubbed records for transparency and auditability.
+The Next.js app is the operator-facing surface. It calls the FastAPI backend API to trigger workflow execution, the workflow layer produces decisions and intermediate artifacts, the report layer formats operational output, and the history layer retains scrubbed records for transparency and auditability.
 
 ## Primary Runtime Chain
 
 The main public operating loop is:
 
-1. The operator uses the control panel or shell entrypoints to trigger a run.
+1. The operator uses the Next.js frontend, FastAPI API, or shell entrypoints to trigger a run.
 2. `scan.py` builds the candidate universe.
 3. `ai_screening.py` narrows that universe into a shortlist with decision context.
 4. `midday_verify.py` re-checks the morning view against midday conditions.
@@ -43,31 +45,37 @@ The main public operating loop is:
 
 ## Component Boundaries
 
-### 1. Operator Surface
+### 1. Frontend Surface
+
+Path: `apps/web/`
+
+This app provides the public operator-facing UI. It is the only official Prism frontend and contains the command center, portfolio, discovery, review, settings, and stock detail pages.
+
+### 2. Backend API
 
 Path: `apps/control-panel/`
 
-This app provides the public operator-facing UI. It contains the FastAPI app, Jinja templates, static assets, and tests for the control panel surface. Its responsibility is orchestration and presentation, not deep screening logic.
+This app provides the FastAPI backend API. It assembles view data, triggers background tasks, serves artifact previews, and exposes health checks. It no longer owns Jinja pages or static frontend assets.
 
-### 2. Workflow Layer
+### 3. Workflow Layer
 
 Path: `packages/screener/`
 
 This package holds the real workflow chain used by Prism. It includes candidate generation, AI-assisted screening, midday verification, lifecycle tracking, and report preparation. The public repository keeps these scripts together because they are easier to understand as one operating chain than as disconnected utilities.
 
-### 3. Reporting Layer
+### 4. Reporting Layer
 
 Primary entrypoint: `generate_feishu_message.py`
 
 Prism treats report generation as part of the workflow, not as an afterthought. The reporting layer converts internal decisions into operator-facing summaries, message payloads, and archived report artifacts.
 
-### 4. Historical Artifact Layer
+### 5. Historical Artifact Layer
 
 Path: `data/history/`
 
 This folder keeps scrubbed operational artifacts, including AI screening snapshots, quality gates, cron logs, command briefs, generated reports, control-panel run metadata, and daily snapshot inputs. Publishing this layer is part of the open-source boundary because it shows how the system behaves over time.
 
-### 5. Privacy Scrub Layer
+### 6. Privacy Scrub Layer
 
 Path: `scripts/scrub-secrets.py`
 
@@ -77,7 +85,8 @@ The scrub script is the mechanical guardrail between a real working repository a
 
 ```text
 prism/
-├── apps/control-panel/        # Operator UI and tests
+├── apps/web/                  # Next.js frontend
+├── apps/control-panel/        # FastAPI backend API
 ├── packages/screener/         # Real screening and review workflows
 ├── data/history/              # Scrubbed historical artifacts
 ├── docs/architecture/         # Architecture notes for the public repo
@@ -91,7 +100,7 @@ Prism is intentionally full-source but not secret-leaking.
 
 The public repository includes:
 
-- real frontend templates and static assets
+- real Next.js frontend source
 - real workflow scripts and decision rules
 - real prompts, thresholds, and report formats
 - real historical artifacts after mechanical scrub

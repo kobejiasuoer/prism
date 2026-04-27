@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import urllib.parse
 import urllib.request
 from copy import deepcopy
@@ -11,8 +12,12 @@ from typing import Any
 
 
 SKILL_ROOT = Path(__file__).resolve().parent
-WATCHLIST_CONFIG_PATH = SKILL_ROOT / "config" / "stocks.json"
-STOCK_SCREENER_ROOT = SKILL_ROOT.parent / "stock-screener"
+REPO_ROOT = SKILL_ROOT.parents[1] if SKILL_ROOT.name == "control-panel" and SKILL_ROOT.parent.name == "apps" else SKILL_ROOT.parent
+PACKAGES_ROOT = REPO_ROOT / "packages"
+if str(PACKAGES_ROOT) not in sys.path:
+    sys.path.insert(0, str(PACKAGES_ROOT))
+WATCHLIST_CONFIG_PATH = REPO_ROOT / "stock-analyzer" / "config" / "stocks.json"
+STOCK_SCREENER_ROOT = REPO_ROOT / "stock-screener"
 CODE_PATTERN = re.compile(r"^\d{6}$")
 SINA_QUOTE_URL = "https://hq.sinajs.cn/list={sina_code}"
 SINA_SUGGEST_URL = "https://suggest3.sinajs.cn/suggest/type=11,12,13,14,15&key={query}"
@@ -25,6 +30,11 @@ HISTORICAL_STOCK_SEARCH_SOURCES = (
 _HISTORICAL_STOCK_CATALOG_CACHE: dict[str, Any] = {"signature": None, "items": []}
 _SINA_SUGGEST_CACHE: dict[str, dict[str, Any]] = {}
 SINA_SUGGEST_CACHE_TTL_SECONDS = 600
+
+try:
+    from prism_storage import WatchlistConfigRepository
+except Exception:  # pragma: no cover - direct JSON remains the compatibility fallback.
+    WatchlistConfigRepository = None  # type: ignore[assignment]
 
 
 def now_str() -> str:
@@ -235,6 +245,8 @@ def list_historical_stock_catalog() -> list[dict[str, Any]]:
 
 def load_watchlist_config(path: str | Path | None = None) -> dict[str, Any]:
     target = Path(path).expanduser() if path else WATCHLIST_CONFIG_PATH
+    if WatchlistConfigRepository is not None:
+        return WatchlistConfigRepository(target).get()
     if not target.exists():
         return {"stocks": []}
     try:
@@ -250,11 +262,10 @@ def load_watchlist_config(path: str | Path | None = None) -> dict[str, Any]:
 
 def save_watchlist_config(payload: dict[str, Any], path: str | Path | None = None) -> Path:
     target = Path(path).expanduser() if path else WATCHLIST_CONFIG_PATH
+    if WatchlistConfigRepository is not None:
+        return WatchlistConfigRepository(target).set(payload)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    target.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return target
 
 

@@ -17,15 +17,11 @@ html[data-preview-theme="ibm-preview"] .panel-shell {
   padding: 1rem 0 3rem;
 }
 
-html[data-preview-theme="ibm-preview"] .dashboard-page-shell,
 html[data-preview-theme="ibm-preview"] .ask-page-shell {
   color: #161616;
 }
 
 html[data-preview-theme="ibm-preview"] :is(
-  .dashboard-ops-header,
-  .ops-health-card,
-  .ops-blocked-item,
   .task-card,
   .freshness-card,
   .lane-card,
@@ -45,8 +41,7 @@ html[data-preview-theme="ibm-preview"] :is(
   .ask-compact-promise,
   .ask-quick-block,
   .ask-example-chip,
-  .ask-followup-shell,
-  .ops-health-metric
+  .ask-followup-shell
 ) {
   background: #ffffff;
   border: 1px solid #c6c6c6;
@@ -55,7 +50,6 @@ html[data-preview-theme="ibm-preview"] :is(
   backdrop-filter: none;
 }
 
-html[data-preview-theme="ibm-preview"] .dashboard-ops-header,
 html[data-preview-theme="ibm-preview"] .today-hero,
 html[data-preview-theme="ibm-preview"] .today-panel,
 html[data-preview-theme="ibm-preview"] .section-block {
@@ -63,7 +57,6 @@ html[data-preview-theme="ibm-preview"] .section-block {
   overflow: hidden;
 }
 
-html[data-preview-theme="ibm-preview"] .dashboard-ops-header::before,
 html[data-preview-theme="ibm-preview"] .today-hero::before,
 html[data-preview-theme="ibm-preview"] .today-panel::before,
 html[data-preview-theme="ibm-preview"] .section-block::before {
@@ -78,7 +71,6 @@ html[data-preview-theme="ibm-preview"] :is(h1, h2, h3, h4, strong) {
   color: #161616;
 }
 
-html[data-preview-theme="ibm-preview"] .dashboard-ops-header h1,
 html[data-preview-theme="ibm-preview"] .ask-page-hero h1,
 html[data-preview-theme="ibm-preview"] .ask-result-hero h2 {
   font-family: "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
@@ -343,7 +335,6 @@ html[data-preview-theme="ibm-preview"] .ask-search-button kbd {
 html[data-preview-theme="ibm-preview"] .ask-example-chip,
 html[data-preview-theme="ibm-preview"] .meta-pill,
 html[data-preview-theme="ibm-preview"] .detail-tag,
-html[data-preview-theme="ibm-preview"] .ops-health-metric,
 html[data-preview-theme="ibm-preview"] .source-card,
 html[data-preview-theme="ibm-preview"] .today-summary-card,
 html[data-preview-theme="ibm-preview"] .task-last-run,
@@ -356,8 +347,7 @@ html[data-preview-theme="ibm-preview"] .meta-pill,
 html[data-preview-theme="ibm-preview"] .detail-tag,
 html[data-preview-theme="ibm-preview"] .task-last-run,
 html[data-preview-theme="ibm-preview"] .task-run-note,
-html[data-preview-theme="ibm-preview"] .batch-banner,
-html[data-preview-theme="ibm-preview"] .ops-health-metric {
+html[data-preview-theme="ibm-preview"] .batch-banner {
   background: #f4f4f4;
   border: 1px solid #c6c6c6;
 }
@@ -408,10 +398,6 @@ html[data-preview-theme="ibm-preview"] .artifact-link:hover {
   transform: none;
   border-color: #0f62fe;
   background: #edf5ff;
-}
-
-html[data-preview-theme="ibm-preview"] .dashboard-ops-actions {
-  align-items: start;
 }
 
 @media (max-width: 960px) {

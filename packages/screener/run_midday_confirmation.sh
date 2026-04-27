@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$BASE_DIR/.." && pwd)"
+export PYTHONPATH="$REPO_ROOT:$REPO_ROOT/packages:${PYTHONPATH:-}"
 RUN_STAMP="$(date "+%F_%H-%M-%S")_$$"
 TARGET_DATE="${TARGET_DATE:-$(date "+%F")}"
 
@@ -14,11 +16,11 @@ SCAN_RESULT_PATH="$BASE_DIR/data/scan_result.json"
 MIDDAY_OUTPUT_PATH="$BASE_DIR/data/midday_verification_result.json"
 AI_HISTORY_DIR="$BASE_DIR/data/ai_history"
 STALE_OUTPUT_DIR="$BASE_DIR/data/stale_outputs"
-QUALITY_GATE_SCRIPT="$BASE_DIR/../invest-flow/scripts/feishu_quality_gate.py"
 QUALITY_OUTPUT_PATH="$BASE_DIR/data/quality_gate_midday_${RUN_STAMP}.json"
 QUALITY_REPORT_PATH="${QUALITY_REPORT_PATH:-$BASE_DIR/reports/quality_gate_midday_${RUN_STAMP}.md}"
-QUALITY_DASHBOARD_SCRIPT="$BASE_DIR/../invest-flow/scripts/quality_gate_dashboard.py"
-QUALITY_DASHBOARD_PATH="${QUALITY_DASHBOARD_PATH:-$BASE_DIR/../invest-flow/reports/feishu-quality-dashboard.md}"
+QUALITY_GATE_SCRIPT="$REPO_ROOT/apps/scripts/feishu_quality_gate.py"
+QUALITY_DASHBOARD_SCRIPT="$REPO_ROOT/apps/scripts/quality_gate_dashboard.py"
+QUALITY_DASHBOARD_PATH="${QUALITY_DASHBOARD_PATH:-$REPO_ROOT/data/history/reports/command_brief/feishu-quality-dashboard.md}"
 MESSAGE_OUTPUT_PATH="/tmp/stock_midday_confirmation.txt"
 ATTACHMENT_OUTPUT_PATH="$BASE_DIR/reports/stock_midday_confirmation_${RUN_STAMP}.txt"
 REPORT_OUTPUT_PATH="$BASE_DIR/reports/stock_midday_confirmation_${RUN_STAMP}.md"
@@ -27,6 +29,14 @@ SEND_TO_FEISHU="${SEND_TO_FEISHU:-0}"
 FEISHU_CHANNEL="${FEISHU_CHANNEL:-feishu}"
 FEISHU_TARGET="${FEISHU_TARGET:-}"
 FEISHU_APPEND_LINE="${FEISHU_APPEND_LINE:-}"
+
+if [[ -f "$SCRIPT_DIR/prism_artifact_helpers.sh" ]]; then
+  source "$SCRIPT_DIR/prism_artifact_helpers.sh"
+  prism_init_artifact_helpers "$REPO_ROOT" "$RUN_STAMP" "$TARGET_DATE"
+fi
+if ! declare -F prism_mirror_artifact >/dev/null; then
+  prism_mirror_artifact() { return 0; }
+fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -96,7 +106,17 @@ quarantine_stale_output() {
     fi
     mv "$target_path" "$backup_path"
     echo "  旧产物已隔离: $target_path -> $backup_path"
+    prism_mirror_artifact "$backup_path" "screener/stale_outputs/$(basename "$backup_path")" "stale_output" "screener"
   fi
+}
+
+mirror_midday_confirmation_artifacts() {
+  prism_mirror_artifact "$MIDDAY_OUTPUT_PATH" "screener/midday_confirmation/midday_verification_${RUN_STAMP}.json" "midday_confirmation_result" "screener"
+  prism_mirror_artifact "$ATTACHMENT_OUTPUT_PATH" "screener/reports/$(basename "$ATTACHMENT_OUTPUT_PATH")" "midday_confirmation_brief" "screener"
+  prism_mirror_artifact "$REPORT_OUTPUT_PATH" "screener/reports/$(basename "$REPORT_OUTPUT_PATH")" "midday_confirmation_report" "screener"
+  prism_mirror_artifact "$SENDABLE_OUTPUT_PATH" "screener/reports/$(basename "$SENDABLE_OUTPUT_PATH")" "midday_confirmation_sendable" "screener"
+  prism_mirror_artifact "$QUALITY_OUTPUT_PATH" "screener/quality_gates/$(basename "$QUALITY_OUTPUT_PATH")" "quality_gate" "screener"
+  prism_mirror_artifact "$QUALITY_REPORT_PATH" "screener/quality_gates/$(basename "$QUALITY_REPORT_PATH")" "quality_gate_report" "screener"
 }
 
 send_to_feishu() {
@@ -442,6 +462,7 @@ if [[ -z "$MORNING_PATH" ]]; then
   else
     write_status_output "missing_baseline" "未找到当天有效的晨间 AI shortlist 基线" "skipped" "false"
     generate_midday_reports "missing_baseline"
+    mirror_midday_confirmation_artifacts
     echo "  无有效晨间基线，已写入状态文件: $MIDDAY_OUTPUT_PATH"
     echo "完成："
     echo "  midday_result -> $MIDDAY_OUTPUT_PATH"
@@ -458,6 +479,7 @@ fi
 if [[ ! -f "$MORNING_PATH" ]]; then
   write_status_output "missing_baseline" "指定的晨间基线文件不存在" "failed" "false"
   generate_midday_reports "missing_baseline"
+  mirror_midday_confirmation_artifacts
   echo "ERROR: 指定的晨间基线文件不存在: $MORNING_PATH" >&2
   exit 1
 fi
@@ -482,6 +504,7 @@ else
     rm -f "$SCAN_ERR_FILE"
     write_status_output "scan_failed" "scan.py 执行失败，请查看 stderr" "failed" "false"
     generate_midday_reports "scan_failed"
+    mirror_midday_confirmation_artifacts
     exit "$scan_exit"
   fi
   rm -f "$SCAN_ERR_FILE"
@@ -490,6 +513,7 @@ fi
 if [[ ! -f "$SCAN_RESULT_PATH" ]]; then
   write_status_output "scan_failed" "未生成有效的 scan_result.json" "failed" "false"
   generate_midday_reports "scan_failed"
+  mirror_midday_confirmation_artifacts
   echo "ERROR: scan 结果文件不存在: $SCAN_RESULT_PATH" >&2
   exit 1
 fi
@@ -512,6 +536,7 @@ if [[ $verify_exit -ne 0 ]]; then
     validation_status="$(python3 -c 'import json, pathlib, sys; p=pathlib.Path(sys.argv[1]); print(json.loads(p.read_text(encoding="utf-8")).get("validation_status",""))' "$MIDDAY_OUTPUT_PATH")"
     if [[ "$validation_status" == "invalid" ]]; then
       generate_midday_reports "invalid"
+      mirror_midday_confirmation_artifacts
       echo "完成："
       echo "  morning_baseline -> $MORNING_PATH"
       echo "  scan_result      -> $SCAN_RESULT_PATH"
@@ -524,6 +549,7 @@ if [[ $verify_exit -ne 0 ]]; then
   fi
   write_status_output "verify_failed" "midday_verify.py 执行失败，请查看 stderr" "failed" "true"
   generate_midday_reports "verify_failed"
+  mirror_midday_confirmation_artifacts
   exit "$verify_exit"
 fi
 rm -f "$VERIFY_ERR_FILE"
@@ -553,11 +579,13 @@ if [[ "${validation_status:-unknown}" == "ok" ]]; then
       fi
     fi
     refresh_quality_dashboard
+    mirror_midday_confirmation_artifacts
     exit 1
   fi
   rm -f "$QUALITY_ERR_FILE"
 fi
 refresh_quality_dashboard
+mirror_midday_confirmation_artifacts
 
 echo "完成："
 echo "  morning_baseline -> $MORNING_PATH"

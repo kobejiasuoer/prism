@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+const backendOrigin = process.env.PRISM_BACKEND_ORIGIN ?? "http://127.0.0.1:8001";
+
 const nextConfig: NextConfig = {
   async redirects() {
     return [
@@ -76,15 +78,15 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: "http://localhost:8000/api/:path*",
+        destination: `${backendOrigin}/api/:path*`,
       },
       {
         source: "/artifacts",
-        destination: "http://localhost:8000/artifacts",
+        destination: `${backendOrigin}/artifacts`,
       },
       {
         source: "/healthz",
-        destination: "http://localhost:8000/healthz",
+        destination: `${backendOrigin}/healthz`,
       },
     ];
   },

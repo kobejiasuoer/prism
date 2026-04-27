@@ -4,20 +4,45 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UVICORN_BIN="$ROOT_DIR/.venv/bin/uvicorn"
+FRONTEND_DIR="$ROOT_DIR/apps/web"
+NEXT_BIN="$FRONTEND_DIR/node_modules/.bin/next"
+
 APP_MODULE="${PRISM_APP_MODULE:-control_panel.app:app}"
-HOST="${PRISM_HOST:-127.0.0.1}"
-PORT="${PRISM_PORT:-8000}"
+BACKEND_HOST="${PRISM_BACKEND_HOST:-127.0.0.1}"
+BACKEND_PORT="${PRISM_BACKEND_PORT:-8001}"
+WEB_HOST="${PRISM_WEB_HOST:-127.0.0.1}"
+WEB_PORT="${PRISM_WEB_PORT:-8000}"
+BACKEND_ORIGIN="${PRISM_BACKEND_ORIGIN:-http://$BACKEND_HOST:$BACKEND_PORT}"
 
 if [[ ! -x "$UVICORN_BIN" ]]; then
   echo "[prism] Missing uvicorn at $UVICORN_BIN" >&2
-  echo "[prism] Please create the local virtualenv first." >&2
+  echo "[prism] Please create the local Python virtualenv first." >&2
+  exit 1
+fi
+
+if [[ ! -x "$NEXT_BIN" ]]; then
+  echo "[prism] Missing Next.js binary at $NEXT_BIN" >&2
+  echo "[prism] Please install the web app dependencies in apps/web first." >&2
   exit 1
 fi
 
 cd "$ROOT_DIR"
 
-echo "[prism] Starting Prism control panel..."
-echo "[prism] URL: http://$HOST:$PORT"
+echo "[prism] Starting Prism backend API..."
+echo "[prism] Backend: $BACKEND_ORIGIN"
+"$UVICORN_BIN" "$APP_MODULE" --host "$BACKEND_HOST" --port "$BACKEND_PORT" &
+BACKEND_PID=$!
+
+cleanup() {
+  if kill -0 "$BACKEND_PID" >/dev/null 2>&1; then
+    kill "$BACKEND_PID" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT INT TERM
+
+echo "[prism] Starting Prism Next web app..."
+echo "[prism] URL: http://$WEB_HOST:$WEB_PORT"
 echo "[prism] Stop: Ctrl+C"
 
-exec "$UVICORN_BIN" "$APP_MODULE" --host "$HOST" --port "$PORT"
+cd "$FRONTEND_DIR"
+PRISM_BACKEND_ORIGIN="$BACKEND_ORIGIN" "$NEXT_BIN" dev --hostname "$WEB_HOST" --port "$WEB_PORT"

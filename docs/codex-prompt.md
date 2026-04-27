@@ -1,8 +1,10 @@
 # Codex Task: 棱镜前端重建 — Phase 0 + Phase 1
 
+> 历史任务记录：这份文档记录的是启动 Next.js 重建时的原始任务书。当前 Prism 已经完成迁移，正式前端是 `apps/web`，FastAPI 位于 `apps/control-panel` 且只作为后端 API。
+
 ## 背景
 
-棱镜（Prism）是一个 A 股交易决策辅助系统。当前前端是 FastAPI + Jinja2 SSR，体验很差。我们要用 Next.js + React 重建前端，后端 API 完全不动。
+棱镜（Prism）是一个 A 股交易决策辅助系统。当前正式前端是 Next.js + React，位于 `apps/web`；FastAPI 后端 API 位于 `apps/control-panel`。
 
 所有设计规范和交互原型已经写好，在 `docs/design/` 目录下：
 - `docs/design/README.md` — 完整设计规范（设计令牌、组件定义、页面布局、API 映射）
@@ -19,7 +21,7 @@
 
 ## 现有后端 API
 
-后端是 FastAPI，运行在 `http://localhost:8000`。所有 API 端点已经存在且返回 JSON，不需要修改后端。关键端点：
+后端是 FastAPI，开发栈中默认运行在 `http://127.0.0.1:8001`，Next 前端默认运行在 `http://127.0.0.1:8000` 并通过 rewrites 代理 API。关键端点：
 
 | 端点 | 用途 |
 |------|------|
@@ -57,7 +59,7 @@
    - `lucide-react` — 图标
    - `clsx` + `tailwind-merge` — 样式工具
 3. 配置 `next.config.ts`：
-   - 开发环境代理 `/api/*` 到 `http://localhost:8000`（用 rewrites）
+   - 开发环境代理 `/api/*` 到 `PRISM_BACKEND_ORIGIN`，默认 `http://127.0.0.1:8001`
 4. 创建设计令牌：
    - 在 `src/styles/globals.css` 中定义 CSS 变量，对应 `docs/design/README.md` 中的设计令牌
    - 背景层级：`--bg-primary: #0a0a0b`, `--bg-secondary: #111113`, `--bg-tertiary: #18181b`, `--bg-elevated: #1c1c1f`
@@ -162,9 +164,9 @@ apps/web/
 
 ## 注意事项
 
-1. **不要修改后端**：`apps/control-panel/` 下的任何文件都不要动
+1. **后端定位**：`apps/control-panel/` 是 API 后端，不再承载旧前端页面
 2. **不要修改 `docs/` 下的设计文件**：这些是设计规范，只读参考
-3. **占位页面**：Portfolio、Discovery、Review、Settings、Stock Profile 页面先创建占位，内容写"即将实现"即可，后续 Phase 再填充
-4. **API 代理**：开发时 Next.js 跑在 3000 端口，通过 rewrites 代理 `/api/*` 到 FastAPI 的 8000 端口
-5. **确保能跑起来**：完成后 `cd apps/web && npm install && npm run dev` 应该能正常启动，访问 `localhost:3000` 能看到指挥中心页面（即使后端没启动，也应该有骨架屏而不是白屏）
+3. **页面状态**：Portfolio、Discovery、Review、Settings、Stock Profile 已进入 Next 前端
+4. **API 代理**：开发时 Next.js 默认跑在 8000 端口，通过 rewrites 代理 `/api/*` 到 FastAPI 的 8001 端口
+5. **确保能跑起来**：完成后 `./start_prism.sh` 应该能同时启动前端和后端，访问 `localhost:8000` 能看到指挥中心页面
 6. **代码质量**：TypeScript strict mode，组件拆分合理，不要把所有东西写在一个文件里
