@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -23,6 +24,22 @@ from control_panel.dashboard_data import (  # noqa: E402
     watchlist_detail_url,
     watchlist_page_url,
 )
+
+
+UNSUPPORTED_ASK_FOLLOWUP_COPY = {
+    "强烈买入",
+    "建议买入",
+    "可以买入",
+    "买入",
+    "开新仓",
+    "开仓",
+    "轻仓试错",
+    "满仓",
+    "目标价",
+    "收益预测",
+    "收益承诺",
+    "建议仓位",
+}
 
 
 class ControlPanelApiTest(unittest.TestCase):
@@ -120,6 +137,27 @@ class ControlPanelApiTest(unittest.TestCase):
         payload = response.json()
         self.assertIn("answer", payload)
         self.assertIn("engine", payload["answer"])
+
+    def test_ask_followup_api_keeps_degraded_action_copy(self) -> None:
+        previous = os.environ.get("PRISM_ASK_FOLLOWUP_DISABLE")
+        os.environ["PRISM_ASK_FOLLOWUP_DISABLE"] = "1"
+        try:
+            response = self.client.post(
+                "/api/ask/followup",
+                json={"query": "600690", "question": "这只现在买还是卖？今天怎么操作？", "history": []},
+            )
+        finally:
+            if previous is None:
+                os.environ.pop("PRISM_ASK_FOLLOWUP_DISABLE", None)
+            else:
+                os.environ["PRISM_ASK_FOLLOWUP_DISABLE"] = previous
+
+        self.assertEqual(response.status_code, 200)
+        answer = response.json()["answer"]
+        answer_text = json.dumps(answer, ensure_ascii=False)
+        for fragment in UNSUPPORTED_ASK_FOLLOWUP_COPY:
+            self.assertNotIn(fragment, answer_text)
+        self.assertIn("纪律", answer_text)
 
     def test_parameter_api_save_validates_payload_without_touching_real_config(self) -> None:
         seed = {

@@ -18,21 +18,136 @@ import {
   useStockProfile,
   useWatchlistManager,
 } from "@/lib/hooks";
-import type { AskFollowupResponse, StockDetailData, WatchlistManagerItem } from "@/lib/types";
+import type { AskFollowupResponse, StockDetailData, StockProfileData, WatchlistManagerItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const tabs = ["决策", "追问", "持仓", "发现", "证据"] as const;
+type StockTab = (typeof tabs)[number];
+type StockProfileSource = NonNullable<StockProfileData["available_sources"]>[number];
 const followupHistoryTurnLimit = 3;
+const profileSourceIssueLabels: Record<StockProfileSource, string> = {
+  watchlist: "自选股未命中",
+  opportunity: "观察池未命中",
+};
 
-function pickDetail(watchlist?: StockDetailData, opportunity?: StockDetailData, activeTab?: string) {
-  if (activeTab === "发现" && opportunity) {
-    return opportunity;
+function pickDetail(profile?: StockProfileData, activeTab?: string) {
+  if (activeTab === "发现" && profile?.opportunity) {
+    return profile.opportunity;
   }
-  return watchlist || opportunity;
+  return profile?.primary_detail || profile?.watchlist || profile?.opportunity;
+}
+
+function sourceIssueBadges(profile?: StockProfileData) {
+  const errors = profile?.errors || {};
+  return (Object.keys(profileSourceIssueLabels) as StockProfileSource[])
+    .filter((source) => errors[source] && !profile?.[source])
+    .map((source) => ({
+      key: source,
+      label: profileSourceIssueLabels[source],
+    }));
 }
 
 function findManagerItem(items: WatchlistManagerItem[] | undefined, code: string) {
   return (items || []).find((item) => item.code === code);
+}
+
+function canonicalText(
+  canonical: StockDetailData["canonical_decision"] | undefined,
+  key: string,
+  fallback = "-",
+) {
+  const value = canonical?.[key];
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+  return String(value);
+}
+
+function sourceScopeLabel(value: unknown) {
+  switch (String(value || "")) {
+    case "holdings":
+      return "自选股链路";
+    case "opportunity":
+      return "观察池链路";
+    case "live_fallback":
+      return "Ask 临时分析";
+    default:
+      return String(value || "当前链路");
+  }
+}
+
+function triggerCard(trigger: NonNullable<StockDetailData["triggers"]>[number], index: number) {
+  const condition = trigger.condition || trigger.value || trigger.detail || "";
+  const action = trigger.action || "";
+  return {
+    title: trigger.name || trigger.label || `触发 ${index + 1}`,
+    detail: [condition, action].filter(Boolean).join(" / "),
+    tone: "watch",
+  };
+}
+
+function DecisionSummary({
+  canonical,
+  sourceLabel,
+  generatedAt,
+  embedded = false,
+}: {
+  canonical?: StockDetailData["canonical_decision"];
+  sourceLabel: string;
+  generatedAt?: string;
+  embedded?: boolean;
+}) {
+  if (!canonical) {
+    return <EmptyState>暂无标准化摘要。</EmptyState>;
+  }
+
+  const rows = [
+    {
+      label: "系统位置",
+      value: sourceScopeLabel(canonical.source_scope) || sourceLabel,
+      detail: canonicalText(canonical, "trade_date", generatedAt || "-"),
+    },
+    {
+      label: "当前口径",
+      value: canonicalText(canonical, "main_conclusion"),
+      detail: canonicalText(canonical, "action_tier", "仅作纪律参考"),
+    },
+    {
+      label: "仓位纪律",
+      value: canonicalText(canonical, "position_guidance", "待定"),
+      detail: "不做收益承诺",
+    },
+    {
+      label: "失效条件",
+      value: canonicalText(canonical, "stop_condition", canonicalText(canonical, "risk_boundary")),
+      detail: "触发后先停止原计划",
+    },
+    {
+      label: "继续条件",
+      value: canonicalText(canonical, "continue_condition", canonicalText(canonical, "trigger_condition")),
+      detail: "满足后再升级动作",
+    },
+  ];
+
+  return (
+    <div className={cn(embedded ? "space-y-3" : "surface-card p-4")}>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <Badge tone="info">{sourceLabel}</Badge>
+        <Badge tone="watch">弱结论</Badge>
+      </div>
+      <div className="flex flex-col gap-2">
+        {rows.map((row) => (
+          <div key={row.label} className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <span className="shrink-0 text-[11px] text-[var(--text-tertiary)]">{row.label}</span>
+              <span className="min-w-0 text-right text-[12px] font-medium text-[var(--text-primary)]">{row.value}</span>
+            </div>
+            <div className="mt-1 text-[11px] leading-4 text-[var(--text-tertiary)]">{row.detail}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function historyPayload(messages: AskFollowupResponse[]) {
@@ -62,7 +177,7 @@ export default function StockProfilePage() {
   const addStock = useAddWatchlistStock();
   const archiveStock = useArchiveWatchlistStock();
   const restoreStock = useRestoreWatchlistStock();
-  const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>("决策");
+  const [activeTab, setActiveTab] = useState<StockTab>("决策");
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<AskFollowupResponse[]>([]);
   const [pendingQuestion, setPendingQuestion] = useState("");
@@ -70,21 +185,57 @@ export default function StockProfilePage() {
   const [askError, setAskError] = useState("");
   const [manageFeedback, setManageFeedback] = useState("");
   const threadEndRef = useRef<HTMLDivElement | null>(null);
-  const detail = pickDetail(profile.data?.watchlist, profile.data?.opportunity, activeTab);
+  const profileData = profile.data;
+  const detail = pickDetail(profileData, activeTab);
   const askCase = ask.data?.case;
   const manager = managerQuery.data?.manager;
   const activeManagerItem = findManagerItem(manager?.active_items, code);
   const archivedManagerItem = findManagerItem(manager?.archived_items, code);
   const manageBusy = addStock.isPending || archiveStock.isPending || restoreStock.isPending;
+  const managerUnavailable = managerQuery.isError || (managerQuery.isLoading && !manager);
+  const hasWatchlistDetail = Boolean(profileData?.watchlist);
+  const hasOpportunityDetail = Boolean(profileData?.opportunity);
+  const visibleTabs = useMemo<StockTab[]>(() => {
+    const items: StockTab[] = ["决策", "追问"];
+    if (hasWatchlistDetail) {
+      items.push("持仓");
+    }
+    if (hasOpportunityDetail) {
+      items.push("发现");
+    }
+    items.push("证据");
+    return items;
+  }, [hasOpportunityDetail, hasWatchlistDetail]);
   const stockName = detail?.name || activeManagerItem?.name || archivedManagerItem?.name || askCase?.name || code;
   const followupShell = ask.data?.followup || askCase?.evidence_layer?.followup || null;
+  const sourceLabel =
+    profileData?.primary_source_label && activeTab === "决策"
+      ? profileData.primary_source_label
+      : activeTab === "发现" && hasOpportunityDetail
+      ? "观察池链路"
+      : hasWatchlistDetail
+        ? "自选股链路"
+        : hasOpportunityDetail
+          ? "观察池链路"
+          : askCase
+            ? "Ask 临时分析"
+            : "待匹配";
+  const sourceGeneratedAt =
+    detail?.generated_at ||
+    ask.data?.generated_at ||
+    canonicalText(askCase?.canonical_decision, "updated_at", "");
+  const sourceTradeDate =
+    detail?.trade_date ||
+    askCase?.trade_date ||
+    canonicalText(detail?.canonical_decision || askCase?.canonical_decision, "trade_date", "");
+  const sourceIssues = useMemo(() => sourceIssueBadges(profileData), [profileData]);
   const allMetricCards = useMemo(() => {
     if (!detail) {
       return [];
     }
     return [
-      ...(detail.decision_cards || []),
       ...(detail.metric_cards || []),
+      ...(detail.capital_cards || []),
       ...(detail.meta_cards || []),
       ...(detail.level_cards || []),
     ];
@@ -117,6 +268,12 @@ export default function StockProfilePage() {
     threadEndRef.current?.scrollIntoView({ block: "nearest" });
   }, [messages, pendingQuestion]);
 
+  useEffect(() => {
+    if (!visibleTabs.includes(activeTab)) {
+      setActiveTab("决策");
+    }
+  }, [activeTab, visibleTabs]);
+
   async function submitFollowup(value?: string) {
     const text = (value ?? question).trim();
     if (!text || asking) {
@@ -146,7 +303,7 @@ export default function StockProfilePage() {
     setManageFeedback("");
     if (action === "add") {
       addStock.mutate(
-        { code, name: detail?.name, trigger_refresh: true },
+        { code, name: stockName, trigger_refresh: true },
         {
           onSuccess: (payload) => setManageFeedback(payload.message || "已加入持仓。"),
           onError: (error) => setManageFeedback(error instanceof Error ? error.message : "加入失败"),
@@ -185,7 +342,16 @@ export default function StockProfilePage() {
           badge={detail?.hero?.status_label || detail?.topline?.verdict_badge || askCase?.hero?.status_label || askCase?.hero?.decision_label || "个股档案"}
           actions={
             <div className="flex flex-wrap items-center gap-2">
-              {activeManagerItem ? (
+              {managerUnavailable ? (
+                <button
+                  type="button"
+                  className="focus-ring inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] px-3 py-2 text-[12px] text-[var(--text-tertiary)] disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled
+                >
+                  {managerQuery.isLoading ? <LoaderCircle size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                  {managerQuery.isLoading ? "名单同步中" : "名单状态待同步"}
+                </button>
+              ) : activeManagerItem ? (
                 <button
                   type="button"
                   className="focus-ring inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] px-3 py-2 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
@@ -236,8 +402,23 @@ export default function StockProfilePage() {
         ) : null}
         {!profile.isLoading && !ask.isLoading && !detail && !askCase ? <EmptyState>当前股票不在持仓或观察池详情中。</EmptyState> : null}
 
+        {detail || askCase ? (
+          <div className="mb-5 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone={hasWatchlistDetail ? "positive" : hasOpportunityDetail ? "watch" : "info"}>{sourceLabel}</Badge>
+              {sourceTradeDate ? <Badge tone="info">交易日 {sourceTradeDate}</Badge> : null}
+              {sourceGeneratedAt ? <Badge tone="info">更新 {sourceGeneratedAt}</Badge> : null}
+              {!detail && askCase ? <Badge tone="warning">临时抓取</Badge> : null}
+              {sourceIssues.map((item) => <Badge key={item.key} tone="watch">{item.label}</Badge>)}
+            </div>
+            <p className="mt-2 text-[12px] leading-5 text-[var(--text-tertiary)]">
+              当前页只展示已有链路能回源的纪律参考；目标价、收益预测和完整财报研判暂不进入结果页。
+            </p>
+          </div>
+        ) : null}
+
         <div className="mb-6 flex gap-2 overflow-x-auto rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-1">
-          {tabs.map((tab) => (
+          {visibleTabs.map((tab) => (
             <button
               key={tab}
               type="button"
@@ -296,14 +477,12 @@ export default function StockProfilePage() {
                     ) : null}
 
                     {askCase.canonical_decision ? (
-                      <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-3">
-                        {Object.entries(askCase.canonical_decision).slice(0, 8).map(([key, value]) => (
-                          <div key={key} className="flex gap-3 border-b border-[var(--border-subtle)] py-2 last:border-b-0">
-                            <span className="mono w-32 shrink-0 text-[11px] text-[var(--text-tertiary)]">{key}</span>
-                            <span className="min-w-0 flex-1 text-[12px] text-[var(--text-secondary)]">{String(value ?? "-")}</span>
-                          </div>
-                        ))}
-                      </div>
+                      <DecisionSummary
+                        canonical={askCase.canonical_decision}
+                        sourceLabel="Ask 临时分析"
+                        generatedAt={sourceGeneratedAt}
+                        embedded
+                      />
                     ) : null}
                   </div>
                 ) : (
@@ -465,20 +644,7 @@ export default function StockProfilePage() {
             </div>
 
             <Panel title="决策摘要" eyebrow="Ask Canonical">
-              <div className="surface-card p-4">
-                {askCase.canonical_decision ? (
-                  <div className="flex flex-col gap-2">
-                    {Object.entries(askCase.canonical_decision).slice(0, 10).map(([key, value]) => (
-                      <div key={key} className="flex gap-3 border-b border-[var(--border-subtle)] py-2 last:border-b-0">
-                        <span className="mono w-36 shrink-0 text-[11px] text-[var(--text-tertiary)]">{key}</span>
-                        <span className="min-w-0 flex-1 text-[12px] text-[var(--text-secondary)]">{String(value ?? "-")}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState>暂无标准化决策。</EmptyState>
-                )}
-              </div>
+              <DecisionSummary canonical={askCase.canonical_decision} sourceLabel="Ask 临时分析" generatedAt={sourceGeneratedAt} />
             </Panel>
           </div>
         ) : null}
@@ -501,20 +667,7 @@ export default function StockProfilePage() {
             </div>
 
             <Panel title="决策摘要" eyebrow="Canonical">
-              <div className="surface-card p-4">
-                {detail.canonical_decision ? (
-                  <div className="flex flex-col gap-2">
-                    {Object.entries(detail.canonical_decision).slice(0, 10).map(([key, value]) => (
-                      <div key={key} className="flex gap-3 border-b border-[var(--border-subtle)] py-2 last:border-b-0">
-                        <span className="mono w-36 shrink-0 text-[11px] text-[var(--text-tertiary)]">{key}</span>
-                        <span className="min-w-0 flex-1 text-[12px] text-[var(--text-secondary)]">{String(value ?? "-")}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState>暂无标准化决策。</EmptyState>
-                )}
-              </div>
+              <DecisionSummary canonical={detail.canonical_decision} sourceLabel={sourceLabel} generatedAt={sourceGeneratedAt} />
             </Panel>
           </div>
         ) : null}
@@ -534,13 +687,8 @@ export default function StockProfilePage() {
               <div className="flex flex-col gap-2">
                 {(detail.triggers || []).map((trigger, index) => (
                   <DataCard
-                    key={`${trigger.label || index}`}
-                    card={{
-                      title: trigger.label || `触发 ${index + 1}`,
-                      value: trigger.value,
-                      detail: trigger.detail,
-                      tone: "watch",
-                    }}
+                    key={`${trigger.name || trigger.label || index}`}
+                    card={triggerCard(trigger, index)}
                   />
                 ))}
                 {!detail.triggers?.length ? <EmptyState>暂无盘中触发条件。</EmptyState> : null}
@@ -589,7 +737,7 @@ export default function StockProfilePage() {
 
         {!detail && askCase && activeTab === "证据" ? (
           <EvidencePanel
-            page="opportunities"
+            mode="ask"
             stockCode={code}
             sources={askCase.source_cards}
             artifacts={askCase.artifacts}
