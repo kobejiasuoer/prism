@@ -11,8 +11,18 @@ from pathlib import Path
 
 try:
     from screener.capital_flow_contract import UNIT_YUAN, capital_flow_today_yi
+    from screener.parameters import (
+        build_intraday_observation_contract,
+        infer_intraday_setup_label,
+        infer_intraday_setup_type,
+    )
 except ModuleNotFoundError:
     from capital_flow_contract import UNIT_YUAN, capital_flow_today_yi
+    from parameters import (
+        build_intraday_observation_contract,
+        infer_intraday_setup_label,
+        infer_intraday_setup_type,
+    )
 
 BASE = Path(__file__).resolve().parents[1]
 DEFAULT_MORNING = BASE / "data" / "ai_screening_result.json"
@@ -156,16 +166,11 @@ def iter_scan_candidates(scan_data):
 
 
 def infer_scan_setup_label(item):
-    reason = (((item or {}).get("trade_note") or {}).get("entry_reason") or "").strip()
-    if "低位" in reason and "反" in reason:
-        return "低位反转"
-    if "回踩" in reason:
-        return "回踩接力"
-    if "突破" in reason:
-        return "突破跟随"
-    if "龙头" in reason:
-        return "热点龙头"
-    return "盘中新机会"
+    return infer_intraday_setup_label(item or {})
+
+
+def infer_scan_setup_type(item):
+    return infer_intraday_setup_type(item or {})
 
 
 def build_fresh_candidates(scan_data, exclude_codes, active_themes=None, limit=3):
@@ -186,6 +191,15 @@ def build_fresh_candidates(scan_data, exclude_codes, active_themes=None, limit=3
         trade_note = item.get("trade_note") or {}
         capital_flow = item.get("capital_flow") or {}
         technical_state = item.get("technical_state") or {}
+        flow_today_yi = round(capital_flow_today_yi(capital_flow, legacy_source_unit=UNIT_YUAN), 2)
+        setup_label = infer_scan_setup_label(item)
+        active_theme = theme in active_themes if theme else False
+        observation_contract = build_intraday_observation_contract(
+            item,
+            status="fresh_candidate",
+            active_theme=active_theme,
+            flow_today_yi=flow_today_yi,
+        )
         candidates.append(
             {
                 "code": code,
@@ -195,15 +209,19 @@ def build_fresh_candidates(scan_data, exclude_codes, active_themes=None, limit=3
                 "change_pct": change_pct,
                 "amount_yi": amount_yi,
                 "capital_trend": capital_flow.get("trend") or "资金未确认",
-                "flow_today_yi": round(capital_flow_today_yi(capital_flow, legacy_source_unit=UNIT_YUAN), 2),
+                "flow_today_yi": flow_today_yi,
                 "entry_reason": trade_note.get("entry_reason") or "盘中强度较高",
                 "main_risk": trade_note.get("main_risk") or "先看二次确认，不追第一波",
                 "watch_condition": trade_note.get("watch_condition") or "先等换手和承接确认",
-                "setup_label": infer_scan_setup_label(item),
+                "setup_type": observation_contract["setup_type"],
+                "setup_label": setup_label,
+                "setup_summary": observation_contract["setup_summary"],
+                "entry_plan": observation_contract["entry_plan"],
+                "execution_quality": observation_contract["execution_quality"],
                 "high20": technical_state.get("high20"),
                 "ma5": technical_state.get("ma5"),
                 "ma10": technical_state.get("ma10"),
-                "active_theme": theme in active_themes if theme else False,
+                "active_theme": active_theme,
             }
         )
 

@@ -1,0 +1,81 @@
+{
+  "schema_version": "2026-04-27.stock_mvp_first_screen.v1",
+  "endpoint": "GET /api/stock/{code}",
+  "request": {
+    "path_params": {
+      "code": {
+        "type": "string",
+        "pattern": "^\\d{6}$",
+        "description": "MVP only guarantees 6-digit A-share codes."
+      }
+    }
+  },
+  "response": {
+    "required": [
+      "generated_at",
+      "code",
+      "primary_source",
+      "primary_source_label",
+      "primary_detail",
+      "available_sources",
+      "watchlist",
+      "opportunity",
+      "errors",
+      "links"
+    ],
+    "primary_source_priority": [
+      "watchlist",
+      "opportunity"
+    ],
+    "detail_required": [
+      "generated_at",
+      "code",
+      "hero",
+      "canonical_decision",
+      "decision_cards",
+      "execution_loop"
+    ],
+    "canonical_decision_required": [
+      "stock_id",
+      "stock_name",
+      "trade_date",
+      "source_scope",
+      "main_conclusion",
+      "action_tier",
+      "position_guidance",
+      "risk_boundary",
+      "why_now",
+      "continue_condition",
+      "stop_condition",
+      "next_step",
+      "trigger_condition",
+      "avoid_action",
+      "evidence_entry",
+      "confidence_note",
+      "updated_at"
+    ],
+    "decision_card_required_labels": [
+      "当前结论",
+      "仓位建议",
+      "风险边界",
+      "下一步动作"
+    ],
+    "execution_loop_required_labels": [
+      "现在做什么",
+      "为什么先做这一步",
+      "触发条件",
+      "先不要做什么",
+      "去哪看证据"
+    ],
+    "degrade_rules": [
+      "watchlist failed + opportunity ok renders opportunity",
+      "opportunity failed + watchlist ok renders watchlist",
+      "both failed returns empty primary_detail and exposes errors",
+      "Ask may enrich or fallback on the page, but does not override profile primary_detail"
+    ],
+    "source_issue_labels": {
+      "watchlist": "自选股未命中",
+      "opportunity": "观察池未命中"
+    }
+  }
+}

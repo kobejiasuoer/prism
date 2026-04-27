@@ -40,6 +40,7 @@ from control_panel.dashboard_data import (
     build_review_detail_view,
     build_review_view,
     build_screening_batch_view,
+    build_stock_profile_view,
     build_today_view,
     build_watchlist_page_view,
     build_watchlist_detail_view,
@@ -1011,6 +1012,11 @@ async def api_today_watchlist_detail(code: str) -> JSONResponse:
         return JSONResponse(build_watchlist_detail_view(code))
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/stock/{code}")
+async def api_stock_profile(code: str) -> JSONResponse:
+    return JSONResponse(build_stock_profile_view(code))
 
 
 @app.get("/opportunities/batch/{kind}", include_in_schema=False)

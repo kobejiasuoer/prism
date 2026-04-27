@@ -21,6 +21,7 @@ if str(STOCK_ANALYZER_ROOT) not in sys.path:
     sys.path.insert(0, str(STOCK_ANALYZER_ROOT))
 
 from screener.capital_flow_contract import UNIT_YUAN, normalize_capital_flow_payload
+from screener.parameters import build_intraday_observation_contract
 from watchlist_registry import load_active_watchlist_codes
 
 WATCHLIST_SNAPSHOT_DIR = STOCK_ANALYZER_ROOT / "data" / "daily_snapshots"
@@ -115,6 +116,15 @@ def unique_strings(values: list[str]) -> list[str]:
         seen.add(text)
         output.append(text)
     return output
+
+
+def build_confirmation_observation_contract(raw: dict[str, Any], status: str) -> dict[str, Any]:
+    return build_intraday_observation_contract(
+        raw,
+        status=status,
+        active_theme=bool(raw.get("active_theme")),
+        flow_today_yi=raw.get("flow_today_yi"),
+    )
 
 
 def stable_artifact_path(path_value: str | None) -> str | None:
@@ -355,18 +365,23 @@ def normalize_confirmation_item(
     morning_batch_id: str | None,
     midday_batch_id: str | None,
 ) -> dict[str, Any]:
+    observation_contract = build_confirmation_observation_contract(raw, status)
     return {
         "code": raw.get("code") or "",
         "name": raw.get("name") or raw.get("code") or "",
         "status": status,
         "theme": raw.get("theme") or raw.get("active_theme"),
-        "setup_label": raw.get("setup_label"),
+        "setup_type": observation_contract["setup_type"],
+        "setup_label": observation_contract["setup_label"],
+        "setup_summary": observation_contract["setup_summary"],
         "score": safe_float(raw.get("score")),
         "change_pct": safe_float(raw.get("change_pct")),
         "amount_yi": safe_float(raw.get("amount_yi")),
         "flow_today_yi": safe_float(raw.get("flow_today_yi")),
         "capital_trend": raw.get("capital_trend"),
         "entry_reason": raw.get("entry_reason"),
+        "entry_plan": observation_contract["entry_plan"],
+        "execution_quality": observation_contract["execution_quality"],
         "main_risk": raw.get("main_risk"),
         "watch_condition": raw.get("watch_condition"),
         "high20": safe_float(raw.get("high20")),
@@ -522,7 +537,7 @@ def find_candidate_detail(code: str, path: str | None = None) -> dict[str, Any]:
                 "screening_status": item.get("status"),
                 "tier": None,
                 "tier_rank": None,
-                "setup_type": None,
+                "setup_type": item.get("setup_type"),
                 "setup_label": item.get("setup_label"),
                 "priority_score": item.get("score"),
                 "best_score": item.get("score"),
@@ -530,14 +545,17 @@ def find_candidate_detail(code: str, path: str | None = None) -> dict[str, Any]:
                 "amount_yi": item.get("amount_yi"),
                 "strategy_labels": [],
                 "themes": unique_strings([item.get("theme") or ""]),
-                "risk_flags": unique_strings([item.get("main_risk") or ""]),
+                "risk_flags": unique_strings([
+                    item.get("main_risk") or "",
+                    *(((item.get("execution_quality") or {}).get("warnings")) or []),
+                ]),
                 "entry_reason": item.get("entry_reason"),
-                "entry_plan": None,
+                "entry_plan": item.get("entry_plan"),
                 "watch_condition": item.get("watch_condition"),
                 "main_risk": item.get("main_risk"),
-                "screening_note": None,
+                "screening_note": item.get("setup_summary"),
                 "consistency": {},
-                "execution_quality": {},
+                "execution_quality": item.get("execution_quality") or {},
                 "capital_flow": normalize_capital_flow_payload({
                     "trend": item.get("capital_trend"),
                     "today_yi": item.get("flow_today_yi"),
