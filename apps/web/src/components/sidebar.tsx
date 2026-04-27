@@ -15,6 +15,7 @@ import { usePathname } from "next/navigation";
 
 import { useOverview } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export const navItems = [
   { href: "/", label: "指挥中心", icon: Home },
@@ -96,7 +97,8 @@ export function Sidebar({
       </Link>
 
       <div className="mt-auto px-3 py-2">
-        <div className="flex items-center gap-2 text-[11px] text-[var(--text-tertiary)]">
+        <ThemeToggle />
+        <div className="mt-3 flex items-center gap-2 text-[11px] text-[var(--text-tertiary)]">
           <Circle
             size={8}
             fill={statusOk ? "var(--positive)" : "var(--negative)"}

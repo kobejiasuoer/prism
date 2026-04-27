@@ -15,6 +15,7 @@ def test_start_script_targets_next_web_shell_and_local_backend() -> None:
     assert "control_panel.app:app" in content
     assert "apps/web" in content
     assert "node_modules/.bin/next" in content
+    assert "scripts/dev.mjs" in content
     assert "PRISM_BACKEND_ORIGIN" in content
     assert "127.0.0.1" in content
     assert "8001" in content
@@ -31,6 +32,21 @@ def test_next_rewrites_target_internal_backend_by_default() -> None:
 
     assert 'process.env.PRISM_BACKEND_ORIGIN ?? "http://127.0.0.1:8001"' in content
     assert '"http://localhost:8000' not in content
+
+
+def test_web_dev_script_uses_single_server_guard() -> None:
+    package_path = Path("apps/web/package.json")
+    wrapper_path = Path("apps/web/scripts/dev.mjs")
+
+    assert package_path.exists()
+    assert wrapper_path.exists()
+
+    package_content = package_path.read_text(encoding="utf-8")
+    wrapper_content = wrapper_path.read_text(encoding="utf-8")
+
+    assert '"dev": "node ./scripts/dev.mjs"' in package_content
+    assert "Another Next dev server" in wrapper_content
+    assert "Stop the existing dev server first" in wrapper_content
 
 
 def test_command_brief_script_writes_artifact_store_with_legacy_copy() -> None:

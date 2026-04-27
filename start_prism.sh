@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UVICORN_BIN="$ROOT_DIR/.venv/bin/uvicorn"
 FRONTEND_DIR="$ROOT_DIR/apps/web"
 NEXT_BIN="$FRONTEND_DIR/node_modules/.bin/next"
+NEXT_DEV_WRAPPER="$FRONTEND_DIR/scripts/dev.mjs"
 
 APP_MODULE="${PRISM_APP_MODULE:-control_panel.app:app}"
 BACKEND_HOST="${PRISM_BACKEND_HOST:-127.0.0.1}"
@@ -23,6 +24,11 @@ fi
 if [[ ! -x "$NEXT_BIN" ]]; then
   echo "[prism] Missing Next.js binary at $NEXT_BIN" >&2
   echo "[prism] Please install the web app dependencies in apps/web first." >&2
+  exit 1
+fi
+
+if [[ ! -f "$NEXT_DEV_WRAPPER" ]]; then
+  echo "[prism] Missing Next dev wrapper at $NEXT_DEV_WRAPPER" >&2
   exit 1
 fi
 
@@ -45,4 +51,4 @@ echo "[prism] URL: http://$WEB_HOST:$WEB_PORT"
 echo "[prism] Stop: Ctrl+C"
 
 cd "$FRONTEND_DIR"
-PRISM_BACKEND_ORIGIN="$BACKEND_ORIGIN" "$NEXT_BIN" dev --hostname "$WEB_HOST" --port "$WEB_PORT"
+PRISM_BACKEND_ORIGIN="$BACKEND_ORIGIN" node "$NEXT_DEV_WRAPPER" --hostname "$WEB_HOST" --port "$WEB_PORT"
