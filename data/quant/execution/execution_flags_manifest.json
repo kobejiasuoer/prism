@@ -1,0 +1,333 @@
+{
+  "available_execution_data": {
+    "configured_transaction_cost": true,
+    "entry_models_configured": [
+      "next_open",
+      "next_close"
+    ],
+    "raw_open_high_low_close": true,
+    "raw_volume_amount": true
+  },
+  "code_revision": {
+    "commit": "eefe832f32f863c7735548fe15bcc0f9eb1dcc52",
+    "dirty": true
+  },
+  "conservative_flags": [
+    "suspend_status_unavailable",
+    "limit_up_down_status_unavailable",
+    "failed_order_unavailable",
+    "partial_fill_unavailable",
+    "official_calendar_unavailable",
+    "order_ledger_unavailable",
+    "execution_realistic_return_unavailable"
+  ],
+  "cost_policy_reference": {
+    "config_checksum": "7a8f9ec2fdb100e13f2587710eae437535703191d6457bc4bf8def627734616d",
+    "config_path": "data/config/quant-research.json",
+    "label_cost_bps_counts": {
+      "20.0": 11064
+    },
+    "minimum_commission_status": "notional_unavailable_research_only",
+    "roundtrip_cost_bps": 20.0,
+    "transaction_cost": {
+      "buy_commission_bps": 2.5,
+      "currency": "CNY",
+      "impact_cost": {
+        "enabled": false,
+        "notes": "Sprint 0 records the configuration surface only; impact model calibration is deferred.",
+        "placeholder_bps": 0.0
+      },
+      "minimum_commission_cny": 5.0,
+      "sell_commission_bps": 2.5,
+      "slippage_bps": 5.0,
+      "stamp_tax_bps": 5.0
+    }
+  },
+  "deferred_execution_fields": [
+    "official_frozen_trading_calendar",
+    "suspend_status_source",
+    "limit_up_down_status_source",
+    "order_ledger",
+    "failed_order_rule_application",
+    "partial_fill_rule_application",
+    "lot_size",
+    "participation_rate",
+    "exit_delay_after_suspend_or_limit_down"
+  ],
+  "execution_realism_status": "not_ready_research_only_simulation_execution_data_missing",
+  "failed_order_availability": {
+    "candidate_fields": [
+      "order_status",
+      "failed_order",
+      "failure_reason",
+      "fill_status"
+    ],
+    "conservative_flag": "failed_order_unavailable",
+    "label_field_non_null_counts": {
+      "failed_order": 0,
+      "failure_reason": 0,
+      "fill_status": 0,
+      "order_status": 0
+    },
+    "label_rows_marked_missing": 11064,
+    "machine_readable_available": false,
+    "notes": "No broker/order ledger or source-provided failed order status exists. Card 3 does not infer real failed orders.",
+    "price_field_non_null_counts": {
+      "failed_order": 0,
+      "failure_reason": 0,
+      "fill_status": 0,
+      "order_status": 0
+    },
+    "status": "unavailable"
+  },
+  "generated_at": "2026-04-29T21:14:53+08:00",
+  "guardrails": [
+    "report_only",
+    "research_only_simulation",
+    "no_external_data_fetch",
+    "no_real_fill_inference",
+    "no_unavailable_execution_field_as_available",
+    "no_execution_realistic_backtest_generation",
+    "no_formal_execution_eligible_upgrade",
+    "no_factor_backtest_health_rerun",
+    "no_production_sorting",
+    "no_abc_replacement",
+    "no_page",
+    "no_prism_edge",
+    "no_expected_5d_frontend",
+    "no_ml"
+  ],
+  "inspected_label_count": 11064,
+  "inspected_price_row_count": 84500,
+  "label_implications": {
+    "cost_bps_counts": {
+      "20.0": 11064
+    },
+    "current_labels_remain": "research_only_execution_missing",
+    "entry_model_counts": {
+      "next_close": 5532,
+      "next_open": 5532
+    },
+    "execution_data_missing_counts": {
+      "adjustment_policy": 11064,
+      "failed_order": 11064,
+      "limit_up_down_status": 11064,
+      "partial_fill": 11064,
+      "suspend_status": 11064
+    },
+    "execution_realistic_return_allowed": false,
+    "formal_execution_eligible_allowed": false,
+    "formal_execution_eligible_counts": {
+      "false": 11064
+    },
+    "formal_label_ready_allowed": false,
+    "holding_window_counts": {
+      "1": 2766,
+      "10": 2766,
+      "3": 2766,
+      "5": 2766
+    },
+    "label_count": 11064,
+    "label_path": "data/quant/labels/forward_return_labels.jsonl",
+    "label_scope_counts": {
+      "2024_research_backfill_only": 11064
+    },
+    "label_status_counts": {
+      "available_research_only": 10818,
+      "unavailable": 246
+    },
+    "required_before_upgrade": [
+      "machine-readable suspend status",
+      "machine-readable limit up/down prices and at-limit flags",
+      "failed/blocked order rules with reasons",
+      "partial-fill policy with notional, lot size, and participation rate",
+      "official frozen trading calendar",
+      "execution flags written to labels or accepted sidecar"
+    ],
+    "rows_with_execution_flags": 0,
+    "rows_with_execution_realistic_return": 0,
+    "rows_with_order_status": 0
+  },
+  "limit_up_down_status_availability": {
+    "candidate_fields": [
+      "limit_up_price",
+      "limit_down_price",
+      "open_at_limit_up",
+      "open_at_limit_down",
+      "close_at_limit_up",
+      "close_at_limit_down",
+      "limit_status",
+      "limit_up_down_status"
+    ],
+    "conservative_flag": "limit_up_down_status_unavailable",
+    "label_field_non_null_counts": {
+      "close_at_limit_down": 0,
+      "close_at_limit_up": 0,
+      "limit_down_price": 0,
+      "limit_status": 0,
+      "limit_up_down_status": 0,
+      "limit_up_price": 0,
+      "open_at_limit_down": 0,
+      "open_at_limit_up": 0
+    },
+    "label_rows_marked_missing": 11064,
+    "machine_readable_available": false,
+    "notes": "No explicit limit up/down prices or at-limit flags exist. OHLCV-based approximation is deferred and not formal execution evidence.",
+    "price_field_non_null_counts": {
+      "close_at_limit_down": 0,
+      "close_at_limit_up": 0,
+      "limit_down_price": 0,
+      "limit_status": 0,
+      "limit_up_down_status": 0,
+      "limit_up_price": 0,
+      "open_at_limit_down": 0,
+      "open_at_limit_up": 0
+    },
+    "status": "unavailable"
+  },
+  "partial_fill_availability": {
+    "candidate_fields": [
+      "partial_fill",
+      "fill_qty_pct",
+      "fill_ratio",
+      "filled_notional",
+      "participation_rate"
+    ],
+    "conservative_flag": "partial_fill_unavailable",
+    "label_field_non_null_counts": {
+      "fill_qty_pct": 0,
+      "fill_ratio": 0,
+      "filled_notional": 0,
+      "partial_fill": 0,
+      "participation_rate": 0
+    },
+    "label_rows_marked_missing": 11064,
+    "machine_readable_available": false,
+    "notes": "Volume and amount exist for raw diagnostics, but no order notional, participation-rate policy, fill ratio, or broker fills exist.",
+    "price_field_non_null_counts": {
+      "fill_qty_pct": 0,
+      "fill_ratio": 0,
+      "filled_notional": 0,
+      "partial_fill": 0,
+      "participation_rate": 0
+    },
+    "status": "deferred"
+  },
+  "price_source": {
+    "aggregate_source_hash": "41e619603202843bb125d96a31212c2e82618c62597156353795dbb57f4b5652",
+    "artifact_count": 1571,
+    "date_coverage": {
+      "end": "2024-04-10",
+      "start": "2023-11-20",
+      "unique_dates": 94
+    },
+    "raw_field_availability": {
+      "amount": {
+        "available": true,
+        "coverage_rate": 1.0,
+        "non_null_rows": 84500
+      },
+      "close": {
+        "available": true,
+        "coverage_rate": 1.0,
+        "non_null_rows": 84500
+      },
+      "high": {
+        "available": true,
+        "coverage_rate": 1.0,
+        "non_null_rows": 84500
+      },
+      "low": {
+        "available": true,
+        "coverage_rate": 1.0,
+        "non_null_rows": 84500
+      },
+      "open": {
+        "available": true,
+        "coverage_rate": 1.0,
+        "non_null_rows": 84500
+      },
+      "volume": {
+        "available": true,
+        "coverage_rate": 1.0,
+        "non_null_rows": 84500
+      }
+    },
+    "readable_artifact_count": 1571,
+    "root": "stock-screener/data/research_backfill/cache/price_kline",
+    "sample_artifacts": [
+      {
+        "path": "stock-screener/data/research_backfill/cache/price_kline/000001_20231118_20240105.json",
+        "row_count": 34,
+        "sha256": "89ec539758d8b57a18f6e7206a5f6f5a32286cc81aab6a9b12875e047a288b9e"
+      },
+      {
+        "path": "stock-screener/data/research_backfill/cache/price_kline/000001_20231118_20240112.json",
+        "row_count": 39,
+        "sha256": "0fda01834005707263b57b6ab81482535890f7fc486a04c4a066877b0c6d64f1"
+      },
+      {
+        "path": "stock-screener/data/research_backfill/cache/price_kline/000001_20231118_20240212.json",
+        "row_count": 58,
+        "sha256": "f6833693c65fd01a8b65d0564d23ae2e3f95016ec55c8c96bef05cfd2747b7c4"
+      },
+      {
+        "path": "stock-screener/data/research_backfill/cache/price_kline/000001_20231218_20240312.json",
+        "row_count": 55,
+        "sha256": "ead89579d66f13fd26e329d25961a3da25937bdcbb907b485cc73c56ddcff91e"
+      },
+      {
+        "path": "stock-screener/data/research_backfill/cache/price_kline/000001_20240116_20240410.json",
+        "row_count": 54,
+        "sha256": "577395b7a33b60cfc361511bf4e3c7588c1913000c31fc779e41982be0ab337e"
+      }
+    ],
+    "source_counts": {
+      "<missing>": 5633,
+      "tx": 78867
+    }
+  },
+  "production_impact": "none",
+  "schema_version": "1.0",
+  "scope": "P1-A Card 3 execution flags and execution data availability",
+  "suspend_status_availability": {
+    "candidate_fields": [
+      "is_suspended",
+      "suspend_status",
+      "resume_date",
+      "trading_status",
+      "is_trading"
+    ],
+    "conservative_flag": "suspend_status_unavailable",
+    "label_field_non_null_counts": {
+      "is_suspended": 0,
+      "is_trading": 0,
+      "resume_date": 0,
+      "suspend_status": 0,
+      "trading_status": 0
+    },
+    "label_rows_marked_missing": 11064,
+    "machine_readable_available": false,
+    "notes": "No explicit machine-readable suspend or resume status exists. Missing price rows or zero volume are not treated as formal suspend proof.",
+    "price_field_non_null_counts": {
+      "is_suspended": 0,
+      "is_trading": 0,
+      "resume_date": 0,
+      "suspend_status": 0,
+      "trading_status": 0
+    },
+    "status": "unavailable"
+  },
+  "t_plus_one_policy": {
+    "calendar_source": "symbol_price_rows_not_official_frozen_exchange_calendar",
+    "configured_rebalance_rule": "daily_after_signal_with_t_plus_1_execution",
+    "current_handling": "conservative_next_observed_trade_row_entry",
+    "notes": "Current labels use next_open / next_close after signal date, but there is no canonical order ledger or official frozen trading calendar in this card.",
+    "primary_entry_model": "next_open",
+    "status": "research_only_not_execution_realistic",
+    "supported_entry_models": [
+      "next_open",
+      "next_close"
+    ]
+  }
+}
