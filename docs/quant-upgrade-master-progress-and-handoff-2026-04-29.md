@@ -3,7 +3,7 @@
 Date: 2026-04-29
 Role: PMO / project secretary
 Scope: documentation control only
-Status: master progress and handoff ledger; quant mainline complete, Commit D done, stock config pending
+Status: master progress and handoff ledger; free-source FS-2 accepted, FS-3 repo-external live smoke planning next
 
 ## 0. 本文边界
 
@@ -51,6 +51,12 @@ P0 scope approval
   -> quant upgrade mainline completed
   -> Commit D non-quant source changes completed: 4d7a89857d3b85c89e5be4f2ee42894bd45df2f2
   -> stock-analyzer/config/stocks.json pending human confirmation
+  -> Tushare paid/points route deferred
+  -> free data source route completed through FS-1 schema-only + synthetic tests
+  -> FS-1 independent acceptance passed
+  -> FS-2 provider contract mapping completed
+  -> FS-2 independent acceptance passed
+  -> next stage: FS-3 repo-external live smoke planning
 ```
 
 Sprint 2 的独立验收结论是 **有条件通过**。允许进入 P1 的范围仅限数据补强、shadow-only 预研和页面信息架构草案；不允许进入生产排序、A/B/C 替换、真实页面接入 Prism Edge、Expected 5D 默认展示、ML 或 hard gate。
@@ -59,7 +65,7 @@ P1-A Card 1 的独立验收结论是 **通过**。但 Card 1 只完成了 `eligi
 
 P1-A Card 2 / 3 / 4 / 5 均已通过独立验收。它们完成的是内部可得数据的 policy freeze、availability freeze、hardened label sidecar 和 report-only rerun，不代表 formal benchmark、formal adjusted return 或 execution-realistic return 已经完成。
 
-外部数据源调研和外部数据源决策包已完成。**Tushare Pro non-production POC 已完成**，POC 结论为 **completed with blockers / 有条件继续**。Tushare source design / blocker matrix 已通过二号 AI 有条件验收。change inventory 和验收已完成，结论为有条件通过。stage pathspec plan 和验收已完成。Quant core + P1-A internal hardening staged diff 已通过复验并已提交。PR 1 / Commit 1 已创建，commit hash 为 `1ef4614e1753d9f7776b53d6a6b588ee62ed15aa`。PR 2 / Commit 2 已创建，commit hash 为 `606dc5276843846576cce7448e3fc83ec0c726a4`。剩余 dirty worktree inventory 已提交，commit hash 为 `8851984a86f6a760275070b6be8b52564ce93a08`。当前量化升级主线已完成，剩余事项转入非量化 dirty worktree 处理。非量化源码改动 Commit D 已完成，commit hash 为 `4d7a89857d3b85c89e5be4f2ee42894bd45df2f2`；`stock-analyzer/config/stocks.json` 仍待人工确认。
+外部数据源调研和外部数据源决策包已完成。**Tushare Pro non-production POC 已完成**，POC 结论为 **completed with blockers / 有条件继续**。Tushare source design / blocker matrix 已通过二号 AI 有条件验收。change inventory 和验收已完成，结论为有条件通过。stage pathspec plan 和验收已完成。Quant core + P1-A internal hardening staged diff 已通过复验并已提交。PR 1 / Commit 1 已创建，commit hash 为 `1ef4614e1753d9f7776b53d6a6b588ee62ed15aa`。PR 2 / Commit 2 已创建，commit hash 为 `606dc5276843846576cce7448e3fc83ec0c726a4`。剩余 dirty worktree inventory 已提交，commit hash 为 `8851984a86f6a760275070b6be8b52564ce93a08`。当前量化升级主线已完成，剩余事项转入非量化 dirty worktree 处理。非量化源码改动 Commit D 已完成，commit hash 为 `4d7a89857d3b85c89e5be4f2ee42894bd45df2f2`；`stock-analyzer/config/stocks.json` 仍待人工确认。Tushare 付费/积分路线继续暂缓；免费数据源路线 FS-2 provider contract mapping 已完成并通过独立验收，当前允许进入 FS-3 repo-external live smoke planning，但不允许直接 FS-3 代码或 live provider call。
 
 四个 AI 的上一轮任务均已完成。当前不进入主线开发，也不开发新功能；当前工作区存在大量 modified / untracked 文件，后续禁止 `git add .`。Tushare token 已人工轮换，旧 token 不再允许使用。
 
@@ -155,6 +161,12 @@ Owner 已调整实际 staging 策略：
 - 当前阶段：剩余事项转入非量化 dirty worktree 处理。
 - Commit D：非量化源码改动已完成。
 - 下一步待人工确认：`stock-analyzer/config/stocks.json`。
+- Tushare 付费/积分路线：继续暂缓。
+- 免费数据源路线：FS-2 provider contract mapping 已完成并通过独立验收。
+- 当前下一步：FS-3 repo-external live smoke planning。
+- 当前不允许直接 FS-3 代码。
+- 当前不允许 live provider call。
+- 第四个 AI：继续不用。
 
 非量化 dirty worktree 处理边界：
 
@@ -180,6 +192,7 @@ Owner 已调整实际 staging 策略：
 - 不实现新功能。
 - 不生成 formal labels。
 - 不生成 formal excess return。
+- 不生成 formal adjusted return。
 - 不生成 execution-realistic backtest。
 - 不影响生产排序。
 - 不提交 raw vendor data。
@@ -713,7 +726,7 @@ P1-A 内部数据硬化阶段已可以阶段性收口：
 
 ## 15. 2026-04-30 更新：Commit D 非量化源码改动已完成
 
-当前最新状态：
+当时状态：
 
 - 非量化源码改动 Commit D 已完成。
 - Commit hash：`4d7a89857d3b85c89e5be4f2ee42894bd45df2f2`。
@@ -721,6 +734,53 @@ P1-A 内部数据硬化阶段已可以阶段性收口：
 - 未包含 runtime / cache / generated 数据。
 - `stock-analyzer/config/stocks.json` 仍待人工确认。
 
-## 16. 当前 PMO 交接一句话
+## 16. 2026-04-30 更新：免费数据源路线 FS-1 已通过
 
-当前 Prism 量化升级已完成 P0 到 P1-A 内部数据硬化的 report-only 闭环，四个 AI 的上一轮任务均已完成，P1-A 可以阶段性收口，但仍不是 production-ready。当前量化升级主线已完成两个安全提交：PR 1 Quant core + P1-A internal hardening，commit `1ef4614e1753d9f7776b53d6a6b588ee62ed15aa`；PR 2 External / Tushare governance docs，commit `606dc5276843846576cce7448e3fc83ec0c726a4`。剩余 dirty worktree inventory 已提交，commit `8851984a86f6a760275070b6be8b52564ce93a08`。非量化源码改动 Commit D 已完成，commit `4d7a89857d3b85c89e5be4f2ee42894bd45df2f2`，且未包含 runtime / cache / generated 数据。`stock-analyzer/config/stocks.json` 仍待人工确认。仍禁止 `git add .`，禁止提交 runtime / cache / generated 数据。
+当时状态：
+
+- Tushare 付费 / 积分路线继续暂缓。
+- 免费数据源路线已完成：
+  - POC plan。
+  - POC plan acceptance。
+  - field availability POC。
+  - field POC acceptance。
+  - adapter design。
+  - adapter design acceptance。
+  - implementation plan。
+  - implementation plan acceptance。
+  - FS-1 schema-only + synthetic tests。
+  - FS-1 independent acceptance。
+- FS-1 结论：通过，`no-network`、`synthetic-only`、`no data/quant`、`no provider imports`。
+- 当前下一步：FS-2 provider contract mapping planning。
+- 仍禁止生产排序、A/B/C、页面、Prism Edge、Expected 5D、ML。
+- 仍禁止 formal labels、formal excess return、formal adjusted return、execution-realistic backtest。
+- 第四个 AI 继续不用。
+
+## 17. 2026-04-30 更新：免费数据源路线 FS-2 已通过
+
+当前最新状态：
+
+- Tushare 付费 / 积分路线继续暂缓。
+- 免费数据源路线已完成：
+  - POC plan。
+  - POC plan acceptance。
+  - field availability POC。
+  - field POC acceptance。
+  - adapter design。
+  - adapter design acceptance。
+  - implementation plan。
+  - implementation plan acceptance。
+  - FS-1 schema-only + synthetic tests。
+  - FS-1 independent acceptance。
+  - FS-2 provider contract mapping。
+  - FS-2 independent acceptance。
+- FS-2 独立验收通过：`no-network`、`synthetic-only`、`no data/quant`、`no provider imports`、`no raw vendor data`、`no formal outputs`、`no production/page/ML impact`。
+- 当前允许进入 FS-3 repo-external live smoke planning。
+- 当前不允许直接 FS-3 代码，不允许 live provider call。
+- 仍禁止生产排序、A/B/C、页面、Prism Edge、Expected 5D、ML。
+- 仍禁止 formal labels、formal excess return、formal adjusted return、execution-realistic backtest。
+- 第四个 AI 继续不用。
+
+## 18. 当前 PMO 交接一句话
+
+当前 Prism 量化升级已完成 P0 到 P1-A 内部数据硬化的 report-only 闭环，P1-A 可以阶段性收口，但仍不是 production-ready。当前量化升级主线已完成两个安全提交：PR 1 Quant core + P1-A internal hardening，commit `1ef4614e1753d9f7776b53d6a6b588ee62ed15aa`；PR 2 External / Tushare governance docs，commit `606dc5276843846576cce7448e3fc83ec0c726a4`。Tushare 付费 / 积分路线继续暂缓；免费数据源路线已完成 FS-2 provider contract mapping 并通过独立验收，结论为 `no-network` / `synthetic-only` / `no data/quant` / `no provider imports` / `no raw vendor data` / `no formal outputs` / `no production/page/ML impact`。当前允许进入 FS-3 repo-external live smoke planning，但不允许直接 FS-3 代码或 live provider call。第四个 AI 继续不用。仍禁止生产排序、A/B/C、页面、Prism Edge、Expected 5D、ML、formal labels、formal excess return、formal adjusted return、execution-realistic backtest。
