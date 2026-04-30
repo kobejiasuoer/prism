@@ -23,7 +23,7 @@ export default function DiscoveryPage() {
     <main className="flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
       <div className="mx-auto max-w-7xl">
         <PageTitle
-          eyebrow={data?.trade_date || "Discovery"}
+          eyebrow={data?.display_date || data?.generated_at?.slice(0, 10) || data?.trade_date || "Discovery"}
           title={data?.topline?.verdict_title || data?.hero?.title || "观察池"}
           summary={data?.topline?.verdict_summary || data?.hero?.summary || "候选 Pipeline、阀门状态、质检和主线热力。"}
           icon={Telescope}

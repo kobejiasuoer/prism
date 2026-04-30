@@ -143,7 +143,24 @@ def _is_fund_flow_history_fresh(history, now=None):
 
 def load_config(selected_codes=None):
     config = json.load(open(os.path.join(SKILL_ROOT, "config", "stocks.json")))
-    config["stocks"] = list_active_watchlist_stocks(config)
+    normalized_stocks = []
+    for stock in list_active_watchlist_stocks(config):
+        code = str(stock.get("code") or "").strip()
+        if not code:
+            continue
+        market = str(stock.get("market") or infer_market_from_code(code)).strip().lower()
+        if market not in {"sh", "sz"}:
+            market = infer_market_from_code(code)
+        normalized_stocks.append(
+            {
+                **stock,
+                "code": code,
+                "market": market,
+                "sina": str(stock.get("sina") or infer_sina_code(code, market)).strip() or infer_sina_code(code, market),
+            }
+        )
+
+    config["stocks"] = normalized_stocks
     if selected_codes:
         selected = []
         existing = set()
@@ -2040,7 +2057,10 @@ def main():
     for stock in config["stocks"]:
         code = stock["code"]
         name = stock["name"]
-        sina = stock.get("sina", f"{'sh' if stock.get('market')=='sh' else 'sz'}{code}")
+        market = str(stock.get("market") or infer_market_from_code(code)).strip().lower()
+        if market not in {"sh", "sz"}:
+            market = infer_market_from_code(code)
+        sina = str(stock.get("sina") or infer_sina_code(code, market)).strip() or infer_sina_code(code, market)
         print(f"[INFO] 正在获取 {name}({code})...", file=sys.stderr)
 
         try:

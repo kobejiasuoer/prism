@@ -235,6 +235,7 @@ export interface TodayCounts {
 
 export interface TodayData {
   generated_at: string;
+  display_date?: string;
   trade_date: string;
   brief_is_live: boolean;
   hero: TodayHero;
@@ -362,6 +363,7 @@ export interface OverviewData {
 
 export interface WatchlistData {
   generated_at: string;
+  display_date?: string;
   trade_date: string;
   brief_is_live?: boolean;
   hero?: {
@@ -450,6 +452,7 @@ export interface WatchlistManageResponse {
 
 export interface OpportunitiesData {
   generated_at: string;
+  display_date?: string;
   trade_date: string;
   brief_is_live?: boolean;
   hero?: {

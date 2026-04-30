@@ -22,6 +22,8 @@ SCRIPTS_ROOT = INVEST_FLOW_ROOT / "scripts"
 STOCK_ANALYZER_ROOT = SKILLS_ROOT / "stock-analyzer"
 STOCK_SCREENER_ROOT = SKILLS_ROOT / "stock-screener"
 PACKAGES_ROOT = SKILLS_ROOT / "packages"
+CURRENT_SCREENER_DATA_DIR = PACKAGES_ROOT / "data"
+SCREENER_DATA_DIRS = (CURRENT_SCREENER_DATA_DIR, STOCK_SCREENER_ROOT / "data")
 
 if str(PACKAGES_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGES_ROOT))
@@ -93,9 +95,15 @@ ACTION_TIER_LABELS = {
 }
 
 QUALITY_PATTERNS = {
-    "watchlist": STOCK_ANALYZER_ROOT / "data" / "quality_gate_watchlist_*.json",
-    "aggressive": STOCK_SCREENER_ROOT / "data" / "quality_gate_*.json",
-    "midday_confirmation": STOCK_SCREENER_ROOT / "data" / "quality_gate_midday_*.json",
+    "watchlist": [STOCK_ANALYZER_ROOT / "data" / "quality_gate_watchlist_*.json"],
+    "aggressive": [
+        CURRENT_SCREENER_DATA_DIR / "quality_gate_*.json",
+        STOCK_SCREENER_ROOT / "data" / "quality_gate_*.json",
+    ],
+    "midday_confirmation": [
+        CURRENT_SCREENER_DATA_DIR / "quality_gate_midday_*.json",
+        STOCK_SCREENER_ROOT / "data" / "quality_gate_midday_*.json",
+    ],
 }
 
 ARTIFACT_GROUPS = {
@@ -303,8 +311,9 @@ def artifact_from_path(title: str, path_like: str | Path | None, key: str | None
 
 
 def _match_quality_files(lane: str) -> list[Path]:
-    pattern = QUALITY_PATTERNS[lane]
-    files = list(pattern.parent.glob(pattern.name))
+    files: list[Path] = []
+    for pattern in QUALITY_PATTERNS[lane]:
+        files.extend(pattern.parent.glob(pattern.name))
     if lane == "aggressive":
         files = [path for path in files if "midday_" not in path.name]
     return sorted(files, key=lambda path: path.stat().st_mtime, reverse=True)
@@ -736,8 +745,10 @@ def latest_command_brief_info() -> dict[str, Any]:
 
 
 def latest_ai_history_info() -> dict[str, Any]:
-    ai_dir = STOCK_SCREENER_ROOT / "data" / "ai_history"
-    files = sorted(ai_dir.glob("ai_screening_*.json"), key=lambda path: path.stat().st_mtime, reverse=True)
+    files: list[Path] = []
+    for data_dir in SCREENER_DATA_DIRS:
+        files.extend(data_dir.glob("ai_history/ai_screening_*.json"))
+    files = sorted(files, key=lambda path: path.stat().st_mtime, reverse=True)
     if not files:
         return {"label": "最新二筛", "value": "-", "detail": "暂无 ai_history"}
     data = load_json(files[0]) or {}
@@ -749,8 +760,8 @@ def latest_ai_history_info() -> dict[str, Any]:
 
 
 def latest_midday_info() -> dict[str, Any]:
-    path = STOCK_SCREENER_ROOT / "data" / "midday_verification_result.json"
-    if not path.exists():
+    path = next((candidate for data_dir in SCREENER_DATA_DIRS if (candidate := data_dir / "midday_verification_result.json").exists()), None)
+    if path is None:
         return {"label": "午盘确认", "value": "-", "detail": "暂无午盘结果"}
     data = load_json(path) or {}
     return {
@@ -761,8 +772,8 @@ def latest_midday_info() -> dict[str, Any]:
 
 
 def latest_midday_refresh_info() -> dict[str, Any]:
-    path = STOCK_SCREENER_ROOT / "data" / "midday_refresh_result.json"
-    if not path.exists():
+    path = next((candidate for data_dir in SCREENER_DATA_DIRS if (candidate := data_dir / "midday_refresh_result.json").exists()), None)
+    if path is None:
         return {"label": "午盘刷新", "value": "-", "detail": "暂无刷新结果"}
     data = load_json(path) or {}
     return {
@@ -783,8 +794,8 @@ def latest_dashboard_info() -> dict[str, Any]:
 
 
 def latest_midday_refresh_status() -> dict[str, Any] | None:
-    path = STOCK_SCREENER_ROOT / "data" / "midday_refresh_result.json"
-    if not path.exists():
+    path = next((candidate for data_dir in SCREENER_DATA_DIRS if (candidate := data_dir / "midday_refresh_result.json").exists()), None)
+    if path is None:
         return None
     data = load_json(path) or {}
     validation_status = (data.get("validation_status") or "").strip()
@@ -1474,6 +1485,10 @@ def current_trade_date(
         return screening_dt.strftime("%Y-%m-%d")
     if decision_brief and decision_brief.get("trade_date"):
         return str(decision_brief["trade_date"])
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+def current_display_date() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
@@ -6747,8 +6762,11 @@ def build_watchlist_page_view() -> dict[str, Any]:
         ],
     }
 
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     return {
-        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "generated_at": generated_at,
+        "display_date": current_display_date(),
         "trade_date": trade_date,
         "brief_is_live": brief_is_live,
         "reading_compass": build_reading_compass_cards(
@@ -6969,8 +6987,11 @@ def build_opportunities_view() -> dict[str, Any]:
         "api_self": api_opportunities_page_url(),
     }
 
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     return {
-        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "generated_at": generated_at,
+        "display_date": current_display_date(),
         "trade_date": trade_date,
         "brief_is_live": brief_is_live,
         "reading_compass": build_reading_compass_cards(
@@ -8026,7 +8047,7 @@ def build_today_view() -> dict[str, Any]:
         hero_summary = normalize_stock_ui_copy(brief_summary.get("gate_summary")) or "当前判断已由总控层收束。"
         hero_gate_label = brief_summary.get("gate_label") or gate.get("label") or "总控已更新"
         position_cap = brief_summary.get("position_cap") or gate.get("position_cap") or "-"
-        context_note = f"当前页面基于 {brief_summary.get('generated_at') or '-'} 的总控简报。"
+        context_note = f"当前页面基于 {(decision_brief or {}).get('generated_at') or '-'} 的总控简报。"
     else:
         if gate.get("allow_new_positions"):
             hero_title = "可以继续看新仓，但先只保留少量观察名单"
@@ -8159,8 +8180,11 @@ def build_today_view() -> dict[str, Any]:
         source_cards=source_cards,
     )
 
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     return {
-        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "generated_at": generated_at,
+        "display_date": current_display_date(),
         "trade_date": trade_date,
         "brief_is_live": brief_is_live,
         "hero": {

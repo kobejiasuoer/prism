@@ -112,11 +112,13 @@ class StockMvpFirstScreenContractTest(unittest.TestCase):
     def test_today_first_screen_contract_keeps_stock_routes_and_queue_fields(self) -> None:
         payload = build_today_view()
 
-        for key in ("generated_at", "trade_date", "brief_is_live", "hero", "summary_cards", "action_queue", "source_cards", "counts"):
+        for key in ("generated_at", "display_date", "trade_date", "brief_is_live", "hero", "summary_cards", "action_queue", "source_cards", "counts"):
             self.assertIn(key, payload)
 
         assert_non_empty_string(self, payload["generated_at"], "generated_at")
+        assert_non_empty_string(self, payload["display_date"], "display_date")
         assert_non_empty_string(self, payload["trade_date"], "trade_date")
+        self.assertEqual(payload["display_date"], payload["generated_at"].split(" ")[0])
         self.assertIsInstance(payload["brief_is_live"], bool)
 
         hero = payload["hero"]

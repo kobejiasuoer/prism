@@ -75,6 +75,8 @@ export default function CommandCenterPage() {
   const updateDecision = useUpdateTodayActionDecision();
   const data = today.data;
   const hero = data?.command_hero;
+  const displayDate = data?.display_date || data?.generated_at?.slice(0, 10) || data?.trade_date || hero?.trade_date;
+  const showTradeDateBadge = Boolean(data?.display_date && data?.trade_date && data.display_date !== data.trade_date);
   const summaryCards = data?.summary_cards?.length ? data.summary_cards : data?.radar_cards ?? [];
   const actionItems = data?.action_queue?.items ?? [];
   const counts = data?.action_queue?.counts;
@@ -132,8 +134,9 @@ export default function CommandCenterPage() {
           <section className="mb-8">
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <div className="mono text-[11px] font-medium uppercase text-[var(--info)]">
-                {asText(data?.trade_date || hero?.trade_date, "交易日待同步")}
+                {asText(displayDate, "日期待同步")}
               </div>
+              {showTradeDateBadge ? <Badge tone="watch">数据交易日 {data?.trade_date}</Badge> : null}
               <Badge tone={data?.brief_is_live ? "positive" : "warning"}>
                 {data?.hero?.gate_label || hero?.source_state || "实时链路"}
               </Badge>

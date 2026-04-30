@@ -19,7 +19,7 @@ export default function PortfolioPage() {
     <main className="flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
       <div className="mx-auto max-w-7xl">
         <PageTitle
-          eyebrow={data?.trade_date || "Portfolio"}
+          eyebrow={data?.display_date || data?.generated_at?.slice(0, 10) || data?.trade_date || "Portfolio"}
           title={data?.topline?.verdict_title || data?.hero?.title || "持仓管理"}
           summary={data?.topline?.verdict_summary || data?.hero?.summary || "按优先处理、跟踪增强、继续观察分组管理当前自选股。"}
           icon={WalletCards}

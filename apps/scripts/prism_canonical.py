@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -26,6 +27,8 @@ from watchlist_registry import load_active_watchlist_codes
 
 WATCHLIST_SNAPSHOT_DIR = STOCK_ANALYZER_ROOT / "data" / "daily_snapshots"
 SCREENER_DATA_DIR = STOCK_SCREENER_ROOT / "data"
+CURRENT_SCREENER_DATA_DIR = PACKAGES_ROOT / "data"
+SCREENER_DATA_DIRS = (CURRENT_SCREENER_DATA_DIR, SCREENER_DATA_DIR)
 COMMAND_BRIEF_DIR = BASE_DIR / "data" / "command_brief"
 RESEARCH_REPORTS_DIR = STOCK_SCREENER_ROOT / "data" / "research_backfill" / "reports"
 
@@ -149,7 +152,19 @@ def latest_matching(pattern: Path, exclude_tokens: tuple[str, ...] = ()) -> Path
     files = list(pattern.parent.glob(pattern.name))
     if exclude_tokens:
         files = [path for path in files if not any(token in path.name for token in exclude_tokens)]
-    files.sort(key=lambda item: item.stat().st_mtime, reverse=True)
+
+    def sort_key(path: Path) -> tuple[datetime, float, str]:
+        name_stamp = re.search(r"(\d{4}-\d{2}-\d{2})(?:[_-](\d{2})-(\d{2})(?:-(\d{2}))?)?", path.stem)
+        if name_stamp:
+            date_part, hour, minute, second = name_stamp.groups()
+            parsed = parse_ts(
+                f"{date_part} {hour or '00'}:{minute or '00'}:{second or '00'}"
+            )
+            if parsed:
+                return (parsed, path.stat().st_mtime, path.name)
+        return (datetime.fromtimestamp(path.stat().st_mtime), path.stat().st_mtime, path.name)
+
+    files.sort(key=sort_key, reverse=True)
     return files[0] if files else None
 
 
@@ -168,20 +183,30 @@ def resolve_screening_batch_path(path: str | None = None) -> Path | None:
     if path:
         candidate = Path(path).expanduser()
         return candidate if candidate.exists() else None
-    current = SCREENER_DATA_DIR / "ai_screening_result.json"
-    if current.exists():
-        return current
-    return latest_matching(SCREENER_DATA_DIR / "ai_history" / "ai_screening_*.json")
+    for data_dir in SCREENER_DATA_DIRS:
+        current = data_dir / "ai_screening_result.json"
+        if current.exists():
+            return current
+    for data_dir in SCREENER_DATA_DIRS:
+        history = latest_matching(data_dir / "ai_history" / "ai_screening_*.json")
+        if history:
+            return history
+    return None
 
 
 def resolve_confirmation_path(path: str | None = None) -> Path | None:
     if path:
         candidate = Path(path).expanduser()
         return candidate if candidate.exists() else None
-    current = SCREENER_DATA_DIR / "midday_verification_result.json"
-    if current.exists():
-        return current
-    return latest_matching(SCREENER_DATA_DIR / "midday_verification_*.json")
+    for data_dir in SCREENER_DATA_DIRS:
+        current = data_dir / "midday_verification_result.json"
+        if current.exists():
+            return current
+    for data_dir in SCREENER_DATA_DIRS:
+        history = latest_matching(data_dir / "midday_verification_*.json")
+        if history:
+            return history
+    return None
 
 
 def resolve_decision_brief_path(path: str | None = None) -> Path | None:
