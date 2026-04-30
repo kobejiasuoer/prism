@@ -3,7 +3,7 @@
 Date: 2026-04-29
 Role: PMO / project secretary
 Scope: documentation control only
-Status: master progress and handoff ledger; PR 1 and PR 2 committed, dirty worktree cleanup next
+Status: master progress and handoff ledger; quant mainline complete, Commit D done, stock config pending
 
 ## 0. 本文边界
 
@@ -47,7 +47,10 @@ P0 scope approval
   -> PR 1 staged diff re-accepted
   -> PR 1 / Commit 1 created: 1ef4614e1753d9f7776b53d6a6b588ee62ed15aa
   -> PR 2 / Commit 2 created: 606dc5276843846576cce7448e3fc83ec0c726a4
-  -> next stage: handle remaining unrelated dirty worktree
+  -> remaining dirty worktree inventory committed: 8851984a86f6a760275070b6be8b52564ce93a08
+  -> quant upgrade mainline completed
+  -> Commit D non-quant source changes completed: 4d7a89857d3b85c89e5be4f2ee42894bd45df2f2
+  -> stock-analyzer/config/stocks.json pending human confirmation
 ```
 
 Sprint 2 的独立验收结论是 **有条件通过**。允许进入 P1 的范围仅限数据补强、shadow-only 预研和页面信息架构草案；不允许进入生产排序、A/B/C 替换、真实页面接入 Prism Edge、Expected 5D 默认展示、ML 或 hard gate。
@@ -56,7 +59,7 @@ P1-A Card 1 的独立验收结论是 **通过**。但 Card 1 只完成了 `eligi
 
 P1-A Card 2 / 3 / 4 / 5 均已通过独立验收。它们完成的是内部可得数据的 policy freeze、availability freeze、hardened label sidecar 和 report-only rerun，不代表 formal benchmark、formal adjusted return 或 execution-realistic return 已经完成。
 
-外部数据源调研和外部数据源决策包已完成。**Tushare Pro non-production POC 已完成**，POC 结论为 **completed with blockers / 有条件继续**。Tushare source design / blocker matrix 已通过二号 AI 有条件验收。change inventory 和验收已完成，结论为有条件通过。stage pathspec plan 和验收已完成。Quant core + P1-A internal hardening staged diff 已通过复验并已提交。PR 1 / Commit 1 已创建，commit hash 为 `1ef4614e1753d9f7776b53d6a6b588ee62ed15aa`。PR 2 / Commit 2 已创建，commit hash 为 `606dc5276843846576cce7448e3fc83ec0c726a4`。下一步不是开发，而是处理剩余 dirty worktree 的无关运行态 / 缓存 / 页面 / stock 数据。
+外部数据源调研和外部数据源决策包已完成。**Tushare Pro non-production POC 已完成**，POC 结论为 **completed with blockers / 有条件继续**。Tushare source design / blocker matrix 已通过二号 AI 有条件验收。change inventory 和验收已完成，结论为有条件通过。stage pathspec plan 和验收已完成。Quant core + P1-A internal hardening staged diff 已通过复验并已提交。PR 1 / Commit 1 已创建，commit hash 为 `1ef4614e1753d9f7776b53d6a6b588ee62ed15aa`。PR 2 / Commit 2 已创建，commit hash 为 `606dc5276843846576cce7448e3fc83ec0c726a4`。剩余 dirty worktree inventory 已提交，commit hash 为 `8851984a86f6a760275070b6be8b52564ce93a08`。当前量化升级主线已完成，剩余事项转入非量化 dirty worktree 处理。非量化源码改动 Commit D 已完成，commit hash 为 `4d7a89857d3b85c89e5be4f2ee42894bd45df2f2`；`stock-analyzer/config/stocks.json` 仍待人工确认。
 
 四个 AI 的上一轮任务均已完成。当前不进入主线开发，也不开发新功能；当前工作区存在大量 modified / untracked 文件，后续禁止 `git add .`。Tushare token 已人工轮换，旧 token 不再允许使用。
 
@@ -114,7 +117,21 @@ PR 2 / Commit 2 已创建：
 - 该提交是 External / Tushare / governance docs-only。
 - 不包含：`packages`、`data`、`apps`、`stock-screener`、`stock-analyzer`、raw vendor data、token、secret。
 
-当前量化升级已完成两个安全提交：
+剩余 dirty worktree inventory 已提交：
+
+- Commit hash：`8851984a86f6a760275070b6be8b52564ce93a08`。
+- Commit subject：`docs: record remaining dirty worktree inventory`。
+- 该提交记录剩余 dirty worktree inventory 和验收，不代表继续量化开发。
+
+非量化源码改动 Commit D 已完成：
+
+- Commit hash：`4d7a89857d3b85c89e5be4f2ee42894bd45df2f2`。
+- Commit subject：`app: add display date and source path normalization`。
+- 该提交只包含 app / control-panel / frontend / canonical / fetch 源码和测试。
+- 未包含 runtime / cache / generated 数据。
+- `stock-analyzer/config/stocks.json` 仍待人工确认。
+
+当前量化升级主线已完成，包含两个安全主线提交：
 
 - PR 1：Quant core + P1-A internal hardening。
 - PR 2：External / Tushare governance docs。
@@ -135,13 +152,16 @@ Owner 已调整实际 staging 策略：
 - 1 号 AI：已完成 PR 1 stage-only 和 Commit 1 创建。
 - 2 号 AI：已完成 Quant core + P1-A internal hardening staged diff 复验。
 - PR 2：External / Tushare governance docs-only 已创建。
-- 下一阶段：处理剩余 dirty worktree 的无关运行态 / 缓存 / 页面 / stock 数据。
+- 当前阶段：剩余事项转入非量化 dirty worktree 处理。
+- Commit D：非量化源码改动已完成。
+- 下一步待人工确认：`stock-analyzer/config/stocks.json`。
 
-剩余 dirty worktree 处理边界：
+非量化 dirty worktree 处理边界：
 
 - 仍禁止 `git add .`。
 - 禁止 stage unrelated runtime / cache / current-state 数据。
 - 禁止把未 staged 的运行态 / cache / current-state 数据混入后续提交。
+- 禁止提交 runtime / cache / generated 数据。
 - 禁止 stage raw vendor data。
 - 禁止 stage token、secret 或付费账号凭据。
 - 任何后续提交都必须先有明确 pathspec 和 staged diff 验收。
@@ -152,7 +172,7 @@ Owner 已调整实际 staging 策略：
 - P1-A Card 4 label hardening：通过；但全部 `formal_label_ready=false`，全部 `formal_execution_eligible=false`。
 - P1-A Card 5 rerun reports：通过；已使用 hardened labels 重跑 report-only 报告，但仍无 formal excess、formal adjusted 或 execution-realistic 升级。
 
-剩余 dirty worktree 处理期间：
+非量化 dirty worktree 处理期间：
 
 - 不进入 adapter 开发。
 - 不接主线代码。
@@ -164,9 +184,9 @@ Owner 已调整实际 staging 策略：
 - 不影响生产排序。
 - 不提交 raw vendor data。
 - 不执行 `git add .`。
-- 不执行 commit。
+- 任何后续提交都必须先有明确 pathspec 和 staged diff 验收。
 
-当前只允许处理剩余 dirty worktree 的无关运行态 / 缓存 / 页面 / stock 数据，不允许开发新功能。
+当前量化升级主线已完成，非量化源码改动 Commit D 已完成。`stock-analyzer/config/stocks.json` 仍待人工确认。
 
 ### 1.4 当前不能做的事项
 
@@ -501,7 +521,7 @@ Tushare Pro non-production POC 已完成。token 已人工轮换，旧 token 不
 
 ## 7. 下一步决策点
 
-当前下一步不是 adapter 开发，也不是新功能开发，而是处理剩余 dirty worktree 的无关运行态 / 缓存 / 页面 / stock 数据。
+当前量化升级主线已完成，非量化源码改动 Commit D 也已完成；剩余事项转入非量化 dirty worktree 处理。
 
 下一硬门槛：
 
@@ -513,12 +533,19 @@ Tushare Pro non-production POC 已完成。token 已人工轮换，旧 token 不
 - PR 2 是 External / Tushare / governance docs-only。
 - PR 2 不包含 `packages`、`data`、`apps`、`stock-screener`、`stock-analyzer`、raw vendor data、token、secret。
 - 当前量化升级已完成两个安全提交：PR 1 Quant core + P1-A internal hardening；PR 2 External / Tushare governance docs。
+- 剩余 dirty worktree inventory 已提交：`8851984a86f6a760275070b6be8b52564ce93a08`。
+- 当前量化升级主线已完成，后续进入非量化 dirty worktree 处理。
+- 非量化源码改动 Commit D 已完成：`4d7a89857d3b85c89e5be4f2ee42894bd45df2f2`。
+- Commit D 只包含 app / control-panel / frontend / canonical / fetch 源码和测试。
+- Commit D 未包含 runtime / cache / generated 数据。
+- `stock-analyzer/config/stocks.json` 仍待人工确认。
 - unrelated runtime / cache / current-state 数据默认不纳入量化 PR。
 - 禁止使用 `git add .`。
 - 禁止 stage raw vendor data、token、secret 或付费账号凭据。
+- 禁止提交 runtime / cache / generated 数据。
 - 人工再拍板 Tushare 权限/积分处理、换源/多源路线，或继续 internal research-only 路线。
 
-剩余 dirty worktree 处理期间：
+非量化 dirty worktree 处理期间：
 
 - 不进入 adapter 开发。
 - 不接主线代码。
@@ -530,6 +557,7 @@ Tushare Pro non-production POC 已完成。token 已人工轮换，旧 token 不
 - 不执行 `git add .`。
 - 不 stage raw vendor data 或 token。
 - 不 stage unrelated runtime / cache / current-state 数据。
+- 不提交 runtime / cache / generated 数据。
 - 新 token 不得写入代码、文档、日志或 git。
 - 后续如需调用 Tushare，只能从本地环境变量 `TUSHARE_TOKEN` 读取。
 
@@ -576,9 +604,15 @@ P1-A 内部数据硬化阶段已可以阶段性收口：
 - PR 2 是 External / Tushare / governance docs-only。
 - PR 2 不包含 `packages`、`data`、`apps`、`stock-screener`、`stock-analyzer`、raw vendor data、token、secret。
 - 当前量化升级已完成两个安全提交：PR 1 Quant core + P1-A internal hardening；PR 2 External / Tushare governance docs。
-- 下一步不是开发，而是处理剩余 dirty worktree 的无关运行态 / 缓存 / 页面 / stock 数据。
+- 剩余 dirty worktree inventory 已提交：`8851984a86f6a760275070b6be8b52564ce93a08`。
+- 当前量化升级主线已完成，剩余事项转入非量化 dirty worktree 处理。
+- 非量化源码改动 Commit D 已完成：`4d7a89857d3b85c89e5be4f2ee42894bd45df2f2`。
+- Commit D 只包含 app / control-panel / frontend / canonical / fetch 源码和测试。
+- Commit D 未包含 runtime / cache / generated 数据。
+- `stock-analyzer/config/stocks.json` 仍待人工确认。
 - unrelated runtime / cache / current-state 数据默认不纳入量化 PR。
 - 当前工作区存在大量 modified / untracked 文件，后续禁止 `git add .`。
+- 仍禁止提交 runtime / cache / generated 数据。
 - 后续人工再拍板 Tushare 权限/积分、换源/多源，或 internal research-only 路线。
 
 外部数据 POC 仍禁止：
@@ -655,7 +689,7 @@ P1-A 内部数据硬化阶段已可以阶段性收口：
 
 ## 13. 2026-04-30 更新：PR 2 / Commit 2 已创建
 
-当前最新状态：
+当时状态：
 
 - PR 2 / Commit 2 已创建。
 - Commit hash：`606dc5276843846576cce7448e3fc83ec0c726a4`。
@@ -666,6 +700,27 @@ P1-A 内部数据硬化阶段已可以阶段性收口：
   - PR 2：External / Tushare governance docs。
 - 下一步不是开发，而是处理剩余 dirty worktree 的无关运行态 / 缓存 / 页面 / stock 数据。
 
-## 14. 当前 PMO 交接一句话
+## 14. 2026-04-30 更新：剩余 dirty worktree inventory 已提交
 
-当前 Prism 量化升级已完成 P0 到 P1-A 内部数据硬化的 report-only 闭环，四个 AI 的上一轮任务均已完成，P1-A 可以阶段性收口，但仍不是 production-ready。Tushare Pro non-production POC 已完成，结论为 completed with blockers / 有条件继续；Tushare source design / blocker matrix 已通过二号 AI 有条件验收。change inventory 和验收已完成，结论为有条件通过；stage pathspec plan 和验收也已完成。当前量化升级已完成两个安全提交：PR 1 Quant core + P1-A internal hardening，commit `1ef4614e1753d9f7776b53d6a6b588ee62ed15aa`；PR 2 External / Tushare governance docs，commit `606dc5276843846576cce7448e3fc83ec0c726a4`。PR 2 不包含 packages、data、apps、stock-screener、stock-analyzer、raw vendor data、token 或 secret。下一步不是开发，而是处理剩余 dirty worktree 的无关运行态 / 缓存 / 页面 / stock 数据；后续由人工再拍板 Tushare 权限/积分、换源/多源，或 internal research-only 路线。
+当时状态：
+
+- 剩余 dirty worktree inventory 已提交。
+- Commit hash：`8851984a86f6a760275070b6be8b52564ce93a08`。
+- 当前量化升级主线已完成，剩余事项转入非量化 dirty worktree 处理。
+- 下一步候选是 `app/control-panel` + fetch normalization 源码改动人工确认。
+- 仍禁止 `git add .`。
+- 禁止提交 runtime / cache / generated 数据。
+
+## 15. 2026-04-30 更新：Commit D 非量化源码改动已完成
+
+当前最新状态：
+
+- 非量化源码改动 Commit D 已完成。
+- Commit hash：`4d7a89857d3b85c89e5be4f2ee42894bd45df2f2`。
+- 该提交只包含 app / control-panel / frontend / canonical / fetch 源码和测试。
+- 未包含 runtime / cache / generated 数据。
+- `stock-analyzer/config/stocks.json` 仍待人工确认。
+
+## 16. 当前 PMO 交接一句话
+
+当前 Prism 量化升级已完成 P0 到 P1-A 内部数据硬化的 report-only 闭环，四个 AI 的上一轮任务均已完成，P1-A 可以阶段性收口，但仍不是 production-ready。当前量化升级主线已完成两个安全提交：PR 1 Quant core + P1-A internal hardening，commit `1ef4614e1753d9f7776b53d6a6b588ee62ed15aa`；PR 2 External / Tushare governance docs，commit `606dc5276843846576cce7448e3fc83ec0c726a4`。剩余 dirty worktree inventory 已提交，commit `8851984a86f6a760275070b6be8b52564ce93a08`。非量化源码改动 Commit D 已完成，commit `4d7a89857d3b85c89e5be4f2ee42894bd45df2f2`，且未包含 runtime / cache / generated 数据。`stock-analyzer/config/stocks.json` 仍待人工确认。仍禁止 `git add .`，禁止提交 runtime / cache / generated 数据。
