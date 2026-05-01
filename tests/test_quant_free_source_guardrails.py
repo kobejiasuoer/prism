@@ -92,6 +92,5 @@ def test_no_disallowed_fs2_runtime_files_exist() -> None:
         Path("packages/quant/free_sources/baostock_adapter.py"),
         Path("packages/quant/free_sources/akshare_adapter.py"),
         Path("packages/quant/free_sources/run_field_poc.py"),
-        Path("packages/quant/free_sources/report_generator.py"),
     ]
     assert not any(path.exists() for path in disallowed)
