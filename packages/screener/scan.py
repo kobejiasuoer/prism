@@ -140,6 +140,30 @@ def _safe_float(value, default=0.0):
         return default
 
 
+# --- universe boundary configuration --------------------------------------
+#
+# Stage-0 normalization excludes stocks whose code starts with any of these
+# prefixes. Defaults to ChiNext (``30``) and STAR (``68``), preserving the
+# historical behavior. Override with the ``PRISM_SCAN_EXCLUDED_CODE_PREFIXES``
+# env var (comma-separated; empty string disables exclusion entirely):
+#   PRISM_SCAN_EXCLUDED_CODE_PREFIXES=""              # include everything
+#   PRISM_SCAN_EXCLUDED_CODE_PREFIXES="30,68,87"      # also exclude BSE
+# Tests can monkeypatch ``scan.EXCLUDED_CODE_PREFIXES`` directly.
+
+_DEFAULT_EXCLUDED_CODE_PREFIXES: tuple[str, ...] = ("30", "68")
+
+
+def _parse_excluded_code_prefixes_from_env() -> tuple[str, ...]:
+    raw = os.getenv("PRISM_SCAN_EXCLUDED_CODE_PREFIXES")
+    if raw is None:
+        return _DEFAULT_EXCLUDED_CODE_PREFIXES
+    parts = [part.strip() for part in raw.split(",")]
+    return tuple(part for part in parts if part)
+
+
+EXCLUDED_CODE_PREFIXES: tuple[str, ...] = _parse_excluded_code_prefixes_from_env()
+
+
 def _normalize_stage0_stock(raw, source_pool):
     code = str(raw.get('code') or '').strip()
     if code.isdigit():
@@ -148,7 +172,7 @@ def _normalize_stage0_stock(raw, source_pool):
     amount = _safe_float(raw.get('amount'), 0)
     if 'ST' in name:
         return None
-    if code.startswith('68') or code.startswith('30'):
+    if any(code.startswith(prefix) for prefix in EXCLUDED_CODE_PREFIXES):
         return None
     if amount <= 0 or not code:
         return None
