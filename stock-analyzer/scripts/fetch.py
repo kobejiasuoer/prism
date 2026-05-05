@@ -385,42 +385,63 @@ def fetch_technical_indicators(sina_code, days=60):
 
     result = {}
 
-    # === calc_score 回测评分 ===
+    # === calc_score 回测评分 — repo-owned scoring helper (technical_scoring.py) ===
+    # Ensure the sibling scripts/ dir is importable when fetch.py is loaded
+    # via importlib (tests) instead of run as a script.
+    _scripts_dir = os.path.dirname(os.path.abspath(__file__))
+    if _scripts_dir not in sys.path:
+        sys.path.insert(0, _scripts_dir)
     try:
-        # 动态导入 backtest 模块（同级目录）
-        import importlib.util
-        bt_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "backtest.py")
-        spec = importlib.util.spec_from_file_location("backtest", bt_path)
-        bt = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(bt)
-
-        macd_data = bt.calc_macd(closes)
-        kdj_data = bt.calc_kdj(highs, lows, closes)
-        boll_data = bt.calc_boll(closes)
-
-        score, components = bt.calc_score_detail(
-            len(closes) - 1, closes, highs, lows, volumes,
-            macd_data, kdj_data, boll_data
+        from technical_scoring import (
+            BEAR_THRESHOLD as _bt_BEAR_THRESHOLD,
+            BULL_THRESHOLD as _bt_BULL_THRESHOLD,
+            InsufficientHistory as _bt_InsufficientHistory,
+            calc_boll as _bt_calc_boll,
+            calc_kdj as _bt_calc_kdj,
+            calc_macd as _bt_calc_macd,
+            calc_score_detail as _bt_calc_score_detail,
+            classify_score as _bt_classify_score,
         )
-        bias = bt.classify_score(score)
-        result["backtest_score"] = score
-        result["backtest_bias"] = bias
-        result["backtest_thresholds"] = {
-            "bull": bt.BULL_THRESHOLD,
-            "bear": bt.BEAR_THRESHOLD,
-        }
-        result["backtest_components"] = [
-            {"points": points, "reason": reason}
-            for points, reason in components
-        ]
-        if bias == "bull":
-            result["backtest_signal"] = f"看多（评分{score}）"
-        elif bias == "bear":
-            result["backtest_signal"] = f"看空（评分{score}）"
-        else:
-            result["backtest_signal"] = f"中性（评分{score}）"
-    except Exception as e:
-        print(f"[WARN] calc_score 计算失败: {e}", file=sys.stderr)
+    except ImportError as exc:
+        # Static import — should always succeed since the module sits next to
+        # this file. If it doesn't, fail loudly: this is a packaging bug.
+        print(
+            f"[ERROR] technical_scoring.py 不可用: {exc}. 请确认 stock-analyzer/scripts 在 sys.path 中。",
+            file=sys.stderr,
+        )
+    else:
+        try:
+            macd_data = _bt_calc_macd(closes)
+            kdj_data = _bt_calc_kdj(highs, lows, closes)
+            boll_data = _bt_calc_boll(closes)
+
+            score, components = _bt_calc_score_detail(
+                len(closes) - 1, closes, highs, lows, volumes,
+                macd_data, kdj_data, boll_data
+            )
+            bias = _bt_classify_score(score)
+            result["backtest_score"] = score
+            result["backtest_bias"] = bias
+            result["backtest_thresholds"] = {
+                "bull": _bt_BULL_THRESHOLD,
+                "bear": _bt_BEAR_THRESHOLD,
+            }
+            result["backtest_components"] = [
+                {"points": points, "reason": reason}
+                for points, reason in components
+            ]
+            if bias == "bull":
+                result["backtest_signal"] = f"看多（评分{score}）"
+            elif bias == "bear":
+                result["backtest_signal"] = f"看空（评分{score}）"
+            else:
+                result["backtest_signal"] = f"中性（评分{score}）"
+        except _bt_InsufficientHistory as exc:
+            # Explicit, narrow degradation — leaves backtest_* keys absent and
+            # records a structured reason so downstream callers can render it.
+            result["backtest_degraded"] = True
+            result["backtest_degraded_reason"] = str(exc)
+            print(f"[INFO] calc_score 跳过：历史不足 ({exc})", file=sys.stderr)
 
     # MACD
     macd = calc_macd(closes)
