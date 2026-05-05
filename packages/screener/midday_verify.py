@@ -402,41 +402,123 @@ def verify_item(morning_item, current_item, active_themes=None):
     }
 
 
-def main():
-    parser = argparse.ArgumentParser(description="午盘二次确认")
-    parser.add_argument("--morning", default=str(DEFAULT_MORNING))
-    parser.add_argument("--scan", default=str(DEFAULT_SCAN))
-    parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
-    args = parser.parse_args()
+def build_tracking_snapshot(morning_item, current_item):
+    """Lightweight observation-only snapshot for non-A/B shortlist items.
 
-    morning = load_json(Path(args.morning).expanduser())
-    current = load_json(Path(args.scan).expanduser())
+    Tracking items don't carry a confirmed/downgraded judgment — they exist
+    so weak-market days still surface actionable midday context for items
+    the morning shortlist flagged but didn't promote to A/B.
+    """
+
+    if not current_item:
+        return {
+            "status": "tracking",
+            "reason": "盘中暂未在候选池再次出现",
+            "details": ["晨间出现，盘中尚未再次进入观察池"],
+            "snapshot": None,
+        }
+
+    chg = safe_float(current_item.get("change_pct"))
+    score = safe_float(current_item.get("score"))
+    price = safe_float(current_item.get("price"), default=None)
+    cap = current_item.get("capital_flow") or {}
+    today_flow = round(capital_flow_today_yi(cap, legacy_source_unit=UNIT_YUAN), 2)
+    morning_score = safe_float(morning_item.get("best_score", morning_item.get("score")), default=None)
+    morning_change_pct = safe_float(morning_item.get("change_pct"), default=None)
+    score_delta = round(score - morning_score, 2) if morning_score is not None else None
+    change_delta = round(chg - morning_change_pct, 2) if morning_change_pct is not None else None
+
+    if chg < 0:
+        reason = f"盘中转弱({chg:+.2f}%)，仅作观察"
+    elif score < 60:
+        reason = f"盘中分数偏低({score:.1f})，仅作观察"
+    elif score_delta is not None and score_delta <= -6:
+        reason = f"较晨间转弱(分数 {score_delta:+.2f})，仅作观察"
+    else:
+        reason = f"盘中维持中位强度(涨幅 {chg:+.2f}%, 分数 {score:.1f})"
+
+    return {
+        "status": "tracking",
+        "reason": reason,
+        "details": [reason],
+        "snapshot": {
+            "price": price,
+            "change_pct": chg,
+            "score": score,
+            "score_delta": score_delta,
+            "change_delta": change_delta,
+            "capital_trend": cap.get("trend") or "无数据",
+            "flow_today_yi": today_flow,
+        },
+    }
+
+
+def build_tracking_items(
+    shortlist,
+    scan_index,
+    active_themes=None,
+    *,
+    excluded_tiers=("A", "B"),
+    limit=6,
+):
+    """Build observation-only items for shortlist tiers below A/B.
+
+    These items don't pass/fail like ``confirmed``/``downgraded`` — they
+    surface as a separate ``tracking`` bucket so weak-market days still have
+    actionable coverage of the morning shortlist tail.
+    """
+
+    items = []
+    for raw in shortlist or []:
+        tier = raw.get("tier")
+        # Skip A/B (already covered by confirmed/downgraded) and untiered
+        # entries (no morning ranking → no useful tracking signal).
+        if not tier or tier in excluded_tiers:
+            continue
+        code = raw.get("code")
+        if not code:
+            continue
+        snapshot = build_tracking_snapshot(raw, scan_index.get(code))
+        items.append(
+            {
+                "code": code,
+                "name": raw.get("name"),
+                "tier": raw.get("tier"),
+                "morning_score": raw.get("best_score"),
+                "morning_theme": theme_of(raw),
+                **snapshot,
+            }
+        )
+        if len(items) >= limit:
+            break
+    return items
+
+
+def run_verification(morning, current):
+    """Pure-function midday verification. Returns the same shape as the JSON output."""
+
     validation_errors = validate_inputs(morning, current)
+    base_envelope = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "source_morning_timestamp": morning.get("timestamp", ""),
+        "source_scan_timestamp": morning.get("source_scan_timestamp", ""),
+        "verified_against_scan_timestamp": current.get("timestamp", ""),
+    }
 
     if validation_errors:
-        output = {
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        return {
+            **base_envelope,
             "validation_status": "invalid",
             "validation_errors": validation_errors,
-            "source_morning_timestamp": morning.get("timestamp", ""),
-            "source_scan_timestamp": morning.get("source_scan_timestamp", ""),
-            "verified_against_scan_timestamp": current.get("timestamp", ""),
             "target_codes": [],
             "confirmed": [],
             "downgraded": [],
             "fresh_candidates": [],
+            "tracking": [],
             "items": [],
         }
-        out_path = Path(args.output).expanduser()
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
-        for item in validation_errors:
-            print(f"ERROR: {item}", file=sys.stderr)
-        print(f"Midday verification rejected: {out_path}", file=sys.stderr)
-        sys.exit(1)
 
     scan_index = build_scan_index(current)
-
     shortlist = morning.get("shortlist") or []
     targets = [item for item in shortlist if item.get("tier") in ("A", "B")][:8]
 
@@ -453,29 +535,57 @@ def main():
             **result,
         })
 
-    output = {
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    target_code_set = {item.get("code") for item in targets if item.get("code")}
+
+    return {
+        **base_envelope,
         "validation_status": "ok",
         "validation_errors": [],
-        "source_morning_timestamp": morning.get("timestamp", ""),
-        "source_scan_timestamp": morning.get("source_scan_timestamp", ""),
-        "verified_against_scan_timestamp": current.get("timestamp", ""),
         "target_codes": [item.get("code") for item in targets if item.get("code")],
         "confirmed": [x for x in result_items if x["status"] == "confirmed"],
         "downgraded": [x for x in result_items if x["status"] == "downgraded"],
         "fresh_candidates": build_fresh_candidates(
             current,
-            exclude_codes={item.get("code") for item in targets if item.get("code")},
+            exclude_codes=target_code_set,
             active_themes=active_themes,
             limit=3,
+        ),
+        "tracking": build_tracking_items(
+            shortlist,
+            scan_index,
+            active_themes=active_themes,
         ),
         "items": result_items,
     }
 
+
+def main():
+    parser = argparse.ArgumentParser(description="午盘二次确认")
+    parser.add_argument("--morning", default=str(DEFAULT_MORNING))
+    parser.add_argument("--scan", default=str(DEFAULT_SCAN))
+    parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
+    args = parser.parse_args()
+
+    morning = load_json(Path(args.morning).expanduser())
+    current = load_json(Path(args.scan).expanduser())
+    output = run_verification(morning, current)
+
     out_path = Path(args.output).expanduser()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"Midday verification saved: {out_path} | confirmed={len(output['confirmed'])} downgraded={len(output['downgraded'])}")
+
+    if output["validation_status"] == "invalid":
+        for item in output["validation_errors"]:
+            print(f"ERROR: {item}", file=sys.stderr)
+        print(f"Midday verification rejected: {out_path}", file=sys.stderr)
+        sys.exit(1)
+
+    print(
+        f"Midday verification saved: {out_path} | "
+        f"confirmed={len(output['confirmed'])} "
+        f"downgraded={len(output['downgraded'])} "
+        f"tracking={len(output['tracking'])}"
+    )
 
 
 if __name__ == "__main__":
