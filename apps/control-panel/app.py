@@ -232,6 +232,97 @@ def parameter_validation_errors(payload: dict[str, Any]) -> list[str]:
     return errors
 
 
+def parameter_evaluation(
+    candidate: dict[str, Any],
+    *,
+    current: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Evaluate a parameter payload for safety and sane ranges.
+
+    This runs *after* :func:`parameter_validation_errors` (which is purely
+    structural) and adds a layer of business-logic safety checks:
+
+    * Hard errors (block apply unless ``unsafe_apply=true``):
+      - zero active stocks (downstream pipelines need at least one)
+      - duplicate stock codes
+
+    * Warnings (informational, don't block):
+      - active count drops > 50% from the currently-saved state
+      - ``kline_days`` outside [30, 365]
+      - ``news_count`` outside [3, 50]
+      - ``ma_periods`` longer than 8 entries or any value > 250
+    """
+
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    stocks = candidate.get("stocks") if isinstance(candidate.get("stocks"), list) else []
+    stock_rows = [item for item in stocks if isinstance(item, dict)]
+    active_rows = [item for item in stock_rows if item.get("active", True) is not False]
+    active_count = len(active_rows)
+
+    # Hard error: zero active stocks.
+    if active_count == 0 and stock_rows:
+        errors.append("没有活跃股票（active!=false 数量为 0），下游流水线将无可处理对象")
+    elif not stock_rows:
+        errors.append("stocks 列表为空")
+
+    # Hard error: duplicate codes.
+    seen_codes: set[str] = set()
+    duplicate_codes: list[str] = []
+    for item in stock_rows:
+        code = str(item.get("code") or "").strip()
+        if not code:
+            continue
+        if code in seen_codes and code not in duplicate_codes:
+            duplicate_codes.append(code)
+        seen_codes.add(code)
+    if duplicate_codes:
+        errors.append("发现重复的股票代码：" + ", ".join(duplicate_codes))
+
+    # Soft warning: large drop in active count vs current.
+    if isinstance(current, dict):
+        current_stocks = current.get("stocks") if isinstance(current.get("stocks"), list) else []
+        current_active = sum(
+            1
+            for item in current_stocks
+            if isinstance(item, dict) and item.get("active", True) is not False
+        )
+        if current_active > 0 and active_count < current_active / 2:
+            warnings.append(
+                f"活跃股票数量大幅减少（{current_active} → {active_count}，下降超过 50%）"
+            )
+
+    # Soft warnings: range sanity.
+    kline_days = normalize_positive_int(candidate.get("kline_days"))
+    if kline_days is not None:
+        if kline_days < 30:
+            warnings.append(f"kline_days={kline_days} 偏小（<30），技术指标可能不稳定")
+        elif kline_days > 365:
+            warnings.append(f"kline_days={kline_days} 偏大（>365），抓取耗时显著上升")
+
+    news_count = normalize_positive_int(candidate.get("news_count"))
+    if news_count is not None:
+        if news_count < 3:
+            warnings.append(f"news_count={news_count} 偏小（<3），新闻覆盖度不足")
+        elif news_count > 50:
+            warnings.append(f"news_count={news_count} 偏大（>50），抓取与渲染成本上升")
+
+    ma_periods = candidate.get("ma_periods")
+    if isinstance(ma_periods, list):
+        if len(ma_periods) > 8:
+            warnings.append(f"ma_periods 含 {len(ma_periods)} 项（>8），UI 渲染会拥挤")
+        oversized = [p for p in ma_periods if isinstance(p, int) and p > 250]
+        if oversized:
+            warnings.append(f"ma_periods 中 {oversized} 大于 250，可能超出常见 K 线窗口")
+
+    return {
+        "ok": not errors,
+        "errors": errors,
+        "warnings": warnings,
+    }
+
+
 def parameter_group_status(payload: dict[str, Any]) -> list[dict[str, Any]]:
     stocks = payload.get("stocks") if isinstance(payload.get("stocks"), list) else []
     stock_rows = [item for item in stocks if isinstance(item, dict)]
@@ -1123,6 +1214,23 @@ async def api_save_parameters(request: Request) -> JSONResponse:
             status_code=400,
         )
 
+    body_dict = body if isinstance(body, dict) else {}
+    unsafe_apply = bool(body_dict.get("unsafe_apply"))
+    current_value = load_parameters_value() if PARAMETERS_PATH.exists() else None
+    evaluation = parameter_evaluation(candidate, current=current_value)
+
+    if evaluation["errors"] and not unsafe_apply:
+        return JSONResponse(
+            {
+                **build_parameters_payload(candidate),
+                "ok": False,
+                "saved": False,
+                "detail": "参数评估未通过：" + "；".join(evaluation["errors"]),
+                "evaluation": evaluation,
+            },
+            status_code=400,
+        )
+
     PARAMETERS_PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = PARAMETERS_PATH.with_name(f"{PARAMETERS_PATH.name}.{now_stamp()}.tmp")
     tmp_path.write_text(
@@ -1130,7 +1238,9 @@ async def api_save_parameters(request: Request) -> JSONResponse:
         encoding="utf-8",
     )
     tmp_path.replace(PARAMETERS_PATH)
-    return JSONResponse(build_parameters_payload(candidate, saved=True))
+    response_payload = build_parameters_payload(candidate, saved=True)
+    response_payload["evaluation"] = evaluation
+    return JSONResponse(response_payload)
 
 
 @app.post("/api/tasks/{task_name}/run")
