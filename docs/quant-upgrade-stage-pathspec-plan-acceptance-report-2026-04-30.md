@@ -62,7 +62,7 @@ PR C 的提交前检查命令也能验证 staged 文件是否全部匹配 `^docs
 | 检查项 | 结果 | 验收意见 |
 | --- | --- | --- |
 | raw vendor data | 通过 | 通用检查和 PR C 明确排除 raw vendor data / raw response body / row-level vendor data。 |
-| repo 外 raw archive | 通过 | 明确排除 `/Users/yangbishang/.prism-private/tushare-poc/`。 |
+| repo 外 raw archive | 通过 | 明确排除 `~/.prism-private/tushare-poc/`。 |
 | token / API key / secret | 通过 | 明确排除 token / API key / account secret，并提供 `TUSHARE_TOKEN` 精确扫描脚本。 |
 | token-like 字符串 | 通过 | 允许安全引用变量名和 policy text，但要求不得出现 token 值或行级 vendor data。 |
 

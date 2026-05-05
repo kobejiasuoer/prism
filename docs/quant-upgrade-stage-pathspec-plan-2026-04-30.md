@@ -517,7 +517,7 @@ docs/quant-upgrade-master-progress-and-handoff-2026-04-29.md
 apps/
 stock-analyzer/
 stock-screener/
-/Users/yangbishang/.prism-private/tushare-poc/
+~/.prism-private/tushare-poc/
 ```
 
 ### 4.3 提交前必须运行的检查命令
@@ -607,7 +607,7 @@ stock-analyzer/config/stocks.json
 stock-analyzer/scripts/fetch.py
 stock-analyzer/data/
 stock-screener/data/
-/Users/yangbishang/.prism-private/tushare-poc/
+~/.prism-private/tushare-poc/
 ```
 
 特别排除：

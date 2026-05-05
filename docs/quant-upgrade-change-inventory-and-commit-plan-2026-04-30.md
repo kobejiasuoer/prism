@@ -215,8 +215,8 @@ Status: no staging, no commit, no cleanup performed
 
 不建议提交：
 
-- repo 外 raw archive：`/Users/yangbishang/.prism-private/tushare-poc/raw/...`
-- repo 外 private summary：`/Users/yangbishang/.prism-private/tushare-poc/poc_summary_*.json`
+- repo 外 raw archive：`~/.prism-private/tushare-poc/raw/...`
+- repo 外 private summary：`~/.prism-private/tushare-poc/poc_summary_*.json`
 - 任何 raw Tushare response、行级行情、完整交易日历、账号截图、积分余额截图。
 
 ## 6. Research / Generated Data 产物是否提交
@@ -454,8 +454,8 @@ Status: no staging, no commit, no cleanup performed
 - `data/history/reports/command_brief/feishu-quality-dashboard.md`
 - `stock-analyzer/data/*`
 - `stock-screener/data/*`
-- repo 外 `/Users/yangbishang/.prism-private/tushare-poc/raw/*`
-- repo 外 `/Users/yangbishang/.prism-private/tushare-poc/poc_summary_*.json`
+- repo 外 `~/.prism-private/tushare-poc/raw/*`
+- repo 外 `~/.prism-private/tushare-poc/poc_summary_*.json`
 
 ### 10.3 需要人工确认
 
@@ -548,7 +548,7 @@ Status: no staging, no commit, no cleanup performed
 - `apps/reports/*`
 - `stock-analyzer/data/*`
 - `stock-screener/data/*`
-- repo 外 `/Users/yangbishang/.prism-private/tushare-poc/*`
+- repo 外 `~/.prism-private/tushare-poc/*`
 - 任何 token、raw response、账号截图、积分余额截图。
 
 ## 12. 推荐 PR 拆分

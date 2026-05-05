@@ -46,11 +46,11 @@ The current account can support limited raw price and adjustment-factor validati
 
 Raw archive location:
 
-- `/Users/yangbishang/.prism-private/tushare-poc/raw/20260429T231346+0800`
+- `~/.prism-private/tushare-poc/raw/20260429T231346+0800`
 
 Private sanitized run summary:
 
-- `/Users/yangbishang/.prism-private/tushare-poc/poc_summary_20260429T231346+0800.json`
+- `~/.prism-private/tushare-poc/poc_summary_20260429T231346+0800.json`
 
 Both paths are outside the Prism repo.
 
@@ -132,7 +132,7 @@ The response hashes in this document can only be reconciled against the private 
 | --- | --- | --- |
 | Token not in repo | `pass` | No token value was written to files or printed by POC commands. |
 | Token exposure risk handled | `warning` | Token was pasted in chat before the run; rotate before future work. |
-| Raw vendor data not committed | `pass` | Raw responses are only under `/Users/yangbishang/.prism-private/tushare-poc/raw/20260429T231346+0800`. |
+| Raw vendor data not committed | `pass` | Raw responses are only under `~/.prism-private/tushare-poc/raw/20260429T231346+0800`. |
 | Did not write `data/quant` | `pass` | No quant data artifacts were generated. |
 | Did not connect `packages/quant` | `pass` | No quant package code was added or changed. |
 | Scope limited to POC availability | `pass` | The POC only checked field, permission, hash, timestamp, and archive behavior. |

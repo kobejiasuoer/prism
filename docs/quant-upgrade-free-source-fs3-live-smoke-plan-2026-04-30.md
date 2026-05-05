@@ -55,7 +55,7 @@ FS-3 should be limited to **repo-external live smoke only**, if separately appro
 Recommended scratch root, if execution is later approved:
 
 ```text
-/Users/yangbishang/.prism-private/free-data-poc/
+~/.prism-private/free-data-poc/
 ```
 
 This path is a private repo-external scratch area. It must not be referenced by absolute path inside repo-safe manifests or committed docs.

@@ -123,7 +123,7 @@ Recommended enforcement:
 | Synthetic fixtures only | Tests construct manifest dictionaries / dataclasses in memory |
 | Optional socket block | Tests may monkeypatch `socket.socket` to raise if any network attempt occurs |
 | No environment secrets | Tests must not read provider tokens, cookies, proxy settings, or private archive paths |
-| No scratch dependency | Tests must pass without `/Users/yangbishang/.prism-private/free-data-poc/` existing |
+| No scratch dependency | Tests must pass without `~/.prism-private/free-data-poc/` existing |
 
 Acceptance signal:
 

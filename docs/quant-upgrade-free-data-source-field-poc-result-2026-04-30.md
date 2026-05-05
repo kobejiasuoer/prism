@@ -14,7 +14,7 @@ Related plan:
 
 | 检查项 | 结果 |
 | --- | --- |
-| POC scratch | `/Users/yangbishang/.prism-private/free-data-poc/` |
+| POC scratch | `~/.prism-private/free-data-poc/` |
 | repo 外 venv | 已创建，仅位于 scratch 内 |
 | 安装依赖 | 仅安装到 scratch venv，不改 repo 依赖文件 / lockfile / 主项目 venv |
 | raw vendor data | 只保存到 scratch 私有 raw 目录 |

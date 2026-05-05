@@ -1,10 +1,14 @@
 # Prism Quality Gate Dashboard
 
-Updated at: 2026-04-26 11:50:42
+Updated at: 2026-04-27 22:00:46
 
 | checked_at | mode | status | notes | path |
 | --- | --- | --- | --- | --- |
+| 2026-04-27 22:00:46 | screener | ok | - | packages/data/quality_gate_2026-04-27_21-59.json |
+| 2026-04-27 12:18:17 | screener | ok | - | packages/data/quality_gate_2026-04-27_12-17.json |
+| 2026-04-27 12:18:17 | screener | ok | - | data/artifacts/screener/quality_gates/quality_gate_2026-04-27_12-17.json |
 | 2026-04-26 11:50:42 | screener | ok | - | packages/data/quality_gate_midday_2026-04-26_11-50-42_18293.json |
+| 2026-04-26 11:50:42 | screener | ok | - | data/artifacts/screener/quality_gates/quality_gate_midday_2026-04-26_11-50-42_18293.json |
 | 2026-04-26 11:50:24 | screener | ok | - | packages/data/quality_gate_2026-04-26_11-50.json |
 | 2026-04-26 11:50:24 | screener | ok | - | data/artifacts/screener/quality_gates/quality_gate_2026-04-26_11-50.json |
 | 2026-04-26 11:49:44 | screener | ok | - | packages/data/quality_gate_2026-04-26_11-49.json |
@@ -20,7 +24,3 @@ Updated at: 2026-04-26 11:50:42
 | 2026-04-21 11:21:51 | screener | ok | - | stock-screener/data/quality_gate_2026-04-21_11-20.json |
 | 2026-04-21 11:05:39 | screener | ok | - | stock-screener/data/quality_gate_2026-04-21_11-04.json |
 | 2026-04-21 10:43:32 | screener | ok | - | stock-screener/data/quality_gate_2026-04-21_10-42.json |
-| 2026-04-21 10:34:59 | screener | ok | - | stock-screener/data/quality_gate_2026-04-21_10-34.json |
-| 2026-04-21 10:32:20 | screener | ok | - | stock-screener/data/quality_gate_2026-04-21_10-31.json |
-| 2026-04-21 10:31:22 | screener | ok | - | stock-screener/data/quality_gate_2026-04-21_10-30.json |
-| 2026-04-21 10:21:45 | screener | ok | - | stock-screener/data/quality_gate_2026-04-21_10-20.json |

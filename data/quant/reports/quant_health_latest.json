@@ -93,7 +93,7 @@
   "hardened_label_input": {
     "formal_execution_eligible_count": 0,
     "formal_label_ready_count": 0,
-    "path": "/Users/yangbishang/Projects/prism/data/quant/labels/forward_return_labels_hardened.jsonl",
+    "path": "~/Projects/prism/data/quant/labels/forward_return_labels_hardened.jsonl",
     "rows": 11064
   },
   "hardened_label_summary": {
@@ -124,7 +124,7 @@
       "research_only_hardened_not_formal": 10818,
       "unavailable_hardened_not_formal": 246
     },
-    "path": "/Users/yangbishang/Projects/prism/data/quant/labels/forward_return_labels_hardened.jsonl",
+    "path": "~/Projects/prism/data/quant/labels/forward_return_labels_hardened.jsonl",
     "price_adjustment_status_counts": {
       "unknown": 11064
     },
@@ -160,7 +160,7 @@
     "hardened_label_input": {
       "formal_execution_eligible_count": 0,
       "formal_label_ready_count": 0,
-      "path": "/Users/yangbishang/Projects/prism/data/quant/labels/forward_return_labels_hardened.jsonl",
+      "path": "~/Projects/prism/data/quant/labels/forward_return_labels_hardened.jsonl",
       "rows": 11064
     },
     "hardened_label_summary": {
@@ -191,7 +191,7 @@
         "research_only_hardened_not_formal": 10818,
         "unavailable_hardened_not_formal": 246
       },
-      "path": "/Users/yangbishang/Projects/prism/data/quant/labels/forward_return_labels_hardened.jsonl",
+      "path": "~/Projects/prism/data/quant/labels/forward_return_labels_hardened.jsonl",
       "price_adjustment_status_counts": {
         "unknown": 11064
       },

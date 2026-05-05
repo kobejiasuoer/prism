@@ -335,7 +335,7 @@ repo 内只能写 `symbol_count`、`board_coverage_summary`、`has_st_sample=tru
 
 | 项目 | 要求 |
 | --- | --- |
-| 位置 | 不在 `/Users/yangbishang/Projects/prism` 工作树内 |
+| 位置 | 不在 `~/Projects/prism` 工作树内 |
 | 权限 | 仅 POC 执行者和审批人可读 |
 | 命名 | 使用 opaque run id，不暴露账号、用户名、完整本地路径或敏感参数 |
 | 内容 | raw response、private request manifest、error payload、字段清单 |

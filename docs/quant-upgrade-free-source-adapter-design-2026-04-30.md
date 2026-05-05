@@ -157,7 +157,7 @@ Raw response archive remains outside the repo.
 
 | Item | Design |
 | --- | --- |
-| Root | `/Users/yangbishang/.prism-private/free-data-poc/` for the current POC family; future runs may use the same private root or a separately approved private root |
+| Root | `~/.prism-private/free-data-poc/` for the current POC family; future runs may use the same private root or a separately approved private root |
 | Raw location | Repo-external `raw/` subdirectory with provider / run separation |
 | Permissions | Owner-only local permissions where possible; no shared repo path |
 | Contents | Raw payload, provider error payload, private request manifest, exact request timestamp |

@@ -203,7 +203,7 @@ Synthetic-only proof:
 
 - Mapping fixtures must be constants / dataclasses with field names only.
 - No arrays of real prices, dates, stock lists, event rows, or vendor payloads.
-- Tests must not read `/Users/yangbishang/.prism-private/free-data-poc/` or any raw archive path.
+- Tests must not read `~/.prism-private/free-data-poc/` or any raw archive path.
 
 No formal output proof:
 

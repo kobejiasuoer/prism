@@ -10,7 +10,7 @@ Scope: report-only quant health. This report does not block or alter production.
 - Production impact: `none`.
 - PIT pass rate: 100.00%.
 - Panel rows: 3896; label rows: 11064.
-- Hardened labels input: `/Users/yangbishang/Projects/prism/data/quant/labels/forward_return_labels_hardened.jsonl`.
+- Hardened labels input: `~/Projects/prism/data/quant/labels/forward_return_labels_hardened.jsonl`.
 - Hardened labels count: 11064.
 - Hardened formal_label_ready count: 0.
 - Hardened formal_execution_eligible count: 0.

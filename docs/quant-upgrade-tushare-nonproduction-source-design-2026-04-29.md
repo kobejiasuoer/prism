@@ -196,7 +196,7 @@ If a later approved non-production adapter POC is allowed, raw responses must re
 Recommended private layout:
 
 ```text
-/Users/yangbishang/.prism-private/tushare-poc/
+~/.prism-private/tushare-poc/
   raw/
     <run_id>/
       <request_id>_<interface>.json

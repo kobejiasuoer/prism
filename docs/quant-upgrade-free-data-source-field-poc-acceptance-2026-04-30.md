@@ -39,7 +39,7 @@ Status: conditional pass
 | 2 | 是否没有修改 `packages/quant` | 通过 | Result 声明未修改；本次 `git status --short` 针对 `packages/quant` 无输出。 |
 | 3 | 是否没有写 `data/quant` | 通过 | Result 声明未写入；本次 `git status --short` 针对 `data/quant` 无输出。 |
 | 4 | 是否没有修改 repo 依赖文件、lockfile、主项目 venv | 通过 | Result 声明依赖只安装到 repo 外 scratch venv；本次状态扫描未发现 dependency / lockfile / `.venv` / `venv` 变更。 |
-| 5 | raw vendor data 是否只在 repo 外私有目录 | 通过 | Result 写明 raw vendor data 只保存到 `/Users/yangbishang/.prism-private/free-data-poc/` 下 scratch 私有 raw 目录；本次验收未读取该目录。 |
+| 5 | raw vendor data 是否只在 repo 外私有目录 | 通过 | Result 写明 raw vendor data 只保存到 `~/.prism-private/free-data-poc/` 下 scratch 私有 raw 目录；本次验收未读取该目录。 |
 | 6 | repo 内报告是否没有行级行情、完整交易日历、完整股票列表、raw response、可还原 vendor dataset | 通过 | Result 只保留 row_count、字段清单、非空摘要、hash、错误摘要和结论；未见行级价格、完整 calendar、完整股票列表或 raw response 片段。 |
 | 7 | BaoStock 结论是否只是字段可得性，不是 formal source | 通过 | BaoStock calendar、stock basic、raw daily、qfq、`tradestatus`、`isST`、index daily 均被描述为字段可得性 / non-production 候选源。 |
 | 8 | AKShare 股票日线 / qfq / index cross-check 是否没有被夸大 | 通过 | AKShare qfq 标为 partial，平安银行 qfq 为 provider / network failure；指数说明东方财富接口失败、中证指数接口可作补充；未宣称 AKShare 为唯一 formal source。 |

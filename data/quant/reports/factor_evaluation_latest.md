@@ -7,7 +7,7 @@ Scope: report-only factor evaluation. This report does not change production sor
 ## Dataset
 
 - Joined available research-only label rows: 10818.
-- Hardened labels input: `/Users/yangbishang/Projects/prism/data/quant/labels/forward_return_labels_hardened.jsonl`.
+- Hardened labels input: `~/Projects/prism/data/quant/labels/forward_return_labels_hardened.jsonl`.
 - Hardened labels count: 11064.
 - Hardened formal_label_ready count: 0.
 - Hardened formal_execution_eligible count: 0.
