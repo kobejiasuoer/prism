@@ -1,18 +1,15 @@
 "use client";
 
-import { CommandIcon, Menu, Search, X } from "lucide-react";
+import { CommandIcon, Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { CommandBar } from "./command-bar";
 import { Sidebar, navItems } from "./sidebar";
-import { cn } from "@/lib/utils";
-import { ThemeToggle } from "@/components/theme-toggle";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [commandOpen, setCommandOpen] = useState(false);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => {
@@ -27,62 +24,52 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  useEffect(() => {
-    setMobileNavOpen(false);
-  }, [pathname]);
-
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
-      <div className="flex min-h-screen">
+    <div className="prism-app-shell" data-od-id="app-shell">
+      <div className="prism-layout">
         <Sidebar onOpenCommand={() => setCommandOpen(true)} className="hidden md:flex" />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--bg-primary)]/95 px-3 md:hidden">
-            <button
-              type="button"
-              aria-label="打开导航"
-              className="focus-ring inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] text-[var(--text-secondary)]"
-              onClick={() => setMobileNavOpen((value) => !value)}
-            >
-              {mobileNavOpen ? <X size={17} /> : <Menu size={17} />}
-            </button>
-            <Link href="/" className="min-w-0 flex-1">
-              <div className="truncate text-sm font-semibold">棱镜 · 交易决策台</div>
-            </Link>
-            <button
-              type="button"
-              aria-label="打开命令栏"
-              className="focus-ring inline-flex h-9 items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 text-[var(--text-secondary)]"
-              onClick={() => setCommandOpen(true)}
-            >
-              <Search size={15} />
-              <CommandIcon size={13} />
-            </button>
-          </header>
-
-          {mobileNavOpen ? (
-            <nav className="grid grid-cols-2 gap-2 border-b border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-3 md:hidden">
+        <div className="prism-content">
+          <header className="prism-mobile-shell md:hidden">
+            <div className="prism-mobile-top">
+              <Link href="/" className="prism-mobile-brand min-w-0">
+                <small>PRISM / A-SHARE DESK</small>
+                <strong>棱镜 Prism</strong>
+              </Link>
+              <button
+                type="button"
+                aria-label="打开命令栏"
+                className="focus-ring od-ghost-btn"
+                onClick={() => setCommandOpen(true)}
+              >
+                <Search size={15} />
+                <CommandIcon size={13} />
+              </button>
+            </div>
+            <nav className="prism-mobile-nav" aria-label="主导航">
               {navItems.map((item) => {
                 const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-                const Icon = item.icon;
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={cn(
-                      "flex items-center gap-2 rounded-md border px-3 py-2 text-sm",
-                      active
-                        ? "border-[var(--border-default)] bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
-                        : "border-[var(--border-subtle)] text-[var(--text-secondary)]",
-                    )}
+                    className="focus-ring prism-nav-link"
+                    data-active={active}
                   >
-                    <Icon size={16} />
-                    {item.label}
+                    <span className="prism-nav-mark">{item.mark}</span>
+                    <span className="prism-nav-label">{item.label}</span>
                   </Link>
                 );
               })}
-              <ThemeToggle className="col-span-2 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] p-2" />
+              <Link
+                href="/settings"
+                className="focus-ring prism-nav-link"
+                data-active={pathname.startsWith("/settings")}
+              >
+                <span className="prism-nav-mark">05</span>
+                <span className="prism-nav-label">设置</span>
+              </Link>
             </nav>
-          ) : null}
+          </header>
 
           {children}
         </div>
