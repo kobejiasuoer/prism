@@ -652,6 +652,11 @@ export interface ParametersResponse {
     ok: boolean;
     errors?: string[];
   };
+  evaluation?: {
+    ok: boolean;
+    errors: string[];
+    warnings: string[];
+  };
   value: Record<string, unknown>;
   raw: string;
   detail?: string;

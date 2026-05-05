@@ -19,9 +19,9 @@ import { EmptyState, ErrorState, Panel } from "@/components/data-card";
 import { MetricCard } from "@/components/metric-card";
 import { PageTitle } from "@/components/page-title";
 import { PreviewDrawer, type PreviewDrawerState } from "@/components/preview-drawer";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useHealth, useOverview, useParameters, useRunTask, useRuns, useSaveParameters } from "@/lib/hooks";
-import type { RunItem, TaskDefinition } from "@/lib/types";
+import type { ParametersResponse, RunItem, TaskDefinition } from "@/lib/types";
 
 function runIdOf(run?: RunItem) {
   return String(run?.run_id || run?.task_id || "").trim();
@@ -51,6 +51,7 @@ function ParametersEditor() {
   const [dirty, setDirty] = useState(false);
   const [localError, setLocalError] = useState("");
   const [success, setSuccess] = useState("");
+  const [evaluation, setEvaluation] = useState<ParametersResponse["evaluation"]>(undefined);
 
   useEffect(() => {
     if (parameters.data?.raw && !dirty) {
@@ -92,9 +93,10 @@ function ParametersEditor() {
     });
   }
 
-  function save() {
+  function save(unsafeApply = false): void {
     setLocalError("");
     setSuccess("");
+    setEvaluation(undefined);
     try {
       JSON.parse(raw);
     } catch (error) {
@@ -102,14 +104,27 @@ function ParametersEditor() {
       return;
     }
     saveParameters.mutate(
-      { raw },
+      { payload: { raw }, unsafeApply },
       {
         onSuccess: (payload) => {
+          if (payload.evaluation) {
+            setEvaluation(payload.evaluation);
+          }
           setRaw(payload.raw);
           setDirty(false);
-          setSuccess(payload.saved ? "参数已保存到磁盘。" : "参数已校验。");
+          setSuccess("参数已保存到磁盘。");
         },
-        onError: (error) => setLocalError(error instanceof Error ? error.message : "保存失败"),
+        onError: (error) => {
+          setLocalError(error instanceof Error ? error.message : "保存失败");
+          // The 400 response body still carries `evaluation` — surface it so the
+          // user can see the rule that blocked them and use 强制保存 if needed.
+          if (error instanceof ApiError && error.payload && typeof error.payload === "object") {
+            const payload = error.payload as { evaluation?: ParametersResponse["evaluation"] };
+            if (payload.evaluation) {
+              setEvaluation(payload.evaluation);
+            }
+          }
+        },
       },
     );
   }
@@ -132,7 +147,7 @@ function ParametersEditor() {
           <button
             type="button"
             className="focus-ring inline-flex items-center gap-2 rounded-md bg-[var(--text-primary)] px-3 py-1.5 text-[12px] font-medium text-[var(--text-inverse)] disabled:cursor-not-allowed disabled:opacity-50"
-            onClick={save}
+            onClick={() => save()}
             disabled={saveParameters.isPending || !raw.trim()}
           >
             {saveParameters.isPending ? <LoaderCircle size={13} className="animate-spin" /> : <Save size={13} />}
@@ -211,6 +226,30 @@ function ParametersEditor() {
         {success ? (
           <div className="mt-3 rounded-md border border-[color-mix(in_srgb,var(--positive)_20%,transparent)] bg-[color-mix(in_srgb,var(--positive)_8%,transparent)] px-3 py-2 text-[12px] text-[var(--text-secondary)]">
             {success}
+          </div>
+        ) : null}
+        {evaluation && evaluation.errors.length > 0 ? (
+          <div className="mt-3 rounded-md border border-[color-mix(in_srgb,var(--negative)_20%,transparent)] bg-[color-mix(in_srgb,var(--negative)_8%,transparent)] px-3 py-2">
+            <div className="mb-1 text-[12px] font-medium text-[var(--text-primary)]">评估拦截（硬错误）</div>
+            <ul className="list-disc space-y-0.5 pl-4 text-[12px] text-[var(--text-secondary)]">
+              {evaluation.errors.map((err, i) => <li key={i}>{err}</li>)}
+            </ul>
+            <button
+              type="button"
+              className="mt-2 rounded-md border border-[var(--border-subtle)] px-2.5 py-1 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              onClick={() => save(true)}
+              disabled={saveParameters.isPending}
+            >
+              强制保存（unsafe apply）
+            </button>
+          </div>
+        ) : null}
+        {evaluation && evaluation.warnings.length > 0 ? (
+          <div className="mt-3 rounded-md border border-[color-mix(in_srgb,var(--watch-color,var(--warning)_40%,transparent))] bg-[color-mix(in_srgb,var(--watch-color,var(--warning)_8%,transparent))] px-3 py-2">
+            <div className="mb-1 text-[12px] font-medium text-[var(--text-primary)]">评估警告</div>
+            <ul className="list-disc space-y-0.5 pl-4 text-[12px] text-[var(--text-secondary)]">
+              {evaluation.warnings.map((w, i) => <li key={i}>{w}</li>)}
+            </ul>
           </div>
         ) : null}
       </div>

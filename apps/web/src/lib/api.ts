@@ -186,10 +186,11 @@ export const api = {
   getParameters() {
     return fetchJson<ParametersResponse>("/api/parameters");
   },
-  saveParameters(payload: { raw: string } | { value: Record<string, unknown> }) {
+  saveParameters(payload: { raw: string } | { value: Record<string, unknown> }, unsafeApply = false) {
+    const body = { ...payload, ...(unsafeApply ? { unsafe_apply: true } : {}) };
     return fetchJson<ParametersResponse>("/api/parameters", {
       method: "POST",
-      json: payload,
+      json: body,
     });
   },
   runTask(taskName: string, payload: Record<string, unknown> = {}) {
