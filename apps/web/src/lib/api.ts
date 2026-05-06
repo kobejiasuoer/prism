@@ -8,6 +8,7 @@ import type {
   OverviewData,
   ParametersResponse,
   PreviewPayload,
+  ReadinessPayload,
   RefreshStatus,
   RefreshTriggerResponse,
   ReviewData,
@@ -213,6 +214,11 @@ export const api = {
   },
   getRefreshStatus(page: string) {
     return fetchJson<RefreshStatus>(`/api/refresh/status?page=${encodeURIComponent(page)}`);
+  },
+  getReadinessLive() {
+    return fetchJson<ReadinessPayload & { generated_at?: string; trade_date?: string }>(
+      "/api/readiness/live",
+    );
   },
   triggerRefresh(payload: { page: string; task_name?: string; force?: boolean }) {
     return fetchJson<RefreshTriggerResponse>("/api/refresh/trigger", {

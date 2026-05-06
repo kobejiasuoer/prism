@@ -1,8 +1,8 @@
 "use client";
 
-import { AlertCircle, Check, ChevronRight, FileDown, LoaderCircle, RefreshCw } from "lucide-react";
+import { AlertCircle, Check, ChevronRight, FileDown, LoaderCircle, RefreshCw, ShieldAlert, ShieldCheck } from "lucide-react";
 import Link from "next/link";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties } from "react";
 
 import { Badge } from "@/components/badge";
 import {
@@ -12,6 +12,10 @@ import {
 } from "@/lib/hooks";
 import type {
   DecisionValue,
+  QualityCardData,
+  ReadinessIssue,
+  ReadinessMode,
+  ReadinessPayload,
   RiskRow,
   RunItem,
   SourceCardData,
@@ -36,6 +40,107 @@ function formatTime(value?: string) {
 
 function sourceIsFresh(source: SourceCardData) {
   return source.available !== false && !source.stale && source.value !== "-";
+}
+
+const READINESS_MODE_COPY: Record<ReadinessMode, {
+  badge: string;
+  title: string;
+  tone: string;
+  iconColor: string;
+  bg: string;
+  border: string;
+}> = {
+  live_ready: {
+    badge: "Live Ready",
+    title: "数据已对齐当日，可按页面执行",
+    tone: "positive",
+    iconColor: "var(--positive)",
+    bg: "color-mix(in srgb, var(--positive) 8%, transparent)",
+    border: "color-mix(in srgb, var(--positive) 30%, transparent)",
+  },
+  shadow_only: {
+    badge: "Shadow Only",
+    title: "仅作影子盘观察，不可按页面真钱执行",
+    tone: "warning",
+    iconColor: "var(--warning)",
+    bg: "color-mix(in srgb, var(--warning) 10%, transparent)",
+    border: "color-mix(in srgb, var(--warning) 35%, transparent)",
+  },
+  blocked: {
+    badge: "Blocked",
+    title: "数据未就绪：请先把核心链路刷到当日",
+    tone: "negative",
+    iconColor: "var(--negative)",
+    bg: "color-mix(in srgb, var(--negative) 10%, transparent)",
+    border: "color-mix(in srgb, var(--negative) 40%, transparent)",
+  },
+};
+
+const TASK_TITLES: Record<string, string> = {
+  watchlist_refresh: "自选股全流程刷新",
+  aggressive: "进攻型早盘扫描",
+  midday_refresh: "午盘新增 + 复核",
+  command_brief: "总控简报",
+};
+
+function ReadinessBanner({ readiness }: { readiness?: ReadinessPayload }) {
+  if (!readiness) {
+    return null;
+  }
+  const copy = READINESS_MODE_COPY[readiness.readiness_mode] ?? READINESS_MODE_COPY.blocked;
+  const issues: ReadinessIssue[] =
+    readiness.readiness_mode === "blocked"
+      ? readiness.blockers
+      : readiness.readiness_mode === "shadow_only"
+        ? [...readiness.warnings, ...readiness.blockers]
+        : [];
+  const Icon = readiness.readiness_mode === "live_ready" ? ShieldCheck : ShieldAlert;
+  const recommendedTaskName = readiness.recommended_tasks?.[0];
+  const recommendedTaskTitle = recommendedTaskName
+    ? TASK_TITLES[recommendedTaskName] || recommendedTaskName
+    : null;
+
+  return (
+    <section
+      data-od-id="readiness-banner"
+      className="rounded-md border px-4 py-3"
+      style={{ background: copy.bg, borderColor: copy.border }}
+    >
+      <div className="flex flex-wrap items-start gap-3">
+        <Icon size={20} style={{ color: copy.iconColor, marginTop: 2 }} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone={copy.tone}>{copy.badge}</Badge>
+            <span className="text-[12px] text-[var(--text-tertiary)]">
+              预期交易日 {readiness.expected_trade_date} · 数据交易日 {readiness.data_trade_date || "-"}
+              {readiness.session?.label ? ` · ${readiness.session.label}` : null}
+            </span>
+          </div>
+          <div className="mt-1 text-[14px] font-medium text-[var(--text-primary)]">{copy.title}</div>
+          {issues.length ? (
+            <ul className="mt-2 list-disc space-y-0.5 pl-5 text-[12px] leading-5 text-[var(--text-secondary)]">
+              {issues.slice(0, 4).map((issue) => (
+                <li key={`${issue.code}-${issue.label}`}>
+                  <span className="font-medium text-[var(--text-primary)]">{issue.label}：</span>
+                  {issue.message}
+                </li>
+              ))}
+              {issues.length > 4 ? (
+                <li className="text-[var(--text-tertiary)]">…还有 {issues.length - 4} 条，请在质检面板查看完整列表。</li>
+              ) : null}
+            </ul>
+          ) : null}
+          {recommendedTaskTitle && readiness.readiness_mode !== "live_ready" ? (
+            <div className="mt-2 text-[12px] text-[var(--text-secondary)]">
+              建议下一步运行：
+              <Link href="/settings" className="ml-1 font-medium underline">{recommendedTaskTitle}</Link>
+              （/settings 任务运行）
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function HeroSkeleton() {
@@ -113,6 +218,9 @@ function DecisionBrief({
   sourceOk,
   sourceTotal,
   briefLive,
+  readinessMode,
+  qualityTimely,
+  qualityTotal,
 }: {
   title: string;
   summary: string;
@@ -124,13 +232,23 @@ function DecisionBrief({
   sourceOk: number;
   sourceTotal: number;
   briefLive: boolean;
+  readinessMode: ReadinessMode;
+  qualityTimely: number;
+  qualityTotal: number;
 }) {
+  const liveTone = readinessMode === "live_ready" ? "positive" : readinessMode === "shadow_only" ? "warning" : "negative";
+  const liveLabel =
+    readinessMode === "live_ready" ? "live ready" : readinessMode === "shadow_only" ? "shadow only" : "blocked";
+  const sourceTone = readinessMode === "live_ready" ? "buy-text" : "watch-text";
+  const qualityTone = qualityTimely === qualityTotal && qualityTotal > 0 ? "buy-text" : "watch-text";
+  const qualityLabel = qualityTotal > 0 ? `${qualityTimely}/${qualityTotal}` : "-";
+
   return (
     <section className="war-brief" data-od-id="decision-summary">
       <div className="war-brief-main">
         <div className="war-eyebrow-row">
           <span className="war-eyebrow">Live Decision</span>
-          <Badge tone={briefLive ? "positive" : "watch"}>{status}</Badge>
+          <Badge tone={liveTone}>{status}</Badge>
         </div>
         <h2>{title}</h2>
         <p className="war-brief-summary">{summary}</p>
@@ -158,13 +276,19 @@ function DecisionBrief({
           </div>
           <div>
             <span>数据源</span>
-            <strong className={sourceOk === sourceTotal ? "buy-text" : "watch-text"}>
+            <strong className={sourceOk === sourceTotal && sourceTotal > 0 ? "buy-text" : "watch-text"}>
               {sourceOk}/{sourceTotal || "-"}
             </strong>
           </div>
           <div>
             <span>质检</span>
-            <strong className="buy-text">ready</strong>
+            <strong className={qualityTone}>{qualityLabel}</strong>
+          </div>
+          <div>
+            <span>状态</span>
+            <strong className={readinessMode === "live_ready" ? "buy-text" : readinessMode === "blocked" ? "negative-text" : "watch-text"}>
+              {liveLabel}
+            </strong>
           </div>
         </div>
       </aside>
@@ -312,7 +436,8 @@ function IntelligenceRail({
   sources,
   runs,
   runsLoading,
-  dataReady,
+  readiness,
+  qualityCards,
   actionTotal,
   riskTotal,
   staleTotal,
@@ -325,7 +450,8 @@ function IntelligenceRail({
   sources: SourceCardData[];
   runs: RunItem[];
   runsLoading: boolean;
-  dataReady: boolean;
+  readiness?: ReadinessPayload;
+  qualityCards?: QualityCardData[];
   actionTotal: number;
   riskTotal: number;
   staleTotal: number;
@@ -341,6 +467,17 @@ function IntelligenceRail({
     { label: "午盘", href: "/discovery", count: freshCandidates },
     { label: "复盘", href: "/review", count: confirmed },
   ];
+
+  const qualityList = qualityCards ?? [];
+  const qualityTimely = qualityList.filter((card) => card.timely === true).length;
+  const qualityStatusLabel =
+    qualityList.length === 0
+      ? "loading"
+      : qualityTimely === qualityList.length
+        ? "ready"
+        : `${qualityTimely}/${qualityList.length}`;
+  const qualityStatusClass =
+    qualityList.length > 0 && qualityTimely === qualityList.length ? "buy-text" : "watch-text";
 
   return (
     <aside className="war-rail" data-od-id="risk-alerts">
@@ -367,7 +504,7 @@ function IntelligenceRail({
       <section className="war-rail-card">
         <div className="war-rail-head">
           <span>数据新鲜度</span>
-          <strong className={fresh === sources.length ? "buy-text" : "watch-text"}>{fresh}/{sources.length || "-"}</strong>
+          <strong className={fresh === sources.length && sources.length > 0 ? "buy-text" : "watch-text"}>{fresh}/{sources.length || "-"}</strong>
         </div>
         {sources.length ? (
           sources.slice(0, 4).map((source) => (
@@ -386,11 +523,32 @@ function IntelligenceRail({
       <section className="war-rail-card">
         <div className="war-rail-head">
           <span>质检</span>
-          <strong className={dataReady ? "buy-text" : "watch-text"}>{dataReady ? "pass" : "loading"}</strong>
+          <strong className={qualityStatusClass}>{qualityStatusLabel}</strong>
         </div>
-        <div className="war-source-line"><span>actions</span><strong>{actionTotal}</strong></div>
-        <div className="war-source-line"><span>risks</span><strong>{riskTotal}</strong></div>
-        <div className="war-source-line"><span>stale</span><strong>{staleTotal ? "visible" : "clear"}</strong></div>
+        {qualityList.length ? (
+          qualityList.slice(0, 3).map((card) => (
+            <div key={card.key || card.title} className="war-source-line">
+              <span>{card.title}</span>
+              <strong className={card.timely === true ? "buy-text" : "watch-text"}>
+                {card.timely === true ? "timely" : card.stale_reasons?.[0] || card.status || "stale"}
+              </strong>
+            </div>
+          ))
+        ) : (
+          <>
+            <div className="war-source-line"><span>actions</span><strong>{actionTotal}</strong></div>
+            <div className="war-source-line"><span>risks</span><strong>{riskTotal}</strong></div>
+            <div className="war-source-line"><span>stale</span><strong>{staleTotal ? "visible" : "clear"}</strong></div>
+          </>
+        )}
+        {readiness ? (
+          <div className="war-source-line">
+            <span>readiness</span>
+            <strong className={readiness.ready ? "buy-text" : readiness.readiness_mode === "blocked" ? "negative-text" : "watch-text"}>
+              {readiness.readiness_mode}
+            </strong>
+          </div>
+        ) : null}
       </section>
 
       <section className="war-rail-card">
@@ -430,10 +588,22 @@ export default function CommandCenterPage() {
   const updateDecision = useUpdateTodayActionDecision();
   const data = today.data;
   const hero = data?.command_hero;
-  const displayDate = data?.display_date || data?.generated_at?.slice(0, 10) || data?.trade_date || hero?.trade_date;
+  const readiness = data?.readiness;
+  const readinessMode: ReadinessMode = readiness?.readiness_mode ?? "blocked";
+  const displayDate =
+    readiness?.expected_trade_date ||
+    data?.display_date ||
+    data?.generated_at?.slice(0, 10) ||
+    data?.trade_date ||
+    hero?.trade_date;
   const sourceCards = data?.source_cards ?? [];
   const freshSourceCount = sourceCards.filter(sourceIsFresh).length;
   const staleSourceCount = sourceCards.filter((source) => !sourceIsFresh(source)).length;
+  const qualityCards = data?.quality_cards ?? [];
+  const qualityTimely = readiness
+    ? readiness.quality_freshness.filter((item) => item.timely).length
+    : qualityCards.filter((card) => card.timely === true).length;
+  const qualityTotal = readiness ? readiness.quality_freshness.length : qualityCards.length;
   const summaryCards = data?.summary_cards?.length ? data.summary_cards : data?.radar_cards ?? [];
   const metricCards =
     summaryCards.length
@@ -442,7 +612,12 @@ export default function CommandCenterPage() {
           { label: "持仓优先", value: data?.counts?.watchlist_priority ?? "-", detail: "优先处理持仓", tone: "sell" },
           { label: "观察候选", value: data?.counts?.candidate_total ?? "-", detail: "观察池候选", tone: "watch" },
           { label: "午盘新增", value: data?.counts?.fresh_candidates ?? "-", detail: "午盘新增观察", tone: "positive" },
-          { label: "质检状态", value: `${freshSourceCount}/${sourceCards.length || "-"}`, detail: "数据源可用", tone: "positive" },
+          {
+            label: "质检状态",
+            value: qualityTotal ? `${qualityTimely}/${qualityTotal}` : "-",
+            detail: "数据源可用",
+            tone: qualityTimely === qualityTotal && qualityTotal > 0 ? "positive" : "warning",
+          },
         ];
   const actionItems = data?.action_queue?.items ?? [];
   const counts = data?.action_queue?.counts;
@@ -460,6 +635,9 @@ export default function CommandCenterPage() {
           ]
         : [];
   const actions = hero?.actions?.length ? hero.actions.slice(0, 3) : fallbackHeroActions();
+  const tradeDateLabel = readiness?.expected_trade_date
+    ? `${readiness.expected_trade_date}${readiness.data_trade_date && readiness.data_trade_date !== readiness.expected_trade_date ? ` ←→ ${readiness.data_trade_date}` : ""}`
+    : asText(displayDate, "待同步");
   const tapeItems = [
     {
       label: "持仓优先",
@@ -483,7 +661,7 @@ export default function CommandCenterPage() {
     },
     {
       label: "交易日",
-      value: asText(displayDate, "待同步"),
+      value: tradeDateLabel,
     },
   ];
 
@@ -497,6 +675,17 @@ export default function CommandCenterPage() {
       decision,
     });
   }
+
+  // status copy in the hero card: NEVER show "live" wording when readiness is
+  // not green, even if the user has stale data sitting in the brief.
+  const briefLiveSafe = Boolean(data?.brief_is_live && readiness?.ready);
+  const heroStatus = readiness
+    ? readinessMode === "live_ready"
+      ? hero?.source_state || "总控已同步"
+      : readinessMode === "shadow_only"
+        ? "影子盘观察"
+        : "数据未就绪"
+    : hero?.source_state || data?.hero?.gate_label || "实时链路";
 
   return (
     <main className="war-room">
@@ -547,6 +736,8 @@ export default function CommandCenterPage() {
           </div>
         ) : null}
 
+        {readiness ? <ReadinessBanner readiness={readiness} /> : null}
+
         <div className="war-layout" data-od-id="command-center-v1">
           <div className="war-primary">
             {today.isLoading && !data ? (
@@ -555,14 +746,17 @@ export default function CommandCenterPage() {
               <DecisionBrief
                 title={hero?.title || data?.hero?.title || "先把旧仓风险降下来，新仓只等一个确认触发"}
                 summary={hero?.summary || data?.hero?.summary || "今天不是找更多机会，而是按纪律先处理旧仓风险。"}
-                status={hero?.source_state || data?.hero?.gate_label || "实时链路"}
+                status={heroStatus}
                 gateLabel={data?.hero?.gate_label || hero?.source_state || "防守试错"}
                 cap={asText(data?.hero?.position_cap, "0成")}
                 mainTheme={asText(data?.hero?.main_theme, "AI + 机器人")}
                 actions={actions}
                 sourceOk={freshSourceCount}
                 sourceTotal={sourceCards.length}
-                briefLive={Boolean(data?.brief_is_live)}
+                briefLive={briefLiveSafe}
+                readinessMode={readinessMode}
+                qualityTimely={qualityTimely}
+                qualityTotal={qualityTotal}
               />
             )}
 
@@ -593,7 +787,8 @@ export default function CommandCenterPage() {
             sources={sourceCards}
             runs={runsQuery.data?.runs ?? []}
             runsLoading={runsQuery.isLoading}
-            dataReady={Boolean(data)}
+            readiness={readiness}
+            qualityCards={qualityCards}
             actionTotal={counts?.total ?? actionItems.length}
             riskTotal={riskRows.length}
             staleTotal={staleSourceCount}

@@ -41,6 +41,83 @@ export interface SourceCardData {
   age_label?: string;
   age_seconds?: number;
   stale_after_seconds?: number;
+  trade_date?: string | null;
+  stale_reasons?: string[];
+}
+
+export type ReadinessMode = "live_ready" | "shadow_only" | "blocked";
+
+export interface ReadinessSession {
+  key: string;
+  label: string;
+  is_trading_day: boolean;
+}
+
+export interface ReadinessIssue {
+  code: string;
+  label: string;
+  message: string;
+  recommended_task?: string;
+}
+
+export interface ReadinessSourceFreshness {
+  key: string;
+  label: string;
+  value: string;
+  detail?: string;
+  trade_date?: string | null;
+  available: boolean;
+  age_seconds: number | null;
+  age_label: string;
+  stale: boolean;
+  stale_after_seconds: number;
+  stale_reasons: string[];
+}
+
+export interface ReadinessQualityFreshness {
+  key: string;
+  title: string;
+  validation_status: string;
+  checked_at: string;
+  expected_timestamp: string;
+  checked_trade_date: string | null;
+  expected_trade_date: string;
+  age_seconds: number | null;
+  age_label: string;
+  timely: boolean;
+  stale_reasons: string[];
+}
+
+export interface ReadinessPayload {
+  expected_trade_date: string;
+  data_trade_date: string | null;
+  display_date: string;
+  checked_at: string;
+  session: ReadinessSession;
+  readiness_mode: ReadinessMode;
+  ready: boolean;
+  brief_is_live: boolean;
+  stale_count: number;
+  blockers: ReadinessIssue[];
+  warnings: ReadinessIssue[];
+  source_freshness: ReadinessSourceFreshness[];
+  quality_freshness: ReadinessQualityFreshness[];
+  recommended_tasks: string[];
+}
+
+export interface QualityCardData {
+  key?: string;
+  title: string;
+  status: string;
+  tone?: Tone | string;
+  checked_at?: string;
+  expected_timestamp?: string;
+  issue?: string;
+  path?: string;
+  url?: string;
+  timely?: boolean;
+  stale_reasons?: string[];
+  age_label?: string;
 }
 
 export interface BasicCard {
@@ -237,7 +314,10 @@ export interface TodayData {
   generated_at: string;
   display_date?: string;
   trade_date: string;
+  expected_trade_date?: string;
+  data_trade_date?: string | null;
   brief_is_live: boolean;
+  readiness?: ReadinessPayload;
   hero: TodayHero;
   command_hero?: TodayCommandHero;
   radar_cards?: MetricCardData[];
@@ -245,6 +325,7 @@ export interface TodayData {
   risk_rows?: RiskRow[];
   source_cards: SourceCardData[];
   summary_cards: MetricCardData[];
+  quality_cards?: QualityCardData[];
   links: LinkMap;
   counts: TodayCounts;
 }

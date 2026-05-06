@@ -74,6 +74,7 @@ function ParametersEditor() {
 
   function formatJson() {
     setLocalError("");
+    setEvaluation(undefined);
     try {
       setRaw(JSON.stringify(JSON.parse(raw), null, 2));
       setDirty(true);
@@ -85,6 +86,7 @@ function ParametersEditor() {
   function reloadFromDisk() {
     setLocalError("");
     setSuccess("");
+    setEvaluation(undefined);
     parameters.refetch().then((result) => {
       if (result.data?.raw) {
         setRaw(result.data.raw);
@@ -211,6 +213,9 @@ function ParametersEditor() {
               setDirty(true);
               setLocalError("");
               setSuccess("");
+              // Drop any stale evaluation banner — the user is editing now,
+              // and the previous evaluation no longer reflects current input.
+              setEvaluation(undefined);
             }}
             spellCheck={false}
             className="mono h-[480px] w-full resize-y bg-transparent px-4 py-3 text-[12px] leading-6 text-[var(--text-secondary)] outline-none placeholder:text-[var(--text-tertiary)]"
