@@ -655,14 +655,89 @@ def pick_recommended_task(page: str, freshness: list[dict[str, Any]], market_mod
     return "command_brief"
 
 
+def _readiness_freshness_rows(
+    readiness: dict[str, Any],
+    *,
+    fallback_threshold: int,
+) -> list[dict[str, Any]]:
+    """Convert ``readiness.source_freshness`` into the legacy freshness shape.
+
+    Keeps the keys the existing UI consumes (key/label/value/age_seconds/age_label/
+    stale/stale_after_seconds/available/detail) and threads through the extra
+    readiness metadata (trade_date, stale_reasons) so callers can drill in.
+    """
+
+    rows: list[dict[str, Any]] = []
+    for item in readiness.get("source_freshness") or []:
+        rows.append(
+            {
+                "key": item.get("key"),
+                "label": item.get("label"),
+                "value": item.get("value") or "-",
+                "detail": item.get("detail") or "",
+                "available": bool(item.get("available")),
+                "age_seconds": item.get("age_seconds"),
+                "age_label": item.get("age_label", "-"),
+                "stale": bool(item.get("stale")),
+                "stale_after_seconds": int(
+                    item.get("stale_after_seconds") or fallback_threshold
+                ),
+                "trade_date": item.get("trade_date"),
+                "stale_reasons": list(item.get("stale_reasons") or []),
+            }
+        )
+    return rows
+
+
 def build_refresh_status_payload(page: str) -> dict[str, Any]:
     market_mode, market_label = current_market_mode()
-    freshness = build_page_freshness(page, market_mode)
     running = build_running_refresh_tasks(page)
     cooldown = build_refresh_cooldown(page, market_mode)
-    recommended_task_name = pick_recommended_task(page, freshness, market_mode)
-    recommended_task = resolve_refresh_task(recommended_task_name)
-    stale_count = sum(1 for item in freshness if item.get("stale"))
+
+    # Single source of truth for the today page: readiness drives freshness,
+    # stale_count, recommended_task and the readiness_mode signature.  The
+    # legacy ``build_page_freshness`` heuristic is bypassed entirely so the
+    # refresh widget cannot disagree with /api/today.
+    readiness_payload: dict[str, Any] | None = None
+    if page == "today":
+        try:
+            today_view = build_today_view()
+            readiness_payload = today_view.get("readiness")
+        except Exception:
+            readiness_payload = None
+
+    if readiness_payload:
+        fallback_threshold = int(REFRESH_PAGE_CONFIG[page]["stale_after_seconds"][market_mode])
+        freshness = _readiness_freshness_rows(
+            readiness_payload, fallback_threshold=fallback_threshold
+        )
+        stale_count = int(readiness_payload.get("stale_count") or 0)
+        readiness_recommendations = [
+            str(name).strip()
+            for name in (readiness_payload.get("recommended_tasks") or [])
+            if str(name).strip()
+        ]
+    else:
+        freshness = build_page_freshness(page, market_mode)
+        stale_count = sum(1 for item in freshness if item.get("stale"))
+        readiness_recommendations = []
+
+    # Recommended task: prefer readiness when it is not green (so the operator
+    # gets the task that actually clears the blocker).  Otherwise fall back to
+    # the page-specific heuristic.
+    recommended_task_name: str | None = None
+    if readiness_payload and not readiness_payload.get("ready"):
+        for candidate in readiness_recommendations:
+            try:
+                resolved = resolve_refresh_task(candidate)
+            except HTTPException:
+                continue
+            recommended_task_name = candidate
+            recommended_task = resolved
+            break
+    if recommended_task_name is None:
+        recommended_task_name = pick_recommended_task(page, freshness, market_mode)
+        recommended_task = resolve_refresh_task(recommended_task_name)
 
     suggested_poll_seconds = int(REFRESH_PAGE_CONFIG[page]["poll_seconds"][market_mode])
     if running:
@@ -678,11 +753,12 @@ def build_refresh_status_payload(page: str) -> dict[str, Any]:
         ],
         "running": [(item.get("task_name"), item.get("started_at")) for item in running],
         "cooldown_remaining": cooldown.get("remaining_seconds"),
+        "readiness_mode": (readiness_payload or {}).get("readiness_mode"),
     }
     signature_seed = json.dumps(signature_payload, ensure_ascii=False, sort_keys=True)
     snapshot_signature = hashlib.sha1(signature_seed.encode("utf-8")).hexdigest()[:16]
 
-    return {
+    payload = {
         "page": page,
         "server_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "market_mode": market_mode,
@@ -698,6 +774,11 @@ def build_refresh_status_payload(page: str) -> dict[str, Any]:
         "cooldown": cooldown,
         "snapshot_signature": snapshot_signature,
     }
+    if readiness_payload:
+        payload["readiness"] = readiness_payload
+        payload["readiness_mode"] = readiness_payload.get("readiness_mode")
+        payload["recommended_tasks"] = readiness_recommendations
+    return payload
 
 
 def save_refresh_trigger(page: str, task_name: str, run_id: str, force: bool) -> None:
@@ -988,6 +1069,37 @@ async def api_refresh_status(page: str) -> JSONResponse:
     return JSONResponse(build_refresh_status_payload(normalized_page))
 
 
+@app.get("/api/readiness/live")
+async def api_readiness_live() -> JSONResponse:
+    """Operator-facing readiness summary.
+
+    Returns the same readiness object that ``/api/today`` embeds, so the
+    operator can hit one endpoint to know whether the system is fresh,
+    aligned, and safe to act on.
+    """
+
+    today_view = build_today_view()
+    readiness = today_view.get("readiness") or {}
+    return JSONResponse(
+        {
+            "generated_at": today_view.get("generated_at"),
+            "expected_trade_date": readiness.get("expected_trade_date"),
+            "data_trade_date": readiness.get("data_trade_date"),
+            "display_date": today_view.get("display_date"),
+            "trade_date": today_view.get("trade_date"),
+            "readiness_mode": readiness.get("readiness_mode"),
+            "ready": readiness.get("ready", False),
+            "session": readiness.get("session"),
+            "stale_count": readiness.get("stale_count", 0),
+            "blockers": readiness.get("blockers", []),
+            "warnings": readiness.get("warnings", []),
+            "source_freshness": readiness.get("source_freshness", []),
+            "quality_freshness": readiness.get("quality_freshness", []),
+            "recommended_tasks": readiness.get("recommended_tasks", []),
+        }
+    )
+
+
 @app.post("/api/refresh/trigger")
 async def api_refresh_trigger(request: Request) -> JSONResponse:
     try:
@@ -1215,7 +1327,13 @@ async def api_save_parameters(request: Request) -> JSONResponse:
         )
 
     body_dict = body if isinstance(body, dict) else {}
-    unsafe_apply = bool(body_dict.get("unsafe_apply"))
+    raw_unsafe = body_dict.get("unsafe_apply")
+    # Only honor an explicit JSON ``true``.  Strings like "false", "0" and
+    # "off" must NOT bypass the hard-error gate — see parse_bool_value().
+    if isinstance(raw_unsafe, bool):
+        unsafe_apply = raw_unsafe
+    else:
+        unsafe_apply = parse_bool_value(raw_unsafe, default=False)
     current_value = load_parameters_value() if PARAMETERS_PATH.exists() else None
     evaluation = parameter_evaluation(candidate, current=current_value)
 
