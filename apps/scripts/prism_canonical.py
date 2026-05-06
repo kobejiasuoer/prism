@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -26,6 +27,8 @@ from watchlist_registry import load_active_watchlist_codes
 
 WATCHLIST_SNAPSHOT_DIR = STOCK_ANALYZER_ROOT / "data" / "daily_snapshots"
 SCREENER_DATA_DIR = STOCK_SCREENER_ROOT / "data"
+CURRENT_SCREENER_DATA_DIR = PACKAGES_ROOT / "data"
+SCREENER_DATA_DIRS = (CURRENT_SCREENER_DATA_DIR, SCREENER_DATA_DIR)
 COMMAND_BRIEF_DIR = BASE_DIR / "data" / "command_brief"
 RESEARCH_REPORTS_DIR = STOCK_SCREENER_ROOT / "data" / "research_backfill" / "reports"
 
@@ -149,7 +152,19 @@ def latest_matching(pattern: Path, exclude_tokens: tuple[str, ...] = ()) -> Path
     files = list(pattern.parent.glob(pattern.name))
     if exclude_tokens:
         files = [path for path in files if not any(token in path.name for token in exclude_tokens)]
-    files.sort(key=lambda item: item.stat().st_mtime, reverse=True)
+
+    def sort_key(path: Path) -> tuple[datetime, float, str]:
+        name_stamp = re.search(r"(\d{4}-\d{2}-\d{2})(?:[_-](\d{2})-(\d{2})(?:-(\d{2}))?)?", path.stem)
+        if name_stamp:
+            date_part, hour, minute, second = name_stamp.groups()
+            parsed = parse_ts(
+                f"{date_part} {hour or '00'}:{minute or '00'}:{second or '00'}"
+            )
+            if parsed:
+                return (parsed, path.stat().st_mtime, path.name)
+        return (datetime.fromtimestamp(path.stat().st_mtime), path.stat().st_mtime, path.name)
+
+    files.sort(key=sort_key, reverse=True)
     return files[0] if files else None
 
 
@@ -168,20 +183,30 @@ def resolve_screening_batch_path(path: str | None = None) -> Path | None:
     if path:
         candidate = Path(path).expanduser()
         return candidate if candidate.exists() else None
-    current = SCREENER_DATA_DIR / "ai_screening_result.json"
-    if current.exists():
-        return current
-    return latest_matching(SCREENER_DATA_DIR / "ai_history" / "ai_screening_*.json")
+    for data_dir in SCREENER_DATA_DIRS:
+        current = data_dir / "ai_screening_result.json"
+        if current.exists():
+            return current
+    for data_dir in SCREENER_DATA_DIRS:
+        history = latest_matching(data_dir / "ai_history" / "ai_screening_*.json")
+        if history:
+            return history
+    return None
 
 
 def resolve_confirmation_path(path: str | None = None) -> Path | None:
     if path:
         candidate = Path(path).expanduser()
         return candidate if candidate.exists() else None
-    current = SCREENER_DATA_DIR / "midday_verification_result.json"
-    if current.exists():
-        return current
-    return latest_matching(SCREENER_DATA_DIR / "midday_verification_*.json")
+    for data_dir in SCREENER_DATA_DIRS:
+        current = data_dir / "midday_verification_result.json"
+        if current.exists():
+            return current
+    for data_dir in SCREENER_DATA_DIRS:
+        history = latest_matching(data_dir / "midday_verification_*.json")
+        if history:
+            return history
+    return None
 
 
 def resolve_decision_brief_path(path: str | None = None) -> Path | None:
@@ -285,6 +310,210 @@ def load_watchlist_snapshot(path: str | None = None, trade_date: str | None = No
         "follow_codes": follow,
         "observe_codes": observe,
         "stocks": normalized,
+    }
+
+
+_WATCHLIST_SNAPSHOT_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})\.json$")
+
+
+def resolve_previous_watchlist_snapshot_path(reference_path: Path) -> Path | None:
+    """Return the largest dated snapshot strictly older than ``reference_path``.
+
+    Used by the watchlist page to anchor a day-over-day diff. Files whose
+    name does not match ``YYYY-MM-DD.json`` are ignored — the resolver
+    refuses to guess at a "previous" from arbitrary file names.
+    """
+
+    if not reference_path:
+        return None
+    ref = Path(reference_path)
+    match = _WATCHLIST_SNAPSHOT_DATE_RE.match(ref.name)
+    if not match:
+        return None
+    reference_date = match.group(1)
+    parent = ref.parent
+    if not parent.exists():
+        return None
+
+    candidates: list[tuple[str, Path]] = []
+    for entry in parent.iterdir():
+        if not entry.is_file():
+            continue
+        m = _WATCHLIST_SNAPSHOT_DATE_RE.match(entry.name)
+        if not m:
+            continue
+        date = m.group(1)
+        if date < reference_date:
+            candidates.append((date, entry))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: item[0])
+    return candidates[-1][1]
+
+
+_GROUP_RANK = {"observe": 0, "follow": 1, "priority": 2}
+
+
+def _index_by_code(payload: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    if not payload:
+        return {}
+    return {item.get("code"): item for item in (payload.get("stocks") or []) if item.get("code")}
+
+
+def _stock_group_label(payload: dict[str, Any] | None, code: str) -> str:
+    if not payload:
+        return "observe"
+    if code in (payload.get("priority_codes") or []):
+        return "priority"
+    if code in (payload.get("follow_codes") or []):
+        return "follow"
+    return "observe"
+
+
+def _trade_level(stock: dict[str, Any], field: str) -> float | None:
+    levels = stock.get("trade_levels") or {}
+    value = levels.get(field)
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def diff_watchlist_snapshots(
+    today: dict[str, Any],
+    previous: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Compute a day-over-day diff between two normalized watchlist payloads.
+
+    Both inputs are shaped like :func:`load_watchlist_snapshot` output —
+    a dict with ``stocks`` (list of normalized stock dicts), plus
+    ``priority_codes``/``follow_codes``/``observe_codes``.
+
+    The result is auditable and JSON-serializable: each change carries
+    the stock code, name, the field that moved, and before/after values.
+    Code orderings are sorted alphabetically so callers asking for the
+    same diff always get the same JSON.
+
+    Pass ``previous=None`` when there is no prior snapshot — the result
+    is still well-formed (empty change buckets, ``unchanged_count`` reflects
+    today's roster).
+    """
+
+    if previous is None:
+        return {
+            "today_trade_date": (today or {}).get("trade_date"),
+            "previous_trade_date": None,
+            "added": [],
+            "removed": [],
+            "action_changes": [],
+            "group_changes": [],
+            "boundary_changes": [],
+            "signal_changes": [],
+            "unchanged_count": len(_index_by_code(today)),
+        }
+
+    today_index = _index_by_code(today)
+    prev_index = _index_by_code(previous)
+
+    today_codes = set(today_index)
+    prev_codes = set(prev_index)
+
+    added_codes = sorted(today_codes - prev_codes)
+    removed_codes = sorted(prev_codes - today_codes)
+    common_codes = sorted(today_codes & prev_codes)
+
+    added = [
+        {
+            "code": code,
+            "name": today_index[code].get("name") or code,
+            "action": today_index[code].get("action") or "",
+            "group": _stock_group_label(today, code),
+        }
+        for code in added_codes
+    ]
+    removed = [
+        {
+            "code": code,
+            "name": prev_index[code].get("name") or code,
+            "action": prev_index[code].get("action") or "",
+            "group": _stock_group_label(previous, code),
+        }
+        for code in removed_codes
+    ]
+
+    action_changes: list[dict[str, Any]] = []
+    group_changes: list[dict[str, Any]] = []
+    boundary_changes: list[dict[str, Any]] = []
+    signal_changes: list[dict[str, Any]] = []
+    unchanged_count = 0
+
+    for code in common_codes:
+        today_stock = today_index[code]
+        prev_stock = prev_index[code]
+        name = today_stock.get("name") or code
+        changed = False
+
+        before_action = prev_stock.get("action") or ""
+        after_action = today_stock.get("action") or ""
+        if before_action != after_action:
+            action_changes.append(
+                {"code": code, "name": name, "before": before_action, "after": after_action}
+            )
+            changed = True
+
+        before_group = _stock_group_label(previous, code)
+        after_group = _stock_group_label(today, code)
+        if before_group != after_group:
+            group_changes.append(
+                {"code": code, "name": name, "before": before_group, "after": after_group}
+            )
+            changed = True
+
+        for field in ("support", "resistance", "stop_loss"):
+            before_value = _trade_level(prev_stock, field)
+            after_value = _trade_level(today_stock, field)
+            if before_value is None and after_value is None:
+                continue
+            if before_value != after_value:
+                boundary_changes.append(
+                    {
+                        "code": code,
+                        "name": name,
+                        "field": field,
+                        "before": before_value,
+                        "after": after_value,
+                    }
+                )
+                changed = True
+
+        before_signal = (prev_stock.get("rule_snapshot") or {}).get("signal") or ""
+        after_signal = (today_stock.get("rule_snapshot") or {}).get("signal") or ""
+        if before_signal != after_signal:
+            signal_changes.append(
+                {"code": code, "name": name, "before": before_signal, "after": after_signal}
+            )
+            changed = True
+
+        if not changed:
+            unchanged_count += 1
+
+    action_changes.sort(key=lambda item: item["code"])
+    group_changes.sort(key=lambda item: item["code"])
+    boundary_changes.sort(key=lambda item: (item["code"], item["field"]))
+    signal_changes.sort(key=lambda item: item["code"])
+
+    return {
+        "today_trade_date": (today or {}).get("trade_date"),
+        "previous_trade_date": (previous or {}).get("trade_date") if previous else None,
+        "added": added,
+        "removed": removed,
+        "action_changes": action_changes,
+        "group_changes": group_changes,
+        "boundary_changes": boundary_changes,
+        "signal_changes": signal_changes,
+        "unchanged_count": unchanged_count,
     }
 
 

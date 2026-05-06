@@ -1,0 +1,247 @@
+{
+  "adjusted_return_availability": {
+    "formal_adjusted_return_status": {
+      "unavailable_adjustment_policy_missing_not_ready": 11064
+    },
+    "price_adjustment_status": {
+      "unknown": 11064
+    },
+    "status": "not_ready"
+  },
+  "backtest_research_only_status": {
+    "portfolio_win_rate_status_counts": {
+      "insufficient_sample": 8,
+      "research_only": 8
+    },
+    "research_only_flags": {
+      "adjustment_policy_unknown": 16,
+      "benchmark_unavailable": 16,
+      "failed_order_unavailable": 16,
+      "limit_up_down_status_unknown": 16,
+      "not_production_sorting": 16,
+      "partial_fill_unavailable": 16,
+      "research_only_simulation": 16,
+      "suspend_status_unknown": 16
+    },
+    "result_status_counts": {
+      "research_only": 16
+    },
+    "status": "research_only_simulation"
+  },
+  "benchmark_availability": {
+    "market_benchmark_unavailable": 216,
+    "market_benchmark_unavailable_internal_research_only_available": 10848
+  },
+  "excess_return_availability": {
+    "unavailable_market_benchmark_not_frozen": 11064
+  },
+  "execution_data_availability": {
+    "missing": {
+      "adjustment_policy": 11064,
+      "failed_order": 11064,
+      "limit_up_down_status": 11064,
+      "partial_fill": 11064,
+      "suspend_status": 11064
+    },
+    "status": "missing_for_execution_realistic_backtest"
+  },
+  "execution_realism_availability": {
+    "execution_realism_status": {
+      "not_ready_research_only_simulation_execution_data_missing": 11064
+    },
+    "formal_execution_eligible_count": 0,
+    "status": "not_ready"
+  },
+  "factor_evidence_status": {
+    "ai_screening_validation": "research_only",
+    "gate_evaluation": "research_only",
+    "groups": {
+      "execution_gate_status": "research_only",
+      "setup_type": "research_only",
+      "theme": "research_only",
+      "tier": "research_only"
+    },
+    "midday_validation": "insufficient_sample",
+    "numeric": {
+      "ai_best_score": "research_only",
+      "ai_priority_score": "research_only",
+      "scan_capital_score": "research_only",
+      "scan_technical_score": "research_only"
+    },
+    "status": "research_only",
+    "tier_monotonicity": "insufficient_sample"
+  },
+  "gate_evaluation_status": "research_only",
+  "generated_at": "2026-04-29T21:40:28+08:00",
+  "guardrails": [
+    "report_only",
+    "hardened_labels_sidecar",
+    "no_production_sorting",
+    "no_abc_replacement",
+    "no_page",
+    "no_prism_edge",
+    "no_ml",
+    "no_theme_state_machine"
+  ],
+  "hard_gates": {
+    "blocks_production": false,
+    "blocks_sorting": false,
+    "production_ready": false,
+    "replaces_abc": false,
+    "requires_page_change": false
+  },
+  "hardened_label_input": {
+    "formal_execution_eligible_count": 0,
+    "formal_label_ready_count": 0,
+    "path": "~/Projects/prism/data/quant/labels/forward_return_labels_hardened.jsonl",
+    "rows": 11064
+  },
+  "hardened_label_summary": {
+    "benchmark_return_status_counts": {
+      "unavailable_market_benchmark_not_frozen": 11064
+    },
+    "benchmark_status_counts": {
+      "market_benchmark_unavailable": 216,
+      "market_benchmark_unavailable_internal_research_only_available": 10848
+    },
+    "excess_return_status_counts": {
+      "unavailable_market_benchmark_not_frozen": 11064
+    },
+    "execution_realism_status_counts": {
+      "not_ready_research_only_simulation_execution_data_missing": 11064
+    },
+    "exists": true,
+    "formal_adjusted_return_status_counts": {
+      "unavailable_adjustment_policy_missing_not_ready": 11064
+    },
+    "formal_execution_eligible_count": 0,
+    "formal_label_ready_count": 0,
+    "internal_benchmark_status_counts": {
+      "research_only_internal_available": 10848,
+      "unavailable": 216
+    },
+    "label_quality_status_counts": {
+      "research_only_hardened_not_formal": 10818,
+      "unavailable_hardened_not_formal": 246
+    },
+    "path": "~/Projects/prism/data/quant/labels/forward_return_labels_hardened.jsonl",
+    "price_adjustment_status_counts": {
+      "unknown": 11064
+    },
+    "research_only_reason_counts": {
+      "adjustment_policy_missing": 11064,
+      "execution_data_missing": 11064,
+      "execution_not_formal": 11064,
+      "execution_realism_not_ready": 11064,
+      "formal_adjusted_return_unavailable": 11064,
+      "internal_benchmark_research_only_not_formal": 10848,
+      "internal_benchmark_unavailable_for_window": 216,
+      "market_benchmark_unavailable": 11064,
+      "raw_return_unavailable": 246,
+      "source_label_unavailable": 246
+    },
+    "rows": 11064
+  },
+  "label_coverage": {
+    "available_rate": 0.9777657266811279,
+    "benchmark_availability": {
+      "benchmark_unavailable": 11064
+    },
+    "excess_return_status": {
+      "deferred_until_benchmark_frozen": 11064
+    },
+    "execution_data_missing": {
+      "adjustment_policy": 11064,
+      "failed_order": 11064,
+      "limit_up_down_status": 11064,
+      "partial_fill": 11064,
+      "suspend_status": 11064
+    },
+    "hardened_label_input": {
+      "formal_execution_eligible_count": 0,
+      "formal_label_ready_count": 0,
+      "path": "~/Projects/prism/data/quant/labels/forward_return_labels_hardened.jsonl",
+      "rows": 11064
+    },
+    "hardened_label_summary": {
+      "benchmark_return_status_counts": {
+        "unavailable_market_benchmark_not_frozen": 11064
+      },
+      "benchmark_status_counts": {
+        "market_benchmark_unavailable": 216,
+        "market_benchmark_unavailable_internal_research_only_available": 10848
+      },
+      "excess_return_status_counts": {
+        "unavailable_market_benchmark_not_frozen": 11064
+      },
+      "execution_realism_status_counts": {
+        "not_ready_research_only_simulation_execution_data_missing": 11064
+      },
+      "exists": true,
+      "formal_adjusted_return_status_counts": {
+        "unavailable_adjustment_policy_missing_not_ready": 11064
+      },
+      "formal_execution_eligible_count": 0,
+      "formal_label_ready_count": 0,
+      "internal_benchmark_status_counts": {
+        "research_only_internal_available": 10848,
+        "unavailable": 216
+      },
+      "label_quality_status_counts": {
+        "research_only_hardened_not_formal": 10818,
+        "unavailable_hardened_not_formal": 246
+      },
+      "path": "~/Projects/prism/data/quant/labels/forward_return_labels_hardened.jsonl",
+      "price_adjustment_status_counts": {
+        "unknown": 11064
+      },
+      "research_only_reason_counts": {
+        "adjustment_policy_missing": 11064,
+        "execution_data_missing": 11064,
+        "execution_not_formal": 11064,
+        "execution_realism_not_ready": 11064,
+        "formal_adjusted_return_unavailable": 11064,
+        "internal_benchmark_research_only_not_formal": 10848,
+        "internal_benchmark_unavailable_for_window": 216,
+        "market_benchmark_unavailable": 11064,
+        "raw_return_unavailable": 246,
+        "source_label_unavailable": 246
+      },
+      "rows": 11064
+    },
+    "rows": 11064,
+    "status": "research_only",
+    "status_counts": {
+      "available_research_only": 10818,
+      "unavailable": 246
+    }
+  },
+  "overall_status": "report_only_hardened_not_production_ready",
+  "panel_coverage": {
+    "missing_required_fields": {
+      "available_timestamp": 0,
+      "code": 0,
+      "decision_timestamp": 0,
+      "panel_row_id": 0,
+      "pipeline_stage": 0,
+      "source_artifact": 0,
+      "source_hash": 0,
+      "source_lane": 0,
+      "trade_date": 0
+    },
+    "pit_pass_rate": 1.0,
+    "pit_status": {
+      "pass": 3896
+    },
+    "rows": 3896,
+    "status": "pass"
+  },
+  "pit_pass_rate": 1.0,
+  "production_impact": "none",
+  "schema_version": "1.0",
+  "scope": "Sprint 2 report-only quant health using P1-A hardened label sidecar",
+  "source_label_benchmark_availability": {
+    "benchmark_unavailable": 11064
+  },
+  "tier_monotonicity_status": "insufficient_sample"
+}

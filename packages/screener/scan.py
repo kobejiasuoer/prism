@@ -140,6 +140,30 @@ def _safe_float(value, default=0.0):
         return default
 
 
+# --- universe boundary configuration --------------------------------------
+#
+# Stage-0 normalization excludes stocks whose code starts with any of these
+# prefixes. Defaults to ChiNext (``30``) and STAR (``68``), preserving the
+# historical behavior. Override with the ``PRISM_SCAN_EXCLUDED_CODE_PREFIXES``
+# env var (comma-separated; empty string disables exclusion entirely):
+#   PRISM_SCAN_EXCLUDED_CODE_PREFIXES=""              # include everything
+#   PRISM_SCAN_EXCLUDED_CODE_PREFIXES="30,68,87"      # also exclude BSE
+# Tests can monkeypatch ``scan.EXCLUDED_CODE_PREFIXES`` directly.
+
+_DEFAULT_EXCLUDED_CODE_PREFIXES: tuple[str, ...] = ("30", "68")
+
+
+def _parse_excluded_code_prefixes_from_env() -> tuple[str, ...]:
+    raw = os.getenv("PRISM_SCAN_EXCLUDED_CODE_PREFIXES")
+    if raw is None:
+        return _DEFAULT_EXCLUDED_CODE_PREFIXES
+    parts = [part.strip() for part in raw.split(",")]
+    return tuple(part for part in parts if part)
+
+
+EXCLUDED_CODE_PREFIXES: tuple[str, ...] = _parse_excluded_code_prefixes_from_env()
+
+
 def _normalize_stage0_stock(raw, source_pool):
     code = str(raw.get('code') or '').strip()
     if code.isdigit():
@@ -148,7 +172,7 @@ def _normalize_stage0_stock(raw, source_pool):
     amount = _safe_float(raw.get('amount'), 0)
     if 'ST' in name:
         return None
-    if code.startswith('68') or code.startswith('30'):
+    if any(code.startswith(prefix) for prefix in EXCLUDED_CODE_PREFIXES):
         return None
     if amount <= 0 or not code:
         return None
@@ -1501,12 +1525,21 @@ def classify_theme(stock):
         ('AI硬件链', {
             'industry': ['元件', '光学光电子', '消费电子', '半导体', '电子化学品', '通信设备'],
             'concept': ['算力', '服务器', 'CPO', 'PCB', 'AI硬件', '铜连接', '光模块'],
-            'name': ['工业富联', '鹏鼎', '沪电', '生益', '长电', '中兴通讯', '深南电路']
+            'name': [
+                '工业富联', '鹏鼎', '沪电', '生益', '长电', '中兴通讯', '深南电路',
+                # name-fallback for stocks whose `industry`/`concept` aren't
+                # populated by the upstream fundamentals fetcher
+                '兆易创新', '紫光国微', '中瓷电子', '深科技', '深圳华强',
+                '世运电路', '广合科技', '光迅科技', '水晶光电', '烽火通信', '方正科技',
+            ],
         }),
         ('AI信息链', {
             'industry': ['通信服务', '软件开发', '计算机设备', '互联网服务', 'IT服务'],
             'concept': ['云计算', '数据中心', '人工智能', '算力', '运营商', '信创'],
-            'name': ['浪潮信息', '紫光股份', '中际旭创', '中科曙光']
+            'name': [
+                '浪潮信息', '紫光股份', '中际旭创', '中科曙光',
+                '中国卫通', '中国卫星', '拓维信息', '岩山科技',
+            ],
         }),
         ('消费电子链', {
             'industry': ['消费电子', '电子元件'],
@@ -1521,17 +1554,27 @@ def classify_theme(stock):
         ('新能源链', {
             'industry': ['能源金属', '电池', '电池化学品', '风电设备', '油气开采', '油气开采Ⅱ'],
             'concept': ['锂电池', '储能', '新能源车', '风电', '油气改革', '盐湖提锂'],
-            'name': ['赣锋锂业', '天齐锂业', '华友钴业', '恩捷股份', '宁德时代', '中国海油', '盐湖股份']
+            'name': [
+                '赣锋锂业', '天齐锂业', '华友钴业', '恩捷股份', '宁德时代',
+                '中国海油', '盐湖股份',
+                '金风科技', '节能风电', '国轩高科', '天赐材料', '兖矿能源',
+                '中国能建', '中国电建', '中国核电', '陕西煤业', '华阳股份',
+            ],
         }),
         ('有色资源链', {
             'industry': ['工业金属', '小金属', '贵金属', '钢铁', '普钢'],
             'concept': ['有色金属', '黄金', '稀土永磁', '钢铁'],
-            'name': ['中国铝业', '洛阳钼业', '紫金矿业', '中金黄金', '山东黄金', '北方稀土', '包钢股份']
+            'name': [
+                '中国铝业', '洛阳钼业', '紫金矿业', '中金黄金', '山东黄金',
+                '北方稀土', '包钢股份',
+                '兴业银锡', '中钨高新', '中国稀土', '锡业股份', '厦门钨业',
+                '盛和资源', '海亮股份', '藏格矿业',
+            ],
         }),
         ('军工链', {
             'industry': ['军工电子', '军工电子Ⅱ', '航天装备', '航空装备', '地面兵装'],
             'concept': ['军工', '大飞机', '卫星导航'],
-            'name': ['中航', '航发', '洪都']
+            'name': ['中航', '航发', '洪都', '高德红外', '航天电器'],
         }),
         ('汽车链', {
             'industry': ['汽车整车', '汽车零部件', '摩托车及其他', '汽车服务'],
@@ -1571,7 +1614,7 @@ def classify_theme(stock):
         ('游戏传媒链', {
             'industry': ['游戏', '文化传媒', '影视院线'],
             'concept': ['网络游戏', '短剧游戏', '传媒', 'AIGC'],
-            'name': ['三七互娱', '恺英网络', '分众传媒']
+            'name': ['三七互娱', '恺英网络', '分众传媒', '完美世界', '中国电影'],
         }),
     ]
 

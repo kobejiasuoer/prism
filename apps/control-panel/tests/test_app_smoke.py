@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
+from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -50,10 +51,10 @@ class ControlPanelApiTest(unittest.TestCase):
     def test_backend_api_contracts_remain_available_for_next_frontend(self) -> None:
         checks = {
             "/api/overview": ("generated_at", "runs", "tasks"),
-            "/api/today": ("generated_at", "action_queue", "source_cards"),
-            "/api/watchlist": ("groups", "manager", "source_cards"),
+            "/api/today": ("generated_at", "display_date", "action_queue", "source_cards"),
+            "/api/watchlist": ("display_date", "groups", "manager", "source_cards"),
             "/api/watchlist/manage": ("manager",),
-            "/api/opportunities": ("groups", "source_cards"),
+            "/api/opportunities": ("display_date", "groups", "source_cards"),
             "/api/review": ("selector_groups", "source_cards"),
             "/api/parameters": ("value", "validation", "raw"),
             "/api/runs": ("runs",),
@@ -217,6 +218,20 @@ class ControlPanelApiTest(unittest.TestCase):
     def test_refresh_status_rejects_unknown_page(self) -> None:
         response = self.client.get("/api/refresh/status?page=unknown")
         self.assertEqual(response.status_code, 400)
+
+    def test_watchlist_fetch_load_config_normalizes_market_and_sina(self) -> None:
+        fetch_path = INVEST_FLOW_ROOT.parent / "stock-analyzer" / "scripts" / "fetch.py"
+        spec = spec_from_file_location("prism_fetch_module", fetch_path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        fetch_module = module_from_spec(spec)
+        spec.loader.exec_module(fetch_module)
+
+        config = fetch_module.load_config(selected_codes=["600690"])
+        self.assertEqual(len(config["stocks"]), 1)
+        stock = config["stocks"][0]
+        self.assertEqual(stock["market"], "sh")
+        self.assertEqual(stock["sina"], "sh600690")
 
 
 if __name__ == "__main__":

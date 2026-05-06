@@ -162,7 +162,9 @@ export function useSaveParameters() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: { raw: string } | { value: Record<string, unknown> }) => api.saveParameters(payload),
+    mutationFn: (
+      args: { payload: { raw: string } | { value: Record<string, unknown> }; unsafeApply?: boolean },
+    ) => api.saveParameters(args.payload, args.unsafeApply ?? false),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.parameters });
     },

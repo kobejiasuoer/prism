@@ -1,87 +1,627 @@
 "use client";
 
-import { AlertCircle, ArrowRight } from "lucide-react";
+import { AlertCircle, Check, ChevronRight, FileDown, LoaderCircle, RefreshCw, ShieldAlert, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import type { CSSProperties } from "react";
 
-import { ActionRow, ActionRowSkeleton } from "@/components/action-row";
 import { Badge } from "@/components/badge";
-import { EvidencePanel } from "@/components/evidence-panel";
-import { MetricCard, MetricSkeleton } from "@/components/metric-card";
-import { RiskAlert } from "@/components/risk-alert";
-import { useTodayData, useUpdateTodayActionDecision } from "@/lib/hooks";
-import type { DecisionValue, MetricCardData, RiskRow } from "@/lib/types";
-import { asText } from "@/lib/utils";
+import {
+  useRuns,
+  useTodayData,
+  useUpdateTodayActionDecision,
+} from "@/lib/hooks";
+import type {
+  DecisionValue,
+  QualityCardData,
+  ReadinessIssue,
+  ReadinessMode,
+  ReadinessPayload,
+  RiskRow,
+  RunItem,
+  SourceCardData,
+  TodayActionItem,
+  TodayCommandHeroAction,
+} from "@/lib/types";
+import { asText, cn, stockCodeFromTitle, stockNameFromTitle, toneColor } from "@/lib/utils";
 
-function inferMetricTone(card: MetricCardData, index: number) {
-  const label = `${card.label} ${card.detail || ""}`;
-  if (card.tone) {
-    return card.tone;
+function formatTime(value?: string) {
+  if (!value) {
+    return "-";
   }
-  if (label.includes("质检") || label.includes("通过")) {
-    return "positive";
+  const timeMatch = value.match(/\d{2}:\d{2}/);
+  if (timeMatch) {
+    return timeMatch[0];
   }
-  if (label.includes("持仓") || index === 0) {
-    return "sell";
+  if (value.length >= 16 && value[10] === "T") {
+    return value.slice(11, 16);
   }
-  if (label.includes("午盘") || label.includes("新增")) {
-    return "positive";
-  }
-  if (label.includes("候选") || label.includes("观察")) {
-    return "watch";
-  }
-  return "info";
+  return value;
 }
 
-function HeroSkeleton() {
+function sourceIsFresh(source: SourceCardData) {
+  return source.available !== false && !source.stale && source.value !== "-";
+}
+
+const READINESS_MODE_COPY: Record<ReadinessMode, {
+  badge: string;
+  title: string;
+  tone: string;
+  iconColor: string;
+  bg: string;
+  border: string;
+}> = {
+  live_ready: {
+    badge: "Live Ready",
+    title: "数据已对齐当日，可按页面执行",
+    tone: "positive",
+    iconColor: "var(--positive)",
+    bg: "color-mix(in srgb, var(--positive) 8%, transparent)",
+    border: "color-mix(in srgb, var(--positive) 30%, transparent)",
+  },
+  shadow_only: {
+    badge: "Shadow Only",
+    title: "仅作影子盘观察，不可按页面真钱执行",
+    tone: "warning",
+    iconColor: "var(--warning)",
+    bg: "color-mix(in srgb, var(--warning) 10%, transparent)",
+    border: "color-mix(in srgb, var(--warning) 35%, transparent)",
+  },
+  blocked: {
+    badge: "Blocked",
+    title: "数据未就绪：请先把核心链路刷到当日",
+    tone: "negative",
+    iconColor: "var(--negative)",
+    bg: "color-mix(in srgb, var(--negative) 10%, transparent)",
+    border: "color-mix(in srgb, var(--negative) 40%, transparent)",
+  },
+};
+
+const TASK_TITLES: Record<string, string> = {
+  watchlist_refresh: "自选股全流程刷新",
+  aggressive: "进攻型早盘扫描",
+  midday_refresh: "午盘新增 + 复核",
+  command_brief: "总控简报",
+};
+
+function ReadinessBanner({ readiness }: { readiness?: ReadinessPayload }) {
+  if (!readiness) {
+    return null;
+  }
+  const copy = READINESS_MODE_COPY[readiness.readiness_mode] ?? READINESS_MODE_COPY.blocked;
+  const issues: ReadinessIssue[] =
+    readiness.readiness_mode === "blocked"
+      ? readiness.blockers
+      : readiness.readiness_mode === "shadow_only"
+        ? [...readiness.warnings, ...readiness.blockers]
+        : [];
+  const Icon = readiness.readiness_mode === "live_ready" ? ShieldCheck : ShieldAlert;
+  const recommendedTaskName = readiness.recommended_tasks?.[0];
+  const recommendedTaskTitle = recommendedTaskName
+    ? TASK_TITLES[recommendedTaskName] || recommendedTaskName
+    : null;
+
   return (
-    <section className="mb-8 animate-pulse">
-      <div className="mb-3 flex items-center gap-2">
-        <div className="h-4 w-36 rounded bg-[var(--bg-tertiary)]" />
-        <div className="h-5 w-20 rounded-full bg-[var(--bg-tertiary)]" />
-      </div>
-      <div className="h-9 max-w-xl rounded bg-[var(--bg-tertiary)]" />
-      <div className="mt-4 h-4 max-w-2xl rounded bg-[var(--bg-tertiary)]" />
-      <div className="mt-5 flex gap-2">
-        <div className="h-6 w-24 rounded-full bg-[var(--bg-tertiary)]" />
-        <div className="h-6 w-28 rounded-full bg-[var(--bg-tertiary)]" />
-        <div className="h-6 w-24 rounded-full bg-[var(--bg-tertiary)]" />
+    <section
+      data-od-id="readiness-banner"
+      className="rounded-md border px-4 py-3"
+      style={{ background: copy.bg, borderColor: copy.border }}
+    >
+      <div className="flex flex-wrap items-start gap-3">
+        <Icon size={20} style={{ color: copy.iconColor, marginTop: 2 }} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone={copy.tone}>{copy.badge}</Badge>
+            <span className="text-[12px] text-[var(--text-tertiary)]">
+              预期交易日 {readiness.expected_trade_date} · 数据交易日 {readiness.data_trade_date || "-"}
+              {readiness.session?.label ? ` · ${readiness.session.label}` : null}
+            </span>
+          </div>
+          <div className="mt-1 text-[14px] font-medium text-[var(--text-primary)]">{copy.title}</div>
+          {issues.length ? (
+            <ul className="mt-2 list-disc space-y-0.5 pl-5 text-[12px] leading-5 text-[var(--text-secondary)]">
+              {issues.slice(0, 4).map((issue) => (
+                <li key={`${issue.code}-${issue.label}`}>
+                  <span className="font-medium text-[var(--text-primary)]">{issue.label}：</span>
+                  {issue.message}
+                </li>
+              ))}
+              {issues.length > 4 ? (
+                <li className="text-[var(--text-tertiary)]">…还有 {issues.length - 4} 条，请在质检面板查看完整列表。</li>
+              ) : null}
+            </ul>
+          ) : null}
+          {recommendedTaskTitle && readiness.readiness_mode !== "live_ready" ? (
+            <div className="mt-2 text-[12px] text-[var(--text-secondary)]">
+              建议下一步运行：
+              <Link href="/settings" className="ml-1 font-medium underline">{recommendedTaskTitle}</Link>
+              （/settings 任务运行）
+            </div>
+          ) : null}
+        </div>
       </div>
     </section>
   );
 }
 
-function SectionHeader({
-  eyebrow,
+function HeroSkeleton() {
+  return (
+    <div className="grid animate-pulse gap-3 xl:grid-cols-[minmax(0,1fr)_260px]">
+      <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-4">
+        <div className="h-3 w-36 rounded bg-[var(--bg-tertiary)]" />
+        <div className="mt-4 h-8 max-w-2xl rounded bg-[var(--bg-tertiary)]" />
+        <div className="mt-4 h-4 max-w-3xl rounded bg-[var(--bg-tertiary)]" />
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          <div className="h-20 rounded bg-[var(--bg-tertiary)]" />
+          <div className="h-20 rounded bg-[var(--bg-tertiary)]" />
+          <div className="h-20 rounded bg-[var(--bg-tertiary)]" />
+        </div>
+      </div>
+      <div className="h-64 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)]" />
+    </div>
+  );
+}
+
+function fallbackHeroActions(): TodayCommandHeroAction[] {
+  return [
+    {
+      label: "1 · 先做",
+      title: "处理旧仓风险",
+      detail: "先把优先持仓里的止损与减仓动作完成。",
+      tone: "sell",
+      tier: "act_now",
+    },
+    {
+      label: "2 · 等触发",
+      title: "只盯高一致性候选",
+      detail: "没有二次确认前，不把观察池候选升级为新仓。",
+      tone: "watch",
+      tier: "wait_trigger",
+    },
+    {
+      label: "3 · 禁止",
+      title: "不追高不补亏",
+      detail: "弱环境未转正，控制总仓位和单笔亏损。",
+      tone: "avoid",
+      tier: "avoid",
+    },
+  ];
+}
+
+function ToneRail({ tone = "watch" }: { tone?: string }) {
+  return <span className="war-tone-rail" style={{ backgroundColor: toneColor(tone) }} />;
+}
+
+function BriefAction({ action, index }: { action: TodayCommandHeroAction; index: number }) {
+  const tone = action.tone || (index === 0 ? "sell" : index === 1 ? "watch" : "avoid");
+  const step = index + 1;
+
+  return (
+    <div className="war-brief-action" style={{ "--accent": toneColor(tone) } as CSSProperties}>
+      <span className="war-step mono">{String(step).padStart(2, "0")}</span>
+      <div className="min-w-0">
+        <div className="war-action-label">{action.label || action.tier || "执行"}</div>
+        <div className="war-action-title">{action.title}</div>
+        <p>{action.detail}</p>
+      </div>
+    </div>
+  );
+}
+
+function DecisionBrief({
   title,
-  action,
+  summary,
+  status,
+  gateLabel,
+  cap,
+  mainTheme,
+  actions,
+  sourceOk,
+  sourceTotal,
+  briefLive,
+  readinessMode,
+  qualityTimely,
+  qualityTotal,
 }: {
-  eyebrow: string;
   title: string;
-  action?: React.ReactNode;
+  summary: string;
+  status: string;
+  gateLabel: string;
+  cap: string;
+  mainTheme: string;
+  actions: TodayCommandHeroAction[];
+  sourceOk: number;
+  sourceTotal: number;
+  briefLive: boolean;
+  readinessMode: ReadinessMode;
+  qualityTimely: number;
+  qualityTotal: number;
+}) {
+  const liveTone = readinessMode === "live_ready" ? "positive" : readinessMode === "shadow_only" ? "warning" : "negative";
+  const liveLabel =
+    readinessMode === "live_ready" ? "live ready" : readinessMode === "shadow_only" ? "shadow only" : "blocked";
+  const sourceTone = readinessMode === "live_ready" ? "buy-text" : "watch-text";
+  const qualityTone = qualityTimely === qualityTotal && qualityTotal > 0 ? "buy-text" : "watch-text";
+  const qualityLabel = qualityTotal > 0 ? `${qualityTimely}/${qualityTotal}` : "-";
+
+  return (
+    <section className="war-brief" data-od-id="decision-summary">
+      <div className="war-brief-main">
+        <div className="war-eyebrow-row">
+          <span className="war-eyebrow">Live Decision</span>
+          <Badge tone={liveTone}>{status}</Badge>
+        </div>
+        <h2>{title}</h2>
+        <p className="war-brief-summary">{summary}</p>
+        <div className="war-brief-actions">
+          {actions.map((action, index) => (
+            <BriefAction key={`${action.title}-${index}`} action={action} index={index} />
+          ))}
+        </div>
+      </div>
+
+      <aside className="war-gate-card" data-od-id="gate-state">
+        <div className="war-gate-top">
+          <span>交易阀门</span>
+          <Badge tone="watch">{gateLabel}</Badge>
+        </div>
+        <div className="war-cap mono">{cap}</div>
+        <p>弱环境下只做验证，不扩大仓位。主线：{mainTheme}。</p>
+        <div className="war-gate-meter">
+          <span style={{ width: cap === "0成" ? "8%" : "50%" }} />
+        </div>
+        <div className="war-mini-grid">
+          <div>
+            <span>简报</span>
+            <strong className={briefLive ? "buy-text" : "watch-text"}>{briefLive ? "live" : "fallback"}</strong>
+          </div>
+          <div>
+            <span>数据源</span>
+            <strong className={sourceOk === sourceTotal && sourceTotal > 0 ? "buy-text" : "watch-text"}>
+              {sourceOk}/{sourceTotal || "-"}
+            </strong>
+          </div>
+          <div>
+            <span>质检</span>
+            <strong className={qualityTone}>{qualityLabel}</strong>
+          </div>
+          <div>
+            <span>状态</span>
+            <strong className={readinessMode === "live_ready" ? "buy-text" : readinessMode === "blocked" ? "negative-text" : "watch-text"}>
+              {liveLabel}
+            </strong>
+          </div>
+        </div>
+      </aside>
+    </section>
+  );
+}
+
+function SignalStrip({
+  items,
+}: {
+  items: Array<{ label: string; value: string; tone?: string }>;
 }) {
   return (
-    <div className="mb-4 flex min-w-0 items-end justify-between gap-4">
-      <div className="min-w-0">
-        <div className="text-[11px] font-medium uppercase text-[var(--text-tertiary)]">{eyebrow}</div>
-        <h2 className="mt-1 truncate text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
+    <section className="war-signals" data-od-id="metric-strip">
+      {items.map((item) => (
+        <div key={item.label} className="war-signal">
+          <span>{item.label}</span>
+          <strong className="mono" style={{ color: item.tone ? toneColor(item.tone) : undefined }}>
+            {item.value}
+          </strong>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function ActionStack({
+  items,
+  counts,
+  loading,
+  disabled,
+  onDecision,
+}: {
+  items: TodayActionItem[];
+  counts?: {
+    total: number;
+    pending: number;
+    done: number;
+    watch: number;
+    skip: number;
+    last_updated?: string;
+  };
+  loading: boolean;
+  disabled?: boolean;
+  onDecision: (key: string, decision: DecisionValue) => void;
+}) {
+  return (
+    <section className="war-stack" data-od-id="action-queue">
+      <header className="war-section-head">
+        <div>
+          <span className="war-eyebrow">Action Stack</span>
+          <h2>今天只看这几件事</h2>
+        </div>
+        <div className="war-counts">
+          <span>P0 {counts?.pending ?? items.length}</span>
+          <span>已处理 {counts?.done ?? 0}/{counts?.total ?? items.length}</span>
+        </div>
+      </header>
+
+      {loading && !items.length ? (
+        <div className="war-action-list">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="war-action-card war-skeleton">
+              <span />
+              <div />
+              <div />
+            </div>
+          ))}
+        </div>
+      ) : items.length ? (
+        <div className="war-action-list">
+          {items.slice(0, 7).map((item, index) => (
+            <WarActionCard
+              key={item.key}
+              item={item}
+              index={index}
+              disabled={disabled}
+              onDecision={onDecision}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="war-empty">当前没有必须处理的动作。</div>
+      )}
+    </section>
+  );
+}
+
+function WarActionCard({
+  item,
+  index,
+  disabled,
+  onDecision,
+}: {
+  item: TodayActionItem;
+  index: number;
+  disabled?: boolean;
+  onDecision: (key: string, decision: DecisionValue) => void;
+}) {
+  const checked = item.decision?.value === "done";
+  const code = stockCodeFromTitle(item.title);
+  const name = stockNameFromTitle(item.title);
+  const href = code ? `/stock/${code}` : item.url || "#";
+  const tone = item.tone || item.decision?.tone || (index === 0 ? "sell" : "watch");
+  const nextDecision: DecisionValue = checked ? "pending" : "done";
+  const freshnessLabel =
+    item.freshness?.label || item.freshness?.value || item.freshness?.status || item.confidence?.label || item.group_title || "live";
+
+  return (
+    <article className={cn("war-action-card", checked ? "is-done" : "")}>
+      <ToneRail tone={tone} />
+      <div className="war-action-rank mono">{String(index + 1).padStart(2, "0")}</div>
+      <div className="war-action-body">
+        <Link href={href} className="war-stock-link">
+          <span>{name}</span>
+          {code ? <em>{code}</em> : null}
+        </Link>
+        <p>{item.detail || item.foot || item.status || "等待系统给出下一步。"}</p>
+        <div className="war-action-meta">
+          <Badge tone={tone}>{item.status || item.group_title || item.decision?.label || "待处理"}</Badge>
+          <span>{item.source || item.group_title || freshnessLabel}</span>
+        </div>
       </div>
-      {action}
-    </div>
+      <div className="war-action-control">
+        <button
+          type="button"
+          className={cn("focus-ring war-check", checked ? "is-on" : "")}
+          disabled={disabled}
+          onClick={() => onDecision(item.key, nextDecision)}
+        >
+          {disabled ? <LoaderCircle size={14} className="animate-spin" /> : <Check size={14} />}
+          {checked ? "已处理" : "处理"}
+        </button>
+        <Link href={href} className="war-action-time">
+          <span>{freshnessLabel}</span>
+          <ChevronRight size={14} />
+        </Link>
+      </div>
+    </article>
+  );
+}
+
+function IntelligenceRail({
+  risks,
+  sources,
+  runs,
+  runsLoading,
+  readiness,
+  qualityCards,
+  actionTotal,
+  riskTotal,
+  staleTotal,
+  watchlistTotal,
+  candidateTotal,
+  freshCandidates,
+  confirmed,
+}: {
+  risks: RiskRow[];
+  sources: SourceCardData[];
+  runs: RunItem[];
+  runsLoading: boolean;
+  readiness?: ReadinessPayload;
+  qualityCards?: QualityCardData[];
+  actionTotal: number;
+  riskTotal: number;
+  staleTotal: number;
+  watchlistTotal?: number;
+  candidateTotal?: number;
+  freshCandidates?: number;
+  confirmed?: number;
+}) {
+  const fresh = sources.filter(sourceIsFresh).length;
+  const links = [
+    { label: "持仓", href: "/portfolio", count: watchlistTotal },
+    { label: "观察池", href: "/discovery", count: candidateTotal },
+    { label: "午盘", href: "/discovery", count: freshCandidates },
+    { label: "复盘", href: "/review", count: confirmed },
+  ];
+
+  const qualityList = qualityCards ?? [];
+  const qualityTimely = qualityList.filter((card) => card.timely === true).length;
+  const qualityStatusLabel =
+    qualityList.length === 0
+      ? "loading"
+      : qualityTimely === qualityList.length
+        ? "ready"
+        : `${qualityTimely}/${qualityList.length}`;
+  const qualityStatusClass =
+    qualityList.length > 0 && qualityTimely === qualityList.length ? "buy-text" : "watch-text";
+
+  return (
+    <aside className="war-rail" data-od-id="risk-alerts">
+      <section className="war-rail-card">
+        <div className="war-rail-head">
+          <span>风险雷达</span>
+          <Badge tone="sell">先看</Badge>
+        </div>
+        {risks.length ? (
+          risks.slice(0, 3).map((risk, index) => (
+            <div key={`${risk.title}-${index}`} className="war-rail-row">
+              <ToneRail tone={risk.tone || (index === 0 ? "sell" : "watch")} />
+              <div>
+                <strong>{risk.title}</strong>
+                <p>{risk.reason || risk.trigger || risk.risk || "继续复核链路状态。"}</p>
+              </div>
+            </div>
+          ))
+        ) : (
+          <p className="war-muted">风险链路等待同步。</p>
+        )}
+      </section>
+
+      <section className="war-rail-card">
+        <div className="war-rail-head">
+          <span>数据新鲜度</span>
+          <strong className={fresh === sources.length && sources.length > 0 ? "buy-text" : "watch-text"}>{fresh}/{sources.length || "-"}</strong>
+        </div>
+        {sources.length ? (
+          sources.slice(0, 4).map((source) => (
+            <div key={source.key || source.label} className="war-source-line">
+              <span>{source.label}</span>
+              <strong className={sourceIsFresh(source) ? "buy-text" : "watch-text"}>
+                {source.age_label || source.value || "-"}
+              </strong>
+            </div>
+          ))
+        ) : (
+          <p className="war-muted">暂无数据源状态。</p>
+        )}
+      </section>
+
+      <section className="war-rail-card">
+        <div className="war-rail-head">
+          <span>质检</span>
+          <strong className={qualityStatusClass}>{qualityStatusLabel}</strong>
+        </div>
+        {qualityList.length ? (
+          qualityList.slice(0, 3).map((card) => (
+            <div key={card.key || card.title} className="war-source-line">
+              <span>{card.title}</span>
+              <strong className={card.timely === true ? "buy-text" : "watch-text"}>
+                {card.timely === true ? "timely" : card.stale_reasons?.[0] || card.status || "stale"}
+              </strong>
+            </div>
+          ))
+        ) : (
+          <>
+            <div className="war-source-line"><span>actions</span><strong>{actionTotal}</strong></div>
+            <div className="war-source-line"><span>risks</span><strong>{riskTotal}</strong></div>
+            <div className="war-source-line"><span>stale</span><strong>{staleTotal ? "visible" : "clear"}</strong></div>
+          </>
+        )}
+        {readiness ? (
+          <div className="war-source-line">
+            <span>readiness</span>
+            <strong className={readiness.ready ? "buy-text" : readiness.readiness_mode === "blocked" ? "negative-text" : "watch-text"}>
+              {readiness.readiness_mode}
+            </strong>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="war-rail-card">
+        <div className="war-rail-head">
+          <span>运行记录</span>
+          <strong>{runs.length || 0}</strong>
+        </div>
+        {runsLoading && !runs.length ? (
+          <p className="war-muted">读取中...</p>
+        ) : runs.length ? (
+          runs.slice(0, 3).map((run) => (
+            <div key={run.run_id || `${run.task_name}-${run.started_at}`} className="war-run-line">
+              <span>{run.title || run.task_name || "任务"}</span>
+              <strong>{formatTime(run.finished_at || run.started_at)}</strong>
+            </div>
+          ))
+        ) : (
+          <p className="war-muted">暂无运行记录。</p>
+        )}
+      </section>
+
+      <section className="war-link-grid">
+        {links.map((item) => (
+          <Link key={`${item.label}-${item.href}`} href={item.href} className="focus-ring">
+            <span>{item.label}</span>
+            <strong>{item.count ?? "-"}</strong>
+          </Link>
+        ))}
+      </section>
+    </aside>
   );
 }
 
 export default function CommandCenterPage() {
   const today = useTodayData();
+  const runsQuery = useRuns();
   const updateDecision = useUpdateTodayActionDecision();
   const data = today.data;
   const hero = data?.command_hero;
+  const readiness = data?.readiness;
+  const readinessMode: ReadinessMode = readiness?.readiness_mode ?? "blocked";
+  const displayDate =
+    readiness?.expected_trade_date ||
+    data?.display_date ||
+    data?.generated_at?.slice(0, 10) ||
+    data?.trade_date ||
+    hero?.trade_date;
+  const sourceCards = data?.source_cards ?? [];
+  const freshSourceCount = sourceCards.filter(sourceIsFresh).length;
+  const staleSourceCount = sourceCards.filter((source) => !sourceIsFresh(source)).length;
+  const qualityCards = data?.quality_cards ?? [];
+  const qualityTimely = readiness
+    ? readiness.quality_freshness.filter((item) => item.timely).length
+    : qualityCards.filter((card) => card.timely === true).length;
+  const qualityTotal = readiness ? readiness.quality_freshness.length : qualityCards.length;
   const summaryCards = data?.summary_cards?.length ? data.summary_cards : data?.radar_cards ?? [];
+  const metricCards =
+    summaryCards.length
+      ? summaryCards.slice(0, 4)
+      : [
+          { label: "持仓优先", value: data?.counts?.watchlist_priority ?? "-", detail: "优先处理持仓", tone: "sell" },
+          { label: "观察候选", value: data?.counts?.candidate_total ?? "-", detail: "观察池候选", tone: "watch" },
+          { label: "午盘新增", value: data?.counts?.fresh_candidates ?? "-", detail: "午盘新增观察", tone: "positive" },
+          {
+            label: "质检状态",
+            value: qualityTotal ? `${qualityTimely}/${qualityTotal}` : "-",
+            detail: "数据源可用",
+            tone: qualityTimely === qualityTotal && qualityTotal > 0 ? "positive" : "warning",
+          },
+        ];
   const actionItems = data?.action_queue?.items ?? [];
   const counts = data?.action_queue?.counts;
-  const completed = counts?.done ?? 0;
-  const total = counts?.total ?? actionItems.length;
-  const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
-  const risks: RiskRow[] =
+  const riskRows: RiskRow[] =
     data?.risk_rows?.length
       ? data.risk_rows
       : data?.hero?.context_note
@@ -94,6 +634,36 @@ export default function CommandCenterPage() {
             },
           ]
         : [];
+  const actions = hero?.actions?.length ? hero.actions.slice(0, 3) : fallbackHeroActions();
+  const tradeDateLabel = readiness?.expected_trade_date
+    ? `${readiness.expected_trade_date}${readiness.data_trade_date && readiness.data_trade_date !== readiness.expected_trade_date ? ` ←→ ${readiness.data_trade_date}` : ""}`
+    : asText(displayDate, "待同步");
+  const tapeItems = [
+    {
+      label: "持仓优先",
+      value: asText(data?.counts?.watchlist_priority ?? metricCards[0]?.value),
+      tone: "sell",
+    },
+    {
+      label: "观察候选",
+      value: asText(data?.counts?.candidate_total ?? metricCards[1]?.value),
+      tone: "watch",
+    },
+    {
+      label: "午盘新增",
+      value: asText(data?.counts?.fresh_candidates ?? metricCards[2]?.value),
+      tone: "positive",
+    },
+    {
+      label: "已确认",
+      value: asText(data?.counts?.confirmed ?? counts?.done),
+      tone: "hold",
+    },
+    {
+      label: "交易日",
+      value: tradeDateLabel,
+    },
+  ];
 
   function handleDecision(key: string, decision: DecisionValue) {
     if (!data) {
@@ -106,11 +676,51 @@ export default function CommandCenterPage() {
     });
   }
 
+  // status copy in the hero card: NEVER show "live" wording when readiness is
+  // not green, even if the user has stale data sitting in the brief.
+  const briefLiveSafe = Boolean(data?.brief_is_live && readiness?.ready);
+  const heroStatus = readiness
+    ? readinessMode === "live_ready"
+      ? hero?.source_state || "总控已同步"
+      : readinessMode === "shadow_only"
+        ? "影子盘观察"
+        : "数据未就绪"
+    : hero?.source_state || data?.hero?.gate_label || "实时链路";
+
   return (
-    <main className="flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
-      <div className="mx-auto max-w-6xl">
+    <main className="war-room">
+      <div className="war-room-inner">
+        <header className="war-topbar" data-od-id="topbar">
+          <div>
+            <div className="war-eyebrow">Command Center</div>
+            <h1>指挥中心</h1>
+          </div>
+          <div className="war-top-actions">
+            <div className="war-command" role="search" aria-label="命令栏提示">
+              <span>搜索股票 / 跳转页面 / 执行快捷动作</span>
+              <kbd className="prism-kbd">⌘K</kbd>
+            </div>
+            <button
+              type="button"
+              className="focus-ring war-tool-btn"
+              onClick={() => void today.refetch()}
+            >
+              <RefreshCw size={14} className={today.isFetching ? "animate-spin" : ""} />
+              刷新
+            </button>
+            <button
+              type="button"
+              className="focus-ring war-tool-btn"
+              onClick={() => window.print()}
+            >
+              <FileDown size={14} />
+              导出简报
+            </button>
+          </div>
+        </header>
+
         {today.isError ? (
-          <div className="mb-6 flex items-start gap-3 rounded-md border border-[color-mix(in_srgb,var(--warning)_20%,transparent)] bg-[color-mix(in_srgb,var(--warning)_8%,transparent)] px-4 py-3 text-[13px] text-[var(--text-secondary)]">
+          <div className="war-error">
             <AlertCircle size={17} className="mt-0.5 shrink-0 text-[var(--warning)]" />
             <div className="min-w-0 flex-1">
               <div className="font-medium text-[var(--text-primary)]">后端数据暂不可用</div>
@@ -126,139 +736,68 @@ export default function CommandCenterPage() {
           </div>
         ) : null}
 
-        {today.isLoading && !data ? (
-          <HeroSkeleton />
-        ) : (
-          <section className="mb-8">
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <div className="mono text-[11px] font-medium uppercase text-[var(--info)]">
-                {asText(data?.trade_date || hero?.trade_date, "交易日待同步")}
-              </div>
-              <Badge tone={data?.brief_is_live ? "positive" : "warning"}>
-                {data?.hero?.gate_label || hero?.source_state || "实时链路"}
-              </Badge>
-            </div>
-            <h1 className="max-w-4xl text-balance text-[32px] font-bold leading-tight text-[var(--text-primary)]">
-              {hero?.title || data?.hero?.title || "先处理旧仓，再决定是否看新仓"}
-            </h1>
-            <p className="mt-3 max-w-3xl text-[15px] leading-7 text-[var(--text-secondary)]">
-              {hero?.summary || data?.hero?.summary || "等待总控数据同步。"}
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Badge tone="info">仓位上限 {asText(data?.hero?.position_cap)}</Badge>
-              <Badge tone="watch">主线 {asText(data?.hero?.main_theme)}</Badge>
-              <Badge tone={data?.brief_is_live ? "positive" : "warning"}>
-                {data?.brief_is_live ? "总控同步" : "实时判断"}
-              </Badge>
-            </div>
-          </section>
-        )}
+        {readiness ? <ReadinessBanner readiness={readiness} /> : null}
 
-        <section className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {today.isLoading && !summaryCards.length
-            ? Array.from({ length: 4 }).map((_, index) => <MetricSkeleton key={index} />)
-            : summaryCards.slice(0, 4).map((card, index) => (
-                <MetricCard
-                  key={`${card.label}-${index}`}
-                  label={card.label}
-                  value={String(card.value ?? "-")}
-                  detail={card.detail || card.note}
-                  tone={inferMetricTone(card, index)}
-                />
-              ))}
-        </section>
-
-        <section className="mb-8">
-          <SectionHeader
-            eyebrow="今日待办"
-            title={data?.action_queue?.title || "Action Queue"}
-            action={
-              <div className="hidden items-center gap-3 sm:flex">
-                <span className="text-[12px] text-[var(--text-tertiary)]">
-                  {completed}/{total || 0} 已完成
-                </span>
-                <div className="h-1 w-24 overflow-hidden rounded-full bg-[var(--bg-tertiary)]">
-                  <div className="h-full rounded-full bg-[var(--positive)]" style={{ width: `${progress}%` }} />
-                </div>
-              </div>
-            }
-          />
-
-          <div className="surface-card px-4">
-            {today.isLoading && !actionItems.length
-              ? Array.from({ length: 4 }).map((_, index) => <ActionRowSkeleton key={index} />)
-              : actionItems.length
-                ? actionItems.map((item) => (
-                    <ActionRow
-                      key={item.key}
-                      item={item}
-                      disabled={updateDecision.isPending}
-                      onDecision={handleDecision}
-                    />
-                  ))
-                : (
-                  <div className="py-8 text-center text-[13px] text-[var(--text-tertiary)]">
-                    当前没有必须处理的动作。
-                  </div>
-                )}
-          </div>
-          {updateDecision.isError ? (
-            <div className="mt-3 rounded-md border border-[color-mix(in_srgb,var(--negative)_20%,transparent)] bg-[color-mix(in_srgb,var(--negative)_8%,transparent)] px-3 py-2 text-[12px] text-[var(--text-secondary)]">
-              动作状态更新失败：{updateDecision.error?.message || "请确认后端服务可用后重试。"}
-            </div>
-          ) : null}
-          {updateDecision.isSuccess ? (
-            <div className="mt-3 rounded-md border border-[color-mix(in_srgb,var(--positive)_20%,transparent)] bg-[color-mix(in_srgb,var(--positive)_8%,transparent)] px-3 py-2 text-[12px] text-[var(--text-secondary)]">
-              动作状态已同步。
-            </div>
-          ) : null}
-          {data?.action_queue?.hidden_count ? (
-            <div className="mt-2 text-right text-[11px] text-[var(--text-tertiary)]">
-              还有 {data.action_queue.hidden_count} 条已收起
-            </div>
-          ) : null}
-        </section>
-
-        <section className="mb-8">
-          <SectionHeader eyebrow="风险提醒" title="Risk Alerts" />
-          <div className="flex flex-col gap-2">
-            {risks.length ? (
-              risks.slice(0, 3).map((row, index) => <RiskAlert key={`${row.title}-${index}`} row={row} />)
+        <div className="war-layout" data-od-id="command-center-v1">
+          <div className="war-primary">
+            {today.isLoading && !data ? (
+              <HeroSkeleton />
             ) : (
-              <div className="surface-panel px-4 py-3 text-[13px] text-[var(--text-tertiary)]">
-                风险链路等待数据同步。
-              </div>
+              <DecisionBrief
+                title={hero?.title || data?.hero?.title || "先把旧仓风险降下来，新仓只等一个确认触发"}
+                summary={hero?.summary || data?.hero?.summary || "今天不是找更多机会，而是按纪律先处理旧仓风险。"}
+                status={heroStatus}
+                gateLabel={data?.hero?.gate_label || hero?.source_state || "防守试错"}
+                cap={asText(data?.hero?.position_cap, "0成")}
+                mainTheme={asText(data?.hero?.main_theme, "AI + 机器人")}
+                actions={actions}
+                sourceOk={freshSourceCount}
+                sourceTotal={sourceCards.length}
+                briefLive={briefLiveSafe}
+                readinessMode={readinessMode}
+                qualityTimely={qualityTimely}
+                qualityTotal={qualityTotal}
+              />
             )}
-          </div>
-        </section>
 
-        <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <div>
-            <SectionHeader eyebrow="快速跳转" title="Quick Links" />
-            <div className="flex flex-col gap-2">
-              {[
-                { label: "持仓管理", href: "/portfolio", count: data?.counts?.watchlist_total },
-                { label: "观察池候选", href: "/discovery", count: data?.counts?.candidate_total },
-                { label: "午盘确认", href: "/discovery", count: data?.counts?.fresh_candidates },
-                { label: "复盘仪表盘", href: "/review", count: data?.counts?.confirmed },
-              ].map((item) => (
-                <Link
-                  key={`${item.label}-${item.href}`}
-                  href={item.href}
-                  className="focus-ring flex items-center justify-between gap-3 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-4 py-3 text-[13px] text-[var(--text-secondary)] hover:border-[var(--border-default)] hover:text-[var(--text-primary)]"
-                >
-                  <span>{item.label}</span>
-                  <span className="flex items-center gap-3">
-                    {item.count !== undefined ? <span className="mono text-[var(--text-primary)]">{item.count}</span> : null}
-                    <ArrowRight size={14} className="text-[var(--text-tertiary)]" />
-                  </span>
-                </Link>
-              ))}
-            </div>
+            <SignalStrip items={tapeItems} />
+
+            <ActionStack
+              items={actionItems}
+              counts={counts}
+              loading={today.isLoading}
+              disabled={updateDecision.isPending}
+              onDecision={handleDecision}
+            />
+
+            {updateDecision.isError ? (
+              <div className="war-inline-note negative-text">
+                动作状态更新失败：{updateDecision.error?.message || "请确认后端服务可用后重试。"}
+              </div>
+            ) : null}
+            {updateDecision.isSuccess ? (
+              <div className="war-inline-note buy-text">
+                动作状态已同步。
+              </div>
+            ) : null}
           </div>
 
-          <EvidencePanel page="today" sources={data?.source_cards} title="数据源" eyebrow="Data Sources" />
-        </section>
+          <IntelligenceRail
+            risks={riskRows}
+            sources={sourceCards}
+            runs={runsQuery.data?.runs ?? []}
+            runsLoading={runsQuery.isLoading}
+            readiness={readiness}
+            qualityCards={qualityCards}
+            actionTotal={counts?.total ?? actionItems.length}
+            riskTotal={riskRows.length}
+            staleTotal={staleSourceCount}
+            watchlistTotal={data?.counts?.watchlist_total}
+            candidateTotal={data?.counts?.candidate_total}
+            freshCandidates={data?.counts?.fresh_candidates}
+            confirmed={data?.counts?.confirmed}
+          />
+        </div>
       </div>
     </main>
   );

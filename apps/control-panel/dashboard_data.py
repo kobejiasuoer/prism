@@ -22,6 +22,8 @@ SCRIPTS_ROOT = INVEST_FLOW_ROOT / "scripts"
 STOCK_ANALYZER_ROOT = SKILLS_ROOT / "stock-analyzer"
 STOCK_SCREENER_ROOT = SKILLS_ROOT / "stock-screener"
 PACKAGES_ROOT = SKILLS_ROOT / "packages"
+CURRENT_SCREENER_DATA_DIR = PACKAGES_ROOT / "data"
+SCREENER_DATA_DIRS = (CURRENT_SCREENER_DATA_DIR, STOCK_SCREENER_ROOT / "data")
 
 if str(PACKAGES_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGES_ROOT))
@@ -29,8 +31,11 @@ if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
 if str(STOCK_ANALYZER_ROOT) not in sys.path:
     sys.path.insert(0, str(STOCK_ANALYZER_ROOT))
+if str(CONTROL_PANEL_ROOT) not in sys.path:
+    sys.path.insert(0, str(CONTROL_PANEL_ROOT))
 
 from prism_canonical import (  # type: ignore
+    diff_watchlist_snapshots,
     find_candidate_detail,
     load_confirmation,
     load_decision_brief,
@@ -39,6 +44,12 @@ from prism_canonical import (  # type: ignore
     load_research_review,
     load_screening_batch,
     load_watchlist_snapshot,
+    resolve_previous_watchlist_snapshot_path,
+)
+from readiness import (  # type: ignore  # local module under apps/control-panel
+    compute_readiness,
+    current_session,
+    expected_trade_date,
 )
 from watchlist_registry import (
     fetch_stock_name,
@@ -93,9 +104,15 @@ ACTION_TIER_LABELS = {
 }
 
 QUALITY_PATTERNS = {
-    "watchlist": STOCK_ANALYZER_ROOT / "data" / "quality_gate_watchlist_*.json",
-    "aggressive": STOCK_SCREENER_ROOT / "data" / "quality_gate_*.json",
-    "midday_confirmation": STOCK_SCREENER_ROOT / "data" / "quality_gate_midday_*.json",
+    "watchlist": [STOCK_ANALYZER_ROOT / "data" / "quality_gate_watchlist_*.json"],
+    "aggressive": [
+        CURRENT_SCREENER_DATA_DIR / "quality_gate_*.json",
+        STOCK_SCREENER_ROOT / "data" / "quality_gate_*.json",
+    ],
+    "midday_confirmation": [
+        CURRENT_SCREENER_DATA_DIR / "quality_gate_midday_*.json",
+        STOCK_SCREENER_ROOT / "data" / "quality_gate_midday_*.json",
+    ],
 }
 
 ARTIFACT_GROUPS = {
@@ -303,8 +320,9 @@ def artifact_from_path(title: str, path_like: str | Path | None, key: str | None
 
 
 def _match_quality_files(lane: str) -> list[Path]:
-    pattern = QUALITY_PATTERNS[lane]
-    files = list(pattern.parent.glob(pattern.name))
+    files: list[Path] = []
+    for pattern in QUALITY_PATTERNS[lane]:
+        files.extend(pattern.parent.glob(pattern.name))
     if lane == "aggressive":
         files = [path for path in files if "midday_" not in path.name]
     return sorted(files, key=lambda path: path.stat().st_mtime, reverse=True)
@@ -736,8 +754,10 @@ def latest_command_brief_info() -> dict[str, Any]:
 
 
 def latest_ai_history_info() -> dict[str, Any]:
-    ai_dir = STOCK_SCREENER_ROOT / "data" / "ai_history"
-    files = sorted(ai_dir.glob("ai_screening_*.json"), key=lambda path: path.stat().st_mtime, reverse=True)
+    files: list[Path] = []
+    for data_dir in SCREENER_DATA_DIRS:
+        files.extend(data_dir.glob("ai_history/ai_screening_*.json"))
+    files = sorted(files, key=lambda path: path.stat().st_mtime, reverse=True)
     if not files:
         return {"label": "最新二筛", "value": "-", "detail": "暂无 ai_history"}
     data = load_json(files[0]) or {}
@@ -749,8 +769,8 @@ def latest_ai_history_info() -> dict[str, Any]:
 
 
 def latest_midday_info() -> dict[str, Any]:
-    path = STOCK_SCREENER_ROOT / "data" / "midday_verification_result.json"
-    if not path.exists():
+    path = next((candidate for data_dir in SCREENER_DATA_DIRS if (candidate := data_dir / "midday_verification_result.json").exists()), None)
+    if path is None:
         return {"label": "午盘确认", "value": "-", "detail": "暂无午盘结果"}
     data = load_json(path) or {}
     return {
@@ -761,8 +781,8 @@ def latest_midday_info() -> dict[str, Any]:
 
 
 def latest_midday_refresh_info() -> dict[str, Any]:
-    path = STOCK_SCREENER_ROOT / "data" / "midday_refresh_result.json"
-    if not path.exists():
+    path = next((candidate for data_dir in SCREENER_DATA_DIRS if (candidate := data_dir / "midday_refresh_result.json").exists()), None)
+    if path is None:
         return {"label": "午盘刷新", "value": "-", "detail": "暂无刷新结果"}
     data = load_json(path) or {}
     return {
@@ -783,8 +803,8 @@ def latest_dashboard_info() -> dict[str, Any]:
 
 
 def latest_midday_refresh_status() -> dict[str, Any] | None:
-    path = STOCK_SCREENER_ROOT / "data" / "midday_refresh_result.json"
-    if not path.exists():
+    path = next((candidate for data_dir in SCREENER_DATA_DIRS if (candidate := data_dir / "midday_refresh_result.json").exists()), None)
+    if path is None:
         return None
     data = load_json(path) or {}
     validation_status = (data.get("validation_status") or "").strip()
@@ -1474,6 +1494,10 @@ def current_trade_date(
         return screening_dt.strftime("%Y-%m-%d")
     if decision_brief and decision_brief.get("trade_date"):
         return str(decision_brief["trade_date"])
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+def current_display_date() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
@@ -6579,6 +6603,37 @@ def build_watchlist_manager_view(watchlist: dict[str, Any] | None = None) -> dic
     }
 
 
+def build_watchlist_day_over_day_diff(today: dict[str, Any] | None) -> dict[str, Any]:
+    """Resolve the previous dated snapshot and diff it against ``today``.
+
+    The page view always carries a ``diff`` field — when no previous
+    snapshot exists, the diff has empty change buckets but still records
+    today's trade date so the frontend can render a clean "first day, no
+    diff" empty state instead of being missing the field entirely.
+
+    Errors during previous-snapshot load are swallowed deliberately:
+    a stale or partially-written prior file should not block today's
+    page render.
+    """
+
+    if not today:
+        return diff_watchlist_snapshots({}, previous=None)
+
+    snapshot_path = today.get("snapshot_path")
+    previous_payload: dict[str, Any] | None = None
+    if snapshot_path:
+        try:
+            previous_path = resolve_previous_watchlist_snapshot_path(Path(snapshot_path))
+        except Exception:
+            previous_path = None
+        if previous_path is not None:
+            try:
+                previous_payload = load_watchlist_snapshot(path=str(previous_path))
+            except Exception:
+                previous_payload = None
+    return diff_watchlist_snapshots(today, previous=previous_payload)
+
+
 def build_watchlist_page_view() -> dict[str, Any]:
     decision_brief = safe_canonical_load(load_decision_brief)
     watchlist = load_watchlist_snapshot()
@@ -6586,9 +6641,17 @@ def build_watchlist_page_view() -> dict[str, Any]:
     confirmation = safe_canonical_load(load_confirmation)
     quality = safe_canonical_load(load_quality_status, lane="watchlist")
 
-    trade_date = current_trade_date(watchlist, screening_batch, decision_brief)
+    readiness_for_page = compute_readiness(
+        watchlist=watchlist,
+        screening_batch=screening_batch,
+        confirmation=confirmation,
+        decision_brief=decision_brief,
+        quality_status=safe_canonical_load(load_quality_status, lane="all"),
+    )
+    expected_date_w = readiness_for_page["expected_trade_date"]
+    trade_date = readiness_for_page["data_trade_date"] or current_trade_date(watchlist, screening_batch, decision_brief)
     brief_trade_date = (decision_brief or {}).get("trade_date")
-    brief_is_live = bool(decision_brief and brief_trade_date == trade_date)
+    brief_is_live = bool(readiness_for_page["brief_is_live"])
     brief_focus = (((decision_brief or {}).get("focus") or {}).get("holding_focus") or []) if brief_is_live else []
     avoid_points = (((decision_brief or {}).get("focus") or {}).get("avoid_points") or []) if brief_is_live else []
 
@@ -6747,8 +6810,11 @@ def build_watchlist_page_view() -> dict[str, Any]:
         ],
     }
 
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     return {
-        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "generated_at": generated_at,
+        "display_date": current_display_date(),
         "trade_date": trade_date,
         "brief_is_live": brief_is_live,
         "reading_compass": build_reading_compass_cards(
@@ -6780,6 +6846,7 @@ def build_watchlist_page_view() -> dict[str, Any]:
         "follow_observe_count": groups[1]["count"] + groups[2]["count"],
         "focus_tags": text_items(brief_focus),
         "avoid_points": text_items(avoid_points),
+        "day_over_day_diff": build_watchlist_day_over_day_diff(watchlist),
         "manager": build_watchlist_manager_view(watchlist),
         "confidence_switch": build_watchlist_confidence_switch(
             decision_brief,
@@ -6802,9 +6869,17 @@ def build_opportunities_view() -> dict[str, Any]:
     aggressive_quality = safe_canonical_load(load_quality_status, lane="aggressive")
     midday_quality = safe_canonical_load(load_quality_status, lane="midday_confirmation")
 
-    trade_date = current_trade_date(watchlist, screening_batch, decision_brief)
+    readiness_for_opps = compute_readiness(
+        watchlist=watchlist,
+        screening_batch=screening_batch,
+        confirmation=confirmation,
+        decision_brief=decision_brief,
+        quality_status=safe_canonical_load(load_quality_status, lane="all"),
+    )
+    expected_date_o = readiness_for_opps["expected_trade_date"]
+    trade_date = readiness_for_opps["data_trade_date"] or current_trade_date(watchlist, screening_batch, decision_brief)
     brief_trade_date = (decision_brief or {}).get("trade_date")
-    brief_is_live = bool(decision_brief and brief_trade_date == trade_date)
+    brief_is_live = bool(readiness_for_opps["brief_is_live"])
     gate = ((screening_batch.get("market_regime") or {}).get("execution_gate") or {})
     summary = screening_batch.get("screening_summary") or {}
     focus = (((decision_brief or {}).get("focus") or {}).get("opportunity_focus") or []) if brief_is_live else []
@@ -6969,8 +7044,11 @@ def build_opportunities_view() -> dict[str, Any]:
         "api_self": api_opportunities_page_url(),
     }
 
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     return {
-        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "generated_at": generated_at,
+        "display_date": current_display_date(),
         "trade_date": trade_date,
         "brief_is_live": brief_is_live,
         "reading_compass": build_reading_compass_cards(
@@ -8006,9 +8084,21 @@ def build_today_view() -> dict[str, Any]:
     quality_status = safe_canonical_load(load_quality_status, lane="all")
     lifecycle_context = resolve_lifecycle_context()
 
-    trade_date = current_trade_date(watchlist, screening_batch, decision_brief)
+    readiness = compute_readiness(
+        watchlist=watchlist,
+        screening_batch=screening_batch,
+        confirmation=confirmation,
+        decision_brief=decision_brief,
+        quality_status=quality_status,
+    )
+
+    expected_date = readiness["expected_trade_date"]
+    data_trade_date = readiness["data_trade_date"]
+    trade_date = data_trade_date or current_trade_date(watchlist, screening_batch, decision_brief)
     brief_trade_date = (decision_brief or {}).get("trade_date")
-    brief_is_live = bool(decision_brief and brief_trade_date == trade_date)
+    # Fail-closed: brief is only ``live`` when readiness is fully green AND
+    # the brief itself is aligned with the expected trade date.
+    brief_is_live = bool(readiness["brief_is_live"])
 
     gate = (((screening_batch or {}).get("market_regime") or {}).get("execution_gate") or {})
     brief_summary = (decision_brief or {}).get("summary") or {}
@@ -8026,16 +8116,26 @@ def build_today_view() -> dict[str, Any]:
         hero_summary = normalize_stock_ui_copy(brief_summary.get("gate_summary")) or "当前判断已由总控层收束。"
         hero_gate_label = brief_summary.get("gate_label") or gate.get("label") or "总控已更新"
         position_cap = brief_summary.get("position_cap") or gate.get("position_cap") or "-"
-        context_note = f"当前页面基于 {brief_summary.get('generated_at') or '-'} 的总控简报。"
+        context_note = f"当前页面基于 {(decision_brief or {}).get('generated_at') or '-'} 的总控简报。"
     else:
-        if gate.get("allow_new_positions"):
+        if readiness["readiness_mode"] == "blocked":
+            hero_title = "数据未就绪：请先把核心链路刷新到当日"
+        elif gate.get("allow_new_positions"):
             hero_title = "可以继续看新仓，但先只保留少量观察名单"
         else:
             hero_title = "先观察，不急着开新仓"
         hero_summary = normalize_stock_ui_copy(gate.get("summary")) or "当前页面已回退到实时链路数据。"
         hero_gate_label = gate.get("label") or "实时链路判断"
         position_cap = gate.get("position_cap") or "-"
-        if decision_brief:
+        if readiness["readiness_mode"] == "blocked":
+            top_blocker = (readiness["blockers"] or [{}])[0]
+            blocker_msg = top_blocker.get("message") or "请回到任务列表刷新当日链路。"
+            context_note = f"当前数据未就绪：{blocker_msg}（应为 {expected_date}）。在恢复实盘前不要按页面建议执行真钱操作。"
+        elif readiness["readiness_mode"] == "shadow_only":
+            context_note = (
+                f"当前页面仅作影子盘观察：{(readiness['warnings'] or [{}])[0].get('message') or '关键链路尚未完全到位'}。"
+            )
+        elif decision_brief:
             context_note = f"最新总控简报停留在 {brief_trade_date}，页面主判断已回退到实时自选股 / 早盘扫描 / 午盘确认数据。"
         else:
             context_note = "尚未生成总控简报，当前页面完全基于实时链路数据。"
@@ -8044,6 +8144,8 @@ def build_today_view() -> dict[str, Any]:
     screening_summary = (screening_batch or {}).get("screening_summary") or {}
     quality_lanes = (quality_status or {}).get("lanes") or {}
     quality_ok = sum(1 for lane in quality_lanes.values() if lane.get("validation_status") == "ok")
+    quality_timely = sum(1 for item in readiness["quality_freshness"] if item.get("timely"))
+    quality_total = len(readiness["quality_freshness"]) or 3
     confirmation_counts = (confirmation or {}).get("counts") or {}
     action_groups = build_today_action_groups(
         watchlist,
@@ -8056,27 +8158,54 @@ def build_today_view() -> dict[str, Any]:
     )
     action_queue = build_today_action_queue(action_groups, trade_date)
 
+    source_freshness_map = {item["key"]: item for item in readiness["source_freshness"]}
+
+    def _augment_source(card: dict[str, Any], freshness_key: str) -> dict[str, Any]:
+        freshness = source_freshness_map.get(freshness_key) or {}
+        merged = dict(card)
+        merged.setdefault("key", freshness_key)
+        merged["available"] = freshness.get("available", merged.get("value") not in (None, "", "-"))
+        merged["stale"] = bool(freshness.get("stale", False))
+        merged["age_seconds"] = freshness.get("age_seconds")
+        merged["age_label"] = freshness.get("age_label", "-")
+        merged["stale_after_seconds"] = freshness.get("stale_after_seconds")
+        merged["trade_date"] = freshness.get("trade_date")
+        merged["stale_reasons"] = freshness.get("stale_reasons", [])
+        return merged
+
     source_cards = [
-        {
-            "label": "自选股",
-            "value": (watchlist or {}).get("generated_at") or "-",
-            "detail": (watchlist or {}).get("trade_date") or "暂无快照",
-        },
-        {
-            "label": "观察池基线",
-            "value": (screening_batch or {}).get("generated_at") or "-",
-            "detail": ((screening_batch or {}).get("pool_label") or (screening_batch or {}).get("pool") or "暂无批次"),
-        },
-        {
-            "label": "午盘确认",
-            "value": (confirmation or {}).get("generated_at") or "-",
-            "detail": (confirmation or {}).get("validation_status") or "暂无确认",
-        },
-        {
-            "label": "总控简报",
-            "value": (decision_brief or {}).get("generated_at") or "-",
-            "detail": "已同步" if brief_is_live else "数据偏旧",
-        },
+        _augment_source(
+            {
+                "label": "自选股",
+                "value": (watchlist or {}).get("generated_at") or "-",
+                "detail": (watchlist or {}).get("trade_date") or "暂无快照",
+            },
+            "watchlist",
+        ),
+        _augment_source(
+            {
+                "label": "观察池基线",
+                "value": (screening_batch or {}).get("generated_at") or "-",
+                "detail": ((screening_batch or {}).get("pool_label") or (screening_batch or {}).get("pool") or "暂无批次"),
+            },
+            "screening",
+        ),
+        _augment_source(
+            {
+                "label": "午盘确认",
+                "value": (confirmation or {}).get("generated_at") or "-",
+                "detail": (confirmation or {}).get("validation_status") or "暂无确认",
+            },
+            "confirmation",
+        ),
+        _augment_source(
+            {
+                "label": "总控简报",
+                "value": (decision_brief or {}).get("generated_at") or "-",
+                "detail": "已同步" if brief_is_live else "数据偏旧",
+            },
+            "decision_brief",
+        ),
     ]
 
     summary_cards = [
@@ -8097,8 +8226,9 @@ def build_today_view() -> dict[str, Any]:
         },
         {
             "label": "质检就绪",
-            "value": f"{quality_ok}/3",
+            "value": f"{quality_timely}/{quality_total}",
             "detail": "核心链路状态",
+            "tone": "positive" if quality_timely == quality_total else "warning",
         },
     ]
 
@@ -8150,7 +8280,7 @@ def build_today_view() -> dict[str, Any]:
     radar_cards = build_today_radar_cards(
         position_cap=position_cap,
         main_theme=main_theme,
-        quality_ok=quality_ok,
+        quality_ok=quality_timely,
         confirmation_counts=confirmation_counts,
         brief_is_live=brief_is_live,
     )
@@ -8159,10 +8289,37 @@ def build_today_view() -> dict[str, Any]:
         source_cards=source_cards,
     )
 
+    quality_freshness_map = {item["key"]: item for item in readiness["quality_freshness"]}
+    quality_cards = []
+    for card in quality_lane_cards(quality_status):
+        # quality_lane_cards uses Chinese titles; map back via the (key, title)
+        # pairs to enrich each card with timely / stale_reasons metadata.
+        title = card.get("title") or ""
+        match_key = next(
+            (k for k, t in (("watchlist", "自选股"), ("aggressive", "进攻型早盘"), ("midday_confirmation", "午盘确认")) if t == title),
+            "",
+        )
+        merged = dict(card)
+        meta = quality_freshness_map.get(match_key) or {}
+        merged["key"] = match_key or card.get("key") or title
+        merged["timely"] = bool(meta.get("timely", card.get("status") == "ok"))
+        merged["stale_reasons"] = meta.get("stale_reasons", [])
+        merged["age_label"] = meta.get("age_label", "-")
+        if not merged["timely"] and card.get("tone") == "positive":
+            # downgrade misleading positive tone when readiness disagrees
+            merged["tone"] = "watch"
+        quality_cards.append(merged)
+
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     return {
-        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "generated_at": generated_at,
+        "display_date": current_display_date(),
         "trade_date": trade_date,
+        "expected_trade_date": expected_date,
+        "data_trade_date": data_trade_date,
         "brief_is_live": brief_is_live,
+        "readiness": readiness,
         "hero": {
             "title": hero_title,
             "summary": hero_summary,
@@ -8196,7 +8353,7 @@ def build_today_view() -> dict[str, Any]:
         "watchlist_cards": pick_watchlist_cards(watchlist),
         "opportunity_cards": pick_opportunity_cards(screening_batch),
         "midday_cards": pick_midday_cards(confirmation),
-        "quality_cards": quality_lane_cards(quality_status),
+        "quality_cards": quality_cards,
         "artifacts": artifacts,
         "links": links,
         "counts": {

@@ -1,28 +1,57 @@
 "use client";
 
 import {
-  BarChart3,
   Circle,
   Command,
-  Home,
+  Monitor,
+  Moon,
   Search,
-  Settings,
-  Telescope,
-  WalletCards,
+  Sun,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { useTheme, type ThemeMode } from "@/components/theme-provider";
 import { useOverview } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
-import { ThemeToggle } from "@/components/theme-toggle";
 
 export const navItems = [
-  { href: "/", label: "指挥中心", icon: Home },
-  { href: "/portfolio", label: "持仓管理", icon: WalletCards },
-  { href: "/discovery", label: "观察池", icon: Telescope },
-  { href: "/review", label: "复盘", icon: BarChart3 },
+  { href: "/", label: "指挥中心", mark: "01" },
+  { href: "/portfolio", label: "持仓管理", mark: "02" },
+  { href: "/discovery", label: "发现/观察", mark: "03" },
+  { href: "/review", label: "复盘", mark: "04" },
 ] as const;
+
+const nextThemeMode: Record<ThemeMode, ThemeMode> = {
+  system: "dark",
+  dark: "light",
+  light: "system",
+};
+
+const themeCopy: Record<ThemeMode, { label: string; next: string; icon: typeof Sun }> = {
+  system: { label: "跟随系统", next: "黑夜", icon: Monitor },
+  dark: { label: "黑夜", next: "白天", icon: Moon },
+  light: { label: "白天", next: "跟随系统", icon: Sun },
+};
+
+function ThemeCycleButton() {
+  const { mode, resolvedTheme, setMode } = useTheme();
+  const Icon = themeCopy[mode].icon;
+  const resolvedCopy = mode === "system" ? (resolvedTheme === "dark" ? "系统黑夜" : "系统白天") : themeCopy[mode].label;
+
+  return (
+    <button
+      type="button"
+      className="focus-ring prism-theme-cycle"
+      data-mode={mode}
+      title={`当前：${resolvedCopy}。切换到${themeCopy[mode].next}`}
+      aria-label={`切换主题，当前是${resolvedCopy}`}
+      onClick={() => setMode(nextThemeMode[mode])}
+    >
+      <Icon size={14} aria-hidden="true" />
+    </button>
+  );
+}
 
 export function Sidebar({
   onOpenCommand,
@@ -38,76 +67,93 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "sticky top-0 h-screen w-[220px] shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-4",
+        "prism-sidebar shrink-0",
         className,
       )}
+      data-od-id="sidebar"
     >
-      <Link href="/" className="mb-5 block rounded-md px-3 py-2">
-        <div className="text-[11px] font-medium uppercase text-[var(--text-tertiary)]">Prism</div>
-        <div className="mt-0.5 text-sm font-semibold text-[var(--text-primary)]">棱镜 · 交易决策台</div>
+      <Link href="/" className="prism-brand">
+        <small>PRISM / A-SHARE DESK</small>
+        <strong>棱镜 Prism</strong>
+        <small>交易决策台</small>
       </Link>
 
       <button
         type="button"
-        className="focus-ring mb-4 flex w-full items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] px-3 py-2 text-left text-[13px] text-[var(--text-tertiary)]"
+        className="focus-ring prism-command-button"
         onClick={onOpenCommand}
       >
-        <Search size={15} className="shrink-0 opacity-60" />
-        <span className="min-w-0 flex-1 truncate">搜索股票、页面</span>
-        <span className="inline-flex items-center gap-1 rounded border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-1.5 py-0.5 text-[11px]">
+        <span className="flex min-w-0 items-center gap-2">
+          <Search size={15} className="shrink-0 opacity-60" />
+          <span className="truncate">搜索股票 / 页面</span>
+        </span>
+        <span className="prism-kbd">
           <Command size={11} />K
         </span>
       </button>
 
-      <nav className="flex flex-col gap-1">
+      <nav className="prism-nav" aria-label="主导航">
         {navItems.map((item) => {
           const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-          const Icon = item.icon;
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={cn(
-                "focus-ring flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] transition-colors",
-                active
-                  ? "bg-[var(--bg-tertiary)] font-medium text-[var(--text-primary)]"
-                  : "text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-secondary)]",
-              )}
+              className="focus-ring prism-nav-link"
+              data-active={active}
             >
-              <Icon size={16} className={cn("shrink-0", active ? "opacity-100" : "opacity-55")} />
-              {item.label}
+              <span className="prism-nav-mark">{item.mark}</span>
+              <span className="prism-nav-label">{item.label}</span>
             </Link>
           );
         })}
       </nav>
 
-      <div className="mx-3 my-3 h-px bg-[var(--border-subtle)]" />
-
       <Link
         href="/settings"
-        className={cn(
-          "focus-ring flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px]",
-          pathname.startsWith("/settings")
-            ? "bg-[var(--bg-tertiary)] font-medium text-[var(--text-primary)]"
-            : "text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-secondary)]",
-        )}
+        className="focus-ring prism-nav-link mt-1"
+        data-active={pathname.startsWith("/settings")}
       >
-        <Settings size={16} className="shrink-0 opacity-60" />
-        设置
+        <span className="prism-nav-mark">05</span>
+        <span className="prism-nav-label">设置</span>
       </Link>
 
-      <div className="mt-auto px-3 py-2">
-        <ThemeToggle />
-        <div className="mt-3 flex items-center gap-2 text-[11px] text-[var(--text-tertiary)]">
-          <Circle
-            size={8}
-            fill={statusOk ? "var(--positive)" : "var(--negative)"}
-            className={statusOk ? "text-[var(--positive)]" : "text-[var(--negative)]"}
-          />
-          <span className="truncate">
-            {statusOk ? "系统正常" : "后端未连接"}
-            {overview.data?.generated_at ? ` · ${overview.data.generated_at.slice(11, 16)}` : ""}
+      <div className="prism-side-status">
+        <div className="prism-status-line">
+          <span>daemon</span>
+          <span className={cn("flex items-center gap-1.5", statusOk ? "buy-text" : "sell-text")}>
+            <Circle
+              size={7}
+              fill={statusOk ? "var(--positive)" : "var(--negative)"}
+              className={statusOk ? "text-[var(--positive)]" : "text-[var(--negative)]"}
+            />
+            {statusOk ? "online" : "offline"}
           </span>
+        </div>
+        <div className="prism-status-line">
+          <span>brief</span>
+          <span className="mono">{overview.data?.generated_at?.slice(11, 16) || "-"}</span>
+        </div>
+        <div className="prism-status-line">
+          <span>watchlist</span>
+          <span className="mono watch-text">
+            {overview.data?.freshness?.find((source) => source.label.includes("自选") || source.key?.includes("watch"))
+              ?.age_label || "live"}
+          </span>
+        </div>
+        <div className="prism-status-footer">
+          <span className="prism-status-copy">
+            <Circle
+              size={8}
+              fill={statusOk ? "var(--positive)" : "var(--negative)"}
+              className={statusOk ? "text-[var(--positive)]" : "text-[var(--negative)]"}
+            />
+            <span className="truncate">
+              {statusOk ? "系统正常" : "后端未连接"}
+              {overview.data?.generated_at ? ` · ${overview.data.generated_at.slice(11, 16)}` : ""}
+            </span>
+          </span>
+          <ThemeCycleButton />
         </div>
       </div>
     </aside>

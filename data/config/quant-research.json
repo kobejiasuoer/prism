@@ -1,0 +1,66 @@
+{
+  "schema_version": "1.0",
+  "profile": "p0-research-only",
+  "generated_for": "Prism quant upgrade Sprint 0",
+  "entry_models": {
+    "primary": "next_open",
+    "supported": [
+      "next_open",
+      "next_close"
+    ],
+    "fallback_policy": "mark_missing; do not backfill from same-day prices"
+  },
+  "holding_windows": [
+    1,
+    3,
+    5,
+    10
+  ],
+  "transaction_cost": {
+    "currency": "CNY",
+    "buy_commission_bps": 2.5,
+    "sell_commission_bps": 2.5,
+    "minimum_commission_cny": 5.0,
+    "stamp_tax_bps": 5.0,
+    "slippage_bps": 5.0,
+    "impact_cost": {
+      "enabled": false,
+      "placeholder_bps": 0.0,
+      "notes": "Sprint 0 records the configuration surface only; impact model calibration is deferred."
+    }
+  },
+  "portfolio": {
+    "max_positions": 5,
+    "max_single_position_pct": 20.0,
+    "rebalance_rule": "daily_after_signal_with_t_plus_1_execution",
+    "allow_new_positions_when_gate_off": false
+  },
+  "benchmark": {
+    "primary": "CSI500",
+    "secondary": [
+      "HS300",
+      "CSI1000",
+      "equal_weight_eligible_pool"
+    ],
+    "source_policy": "must be resolved before formal excess-return conclusions"
+  },
+  "minimum_sample_size": {
+    "field_mapping": 30,
+    "factor_bucket": 100,
+    "backtest_trade_days": 60
+  },
+  "report_only_gates": {
+    "enabled": true,
+    "fail_on_missing_price_source": true,
+    "fail_on_missing_adjustment_policy": true,
+    "fail_on_missing_limit_or_suspend_flags": true,
+    "fail_on_missing_cost_model": true,
+    "production_sorting_impact": "forbidden"
+  },
+  "data_quality_policy": {
+    "pit_required_for_formal_evaluation": true,
+    "unknown_suspend_or_limit_status": "exclude_from_formal_execution_backtest",
+    "unknown_adjustment_status": "research_only",
+    "missing_forward_price": "label_missing"
+  }
+}

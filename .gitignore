@@ -14,7 +14,10 @@ data/runtime/
 data/cache/
 data/artifacts/
 data/analytics/
+data/quant/reports/
 packages/data/
 packages/reports/
+apps/data/
+apps/reports/
 !data/history/cron_logs/**/*.log
 !data/history/control_panel_runs/logs/**/*.log

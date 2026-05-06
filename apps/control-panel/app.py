@@ -232,6 +232,97 @@ def parameter_validation_errors(payload: dict[str, Any]) -> list[str]:
     return errors
 
 
+def parameter_evaluation(
+    candidate: dict[str, Any],
+    *,
+    current: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Evaluate a parameter payload for safety and sane ranges.
+
+    This runs *after* :func:`parameter_validation_errors` (which is purely
+    structural) and adds a layer of business-logic safety checks:
+
+    * Hard errors (block apply unless ``unsafe_apply=true``):
+      - zero active stocks (downstream pipelines need at least one)
+      - duplicate stock codes
+
+    * Warnings (informational, don't block):
+      - active count drops > 50% from the currently-saved state
+      - ``kline_days`` outside [30, 365]
+      - ``news_count`` outside [3, 50]
+      - ``ma_periods`` longer than 8 entries or any value > 250
+    """
+
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    stocks = candidate.get("stocks") if isinstance(candidate.get("stocks"), list) else []
+    stock_rows = [item for item in stocks if isinstance(item, dict)]
+    active_rows = [item for item in stock_rows if item.get("active", True) is not False]
+    active_count = len(active_rows)
+
+    # Hard error: zero active stocks.
+    if active_count == 0 and stock_rows:
+        errors.append("没有活跃股票（active!=false 数量为 0），下游流水线将无可处理对象")
+    elif not stock_rows:
+        errors.append("stocks 列表为空")
+
+    # Hard error: duplicate codes.
+    seen_codes: set[str] = set()
+    duplicate_codes: list[str] = []
+    for item in stock_rows:
+        code = str(item.get("code") or "").strip()
+        if not code:
+            continue
+        if code in seen_codes and code not in duplicate_codes:
+            duplicate_codes.append(code)
+        seen_codes.add(code)
+    if duplicate_codes:
+        errors.append("发现重复的股票代码：" + ", ".join(duplicate_codes))
+
+    # Soft warning: large drop in active count vs current.
+    if isinstance(current, dict):
+        current_stocks = current.get("stocks") if isinstance(current.get("stocks"), list) else []
+        current_active = sum(
+            1
+            for item in current_stocks
+            if isinstance(item, dict) and item.get("active", True) is not False
+        )
+        if current_active > 0 and active_count < current_active / 2:
+            warnings.append(
+                f"活跃股票数量大幅减少（{current_active} → {active_count}，下降超过 50%）"
+            )
+
+    # Soft warnings: range sanity.
+    kline_days = normalize_positive_int(candidate.get("kline_days"))
+    if kline_days is not None:
+        if kline_days < 30:
+            warnings.append(f"kline_days={kline_days} 偏小（<30），技术指标可能不稳定")
+        elif kline_days > 365:
+            warnings.append(f"kline_days={kline_days} 偏大（>365），抓取耗时显著上升")
+
+    news_count = normalize_positive_int(candidate.get("news_count"))
+    if news_count is not None:
+        if news_count < 3:
+            warnings.append(f"news_count={news_count} 偏小（<3），新闻覆盖度不足")
+        elif news_count > 50:
+            warnings.append(f"news_count={news_count} 偏大（>50），抓取与渲染成本上升")
+
+    ma_periods = candidate.get("ma_periods")
+    if isinstance(ma_periods, list):
+        if len(ma_periods) > 8:
+            warnings.append(f"ma_periods 含 {len(ma_periods)} 项（>8），UI 渲染会拥挤")
+        oversized = [p for p in ma_periods if isinstance(p, int) and p > 250]
+        if oversized:
+            warnings.append(f"ma_periods 中 {oversized} 大于 250，可能超出常见 K 线窗口")
+
+    return {
+        "ok": not errors,
+        "errors": errors,
+        "warnings": warnings,
+    }
+
+
 def parameter_group_status(payload: dict[str, Any]) -> list[dict[str, Any]]:
     stocks = payload.get("stocks") if isinstance(payload.get("stocks"), list) else []
     stock_rows = [item for item in stocks if isinstance(item, dict)]
@@ -564,14 +655,89 @@ def pick_recommended_task(page: str, freshness: list[dict[str, Any]], market_mod
     return "command_brief"
 
 
+def _readiness_freshness_rows(
+    readiness: dict[str, Any],
+    *,
+    fallback_threshold: int,
+) -> list[dict[str, Any]]:
+    """Convert ``readiness.source_freshness`` into the legacy freshness shape.
+
+    Keeps the keys the existing UI consumes (key/label/value/age_seconds/age_label/
+    stale/stale_after_seconds/available/detail) and threads through the extra
+    readiness metadata (trade_date, stale_reasons) so callers can drill in.
+    """
+
+    rows: list[dict[str, Any]] = []
+    for item in readiness.get("source_freshness") or []:
+        rows.append(
+            {
+                "key": item.get("key"),
+                "label": item.get("label"),
+                "value": item.get("value") or "-",
+                "detail": item.get("detail") or "",
+                "available": bool(item.get("available")),
+                "age_seconds": item.get("age_seconds"),
+                "age_label": item.get("age_label", "-"),
+                "stale": bool(item.get("stale")),
+                "stale_after_seconds": int(
+                    item.get("stale_after_seconds") or fallback_threshold
+                ),
+                "trade_date": item.get("trade_date"),
+                "stale_reasons": list(item.get("stale_reasons") or []),
+            }
+        )
+    return rows
+
+
 def build_refresh_status_payload(page: str) -> dict[str, Any]:
     market_mode, market_label = current_market_mode()
-    freshness = build_page_freshness(page, market_mode)
     running = build_running_refresh_tasks(page)
     cooldown = build_refresh_cooldown(page, market_mode)
-    recommended_task_name = pick_recommended_task(page, freshness, market_mode)
-    recommended_task = resolve_refresh_task(recommended_task_name)
-    stale_count = sum(1 for item in freshness if item.get("stale"))
+
+    # Single source of truth for the today page: readiness drives freshness,
+    # stale_count, recommended_task and the readiness_mode signature.  The
+    # legacy ``build_page_freshness`` heuristic is bypassed entirely so the
+    # refresh widget cannot disagree with /api/today.
+    readiness_payload: dict[str, Any] | None = None
+    if page == "today":
+        try:
+            today_view = build_today_view()
+            readiness_payload = today_view.get("readiness")
+        except Exception:
+            readiness_payload = None
+
+    if readiness_payload:
+        fallback_threshold = int(REFRESH_PAGE_CONFIG[page]["stale_after_seconds"][market_mode])
+        freshness = _readiness_freshness_rows(
+            readiness_payload, fallback_threshold=fallback_threshold
+        )
+        stale_count = int(readiness_payload.get("stale_count") or 0)
+        readiness_recommendations = [
+            str(name).strip()
+            for name in (readiness_payload.get("recommended_tasks") or [])
+            if str(name).strip()
+        ]
+    else:
+        freshness = build_page_freshness(page, market_mode)
+        stale_count = sum(1 for item in freshness if item.get("stale"))
+        readiness_recommendations = []
+
+    # Recommended task: prefer readiness when it is not green (so the operator
+    # gets the task that actually clears the blocker).  Otherwise fall back to
+    # the page-specific heuristic.
+    recommended_task_name: str | None = None
+    if readiness_payload and not readiness_payload.get("ready"):
+        for candidate in readiness_recommendations:
+            try:
+                resolved = resolve_refresh_task(candidate)
+            except HTTPException:
+                continue
+            recommended_task_name = candidate
+            recommended_task = resolved
+            break
+    if recommended_task_name is None:
+        recommended_task_name = pick_recommended_task(page, freshness, market_mode)
+        recommended_task = resolve_refresh_task(recommended_task_name)
 
     suggested_poll_seconds = int(REFRESH_PAGE_CONFIG[page]["poll_seconds"][market_mode])
     if running:
@@ -587,11 +753,12 @@ def build_refresh_status_payload(page: str) -> dict[str, Any]:
         ],
         "running": [(item.get("task_name"), item.get("started_at")) for item in running],
         "cooldown_remaining": cooldown.get("remaining_seconds"),
+        "readiness_mode": (readiness_payload or {}).get("readiness_mode"),
     }
     signature_seed = json.dumps(signature_payload, ensure_ascii=False, sort_keys=True)
     snapshot_signature = hashlib.sha1(signature_seed.encode("utf-8")).hexdigest()[:16]
 
-    return {
+    payload = {
         "page": page,
         "server_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "market_mode": market_mode,
@@ -607,6 +774,11 @@ def build_refresh_status_payload(page: str) -> dict[str, Any]:
         "cooldown": cooldown,
         "snapshot_signature": snapshot_signature,
     }
+    if readiness_payload:
+        payload["readiness"] = readiness_payload
+        payload["readiness_mode"] = readiness_payload.get("readiness_mode")
+        payload["recommended_tasks"] = readiness_recommendations
+    return payload
 
 
 def save_refresh_trigger(page: str, task_name: str, run_id: str, force: bool) -> None:
@@ -897,6 +1069,37 @@ async def api_refresh_status(page: str) -> JSONResponse:
     return JSONResponse(build_refresh_status_payload(normalized_page))
 
 
+@app.get("/api/readiness/live")
+async def api_readiness_live() -> JSONResponse:
+    """Operator-facing readiness summary.
+
+    Returns the same readiness object that ``/api/today`` embeds, so the
+    operator can hit one endpoint to know whether the system is fresh,
+    aligned, and safe to act on.
+    """
+
+    today_view = build_today_view()
+    readiness = today_view.get("readiness") or {}
+    return JSONResponse(
+        {
+            "generated_at": today_view.get("generated_at"),
+            "expected_trade_date": readiness.get("expected_trade_date"),
+            "data_trade_date": readiness.get("data_trade_date"),
+            "display_date": today_view.get("display_date"),
+            "trade_date": today_view.get("trade_date"),
+            "readiness_mode": readiness.get("readiness_mode"),
+            "ready": readiness.get("ready", False),
+            "session": readiness.get("session"),
+            "stale_count": readiness.get("stale_count", 0),
+            "blockers": readiness.get("blockers", []),
+            "warnings": readiness.get("warnings", []),
+            "source_freshness": readiness.get("source_freshness", []),
+            "quality_freshness": readiness.get("quality_freshness", []),
+            "recommended_tasks": readiness.get("recommended_tasks", []),
+        }
+    )
+
+
 @app.post("/api/refresh/trigger")
 async def api_refresh_trigger(request: Request) -> JSONResponse:
     try:
@@ -1123,6 +1326,29 @@ async def api_save_parameters(request: Request) -> JSONResponse:
             status_code=400,
         )
 
+    body_dict = body if isinstance(body, dict) else {}
+    raw_unsafe = body_dict.get("unsafe_apply")
+    # Only honor an explicit JSON ``true``.  Strings like "false", "0" and
+    # "off" must NOT bypass the hard-error gate — see parse_bool_value().
+    if isinstance(raw_unsafe, bool):
+        unsafe_apply = raw_unsafe
+    else:
+        unsafe_apply = parse_bool_value(raw_unsafe, default=False)
+    current_value = load_parameters_value() if PARAMETERS_PATH.exists() else None
+    evaluation = parameter_evaluation(candidate, current=current_value)
+
+    if evaluation["errors"] and not unsafe_apply:
+        return JSONResponse(
+            {
+                **build_parameters_payload(candidate),
+                "ok": False,
+                "saved": False,
+                "detail": "参数评估未通过：" + "；".join(evaluation["errors"]),
+                "evaluation": evaluation,
+            },
+            status_code=400,
+        )
+
     PARAMETERS_PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = PARAMETERS_PATH.with_name(f"{PARAMETERS_PATH.name}.{now_stamp()}.tmp")
     tmp_path.write_text(
@@ -1130,7 +1356,9 @@ async def api_save_parameters(request: Request) -> JSONResponse:
         encoding="utf-8",
     )
     tmp_path.replace(PARAMETERS_PATH)
-    return JSONResponse(build_parameters_payload(candidate, saved=True))
+    response_payload = build_parameters_payload(candidate, saved=True)
+    response_payload["evaluation"] = evaluation
+    return JSONResponse(response_payload)
 
 
 @app.post("/api/tasks/{task_name}/run")
