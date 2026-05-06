@@ -10,6 +10,134 @@ import { PageTitle } from "@/components/page-title";
 import { StockCard } from "@/components/stock-card";
 import { WatchlistManagerPanel } from "@/components/watchlist-manager-panel";
 import { useWatchlist } from "@/lib/hooks";
+import type { WatchlistDayOverDayDiff } from "@/lib/types";
+
+function formatDiffValue(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "-";
+  return String(value);
+}
+
+function DayOverDayDiffPanel({ diff }: { diff?: WatchlistDayOverDayDiff }) {
+  if (!diff) return null;
+  if (!diff.previous_trade_date) {
+    return (
+      <Panel title="日间变动" eyebrow="Day-over-day">
+        <div className="surface-card p-4">
+          <EmptyState>暂无昨日快照可对比。</EmptyState>
+        </div>
+      </Panel>
+    );
+  }
+
+  const changeCount =
+    diff.added.length +
+    diff.removed.length +
+    diff.action_changes.length +
+    diff.group_changes.length +
+    diff.boundary_changes.length +
+    diff.signal_changes.length;
+
+  return (
+    <Panel
+      title="日间变动"
+      eyebrow={`${diff.previous_trade_date} → ${diff.today_trade_date ?? "今日"}`}
+      action={<Badge tone={changeCount > 0 ? "watch" : "positive"}>{changeCount} 项变化</Badge>}
+    >
+      <div className="surface-card flex flex-col gap-3 p-4 text-[12px] text-[var(--text-secondary)]">
+        {changeCount === 0 ? (
+          <EmptyState>持仓维持昨日状态，无动作变更。</EmptyState>
+        ) : null}
+
+        {diff.added.length > 0 ? (
+          <DiffSection label="新增持仓" tone="info">
+            {diff.added.map((s) => (
+              <li key={s.code}>
+                <strong>{s.code}</strong> {s.name}
+                {s.action ? <span className="ml-2 text-[var(--text-tertiary)]">动作：{s.action}</span> : null}
+              </li>
+            ))}
+          </DiffSection>
+        ) : null}
+
+        {diff.removed.length > 0 ? (
+          <DiffSection label="移出持仓" tone="watch">
+            {diff.removed.map((s) => (
+              <li key={s.code}>
+                <strong>{s.code}</strong> {s.name}
+                {s.action ? <span className="ml-2 text-[var(--text-tertiary)]">原动作：{s.action}</span> : null}
+              </li>
+            ))}
+          </DiffSection>
+        ) : null}
+
+        {diff.action_changes.length > 0 ? (
+          <DiffSection label="动作变更" tone="risk">
+            {diff.action_changes.map((c) => (
+              <li key={`${c.code}-action`}>
+                <strong>{c.code}</strong> {c.name}：{formatDiffValue(c.before)} → {formatDiffValue(c.after)}
+              </li>
+            ))}
+          </DiffSection>
+        ) : null}
+
+        {diff.group_changes.length > 0 ? (
+          <DiffSection label="分组迁移" tone="risk">
+            {diff.group_changes.map((c) => (
+              <li key={`${c.code}-group`}>
+                <strong>{c.code}</strong> {c.name}：{formatDiffValue(c.before)} → {formatDiffValue(c.after)}
+              </li>
+            ))}
+          </DiffSection>
+        ) : null}
+
+        {diff.boundary_changes.length > 0 ? (
+          <DiffSection label="止损 / 支撑 / 阻力调整" tone="watch">
+            {diff.boundary_changes.map((c) => (
+              <li key={`${c.code}-${c.field}`}>
+                <strong>{c.code}</strong> {c.name} {c.field}：{formatDiffValue(c.before)} → {formatDiffValue(c.after)}
+              </li>
+            ))}
+          </DiffSection>
+        ) : null}
+
+        {diff.signal_changes.length > 0 ? (
+          <DiffSection label="信号变化" tone="info">
+            {diff.signal_changes.map((c) => (
+              <li key={`${c.code}-signal`}>
+                <strong>{c.code}</strong> {c.name}：{formatDiffValue(c.before)} → {formatDiffValue(c.after)}
+              </li>
+            ))}
+          </DiffSection>
+        ) : null}
+
+        {diff.unchanged_count > 0 ? (
+          <div className="text-[11px] text-[var(--text-tertiary)]">
+            其余 {diff.unchanged_count} 只维持昨日状态。
+          </div>
+        ) : null}
+      </div>
+    </Panel>
+  );
+}
+
+function DiffSection({
+  label,
+  tone,
+  children,
+}: {
+  label: string;
+  tone: "info" | "watch" | "risk";
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center gap-2">
+        <Badge tone={tone}>{label}</Badge>
+      </div>
+      <ul className="ml-3 list-disc space-y-1 text-[12px] leading-5">{children}</ul>
+    </div>
+  );
+}
 
 export default function PortfolioPage() {
   const watchlist = useWatchlist();
@@ -74,6 +202,10 @@ export default function PortfolioPage() {
                   </div>
                 </Panel>
               ))}
+        </section>
+
+        <section className="mb-7">
+          <DayOverDayDiffPanel diff={data?.day_over_day_diff} />
         </section>
 
         <section id="watchlist-manager" className="mb-7">

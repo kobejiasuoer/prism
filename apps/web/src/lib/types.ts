@@ -361,6 +361,33 @@ export interface OverviewData {
   freshness?: SourceCardData[];
 }
 
+export interface WatchlistDayOverDayChange {
+  code: string;
+  name: string;
+  before?: string | number | null;
+  after?: string | number | null;
+  field?: string;
+}
+
+export interface WatchlistDayOverDayPresence {
+  code: string;
+  name: string;
+  action?: string;
+  group?: string;
+}
+
+export interface WatchlistDayOverDayDiff {
+  today_trade_date: string | null;
+  previous_trade_date: string | null;
+  added: WatchlistDayOverDayPresence[];
+  removed: WatchlistDayOverDayPresence[];
+  action_changes: WatchlistDayOverDayChange[];
+  group_changes: WatchlistDayOverDayChange[];
+  boundary_changes: WatchlistDayOverDayChange[];
+  signal_changes: WatchlistDayOverDayChange[];
+  unchanged_count: number;
+}
+
 export interface WatchlistData {
   generated_at: string;
   display_date?: string;
@@ -385,6 +412,7 @@ export interface WatchlistData {
   source_cards?: SourceCardData[];
   focus_tags?: string[];
   avoid_points?: string[];
+  day_over_day_diff?: WatchlistDayOverDayDiff;
   links?: LinkMap;
   manager?: WatchlistManager;
 }

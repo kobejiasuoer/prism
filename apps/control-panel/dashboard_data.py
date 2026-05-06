@@ -33,6 +33,7 @@ if str(STOCK_ANALYZER_ROOT) not in sys.path:
     sys.path.insert(0, str(STOCK_ANALYZER_ROOT))
 
 from prism_canonical import (  # type: ignore
+    diff_watchlist_snapshots,
     find_candidate_detail,
     load_confirmation,
     load_decision_brief,
@@ -41,6 +42,7 @@ from prism_canonical import (  # type: ignore
     load_research_review,
     load_screening_batch,
     load_watchlist_snapshot,
+    resolve_previous_watchlist_snapshot_path,
 )
 from watchlist_registry import (
     fetch_stock_name,
@@ -6594,6 +6596,37 @@ def build_watchlist_manager_view(watchlist: dict[str, Any] | None = None) -> dic
     }
 
 
+def build_watchlist_day_over_day_diff(today: dict[str, Any] | None) -> dict[str, Any]:
+    """Resolve the previous dated snapshot and diff it against ``today``.
+
+    The page view always carries a ``diff`` field — when no previous
+    snapshot exists, the diff has empty change buckets but still records
+    today's trade date so the frontend can render a clean "first day, no
+    diff" empty state instead of being missing the field entirely.
+
+    Errors during previous-snapshot load are swallowed deliberately:
+    a stale or partially-written prior file should not block today's
+    page render.
+    """
+
+    if not today:
+        return diff_watchlist_snapshots({}, previous=None)
+
+    snapshot_path = today.get("snapshot_path")
+    previous_payload: dict[str, Any] | None = None
+    if snapshot_path:
+        try:
+            previous_path = resolve_previous_watchlist_snapshot_path(Path(snapshot_path))
+        except Exception:
+            previous_path = None
+        if previous_path is not None:
+            try:
+                previous_payload = load_watchlist_snapshot(path=str(previous_path))
+            except Exception:
+                previous_payload = None
+    return diff_watchlist_snapshots(today, previous=previous_payload)
+
+
 def build_watchlist_page_view() -> dict[str, Any]:
     decision_brief = safe_canonical_load(load_decision_brief)
     watchlist = load_watchlist_snapshot()
@@ -6798,6 +6831,7 @@ def build_watchlist_page_view() -> dict[str, Any]:
         "follow_observe_count": groups[1]["count"] + groups[2]["count"],
         "focus_tags": text_items(brief_focus),
         "avoid_points": text_items(avoid_points),
+        "day_over_day_diff": build_watchlist_day_over_day_diff(watchlist),
         "manager": build_watchlist_manager_view(watchlist),
         "confidence_switch": build_watchlist_confidence_switch(
             decision_brief,
