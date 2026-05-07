@@ -1,4 +1,5 @@
 import type {
+  AccountMode,
   AskFollowupResponse,
   AskResponse,
   AskSuggestResponse,
@@ -7,6 +8,7 @@ import type {
   OpportunitiesData,
   OverviewData,
   ParametersResponse,
+  PortfolioAccountResponse,
   PreviewPayload,
   ReadinessPayload,
   RefreshStatus,
@@ -228,5 +230,59 @@ export const api = {
   },
   health() {
     return fetchJson<HealthResponse>("/healthz");
+  },
+  getPortfolioAccount() {
+    return fetchJson<PortfolioAccountResponse>("/api/portfolio/account");
+  },
+  setPortfolioMode(payload: {
+    mode: AccountMode;
+    starting_cash?: number;
+    note?: string;
+    allow_unsafe?: boolean;
+  }) {
+    return fetchJson<PortfolioAccountResponse>("/api/portfolio/mode", {
+      method: "POST",
+      json: payload,
+    });
+  },
+  recordPortfolioCash(payload: { delta: number; reason: string }) {
+    return fetchJson<PortfolioAccountResponse>("/api/portfolio/cash", {
+      method: "POST",
+      json: payload,
+    });
+  },
+  recordPortfolioFill(payload: {
+    trade_date: string;
+    code: string;
+    side: "buy" | "sell";
+    qty: number;
+    price: number;
+    fees?: number;
+    name?: string;
+    broker_ref?: string;
+    intent_key?: string;
+    note?: string;
+  }) {
+    return fetchJson<PortfolioAccountResponse>("/api/portfolio/fills", {
+      method: "POST",
+      json: payload,
+    });
+  },
+  recordPortfolioNoFill(payload: { trade_date: string; intent_key: string; reason: string }) {
+    return fetchJson<PortfolioAccountResponse>("/api/portfolio/intent/no_fill", {
+      method: "POST",
+      json: payload,
+    });
+  },
+  recordPortfolioReconcile(payload: {
+    trade_date: string;
+    broker_cash: number;
+    broker_equity: number;
+    note?: string;
+  }) {
+    return fetchJson<PortfolioAccountResponse>("/api/portfolio/reconcile", {
+      method: "POST",
+      json: payload,
+    });
   },
 };

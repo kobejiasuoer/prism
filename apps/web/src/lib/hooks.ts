@@ -20,6 +20,7 @@ export const queryKeys = {
   parameters: ["parameters"] as const,
   runs: ["runs"] as const,
   health: ["health"] as const,
+  portfolioAccount: ["portfolio-account"] as const,
 };
 
 export function useTodayData() {
@@ -237,6 +238,70 @@ export function useRestoreWatchlistStock() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.watchlist });
       void queryClient.invalidateQueries({ queryKey: queryKeys.watchlistManager });
       void queryClient.invalidateQueries({ queryKey: queryKeys.parameters });
+    },
+  });
+}
+
+export function usePortfolioAccount() {
+  return useQuery({
+    queryKey: queryKeys.portfolioAccount,
+    queryFn: api.getPortfolioAccount,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useSetPortfolioMode() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: api.setPortfolioMode,
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.portfolioAccount });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.today });
+    },
+  });
+}
+
+export function useRecordPortfolioCash() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: api.recordPortfolioCash,
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.portfolioAccount });
+    },
+  });
+}
+
+export function useRecordPortfolioFill() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: api.recordPortfolioFill,
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.portfolioAccount });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.today });
+    },
+  });
+}
+
+export function useRecordPortfolioNoFill() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: api.recordPortfolioNoFill,
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.portfolioAccount });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.today });
+    },
+  });
+}
+
+export function useRecordPortfolioReconcile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: api.recordPortfolioReconcile,
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.portfolioAccount });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.today });
     },
   });
 }

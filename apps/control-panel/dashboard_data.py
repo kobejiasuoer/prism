@@ -51,6 +51,17 @@ from readiness import (  # type: ignore  # local module under apps/control-panel
     current_session,
     expected_trade_date,
 )
+from account_book import (  # type: ignore  # local module under apps/control-panel
+    ACCOUNT_MODES,
+    AccountBookError,
+    compute_account_view,
+    load_account_book,
+    record_cash_adjustment,
+    record_fill,
+    record_no_fill_intent,
+    record_reconciliation,
+    set_account_mode,
+)
 from watchlist_registry import (
     fetch_stock_name,
     infer_market_from_code,
@@ -6647,6 +6658,8 @@ def build_watchlist_page_view() -> dict[str, Any]:
         confirmation=confirmation,
         decision_brief=decision_brief,
         quality_status=safe_canonical_load(load_quality_status, lane="all"),
+        account_book=load_account_book(),
+        today_action_decisions=load_today_action_decision_store(),
     )
     expected_date_w = readiness_for_page["expected_trade_date"]
     trade_date = readiness_for_page["data_trade_date"] or current_trade_date(watchlist, screening_batch, decision_brief)
@@ -6875,6 +6888,8 @@ def build_opportunities_view() -> dict[str, Any]:
         confirmation=confirmation,
         decision_brief=decision_brief,
         quality_status=safe_canonical_load(load_quality_status, lane="all"),
+        account_book=load_account_book(),
+        today_action_decisions=load_today_action_decision_store(),
     )
     expected_date_o = readiness_for_opps["expected_trade_date"]
     trade_date = readiness_for_opps["data_trade_date"] or current_trade_date(watchlist, screening_batch, decision_brief)
@@ -8083,6 +8098,8 @@ def build_today_view() -> dict[str, Any]:
     confirmation = safe_canonical_load(load_confirmation)
     quality_status = safe_canonical_load(load_quality_status, lane="all")
     lifecycle_context = resolve_lifecycle_context()
+    account_book = load_account_book()
+    today_action_decisions = load_today_action_decision_store()
 
     readiness = compute_readiness(
         watchlist=watchlist,
@@ -8090,6 +8107,8 @@ def build_today_view() -> dict[str, Any]:
         confirmation=confirmation,
         decision_brief=decision_brief,
         quality_status=quality_status,
+        account_book=account_book,
+        today_action_decisions=today_action_decisions,
     )
 
     expected_date = readiness["expected_trade_date"]
@@ -8363,5 +8382,118 @@ def build_today_view() -> dict[str, Any]:
             "confirmed": confirmation_counts.get("confirmed") or 0,
             "downgraded": confirmation_counts.get("downgraded") or 0,
             "fresh_candidates": confirmation_counts.get("fresh_candidates") or 0,
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# Portfolio account view (live readiness, real positions, real cash)
+# ---------------------------------------------------------------------------
+
+
+def build_portfolio_account_view() -> dict[str, Any]:
+    """Build the canonical account-state view for the Portfolio page.
+
+    Combines:
+    * the canonical account book (mode, cash, fills, positions),
+    * the today-action-decisions store so we can surface unreconciled
+      "done" actions inline, and
+    * a fresh ``compute_readiness`` payload so the front-end can render
+      the same fail-closed gate it shows on the Today page.
+    """
+
+    ensure_runtime_dirs()
+    decision_brief = safe_canonical_load(load_decision_brief)
+    watchlist = safe_canonical_load(load_watchlist_snapshot)
+    screening_batch = safe_canonical_load(load_screening_batch)
+    confirmation = safe_canonical_load(load_confirmation)
+    quality_status = safe_canonical_load(load_quality_status, lane="all")
+    account_book = load_account_book()
+    today_action_decisions = load_today_action_decision_store()
+
+    readiness = compute_readiness(
+        watchlist=watchlist,
+        screening_batch=screening_batch,
+        confirmation=confirmation,
+        decision_brief=decision_brief,
+        quality_status=quality_status,
+        account_book=account_book,
+        today_action_decisions=today_action_decisions,
+    )
+    account_view = compute_account_view(account_book)
+
+    # Resolve names for positions where we only stored the code.
+    watchlist_index: dict[str, str] = {}
+    for stock in (watchlist or {}).get("stocks") or []:
+        code = str(stock.get("code") or "").lower()
+        name = str(stock.get("name") or "").strip()
+        if code and name:
+            watchlist_index[code] = name
+
+    def _resolve_name(code: str, fallback: str) -> str:
+        return watchlist_index.get(code) or fallback or code
+
+    open_positions = []
+    for pos in account_view["open_positions"]:
+        code = pos["code"]
+        open_positions.append({**pos, "name": _resolve_name(code, pos.get("name") or code)})
+
+    closed_positions = []
+    for pos in account_view["closed_positions"]:
+        code = pos["code"]
+        closed_positions.append({**pos, "name": _resolve_name(code, pos.get("name") or code)})
+
+    fills = list(account_view["fills"])
+    recent_fills = sorted(fills, key=lambda f: f.get("ts", ""), reverse=True)[:25]
+
+    summary_cards = [
+        {
+            "label": "运行模式",
+            "value": account_view["mode_label"],
+            "detail": account_view.get("mode_updated_at") or "未设置",
+            "tone": account_view["mode_tone"],
+        },
+        {
+            "label": "可用现金",
+            "value": f"¥{account_view['cash_balance']:,.2f}",
+            "detail": f"起始 ¥{account_view['starting_cash']:,.2f}",
+            "tone": "info",
+        },
+        {
+            "label": "持仓成本",
+            "value": f"¥{account_view['equity_at_cost']:,.2f}",
+            "detail": f"{len(open_positions)} 只持仓",
+            "tone": "watch" if open_positions else "info",
+        },
+        {
+            "label": "已实现盈亏",
+            "value": f"¥{account_view['realized_pnl']:,.2f}",
+            "detail": f"{len(closed_positions)} 只已平",
+            "tone": "positive" if account_view["realized_pnl"] >= 0 else "risk",
+        },
+    ]
+
+    account_state = readiness.get("account_state") or {}
+    return {
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "trade_date": readiness.get("expected_trade_date"),
+        "expected_trade_date": readiness.get("expected_trade_date"),
+        "data_trade_date": readiness.get("data_trade_date"),
+        "readiness": readiness,
+        "account": {
+            **account_view,
+            "open_positions": open_positions,
+            "closed_positions": closed_positions,
+            "available_modes": list(ACCOUNT_MODES),
+        },
+        "summary_cards": summary_cards,
+        "recent_fills": recent_fills,
+        "unreconciled_intents": account_state.get("unreconciled_intents", []),
+        "reconciliation": account_state.get("reconciliation", {}),
+        "ready_for_live_small": bool(account_state.get("ready_for_live_small")),
+        "links": {
+            "today": "/today",
+            "watchlist": "/watchlist",
+            "portfolio": "/portfolio",
         },
     }
