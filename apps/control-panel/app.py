@@ -30,6 +30,7 @@ from control_panel.dashboard_data import (
     TASK_DEFINITIONS,
     WORKSPACE_ROOT,
     STOCK_ANALYZER_ROOT,
+    AccountBookError,
     build_ask_followup_view,
     build_ask_page_view,
     build_ask_suggestions,
@@ -37,6 +38,7 @@ from control_panel.dashboard_data import (
     build_confirmation_view,
     build_overview,
     build_opportunities_view,
+    build_portfolio_account_view,
     build_review_detail_view,
     build_review_view,
     build_screening_batch_view,
@@ -47,6 +49,11 @@ from control_panel.dashboard_data import (
     ensure_runtime_dirs,
     list_runs,
     parse_timestamp,
+    record_cash_adjustment,
+    record_fill,
+    record_no_fill_intent,
+    record_reconciliation,
+    set_account_mode,
     TASK_RUN_REPOSITORY,
     update_today_action_decision,
 )
@@ -1440,3 +1447,126 @@ async def artifact(path: str) -> FileResponse:
 @app.get("/healthz")
 async def healthz() -> JSONResponse:
     return JSONResponse({"ok": True, "workspace": str(WORKSPACE_ROOT)})
+
+
+# ---------------------------------------------------------------------------
+# Portfolio account endpoints (small-amount real-money operation)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/portfolio", include_in_schema=False)
+async def portfolio_redirect() -> RedirectResponse:
+    return web_redirect("/portfolio")
+
+
+@app.get("/api/portfolio/account")
+async def api_portfolio_account() -> JSONResponse:
+    """Canonical account view: mode, cash, positions, fills, readiness."""
+
+    return JSONResponse(build_portfolio_account_view())
+
+
+@app.post("/api/portfolio/mode")
+async def api_portfolio_mode(request: Request) -> JSONResponse:
+    try:
+        payload: dict[str, Any] = await request.json()
+    except Exception:
+        payload = {}
+
+    mode = str(payload.get("mode") or "").strip().lower()
+    note = str(payload.get("note") or "").strip()
+    starting_cash = payload.get("starting_cash")
+    allow_unsafe = bool(payload.get("allow_unsafe"))
+    try:
+        set_account_mode(
+            mode,
+            starting_cash=starting_cash if starting_cash not in (None, "") else None,
+            note=note,
+            allow_unsafe=allow_unsafe,
+        )
+    except AccountBookError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return JSONResponse(build_portfolio_account_view())
+
+
+@app.post("/api/portfolio/cash")
+async def api_portfolio_cash(request: Request) -> JSONResponse:
+    try:
+        payload: dict[str, Any] = await request.json()
+    except Exception:
+        payload = {}
+
+    delta = payload.get("delta")
+    reason = str(payload.get("reason") or "").strip()
+    try:
+        record_cash_adjustment(delta=delta, reason=reason)
+    except AccountBookError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return JSONResponse(build_portfolio_account_view())
+
+
+@app.post("/api/portfolio/fills")
+async def api_portfolio_fill(request: Request) -> JSONResponse:
+    try:
+        payload: dict[str, Any] = await request.json()
+    except Exception:
+        payload = {}
+
+    try:
+        record_fill(
+            trade_date=payload.get("trade_date"),
+            code=payload.get("code"),
+            side=payload.get("side"),
+            qty=payload.get("qty"),
+            price=payload.get("price"),
+            fees=payload.get("fees"),
+            name=payload.get("name"),
+            broker_ref=payload.get("broker_ref"),
+            intent_key=payload.get("intent_key"),
+            note=payload.get("note"),
+        )
+    except AccountBookError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return JSONResponse(build_portfolio_account_view())
+
+
+@app.post("/api/portfolio/intent/no_fill")
+async def api_portfolio_intent_no_fill(request: Request) -> JSONResponse:
+    try:
+        payload: dict[str, Any] = await request.json()
+    except Exception:
+        payload = {}
+
+    try:
+        record_no_fill_intent(
+            trade_date=payload.get("trade_date"),
+            intent_key=payload.get("intent_key"),
+            reason=payload.get("reason"),
+        )
+    except AccountBookError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return JSONResponse(build_portfolio_account_view())
+
+
+@app.post("/api/portfolio/reconcile")
+async def api_portfolio_reconcile(request: Request) -> JSONResponse:
+    try:
+        payload: dict[str, Any] = await request.json()
+    except Exception:
+        payload = {}
+
+    try:
+        record_reconciliation(
+            trade_date=payload.get("trade_date"),
+            broker_cash=payload.get("broker_cash"),
+            broker_equity=payload.get("broker_equity"),
+            note=payload.get("note") or "",
+        )
+    except AccountBookError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return JSONResponse(build_portfolio_account_view())

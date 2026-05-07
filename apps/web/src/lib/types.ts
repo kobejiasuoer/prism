@@ -51,6 +51,7 @@ export interface ReadinessSession {
   key: string;
   label: string;
   is_trading_day: boolean;
+  calendar_status?: "trading" | "weekend" | "holiday" | "unknown" | string;
 }
 
 export interface ReadinessIssue {
@@ -103,6 +104,116 @@ export interface ReadinessPayload {
   source_freshness: ReadinessSourceFreshness[];
   quality_freshness: ReadinessQualityFreshness[];
   recommended_tasks: string[];
+  account_state?: AccountReadinessState;
+  calendar_horizon?: string;
+}
+
+export type AccountMode = "research" | "shadow" | "live_small";
+
+export interface AccountReadinessState {
+  mode: AccountMode | string;
+  mode_label: string;
+  mode_tone: string;
+  cash_balance: number;
+  equity_at_cost: number;
+  positions_count: number;
+  fills_count: number;
+  reconciliation: {
+    count: number;
+    age_seconds: number | null;
+    age_label?: string;
+    fresh_within_seconds?: number;
+    fresh: boolean;
+    last: Record<string, unknown> | null;
+  };
+  unreconciled_intents: Array<{
+    trade_date: string;
+    intent_key: string;
+    decision_updated_at: string;
+  }>;
+  blockers: ReadinessIssue[];
+  warnings: ReadinessIssue[];
+  recommended_tasks: string[];
+  ready_for_live_small: boolean;
+}
+
+export interface AccountPosition {
+  code: string;
+  name: string;
+  qty: number;
+  avg_cost: number;
+  cost_basis: number;
+  realized_pnl: number;
+  last_fill_at: string;
+  fills: number;
+}
+
+export interface AccountFill {
+  fill_id: string;
+  ts: string;
+  trade_date: string;
+  code: string;
+  name: string;
+  side: "buy" | "sell";
+  qty: number;
+  price: number;
+  fees: number;
+  notional: number;
+  cash_delta: number;
+  balance_after: number;
+  broker_ref: string | null;
+  intent_key: string | null;
+  note: string;
+}
+
+export interface AccountReconciliation {
+  ts: string;
+  trade_date: string;
+  broker_cash: number;
+  broker_equity: number;
+  local_cash: number;
+  local_equity_at_cost: number;
+  delta_cash: number;
+  delta_equity: number;
+  note: string;
+}
+
+export interface AccountView {
+  mode: AccountMode | string;
+  mode_label: string;
+  mode_tone: string;
+  mode_updated_at: string;
+  currency: string;
+  starting_cash: number;
+  cash_balance: number;
+  deposits_total: number;
+  equity_at_cost: number;
+  book_value: number;
+  realized_pnl: number;
+  open_positions: AccountPosition[];
+  closed_positions: AccountPosition[];
+  fills: AccountFill[];
+  fills_count: number;
+  last_fill_at: string;
+  reconciliations: AccountReconciliation[];
+  no_fill_intents: Array<{ ts: string; trade_date: string; intent_key: string; reason: string }>;
+  available_modes: AccountMode[];
+  updated_at: string;
+}
+
+export interface PortfolioAccountResponse {
+  generated_at: string;
+  trade_date: string;
+  expected_trade_date: string;
+  data_trade_date: string | null;
+  readiness: ReadinessPayload;
+  account: AccountView;
+  summary_cards: MetricCardData[];
+  recent_fills: AccountFill[];
+  unreconciled_intents: AccountReadinessState["unreconciled_intents"];
+  reconciliation: AccountReadinessState["reconciliation"];
+  ready_for_live_small: boolean;
+  links: LinkMap;
 }
 
 export interface QualityCardData {

@@ -31,6 +31,13 @@ import os
 from datetime import date, datetime, timedelta
 from typing import Any, Iterable, Mapping, Sequence
 
+from trading_calendar import (
+    CALENDAR_HORIZON,
+    calendar_status,
+    is_trading_day,
+    most_recent_trading_day,
+)
+
 
 __all__ = [
     "expected_trade_date",
@@ -144,24 +151,12 @@ def expected_trade_date(now: datetime | None = None) -> str:
     """Return the trade date the operator expects to see on the page.
 
     Allows an explicit ``PRISM_EXPECTED_TRADE_DATE=YYYY-MM-DD`` env override
-    (mainly for tests and replay sessions).  When that override is missing,
-    weekdays return today, weekends fall back to the previous weekday so the
-    page still has a meaningful baseline — but ``compute_readiness`` will
-    refuse to mark the system ``live_ready`` on those non-trading days.
-
-    TODO(holiday-calendar): this helper currently treats every weekday as a
-    trading day.  A-share market closes for several multi-day holidays
-    (Spring Festival, May Day, National Day, Tomb-Sweeping, etc.) and even
-    when stale data lines up across all sources we will *technically* be
-    inside the live_ready check on those days.  Risk: on the first weekday
-    after a holiday, expected_trade_date == today even though the previous
-    trading day was further back, so a partially-aligned snapshot may look
-    cleaner than it should.  Mitigation today: every freshness check still
-    runs against ``age_seconds`` thresholds, so genuinely stale artifacts
-    will still trip ``age_exceeded`` and end up blocked.  Plan: wire a
-    static A-share holiday list (or akshare ``tool_trade_date_hist_sina``)
-    and have this helper roll forward/back to the nearest trading session.
-    Tracked separately to keep this PR scoped to readiness fixes.
+    (mainly for tests and replay sessions).  When that override is missing
+    we consult the trading calendar: weekdays that are also exchange
+    trading days return today; weekends and exchange holidays fall back to
+    the most recent confirmed trading day so the page still has a sensible
+    baseline.  ``compute_readiness`` will refuse to mark the system
+    ``live_ready`` on those non-trading days regardless.
     """
 
     override = os.environ.get("PRISM_EXPECTED_TRADE_DATE", "").strip()
@@ -171,33 +166,54 @@ def expected_trade_date(now: datetime | None = None) -> str:
             return normalized
 
     current = now or datetime.now()
-    if current.date().weekday() >= 5:
-        return _previous_weekday(current.date()).strftime("%Y-%m-%d")
-    return current.strftime("%Y-%m-%d")
+    if is_trading_day(current):
+        return current.strftime("%Y-%m-%d")
+    return most_recent_trading_day(current).strftime("%Y-%m-%d")
 
 
 def current_session(now: datetime | None = None) -> dict[str, Any]:
     """Best-effort A-share session classifier (Asia/Shanghai assumption).
 
     The control panel runs locally and we already assume host time is in
-    market timezone elsewhere, so we use the host clock directly.
+    market timezone elsewhere, so we use the host clock directly.  The
+    classifier consults the trading calendar so post-holiday weekdays are
+    correctly flagged as non-trading.
     """
 
     current = now or datetime.now()
-    weekday = current.weekday()
-    if weekday >= 5:
-        return {"key": "weekend", "label": "周末休市", "is_trading_day": False}
+    cal = calendar_status(current)
+    if cal["status"] == "holiday":
+        return {
+            "key": "holiday",
+            "label": f"节假日休市（{cal['reason']}）",
+            "is_trading_day": False,
+            "calendar_status": cal["status"],
+        }
+    if cal["status"] == "weekend":
+        return {
+            "key": "weekend",
+            "label": "周末休市",
+            "is_trading_day": False,
+            "calendar_status": cal["status"],
+        }
+    if cal["status"] == "unknown":
+        return {
+            "key": "unknown",
+            "label": "交易日历未覆盖",
+            "is_trading_day": False,
+            "calendar_status": cal["status"],
+        }
 
     minutes = current.hour * 60 + current.minute
     if minutes < 9 * 60:
-        return {"key": "premarket", "label": "盘前", "is_trading_day": True}
+        return {"key": "premarket", "label": "盘前", "is_trading_day": True, "calendar_status": cal["status"]}
     if minutes < 11 * 60 + 30:
-        return {"key": "morning", "label": "早盘", "is_trading_day": True}
+        return {"key": "morning", "label": "早盘", "is_trading_day": True, "calendar_status": cal["status"]}
     if minutes < 13 * 60:
-        return {"key": "midday", "label": "午间", "is_trading_day": True}
+        return {"key": "midday", "label": "午间", "is_trading_day": True, "calendar_status": cal["status"]}
     if minutes < 15 * 60:
-        return {"key": "afternoon", "label": "午后", "is_trading_day": True}
-    return {"key": "post_close", "label": "盘后", "is_trading_day": True}
+        return {"key": "afternoon", "label": "午后", "is_trading_day": True, "calendar_status": cal["status"]}
+    return {"key": "post_close", "label": "盘后", "is_trading_day": True, "calendar_status": cal["status"]}
 
 
 # ---------------------------------------------------------------------------
@@ -348,6 +364,8 @@ def compute_readiness(
     confirmation: Mapping[str, Any] | None,
     decision_brief: Mapping[str, Any] | None,
     quality_status: Mapping[str, Any] | None,
+    account_book: Mapping[str, Any] | None = None,
+    today_action_decisions: Mapping[str, Any] | None = None,
     now: datetime | None = None,
     expected_date: str | None = None,
     source_thresholds: Mapping[str, int] | None = None,
@@ -357,6 +375,12 @@ def compute_readiness(
 
     The caller passes already-loaded canonical artifacts; we never touch the
     filesystem from here so the function is easy to test.
+
+    ``account_book`` and ``today_action_decisions`` are optional — when they
+    are provided we extend the readiness payload with an ``account_state``
+    block and tighten the live-ready gate accordingly.  When they are
+    omitted (e.g. for legacy callers / older tests) the function preserves
+    its previous behaviour and treats the account dimension as "research".
     """
 
     current = now or datetime.now()
@@ -557,13 +581,39 @@ def compute_readiness(
     # Mode resolution -----------------------------------------------------
     stale_count = sum(1 for item in sources if item["stale"])
 
+    # Account-state evaluation (does NOT alter data-side blockers; only
+    # tightens the live-ready gate when the operator has opted into a real-
+    # money mode).  We compute it before the final mode pick so the
+    # account-side blockers participate in the same decision.
+    account_state = _build_account_state(
+        account_book=account_book,
+        today_action_decisions=today_action_decisions,
+        now=current,
+        expected_date=expected,
+    )
+    blockers.extend(account_state["blockers"])
+    warnings.extend(account_state["warnings"])
+    for task in account_state["recommended_tasks"]:
+        add_recommendation(task)
+
     if not is_trading_day:
-        # Weekend / holiday: at most shadow_only, never live_ready.
+        # Weekend / holiday / unknown calendar: at most shadow_only, never
+        # live_ready.  We surface the specific reason from the session
+        # classifier so the operator knows whether it's a weekend, a known
+        # exchange holiday, or a date past the published calendar horizon.
         readiness_mode = "shadow_only"
+        if session.get("calendar_status") == "holiday":
+            non_trading_message = "当前为交易所休市日，仅做影子盘观察，不要按页面执行真钱操作。"
+        elif session.get("calendar_status") == "unknown":
+            non_trading_message = (
+                "交易日历尚未覆盖该日期，无法确认是否开市；先做影子盘观察并升级日历。"
+            )
+        else:
+            non_trading_message = "当前不是交易日，仅做观察 / 影子盘，不要按页面执行真钱操作。"
         warnings.append({
             "code": "non_trading_day",
             "label": session["label"],
-            "message": "当前不是交易日，仅做观察 / 影子盘，不要按页面执行真钱操作。",
+            "message": non_trading_message,
             "recommended_task": "command_brief",
         })
         ready = False
@@ -596,6 +646,7 @@ def compute_readiness(
         "display_date": current.strftime("%Y-%m-%d"),
         "checked_at": current.strftime("%Y-%m-%d %H:%M:%S"),
         "session": session,
+        "calendar_horizon": CALENDAR_HORIZON.strftime("%Y-%m-%d"),
         "readiness_mode": readiness_mode,
         "ready": ready,
         "brief_is_live": brief_is_live,
@@ -605,7 +656,281 @@ def compute_readiness(
         "source_freshness": sources,
         "quality_freshness": quality_items,
         "recommended_tasks": recommended_tasks,
+        "account_state": account_state,
     }
+
+
+# ---------------------------------------------------------------------------
+# Account-state contributions
+# ---------------------------------------------------------------------------
+
+
+def _build_account_state(
+    *,
+    account_book: Mapping[str, Any] | None,
+    today_action_decisions: Mapping[str, Any] | None,
+    now: datetime,
+    expected_date: str,
+) -> dict[str, Any]:
+    """Translate the account book into readiness contributions.
+
+    Returns a dict with:
+
+    * ``mode`` / ``mode_label``
+    * ``cash_balance``, ``equity_at_cost``, ``positions_count``
+    * ``reconciliation``: ``{count, age_seconds, fresh, last}``
+    * ``unreconciled_intents``: list of stale "done" actions without fills
+    * ``blockers`` / ``warnings`` / ``recommended_tasks`` to merge into the
+      top-level readiness payload.
+    """
+
+    blockers: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
+    recommended: list[str] = []
+
+    if account_book is None:
+        # Caller didn't opt-in to account-state evaluation.  Treat as
+        # research mode and surface a single warning so the UI can prompt
+        # the operator to set the mode explicitly before going live.
+        return {
+            "mode": "research",
+            "mode_label": "研究态",
+            "mode_tone": "info",
+            "cash_balance": 0.0,
+            "equity_at_cost": 0.0,
+            "positions_count": 0,
+            "fills_count": 0,
+            "reconciliation": {"count": 0, "age_seconds": None, "fresh": False, "last": None},
+            "unreconciled_intents": [],
+            "blockers": blockers,
+            "warnings": warnings,
+            "recommended_tasks": recommended,
+            "ready_for_live_small": False,
+        }
+
+    mode = str(account_book.get("mode") or "research").strip().lower()
+    cash_balance = _to_money(account_book.get("cash_balance"))
+    fills = list(account_book.get("fills") or [])
+    positions = _summarize_positions(fills)
+    open_positions = [p for p in positions.values() if p["qty"] > 0]
+    equity_at_cost = round(sum(p["cost_basis"] for p in open_positions), 2)
+
+    recon_items = list(account_book.get("reconciliations") or [])
+    recon_age = _last_reconciliation_age(recon_items, now)
+    recon_fresh_threshold = 36 * 3600
+    recon_summary = {
+        "count": len(recon_items),
+        "age_seconds": recon_age,
+        "age_label": _age_label(recon_age),
+        "fresh_within_seconds": recon_fresh_threshold,
+        "fresh": recon_age is not None and recon_age <= recon_fresh_threshold,
+        "last": recon_items[-1] if recon_items else None,
+    }
+
+    pending = _find_unreconciled_intents(
+        fills=fills,
+        no_fill_intents=list(account_book.get("no_fill_intents") or []),
+        decisions_store=today_action_decisions,
+        today_str=now.strftime("%Y-%m-%d"),
+    )
+
+    if mode == "live_small":
+        if cash_balance <= 0:
+            blockers.append(
+                {
+                    "code": "account_cash_zero",
+                    "label": "实盘现金",
+                    "message": "实盘账户现金余额为 0，请先记录入金或调回研究态。",
+                    "recommended_task": "portfolio_cash",
+                }
+            )
+            recommended.append("portfolio_cash")
+        if not recon_summary["fresh"]:
+            blockers.append(
+                {
+                    "code": "account_reconcile_stale",
+                    "label": "账户对账",
+                    "message": (
+                        "实盘账户超过 36 小时未对账，先核对券商现金 / 持仓再继续按页面执行。"
+                    ),
+                    "recommended_task": "portfolio_reconcile",
+                }
+            )
+            recommended.append("portfolio_reconcile")
+        if pending:
+            blockers.append(
+                {
+                    "code": "account_unreconciled_intents",
+                    "label": "未对账动作",
+                    "message": (
+                        f"有 {len(pending)} 条历史 done 动作未绑定成交或 no_fill 备注，"
+                        "请先补录成交或标记为无成交。"
+                    ),
+                    "recommended_task": "portfolio_reconcile",
+                }
+            )
+            recommended.append("portfolio_reconcile")
+    elif mode == "shadow":
+        if pending:
+            warnings.append(
+                {
+                    "code": "account_unreconciled_intents",
+                    "label": "未对账动作",
+                    "message": (
+                        f"影子盘有 {len(pending)} 条历史 done 动作未绑定成交，"
+                        "实盘前先补全。"
+                    ),
+                    "recommended_task": "portfolio_reconcile",
+                }
+            )
+        if not recon_summary["fresh"] and (cash_balance > 0 or fills):
+            warnings.append(
+                {
+                    "code": "account_reconcile_stale",
+                    "label": "账户对账",
+                    "message": "影子盘账本距上次对账已超过 36 小时，建议尽快对账后再切换实盘。",
+                    "recommended_task": "portfolio_reconcile",
+                }
+            )
+
+    ready_for_live_small = (
+        mode == "live_small"
+        and cash_balance > 0
+        and recon_summary["fresh"]
+        and not pending
+    )
+
+    return {
+        "mode": mode,
+        "mode_label": {"research": "研究态", "shadow": "影子盘", "live_small": "小额实盘"}.get(
+            mode, mode
+        ),
+        "mode_tone": {"research": "info", "shadow": "watch", "live_small": "risk"}.get(
+            mode, "info"
+        ),
+        "cash_balance": cash_balance,
+        "equity_at_cost": equity_at_cost,
+        "positions_count": len(open_positions),
+        "fills_count": len(fills),
+        "reconciliation": recon_summary,
+        "unreconciled_intents": pending,
+        "blockers": blockers,
+        "warnings": warnings,
+        "recommended_tasks": recommended,
+        "ready_for_live_small": ready_for_live_small,
+    }
+
+
+def _to_money(value: Any) -> float:
+    try:
+        return round(float(value or 0), 2)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _last_reconciliation_age(items: list[Mapping[str, Any]], now: datetime) -> int | None:
+    if not items:
+        return None
+    last = items[-1]
+    parsed = _parse_dt(last.get("ts"))
+    if parsed is None:
+        return None
+    return _age_seconds(now, parsed)
+
+
+def _summarize_positions(fills: list[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Lightweight position aggregation duplicated from account_book.
+
+    We keep a copy here so readiness has zero dependency on the account_book
+    module (avoids circular imports and keeps readiness side-effect free).
+    The math matches ``account_book._compute_positions``.
+    """
+
+    positions: dict[str, dict[str, Any]] = {}
+    for fill in fills:
+        code = str(fill.get("code") or "")
+        if not code:
+            continue
+        side = str(fill.get("side") or "").lower()
+        try:
+            qty = int(fill.get("qty") or 0)
+            price = float(fill.get("price") or 0.0)
+            fees = float(fill.get("fees") or 0.0)
+        except (TypeError, ValueError):
+            continue
+        pos = positions.setdefault(
+            code,
+            {"code": code, "qty": 0, "avg_cost": 0.0, "cost_basis": 0.0},
+        )
+        if side == "buy":
+            new_qty = pos["qty"] + qty
+            new_cost = pos["cost_basis"] + qty * price + fees
+            pos["qty"] = new_qty
+            pos["cost_basis"] = round(new_cost, 2)
+            pos["avg_cost"] = round(new_cost / new_qty, 2) if new_qty else 0.0
+        elif side == "sell":
+            sell_qty = min(qty, pos["qty"])
+            new_qty = pos["qty"] - sell_qty
+            if new_qty <= 0:
+                pos["qty"] = 0
+                pos["cost_basis"] = 0.0
+                pos["avg_cost"] = 0.0
+            else:
+                pos["qty"] = new_qty
+                pos["cost_basis"] = round(pos["avg_cost"] * new_qty, 2)
+    return positions
+
+
+def _find_unreconciled_intents(
+    *,
+    fills: list[Mapping[str, Any]],
+    no_fill_intents: list[Mapping[str, Any]],
+    decisions_store: Mapping[str, Any] | None,
+    today_str: str,
+) -> list[dict[str, Any]]:
+    if not decisions_store:
+        return []
+    decisions = decisions_store.get("trade_dates") or {}
+    fill_index: set[tuple[str, str]] = set()
+    for fill in fills:
+        ik = str(fill.get("intent_key") or "").strip()
+        td = str(fill.get("trade_date") or "").strip()
+        if ik and td:
+            fill_index.add((td, ik))
+
+    no_fill_index: set[tuple[str, str]] = set()
+    for marker in no_fill_intents:
+        ik = str(marker.get("intent_key") or "").strip()
+        td = str(marker.get("trade_date") or "").strip()
+        if ik and td:
+            no_fill_index.add((td, ik))
+
+    pending: list[dict[str, Any]] = []
+    for trade_date, items in decisions.items():
+        td = str(trade_date or "").strip()
+        if not td or td >= today_str:
+            continue
+        if not isinstance(items, Mapping):
+            continue
+        for key, payload in items.items():
+            if not isinstance(payload, Mapping):
+                continue
+            if str(payload.get("decision") or "").strip().lower() != "done":
+                continue
+            ki = str(key or "").strip()
+            if not ki:
+                continue
+            if (td, ki) in fill_index or (td, ki) in no_fill_index:
+                continue
+            pending.append(
+                {
+                    "trade_date": td,
+                    "intent_key": ki,
+                    "decision_updated_at": str(payload.get("updated_at") or ""),
+                }
+            )
+    pending.sort(key=lambda x: (x["trade_date"], x["intent_key"]))
+    return pending
 
 
 # ---------------------------------------------------------------------------
