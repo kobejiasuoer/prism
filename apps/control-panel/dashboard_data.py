@@ -107,6 +107,22 @@ ACTION_DECISION_TONES = {
     "skip": "risk",
 }
 
+ACTION_DISPLAY_LABELS = {
+    "pending": "待处理",
+    "done": "已完成",
+    "watch": "继续观察中",
+    "skip": "已放弃",
+    "no_fill": "未成交，已记录",
+}
+
+ACTION_DISPLAY_TONES = {
+    "pending": "watch",
+    "done": "positive",
+    "watch": "watch",
+    "skip": "risk",
+    "no_fill": "hold",
+}
+
 ACTION_TIER_LABELS = {
     "act_now": "优先处理",
     "wait_trigger": "等触发",
@@ -1518,6 +1534,14 @@ def action_decision_label(decision: str | None) -> str:
 
 def action_decision_tone(decision: str | None) -> str:
     return ACTION_DECISION_TONES.get(str(decision or "pending").strip(), "watch")
+
+
+def action_display_label(state: str | None) -> str:
+    return ACTION_DISPLAY_LABELS.get(str(state or "pending").strip(), "待处理")
+
+
+def action_display_tone(state: str | None) -> str:
+    return ACTION_DISPLAY_TONES.get(str(state or "pending").strip(), "watch")
 
 
 def load_today_action_decision_store() -> dict[str, Any]:
@@ -5043,8 +5067,52 @@ def build_today_action_decision_state(item: dict[str, Any], decision_map: dict[s
     }
 
 
-def build_today_action_queue(action_groups: list[dict[str, Any]], trade_date: str) -> dict[str, Any]:
+def build_no_fill_intent_index(account_book: dict[str, Any] | None) -> dict[tuple[str, str], dict[str, Any]]:
+    index: dict[tuple[str, str], dict[str, Any]] = {}
+    for item in (account_book or {}).get("no_fill_intents") or []:
+        if not isinstance(item, dict):
+            continue
+        trade_date = str(item.get("trade_date") or "").strip()
+        intent_key = str(item.get("intent_key") or "").strip()
+        if trade_date and intent_key:
+            index[(trade_date, intent_key)] = item
+    return index
+
+
+def build_today_action_display_state(
+    *,
+    item: dict[str, Any],
+    trade_date: str,
+    no_fill_index: dict[tuple[str, str], dict[str, Any]],
+) -> dict[str, Any]:
+    key = str(item.get("key") or "").strip()
+    decision = item.get("decision") or {}
+    decision_value = str(decision.get("value") or "pending").strip().lower()
+    no_fill = no_fill_index.get((str(trade_date or "").strip(), key))
+    state = "no_fill" if no_fill and decision_value == "pending" else decision_value
+    updated_at_raw = str(
+        ((no_fill or {}).get("ts") if state == "no_fill" else "")
+        or decision.get("updated_at_raw")
+        or ""
+    ).strip()
+    return {
+        "value": state,
+        "label": action_display_label(state),
+        "tone": action_display_tone(state),
+        "updated_at": fmt_dt(updated_at_raw) if updated_at_raw else str(decision.get("updated_at") or ""),
+        "updated_at_raw": updated_at_raw,
+        "reason": str((no_fill or {}).get("reason") or "").strip() if state == "no_fill" else "",
+    }
+
+
+def build_today_action_queue(
+    action_groups: list[dict[str, Any]],
+    trade_date: str,
+    *,
+    account_book: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     decision_map = get_today_action_decision_map(trade_date)
+    no_fill_index = build_no_fill_intent_index(account_book)
     ranked_items: list[dict[str, Any]] = []
 
     for group in action_groups:
@@ -5054,6 +5122,11 @@ def build_today_action_queue(action_groups: list[dict[str, Any]], trade_date: st
             queue_item["group_title"] = group.get("title") or ""
             queue_item["group_index"] = index
             queue_item["decision"] = build_today_action_decision_state(item, decision_map)
+            queue_item["display_state"] = build_today_action_display_state(
+                item=queue_item,
+                trade_date=trade_date,
+                no_fill_index=no_fill_index,
+            )
             ranked_items.append(queue_item)
 
     ranked_items.sort(key=today_action_queue_priority)
@@ -5061,14 +5134,15 @@ def build_today_action_queue(action_groups: list[dict[str, Any]], trade_date: st
 
     counts = {
         "total": len(selected_items),
-        "pending": sum(1 for item in selected_items if (item.get("decision") or {}).get("value") == "pending"),
-        "done": sum(1 for item in selected_items if (item.get("decision") or {}).get("value") == "done"),
-        "watch": sum(1 for item in selected_items if (item.get("decision") or {}).get("value") == "watch"),
-        "skip": sum(1 for item in selected_items if (item.get("decision") or {}).get("value") == "skip"),
+        "pending": sum(1 for item in selected_items if (item.get("display_state") or {}).get("value") == "pending"),
+        "done": sum(1 for item in selected_items if (item.get("display_state") or {}).get("value") == "done"),
+        "watch": sum(1 for item in selected_items if (item.get("display_state") or {}).get("value") == "watch"),
+        "skip": sum(1 for item in selected_items if (item.get("display_state") or {}).get("value") == "skip"),
+        "no_fill": sum(1 for item in selected_items if (item.get("display_state") or {}).get("value") == "no_fill"),
     }
 
     last_updated = max(
-        (((item.get("decision") or {}).get("updated_at_raw") or "") for item in selected_items),
+        (((item.get("display_state") or {}).get("updated_at_raw") or "") for item in selected_items),
         default="",
     )
     counts["last_updated"] = fmt_dt(last_updated) if last_updated else "-"
@@ -8218,7 +8292,7 @@ def build_today_view() -> dict[str, Any]:
         brief_is_live=brief_is_live,
         gate=gate,
     )
-    action_queue = build_today_action_queue(action_groups, trade_date)
+    action_queue = build_today_action_queue(action_groups, trade_date, account_book=account_book)
 
     source_freshness_map = {item["key"]: item for item in readiness["source_freshness"]}
 

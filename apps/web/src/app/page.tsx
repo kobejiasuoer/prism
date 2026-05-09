@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, Check, ChevronRight, FileDown, LoaderCircle, RefreshCw, ShieldAlert, ShieldCheck } from "lucide-react";
+import { AlertCircle, Check, ChevronRight, FileDown, RefreshCw, ShieldAlert, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import type { CSSProperties } from "react";
 
@@ -8,10 +8,8 @@ import { Badge } from "@/components/badge";
 import {
   useRuns,
   useTodayData,
-  useUpdateTodayActionDecision,
 } from "@/lib/hooks";
 import type {
-  DecisionValue,
   QualityCardData,
   ReadinessIssue,
   ReadinessMode,
@@ -21,6 +19,7 @@ import type {
   SourceCardData,
   TodayActionItem,
   TodayCommandHeroAction,
+  TodayActionDisplayValue,
 } from "@/lib/types";
 import { asText, cn, stockCodeFromTitle, stockNameFromTitle, toneColor } from "@/lib/utils";
 
@@ -83,6 +82,85 @@ const TASK_TITLES: Record<string, string> = {
   command_brief: "总控简报",
 };
 
+
+const ACTION_STATE_COPY: Record<TodayActionDisplayValue, {
+  label: string;
+  button: string;
+  tone: string;
+  done: boolean;
+}> = {
+  pending: {
+    label: "待处理",
+    button: "处理",
+    tone: "watch",
+    done: false,
+  },
+  done: {
+    label: "已完成",
+    button: "查看结果",
+    tone: "positive",
+    done: true,
+  },
+  watch: {
+    label: "继续观察中",
+    button: "查看观察",
+    tone: "watch",
+    done: true,
+  },
+  skip: {
+    label: "已放弃",
+    button: "查看原因",
+    tone: "risk",
+    done: true,
+  },
+  no_fill: {
+    label: "未成交，已记录",
+    button: "查看未成交",
+    tone: "hold",
+    done: true,
+  },
+};
+
+function actionStateValue(item: TodayActionItem): TodayActionDisplayValue {
+  return item.display_state?.value || item.decision?.value || "pending";
+}
+
+function actionStateCopy(item: TodayActionItem) {
+  return ACTION_STATE_COPY[actionStateValue(item)] || ACTION_STATE_COPY.pending;
+}
+
+function actionItemLink(item: TodayActionItem) {
+  const linkFields = item as TodayActionItem & {
+    href?: string;
+    action_url?: string;
+    detail_url?: string;
+  };
+  return [linkFields.href, linkFields.action_url, linkFields.detail_url, linkFields.url].find(
+    (value) => typeof value === "string" && value.trim() && value.trim() !== "#",
+  );
+}
+
+function actionHref(item: TodayActionItem, options: { portfolioForCompleted?: boolean } = {}) {
+  const state = actionStateValue(item);
+  const code = stockCodeFromTitle(item.title) || stockCodeFromTitle(item.key);
+  if (options.portfolioForCompleted && ["done", "skip", "no_fill"].includes(state)) {
+    return `/portfolio?intent_key=${encodeURIComponent(item.key)}#decision-writeback`;
+  }
+  return code ? `/stock/${code}` : actionItemLink(item) || "#";
+}
+
+function firstPendingAction(items: TodayActionItem[]) {
+  return items.find((item) => actionStateValue(item) === "pending");
+}
+
+function dataLooksStale(readiness?: ReadinessPayload, sourceCards: SourceCardData[] = []) {
+  return Boolean(
+    readiness?.stale_count ||
+      readiness?.blockers?.length ||
+      sourceCards.some((source) => source.stale),
+  );
+}
+
 function ReadinessBanner({ readiness }: { readiness?: ReadinessPayload }) {
   if (!readiness) {
     return null;
@@ -138,6 +216,75 @@ function ReadinessBanner({ readiness }: { readiness?: ReadinessPayload }) {
             </div>
           ) : null}
         </div>
+      </div>
+    </section>
+  );
+}
+
+function TodayPrimaryCTA({
+  readiness,
+  items,
+  sourceCards,
+}: {
+  readiness?: ReadinessPayload;
+  items: TodayActionItem[];
+  sourceCards: SourceCardData[];
+}) {
+  const pending = firstPendingAction(items);
+  const allHandled = items.length > 0 && !pending;
+  const stale = dataLooksStale(readiness, sourceCards);
+  const blocked = readiness?.readiness_mode === "blocked" || (stale && readiness?.readiness_mode !== "shadow_only");
+  const shadowOnly = readiness?.readiness_mode === "shadow_only" || readiness?.session?.is_trading_day === false;
+  let title = "今天数据可用，先处理下一条待决策动作";
+  let detail = "真钱执行：允许，但必须遵守仓位纪律";
+  let button = "处理下一只股票";
+  let href = pending ? actionHref(pending) : "#action-queue";
+  let tone = "positive";
+
+  if (shadowOnly) {
+    title = "今天仅影子盘观察，不可真钱执行";
+    detail = "真钱执行：禁止";
+    button = pending ? "查看下一条影子盘动作" : "查看今日动作队列";
+    href = pending ? actionHref(pending) : "#action-queue";
+    tone = "warning";
+  } else if (allHandled) {
+    title = "今日动作已闭环";
+    detail = readiness?.readiness_mode === "live_ready"
+      ? "真钱执行：按仓位纪律复核，不新增临时动作"
+      : "真钱执行：禁止；今日只查看处理结果";
+    button = "查看处理结果";
+    href = "/portfolio";
+    tone = "positive";
+  } else if (blocked) {
+    title = "数据未就绪，先恢复数据链路";
+    detail = "真钱执行：禁止";
+    button = "去刷新数据";
+    href = "/settings";
+    tone = "negative";
+  } else if (!pending) {
+    title = "今日动作已闭环";
+    detail = "真钱执行：按仓位纪律复核，不新增临时动作";
+    button = "查看处理结果";
+    href = "/portfolio";
+    tone = "positive";
+  }
+
+  return (
+    <section className="war-inline-note" data-od-id="today-primary-cta">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone={tone}>今日第一步</Badge>
+            <span className="text-[12px] font-medium text-[var(--text-primary)]">{title}</span>
+          </div>
+          <div className={cn("mt-1 text-[12px]", tone === "positive" ? "buy-text" : tone === "negative" ? "negative-text" : "watch-text")}>
+            {detail}
+          </div>
+        </div>
+        <Link href={href} className="focus-ring war-check is-on shrink-0">
+          {button}
+          <ChevronRight size={14} />
+        </Link>
       </div>
     </section>
   );
@@ -238,7 +385,7 @@ function DecisionBrief({
 }) {
   const liveTone = readinessMode === "live_ready" ? "positive" : readinessMode === "shadow_only" ? "warning" : "negative";
   const liveLabel =
-    readinessMode === "live_ready" ? "live ready" : readinessMode === "shadow_only" ? "shadow only" : "blocked";
+    readinessMode === "live_ready" ? "允许真钱" : readinessMode === "shadow_only" ? "影子盘" : "禁止";
   const sourceTone = readinessMode === "live_ready" ? "buy-text" : "watch-text";
   const qualityTone = qualityTimely === qualityTotal && qualityTotal > 0 ? "buy-text" : "watch-text";
   const qualityLabel = qualityTotal > 0 ? `${qualityTimely}/${qualityTotal}` : "-";
@@ -247,7 +394,7 @@ function DecisionBrief({
     <section className="war-brief" data-od-id="decision-summary">
       <div className="war-brief-main">
         <div className="war-eyebrow-row">
-          <span className="war-eyebrow">Live Decision</span>
+          <span className="war-eyebrow">Trading Decision</span>
           <Badge tone={liveTone}>{status}</Badge>
         </div>
         <h2>{title}</h2>
@@ -272,7 +419,7 @@ function DecisionBrief({
         <div className="war-mini-grid">
           <div>
             <span>简报</span>
-            <strong className={briefLive ? "buy-text" : "watch-text"}>{briefLive ? "live" : "fallback"}</strong>
+            <strong className={briefLive ? "buy-text" : "watch-text"}>{briefLive ? "当日可用" : "回退"}</strong>
           </div>
           <div>
             <span>数据源</span>
@@ -285,7 +432,7 @@ function DecisionBrief({
             <strong className={qualityTone}>{qualityLabel}</strong>
           </div>
           <div>
-            <span>状态</span>
+            <span>交易可用</span>
             <strong className={readinessMode === "live_ready" ? "buy-text" : readinessMode === "blocked" ? "negative-text" : "watch-text"}>
               {liveLabel}
             </strong>
@@ -319,8 +466,6 @@ function ActionStack({
   items,
   counts,
   loading,
-  disabled,
-  onDecision,
 }: {
   items: TodayActionItem[];
   counts?: {
@@ -329,22 +474,23 @@ function ActionStack({
     done: number;
     watch: number;
     skip: number;
+    no_fill?: number;
     last_updated?: string;
   };
   loading: boolean;
-  disabled?: boolean;
-  onDecision: (key: string, decision: DecisionValue) => void;
 }) {
+  const handled = (counts?.done || 0) + (counts?.watch || 0) + (counts?.skip || 0) + (counts?.no_fill || 0);
   return (
-    <section className="war-stack" data-od-id="action-queue">
+    <section id="action-queue" className="war-stack" data-od-id="action-queue">
       <header className="war-section-head">
         <div>
           <span className="war-eyebrow">Action Stack</span>
           <h2>今天只看这几件事</h2>
         </div>
         <div className="war-counts">
-          <span>P0 {counts?.pending ?? items.length}</span>
-          <span>已处理 {counts?.done ?? 0}/{counts?.total ?? items.length}</span>
+          <span>待处理 {counts?.pending ?? items.length}</span>
+          <span>已处理 {handled}/{counts?.total ?? items.length}</span>
+          {counts?.no_fill ? <span>未成交 {counts.no_fill}</span> : null}
         </div>
       </header>
 
@@ -365,8 +511,6 @@ function ActionStack({
               key={item.key}
               item={item}
               index={index}
-              disabled={disabled}
-              onDecision={onDecision}
             />
           ))}
         </div>
@@ -380,22 +524,26 @@ function ActionStack({
 function WarActionCard({
   item,
   index,
-  disabled,
-  onDecision,
 }: {
   item: TodayActionItem;
   index: number;
-  disabled?: boolean;
-  onDecision: (key: string, decision: DecisionValue) => void;
 }) {
-  const checked = item.decision?.value === "done";
+  const state = actionStateValue(item);
+  const stateCopy = actionStateCopy(item);
+  const checked = stateCopy.done;
   const code = stockCodeFromTitle(item.title);
   const name = stockNameFromTitle(item.title);
-  const href = code ? `/stock/${code}` : item.url || "#";
-  const tone = item.tone || item.decision?.tone || (index === 0 ? "sell" : "watch");
-  const nextDecision: DecisionValue = checked ? "pending" : "done";
+  const href = actionHref(item);
+  const resultHref = actionHref(item, { portfolioForCompleted: true });
+  const tone = stateCopy.done ? stateCopy.tone : item.tone || item.decision?.tone || (index === 0 ? "sell" : "watch");
   const freshnessLabel =
-    item.freshness?.label || item.freshness?.value || item.freshness?.status || item.confidence?.label || item.group_title || "live";
+    item.display_state?.updated_at ||
+    item.freshness?.label ||
+    item.freshness?.value ||
+    item.freshness?.status ||
+    item.confidence?.label ||
+    item.group_title ||
+    "数据可用";
 
   return (
     <article className={cn("war-action-card", checked ? "is-done" : "")}>
@@ -408,20 +556,29 @@ function WarActionCard({
         </Link>
         <p>{item.detail || item.foot || item.status || "等待系统给出下一步。"}</p>
         <div className="war-action-meta">
-          <Badge tone={tone}>{item.status || item.group_title || item.decision?.label || "待处理"}</Badge>
+          <Badge tone={stateCopy.tone}>{item.display_state?.label || stateCopy.label}</Badge>
           <span>{item.source || item.group_title || freshnessLabel}</span>
+          {state === "no_fill" && item.display_state?.reason ? <span>{item.display_state.reason}</span> : null}
         </div>
       </div>
       <div className="war-action-control">
-        <button
-          type="button"
-          className={cn("focus-ring war-check", checked ? "is-on" : "")}
-          disabled={disabled}
-          onClick={() => onDecision(item.key, nextDecision)}
-        >
-          {disabled ? <LoaderCircle size={14} className="animate-spin" /> : <Check size={14} />}
-          {checked ? "已处理" : "处理"}
-        </button>
+        {state === "pending" ? (
+          href !== "#" ? (
+            <Link href={href} className="focus-ring war-check">
+              {stateCopy.button}
+              <ChevronRight size={14} />
+            </Link>
+          ) : (
+            <button type="button" className="focus-ring war-check" disabled>
+              暂无详情
+            </button>
+          )
+        ) : (
+          <Link href={resultHref} className="focus-ring war-check is-on">
+            <Check size={14} />
+            {stateCopy.button}
+          </Link>
+        )}
         <Link href={href} className="war-action-time">
           <span>{freshnessLabel}</span>
           <ChevronRight size={14} />
@@ -585,7 +742,6 @@ function IntelligenceRail({
 export default function CommandCenterPage() {
   const today = useTodayData();
   const runsQuery = useRuns();
-  const updateDecision = useUpdateTodayActionDecision();
   const data = today.data;
   const hero = data?.command_hero;
   const readiness = data?.readiness;
@@ -665,17 +821,6 @@ export default function CommandCenterPage() {
     },
   ];
 
-  function handleDecision(key: string, decision: DecisionValue) {
-    if (!data) {
-      return;
-    }
-    updateDecision.mutate({
-      trade_date: data.trade_date,
-      key,
-      decision,
-    });
-  }
-
   // status copy in the hero card: NEVER show "live" wording when readiness is
   // not green, even if the user has stale data sitting in the brief.
   const briefLiveSafe = Boolean(data?.brief_is_live && readiness?.ready);
@@ -737,6 +882,7 @@ export default function CommandCenterPage() {
         ) : null}
 
         {readiness ? <ReadinessBanner readiness={readiness} /> : null}
+        <TodayPrimaryCTA readiness={readiness} items={actionItems} sourceCards={sourceCards} />
 
         <div className="war-layout" data-od-id="command-center-v1">
           <div className="war-primary">
@@ -766,20 +912,7 @@ export default function CommandCenterPage() {
               items={actionItems}
               counts={counts}
               loading={today.isLoading}
-              disabled={updateDecision.isPending}
-              onDecision={handleDecision}
             />
-
-            {updateDecision.isError ? (
-              <div className="war-inline-note negative-text">
-                动作状态更新失败：{updateDecision.error?.message || "请确认后端服务可用后重试。"}
-              </div>
-            ) : null}
-            {updateDecision.isSuccess ? (
-              <div className="war-inline-note buy-text">
-                动作状态已同步。
-              </div>
-            ) : null}
           </div>
 
           <IntelligenceRail

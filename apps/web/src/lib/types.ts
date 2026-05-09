@@ -13,6 +13,7 @@ export type Tone =
   | "stale";
 
 export type DecisionValue = "pending" | "done" | "watch" | "skip";
+export type TodayActionDisplayValue = DecisionValue | "no_fill";
 
 export interface LinkMap {
   today?: string;
@@ -329,6 +330,15 @@ export interface TodayActionDecision {
   updated_at_raw?: string;
 }
 
+export interface TodayActionDisplayState {
+  value: TodayActionDisplayValue;
+  label: string;
+  tone: Tone | string;
+  updated_at?: string;
+  updated_at_raw?: string;
+  reason?: string;
+}
+
 export interface TodayActionContext {
   value?: string;
   label?: string;
@@ -351,6 +361,7 @@ export interface TodayActionItem {
   group_title?: string;
   group_index?: number;
   decision: TodayActionDecision;
+  display_state?: TodayActionDisplayState;
   freshness?: TodayActionContext;
   confidence?: TodayActionContext;
 }
@@ -367,6 +378,7 @@ export interface TodayActionQueue {
     done: number;
     watch: number;
     skip: number;
+    no_fill?: number;
     last_updated?: string;
   };
 }

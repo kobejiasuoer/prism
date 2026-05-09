@@ -138,7 +138,7 @@ export function Sidebar({
           <span>watchlist</span>
           <span className="mono watch-text">
             {overview.data?.freshness?.find((source) => source.label.includes("自选") || source.key?.includes("watch"))
-              ?.age_label || "live"}
+              ?.age_label || "数据可用"}
           </span>
         </div>
         <div className="prism-status-footer">
