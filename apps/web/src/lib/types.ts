@@ -781,12 +781,16 @@ export interface StockTodayActionContext {
   detail?: string;
   group_title?: string;
   decision?: TodayActionDecision | null;
+  display_state?: TodayActionDisplayState | null;
 }
 
 export interface StockProfileData {
   generated_at?: string;
   code: string;
   trade_date?: string;
+  expected_trade_date?: string;
+  data_trade_date?: string | null;
+  readiness?: ReadinessPayload;
   primary_source?: "watchlist" | "opportunity" | null;
   primary_source_label?: string;
   primary_detail?: StockDetailData;

@@ -2525,15 +2525,24 @@ def find_today_action_match(code: str) -> dict[str, Any] | None:
     return None
 
 
-def build_today_action_context(code: str) -> dict[str, Any] | None:
+def build_today_action_context(
+    code: str,
+    today: dict[str, Any] | None = None,
+    account_book: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
     normalized_code = str(code or "").strip()
     if not normalized_code:
         return None
 
-    try:
-        today = build_today_view()
-    except Exception:
-        return None
+    if today is None:
+        try:
+            today = build_today_view()
+        except Exception:
+            return None
+
+    trade_date = str(today.get("trade_date") or today.get("expected_trade_date") or "").strip()
+    decision_map = get_today_action_decision_map(trade_date) if trade_date else {}
+    no_fill_index = build_no_fill_intent_index(account_book if account_book is not None else load_account_book())
 
     matched_item = None
     for item in (today.get("action_queue") or {}).get("items") or []:
@@ -2555,14 +2564,25 @@ def build_today_action_context(code: str) -> dict[str, Any] | None:
     if not matched_item:
         return None
 
+    enriched_item = dict(matched_item)
+    if not enriched_item.get("decision"):
+        enriched_item["decision"] = build_today_action_decision_state(enriched_item, decision_map)
+    if not enriched_item.get("display_state") and trade_date:
+        enriched_item["display_state"] = build_today_action_display_state(
+            item=enriched_item,
+            trade_date=trade_date,
+            no_fill_index=no_fill_index,
+        )
+
     return {
-        "key": str(matched_item.get("key") or "").strip(),
-        "trade_date": str(today.get("trade_date") or today.get("expected_trade_date") or "").strip(),
-        "source": str(matched_item.get("source") or "").strip(),
-        "status": str(matched_item.get("status") or "").strip(),
-        "detail": str(matched_item.get("detail") or "").strip(),
-        "group_title": str(matched_item.get("group_title") or "").strip(),
-        "decision": matched_item.get("decision") or None,
+        "key": str(enriched_item.get("key") or "").strip(),
+        "trade_date": trade_date,
+        "source": str(enriched_item.get("source") or "").strip(),
+        "status": str(enriched_item.get("status") or "").strip(),
+        "detail": str(enriched_item.get("detail") or "").strip(),
+        "group_title": str(enriched_item.get("group_title") or "").strip(),
+        "decision": enriched_item.get("decision") or None,
+        "display_state": enriched_item.get("display_state") or None,
     }
 
 
@@ -8007,6 +8027,43 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
     if not normalized_code:
         raise KeyError("stock code missing")
 
+    decision_brief = safe_canonical_load(load_decision_brief)
+    watchlist = safe_canonical_load(load_watchlist_snapshot)
+    screening_batch = safe_canonical_load(load_screening_batch)
+    confirmation = safe_canonical_load(load_confirmation)
+    quality_status = safe_canonical_load(load_quality_status, lane="all")
+    account_book = load_account_book()
+    today_action_decisions = load_today_action_decision_store()
+    readiness = compute_readiness(
+        watchlist=watchlist,
+        screening_batch=screening_batch,
+        confirmation=confirmation,
+        decision_brief=decision_brief,
+        quality_status=quality_status,
+        account_book=account_book,
+        today_action_decisions=today_action_decisions,
+    )
+    action_groups = build_today_action_groups(
+        watchlist,
+        screening_batch,
+        confirmation,
+        decision_brief,
+        quality_status,
+        brief_is_live=bool(readiness.get("brief_is_live")),
+        gate=(((screening_batch or {}).get("market_regime") or {}).get("execution_gate") or {}),
+    )
+    profile_trade_date = readiness.get("data_trade_date") or current_trade_date(watchlist, screening_batch, decision_brief)
+    today_context = {
+        "trade_date": profile_trade_date,
+        "expected_trade_date": readiness.get("expected_trade_date"),
+        "action_queue": build_today_action_queue(
+            action_groups,
+            profile_trade_date,
+            account_book=account_book,
+        ),
+        "action_groups": action_groups,
+    }
+
     errors: dict[str, str] = {}
     watchlist_detail: dict[str, Any] | None = None
     opportunity_detail: dict[str, Any] | None = None
@@ -8023,7 +8080,7 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
 
     primary_source = "watchlist" if watchlist_detail else ("opportunity" if opportunity_detail else None)
     primary_detail = watchlist_detail or opportunity_detail
-    today_action = build_today_action_context(normalized_code)
+    today_action = build_today_action_context(normalized_code, today=today_context, account_book=account_book)
     available_sources = [
         key
         for key, detail in (
@@ -8037,6 +8094,9 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "code": normalized_code,
         "trade_date": (primary_detail or {}).get("trade_date"),
+        "expected_trade_date": readiness.get("expected_trade_date"),
+        "data_trade_date": readiness.get("data_trade_date"),
+        "readiness": readiness,
         "primary_source": primary_source,
         "primary_source_label": {
             "watchlist": "自选股链路",
