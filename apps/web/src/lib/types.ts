@@ -761,6 +761,16 @@ export interface StockDetailData {
   links?: LinkMap;
 }
 
+export interface StockTodayActionContext {
+  key: string;
+  trade_date?: string;
+  source?: string;
+  status?: string;
+  detail?: string;
+  group_title?: string;
+  decision?: TodayActionDecision | null;
+}
+
 export interface StockProfileData {
   generated_at?: string;
   code: string;
@@ -771,6 +781,7 @@ export interface StockProfileData {
   available_sources?: Array<"watchlist" | "opportunity">;
   watchlist?: StockDetailData;
   opportunity?: StockDetailData;
+  today_action?: StockTodayActionContext | null;
   errors?: Partial<Record<"watchlist" | "opportunity", string>>;
   links?: LinkMap;
 }

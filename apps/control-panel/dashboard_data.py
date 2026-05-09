@@ -2501,6 +2501,47 @@ def find_today_action_match(code: str) -> dict[str, Any] | None:
     return None
 
 
+def build_today_action_context(code: str) -> dict[str, Any] | None:
+    normalized_code = str(code or "").strip()
+    if not normalized_code:
+        return None
+
+    try:
+        today = build_today_view()
+    except Exception:
+        return None
+
+    matched_item = None
+    for item in (today.get("action_queue") or {}).get("items") or []:
+        key = str(item.get("key") or "").strip()
+        if key.endswith(normalized_code):
+            matched_item = item
+            break
+
+    if not matched_item:
+        for group in today.get("action_groups") or []:
+            for item in group.get("items") or []:
+                key = str(item.get("key") or "").strip()
+                if key.endswith(normalized_code):
+                    matched_item = item
+                    break
+            if matched_item:
+                break
+
+    if not matched_item:
+        return None
+
+    return {
+        "key": str(matched_item.get("key") or "").strip(),
+        "trade_date": str(today.get("trade_date") or today.get("expected_trade_date") or "").strip(),
+        "source": str(matched_item.get("source") or "").strip(),
+        "status": str(matched_item.get("status") or "").strip(),
+        "detail": str(matched_item.get("detail") or "").strip(),
+        "group_title": str(matched_item.get("group_title") or "").strip(),
+        "decision": matched_item.get("decision") or None,
+    }
+
+
 def build_ask_case_view(
     query: str,
     watchlist: dict[str, Any] | None,
@@ -7908,6 +7949,7 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
 
     primary_source = "watchlist" if watchlist_detail else ("opportunity" if opportunity_detail else None)
     primary_detail = watchlist_detail or opportunity_detail
+    today_action = build_today_action_context(normalized_code)
     available_sources = [
         key
         for key, detail in (
@@ -7930,6 +7972,7 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
         "available_sources": available_sources,
         "watchlist": watchlist_detail,
         "opportunity": opportunity_detail,
+        "today_action": today_action,
         "errors": errors,
         "links": {
             "self": f"/stock/{normalized_code}",

@@ -142,6 +142,7 @@ export function useUpdateTodayActionDecision() {
       api.updateTodayActionDecision(payload),
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.today });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.portfolioAccount });
     },
   });
 }

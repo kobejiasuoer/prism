@@ -1,6 +1,7 @@
 "use client";
 
 import { Archive, FileSearch, LoaderCircle, Plus, RefreshCw, RotateCcw, SendHorizontal } from "lucide-react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -240,6 +241,40 @@ export default function StockProfilePage() {
       ...(detail.level_cards || []),
     ];
   }, [detail]);
+  const todayAction = profileData?.today_action;
+  const executionResultHref = useMemo(() => {
+    const params = new URLSearchParams();
+    const canonical = detail?.canonical_decision || askCase?.canonical_decision;
+
+    params.set("code", code);
+    params.set("source", "stock");
+    params.set("source_label", sourceLabel);
+
+    if (stockName) {
+      params.set("name", stockName);
+    }
+    if (todayAction?.key) {
+      params.set("intent_key", todayAction.key);
+      params.set("today_action_key", todayAction.key);
+    }
+    if (todayAction?.trade_date || sourceTradeDate) {
+      params.set("trade_date", todayAction?.trade_date || sourceTradeDate);
+    }
+    if (canonical?.main_conclusion) {
+      params.set("conclusion", canonical.main_conclusion);
+    }
+    if (canonical?.position_guidance) {
+      params.set("position", canonical.position_guidance);
+    }
+    if (canonical?.continue_condition) {
+      params.set("continue_condition", canonical.continue_condition);
+    }
+    if (canonical?.stop_condition) {
+      params.set("stop_condition", canonical.stop_condition);
+    }
+
+    return `/portfolio?${params.toString()}#decision-writeback`;
+  }, [askCase?.canonical_decision, code, detail?.canonical_decision, sourceLabel, sourceTradeDate, stockName, todayAction?.key, todayAction?.trade_date]);
   const askFallbackCards = [
     ...(askCase?.decision_cards || []),
     ...(askCase?.metric_cards || []),
@@ -659,6 +694,14 @@ export default function StockProfilePage() {
               </section>
 
               <Panel title="执行循环" eyebrow="Loop">
+                <div className="mb-3 flex justify-end">
+                  <Link
+                    href={executionResultHref}
+                    className="focus-ring inline-flex items-center gap-2 rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-1.5 text-[12px] text-[var(--accent)]"
+                  >
+                    记录执行结果
+                  </Link>
+                </div>
                 <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                   {(detail.execution_loop || []).map((card, index) => <DataCard key={`${card.label}-${index}`} card={card} />)}
                   {!detail.execution_loop?.length ? <EmptyState>暂无执行循环。</EmptyState> : null}
