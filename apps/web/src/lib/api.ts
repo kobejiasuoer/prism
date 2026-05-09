@@ -37,6 +37,16 @@ export class ApiError extends Error {
 
 type JsonBody = Record<string, unknown> | unknown[];
 
+const backendOrigin =
+  process.env.NEXT_PUBLIC_PRISM_BACKEND_ORIGIN || process.env.PRISM_BACKEND_ORIGIN || "";
+
+function resolveApiUrl(path: string) {
+  if (!backendOrigin) {
+    return path;
+  }
+  return new URL(path, backendOrigin).toString();
+}
+
 async function readPayload(response: Response) {
   const text = await response.text();
   if (!text) {
@@ -89,7 +99,7 @@ async function fetchJson<T>(path: string, init?: RequestInit & { json?: JsonBody
     request.body = JSON.stringify(init.json);
   }
 
-  const response = await fetch(path, request);
+  const response = await fetch(resolveApiUrl(path), request);
   const payload = await readPayload(response);
 
   if (!response.ok) {
@@ -100,7 +110,7 @@ async function fetchJson<T>(path: string, init?: RequestInit & { json?: JsonBody
 }
 
 async function fetchText(path: string): Promise<string> {
-  const response = await fetch(path);
+  const response = await fetch(resolveApiUrl(path));
   const text = await response.text();
 
   if (!response.ok) {

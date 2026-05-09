@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -67,6 +68,41 @@ PARAMETERS_PATH = STOCK_ANALYZER_ROOT / "config" / "stocks.json"
 WEB_ORIGIN = os.environ.get("PRISM_WEB_ORIGIN", "http://127.0.0.1:8000").rstrip("/")
 
 app = FastAPI(title="Prism Control", version="0.1.0")
+
+
+def allowed_cors_origins() -> list[str]:
+    configured = [
+        origin.strip().rstrip("/")
+        for origin in os.environ.get("PRISM_CORS_ORIGINS", "").split(",")
+        if origin.strip()
+    ]
+    defaults = [
+        WEB_ORIGIN,
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:3002",
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://127.0.0.1:8000",
+        "http://localhost:8000",
+    ]
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for origin in [*configured, *defaults]:
+        if origin and origin not in seen:
+            deduped.append(origin)
+            seen.add(origin)
+    return deduped
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_cors_origins(),
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def now_stamp() -> str:
