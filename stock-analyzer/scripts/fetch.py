@@ -11,24 +11,16 @@ import json
 import math
 import os
 import re
-import socket
 import sys
 import time
 import warnings
 import argparse
 from glob import glob
 from datetime import datetime, timedelta
-from urllib.parse import quote, urlparse
-
-import requests
 
 # 清除代理环境变量 — 手动按需启用显式 proxies
 for k in ['http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'no_proxy', 'NO_PROXY']:
     os.environ.pop(k, None)
-
-# 代理配置：新浪直连，东方财富默认直连；只有显式配置代理时才回退
-_EM_PROXY_URL = os.getenv("OPENCLAW_EASTMONEY_PROXY") or os.getenv("EASTMONEY_PROXY_URL")
-_NO_PROXY = {"http": None, "https": None}
 
 SKILL_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 REPO_ROOT = os.path.abspath(os.path.join(SKILL_ROOT, ".."))
@@ -46,6 +38,9 @@ if PACKAGES_ROOT not in sys.path:
 from stock_parameters import WATCHLIST_RULE_THRESHOLDS, assess_flow_confidence
 from screener.capital_flow_contract import UNIT_WAN_YUAN, build_capital_flow_payload, resolve_amount_wan, wan_to_yi, yuan_to_wan
 from watchlist_registry import infer_market_from_code, infer_sina_code, list_active_watchlist_stocks
+from prism_data import build_pipeline_manifest, write_sidecar_manifest
+from prism_data.manifest import load_manifest_file
+from prism_data.service import get_data_gateway, get_dataset_repository
 
 try:
     from prism_storage.mirror import artifact_mirroring_enabled, mirror_file_to_artifact_store
@@ -55,55 +50,29 @@ except Exception:  # pragma: no cover - analyzer must keep working without stora
 
 warnings.filterwarnings("ignore")
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                  "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+WATCHLIST_REQUIRED_DATASETS = {
+    "quotes.snapshot",
+    "bars.daily",
+    "capital_flow.daily",
+}
+WATCHLIST_OPTIONAL_DATASETS = {
+    "fundamentals.snapshot",
+    "announcements.latest",
+    "news.latest",
+    "sector.snapshot",
 }
 
 
-def _proxy_dict(url):
-    return {"http": url, "https": url}
+def _data_gateway():
+    return get_data_gateway()
 
 
-def _port_open(host, port, timeout=0.2):
-    try:
-        with socket.create_connection((host, port), timeout=timeout):
-            return True
-    except OSError:
-        return False
+def _dataset_repository():
+    return get_dataset_repository()
 
 
-def _proxy_available(url):
-    parsed = urlparse(url or "")
-    if not parsed.hostname or not parsed.port:
-        return False
-    return _port_open(parsed.hostname, parsed.port)
-
-
-def _eastmoney_proxy_candidates():
-    candidates = [_NO_PROXY]
-    if _EM_PROXY_URL and _proxy_available(_EM_PROXY_URL):
-        candidates.append(_proxy_dict(_EM_PROXY_URL))
-    return candidates
-
-
-def eastmoney_get(url, referer="https://data.eastmoney.com", timeout=10):
-    last_error = None
-    for proxies in _eastmoney_proxy_candidates():
-        try:
-            resp = requests.get(
-                url,
-                headers={**HEADERS, "Referer": referer},
-                timeout=timeout,
-                proxies=proxies,
-            )
-            resp.raise_for_status()
-            if not resp.text or not resp.text.strip():
-                raise ValueError("empty response")
-            return resp
-        except Exception as exc:
-            last_error = exc
-    raise RuntimeError(f"东方财富请求失败: {last_error}")
+def _today_trade_date() -> str:
+    return datetime.now().strftime("%Y-%m-%d")
 
 
 def _previous_business_day(day):
@@ -187,101 +156,111 @@ def load_config(selected_codes=None):
 
 
 def fetch_realtime(sina_code):
-    """从新浪财经获取实时行情"""
-    url = f"https://hq.sinajs.cn/list={sina_code}"
-    resp = requests.get(url, headers={**HEADERS, "Referer": "https://finance.sina.com.cn"}, timeout=10, proxies=_NO_PROXY)
-    m = re.search(r'"(.+)"', resp.text)
-    if not m:
-        raise ValueError(f"新浪行情解析失败: {sina_code}")
-    f = m.group(1).split(",")
+    """获取实时行情，保持 legacy 输出 shape。"""
+    manifest_key = str(sina_code or "").strip()[-6:]
+    result = _data_gateway().fetch_quote(
+        sina_code,
+        trade_date=_today_trade_date(),
+        key=manifest_key,
+    )
+    payload = result.data if isinstance(result.data, dict) else {}
+    if not payload:
+        raise ValueError(f"实时行情解析失败: {sina_code}")
+    timestamp = str(payload.get("timestamp") or "").strip()
+    date_part = timestamp[:10] if len(timestamp) >= 10 else _today_trade_date()
+    time_part = timestamp[11:19] if len(timestamp) >= 19 else ""
     return {
-        "name": f[0],
-        "open": float(f[1]),
-        "prev_close": float(f[2]),
-        "price": float(f[3]),
-        "high": float(f[4]),
-        "low": float(f[5]),
-        "volume": int(f[8]),       # 手
-        "amount": float(f[9]),     # 元
-        "change_pct": round((float(f[3]) - float(f[2])) / float(f[2]) * 100, 2) if float(f[2]) else 0,
-        "buy1_vol": int(f[10]), "buy1_price": float(f[11]),
-        "sell1_vol": int(f[20]), "sell1_price": float(f[21]),
-        "date": f[30], "time": f[31],
+        "name": payload.get("name") or sina_code,
+        "open": float(payload.get("open") or 0),
+        "prev_close": float(payload.get("prev_close") or 0),
+        "price": float(payload.get("price") or 0),
+        "high": float(payload.get("high") or 0),
+        "low": float(payload.get("low") or 0),
+        "volume": int(float(payload.get("volume") or 0)),
+        "amount": float(payload.get("amount") or 0),
+        "change_pct": float(payload.get("change_pct") or 0),
+        "buy1_vol": int(float(payload.get("buy1_vol") or 0)),
+        "buy1_price": float(payload.get("buy1_price") or 0),
+        "sell1_vol": int(float(payload.get("sell1_vol") or 0)),
+        "sell1_price": float(payload.get("sell1_price") or 0),
+        "date": date_part,
+        "time": time_part,
     }
 
 
 def fetch_news(name, code, count=5):
-    """从东方财富API拉个股新闻"""
-    url = (
-        "https://search-api-web.eastmoney.com/search/jsonp"
-        f"?cb=jQuery&param=%7B%22uid%22%3A%22%22%2C%22keyword%22%3A%22{quote(name + code)}%22"
-        f"%2C%22type%22%3A%5B%22cmsArticleWebOld%22%5D%2C%22client%22%3A%22web%22"
-        f"%2C%22clientType%22%3A%22web%22%2C%22clientVersion%22%3A%22curr%22"
-        f"%2C%22param%22%3A%7B%22cmsArticleWebOld%22%3A%7B%22searchScope%22%3A%22default%22"
-        f"%2C%22sort%22%3A%22default%22%2C%22pageIndex%22%3A1%2C%22pageSize%22%3A{count}"
-        f"%2C%22preTag%22%3A%22%22%2C%22postTag%22%3A%22%22%7D%7D%7D"
-    )
     try:
-        resp = eastmoney_get(url, referer="https://so.eastmoney.com", timeout=10)
-        m = re.search(r"jQuery\((.*)\)", resp.text, re.S)
-        if m:
-            data = json.loads(m.group(1))
-            articles = data.get("result", {}).get("cmsArticleWebOld", [])
-            return [
-                {"date": a.get("date", "")[:10], "title": a.get("title", ""),
-                 "content": a.get("content", "")[:150], "source": a.get("mediaName", "")}
-                for a in articles[:count]
-            ]
+        result = _data_gateway().fetch_news(
+            code,
+            trade_date=_today_trade_date(),
+            key=str(code).strip(),
+            count=count,
+            name=name,
+        )
+        articles = list(result.data or [])
+        return [
+            {
+                "date": str(item.get("date") or item.get("publish_date") or "")[:10],
+                "title": item.get("title", ""),
+                "content": str(item.get("content") or "")[:150],
+                "source": item.get("source", ""),
+            }
+            for item in articles[:count]
+        ]
     except Exception as e:
         print(f"[WARN] 新闻获取失败: {e}", file=sys.stderr)
     return []
 
 
 def fetch_announcements(code, count=5):
-    """从东方财富API拉个股公告（无需登录）"""
-    url = (
-        "https://np-anotice-stock.eastmoney.com/api/security/ann"
-        f"?sr=-1&page_size={count}&page_index=1"
-        f"&ann_type=A&client_source=web&stock_list={code}"
-    )
     try:
-        resp = eastmoney_get(url, timeout=10)
-        data = resp.json()
-        items = data.get("data", {}).get("list", [])
-        result = []
-        for item in items[:count]:
-            title = item.get("title", "")
-            # 清理标题前缀（如 "长安汽车:"）
+        result = _data_gateway().fetch_announcements(
+            code,
+            trade_date=_today_trade_date(),
+            key=str(code).strip(),
+            count=count,
+        )
+        rows = []
+        for item in list(result.data or [])[:count]:
+            title = str(item.get("title") or "")
             clean_title = re.sub(r"^[\w\u4e00-\u9fff]+[:：]", "", title).strip()
-            result.append({
-                "date": item.get("notice_date", "")[:10],
-                "title": clean_title or title,
-                "source": item.get("source", "东方财富"),
-            })
-        return result
+            rows.append(
+                {
+                    "date": str(item.get("date") or item.get("publish_date") or "")[:10],
+                    "title": clean_title or title,
+                    "source": item.get("source", "东方财富"),
+                }
+            )
+        return rows
     except Exception as e:
         print(f"[WARN] 公告获取失败: {e}", file=sys.stderr)
     return []
 
 
 def fetch_kline(sina_code, days=60):
-    """从新浪财经获取日K线数据"""
-    url = (
-        "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData"
-        f"?symbol={sina_code}&scale=240&ma=no&datalen={days}"
+    """获取日 K 线，保持 legacy 输出字段。"""
+    manifest_key = str(sina_code or "").strip()[-6:]
+    result = _data_gateway().fetch_kline(
+        sina_code,
+        trade_date=_today_trade_date(),
+        key=manifest_key,
+        count=days,
     )
-    resp = requests.get(url, headers={**HEADERS, "Referer": "https://finance.sina.com.cn"}, timeout=10, proxies=_NO_PROXY)
-    text = resp.text.strip()
-    if not text or text == "null":
+    rows = list(result.data or [])
+    if not rows:
         raise ValueError(f"K线数据获取失败: {sina_code}")
-    # 新浪返回的是类JSON但key没有引号，需要修复
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        # 修复无引号的key
-        fixed = re.sub(r'(\w+):', r'"\1":', text)
-        data = json.loads(fixed)
-    return data
+    return [
+        {
+            "day": str(item.get("trade_date") or item.get("day") or "")[:10],
+            "open": item.get("open"),
+            "high": item.get("high"),
+            "low": item.get("low"),
+            "close": item.get("close"),
+            "volume": item.get("volume"),
+            "amount": item.get("amount"),
+        }
+        for item in rows
+    ]
 
 
 def calc_ema(series, period):
@@ -656,184 +635,73 @@ def _build_capital_flow_from_history(history):
 
 
 def fetch_capital_flow(code, market):
-    """获取主力资金流向（东方财富），失败时回退到历史缓存。"""
-    secid = f"0.{code}" if market == "sz" else f"1.{code}"
+    """获取主力资金流向，统一走 DataGateway。"""
+    today = _today_trade_date()
     cache_path = _fund_flow_cache_path(code, market)
-
-    try:
-        # 1. 从 /stock/get 接口的 f178 获取最近5日主力流向
-        url_get = (
-            f"https://push2.eastmoney.com/api/qt/stock/get"
-            f"?secid={secid}&fields=f178"
-        )
-        resp_get = eastmoney_get(url_get, timeout=10)
-        data_get = resp_get.json()
-        fdata = data_get.get("data", {})
-        flow_5d_raw = fdata.get("f178", "[]")
-        if isinstance(flow_5d_raw, str):
-            flow_5d_raw = json.loads(flow_5d_raw)
-
-        # 2. 从 /fflow/kline/get 获取今日详细资金流向
-        url_kline = (
-            f"https://push2.eastmoney.com/api/qt/stock/fflow/kline/get"
-            f"?secid={secid}&fields1=f1,f2,f3&fields2=f51,f52,f53,f54,f55,f56,f57,f58"
-            f"&klt=101&fqt=1&lmt=1"
-        )
-        resp_kline = eastmoney_get(url_kline, timeout=10)
-        kdata = resp_kline.json().get("data", {})
-    except Exception as e:
-        print(f"[WARN] 实时资金流获取失败，回退历史缓存: {code} ({e})", file=sys.stderr)
-        history = fetch_fund_flow_history(code, market, days=5)
-        return _build_capital_flow_from_history(history)
-
-    flow = {"main_5d": []}
-
-    # 解析5日历史（f178字段）
-    for item in flow_5d_raw[:5]:
-        flow["main_5d"].append({
-            "date": item.get("date", ""),
-            "net": yuan_to_wan(item.get("mainNetAmt", 0)),
-            "net_wan": yuan_to_wan(item.get("mainNetAmt", 0)),
-            "net_yi": wan_to_yi(yuan_to_wan(item.get("mainNetAmt", 0))),
-        })
-
-    # 解析今日详细数据（kline接口）
-    # kline格式: date, 主力净流入, 超大单净流入, 中大单净流入, 散户大单净流入, 小单净流入
-    klines = kdata.get("klines", [])
-    if klines:
-        parts = klines[0].split(",")
-        if len(parts) >= 6:
-            main_net = float(parts[1])
-            flow["main_net"] = yuan_to_wan(main_net)
-            flow["super_net"] = yuan_to_wan(float(parts[2]))   # 超大单
-            flow["mid_large_net"] = yuan_to_wan(float(parts[3]))  # 中大单
-            flow["retail_net"] = yuan_to_wan(float(parts[4]))    # 散户大单
-            flow["small_net"] = yuan_to_wan(float(parts[5]))     # 小单
-        else:
-            history = fetch_fund_flow_history(code, market, days=5)
-            return _build_capital_flow_from_history(history)
-    else:
-        history = fetch_fund_flow_history(code, market, days=5)
-        return _build_capital_flow_from_history(history)
-
-    today = datetime.now().strftime("%Y-%m-%d")
-    flow["as_of_date"] = today
-    flow["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    today_row = {
-        "date": today,
-        "main_net": flow.get("main_net", 0),
-        "super_net": flow.get("super_net", 0),
-        "mid_large_net": flow.get("mid_large_net", 0),
-        "retail_net": flow.get("retail_net", 0),
-        "small_net": flow.get("small_net", 0),
-    }
     cached_history = _load_fund_flow_cache(cache_path)
-    merged_history = _merge_fund_flow_rows(cached_history, [today_row], limit=120)
+    history = fetch_fund_flow_history(code, market, days=5)
+
+    today_row = None
+    try:
+        batch_result = _data_gateway().fetch_capital_flow_batch(
+            [code],
+            trade_date=today,
+            key=code,
+        )
+        batch_payload = batch_result.data if isinstance(batch_result.data, dict) else {}
+        today_row = batch_payload.get(code)
+    except Exception:
+        today_row = None
+
+    if not today_row:
+        try:
+            fallback_result = _data_gateway().fetch_capital_flow(
+                code,
+                trade_date=today,
+                key=code,
+                allow_fallback=True,
+                mode="snapshot",
+            )
+            fallback_rows = list(fallback_result.data or [])
+            today_row = fallback_rows[-1] if fallback_rows else None
+        except Exception:
+            today_row = None
+
+    merged_history = _merge_fund_flow_rows(history or cached_history, [today_row] if today_row else None, limit=120)
     if merged_history:
         _save_cache(cache_path, merged_history)
-        flow["main_5d"] = _build_main_5d(merged_history)
+        return _build_capital_flow_from_history(merged_history)
 
-    return _apply_capital_flow_signal(flow)
+    if history:
+        return _build_capital_flow_from_history(history)
+    if today_row:
+        return _build_capital_flow_from_history([today_row])
+    return _build_capital_flow_from_history(cached_history)
 
 
 def fetch_fund_flow_history(code, market, days=120):
-    """获取历史日频资金流向（四层降级：本地缓存 → push2 → datacenter-web → 空）
-
-    Args:
-        code: 6位股票代码
-        market: 'sz' 或 'sh'
-        days: 需要的交易日天数
-
-    Returns:
-        List[dict], 每项: {date: 'YYYY-MM-DD', main_net: 万, super_net: 万, retail_net: 万}
-    """
+    """获取历史日频资金流向，统一走 DataGateway。"""
     cache_path = _fund_flow_cache_path(code, market)
     cached = _load_fund_flow_cache(cache_path)
-
-    # === 第零层：本地缓存 ===
     if _is_fund_flow_history_fresh(cached):
         return cached
-
-    secid = f"0.{code}" if market == "sz" else f"1.{code}"
-    result = []
-
-    # === 第一层：push2.eastmoney.com (有历史日频数据) ===
     try:
-        url = (
-            f"https://push2.eastmoney.com/api/qt/stock/fflow/kline/get"
-            f"?secid={secid}&fields1=f1,f2,f3"
-            f"&fields2=f51,f52,f53,f54,f55,f56,f57,f58"
-            f"&klt=101&fqt=1&lmt={days}"
+        result = _data_gateway().fetch_capital_flow(
+            code,
+            trade_date=_today_trade_date(),
+            key=f"{code}-history",
+            allow_fallback=False,
+            count=days,
         )
-        resp = eastmoney_get(url, timeout=10)
-        if resp.text and resp.text.strip():
-            d = resp.json()
-            klines = d.get("data", {}).get("klines", [])
-            if klines:
-                for k in klines:
-                    parts = k.split(",")
-                    if len(parts) >= 6:
-                        result.append({
-                            "date": parts[0],
-                            "main_net": round(float(parts[1]) / 10000, 2),
-                            "super_net": round(float(parts[2]) / 10000, 2),
-                            "mid_large_net": round(float(parts[3]) / 10000, 2),
-                            "retail_net": round(float(parts[4]) / 10000, 2),
-                            "small_net": round(float(parts[5]) / 10000, 2),
-                        })
-                if result:
-                    result = _merge_fund_flow_rows(result, limit=max(days, len(result)))
-                    _save_cache(cache_path, result)
-                    return result
+        rows = list(result.data or [])
+        if rows:
+            normalized = _merge_fund_flow_rows(rows, limit=max(days, len(rows)))
+            if normalized:
+                _save_cache(cache_path, normalized)
+                return normalized
     except Exception:
         pass
-
-    # === 第二层：datacenter-web.eastmoney.com (仅当天数据) ===
-    try:
-        url = (
-            f"https://datacenter-web.eastmoney.com/api/data/v1/get"
-            f"?reportName=RPT_DMSK_TS_STOCKNEW"
-            f"&columns=TRADE_DATE,SUPERDEAL_INFLOW,SUPERDEAL_OUTFLOW,"
-            f"BIGDEAL_INFLOW,BIGDEAL_OUTFLOW,CLOSE_PRICE,CHANGE_RATE"
-            f"&filter=(SECURITY_CODE=%22{code}%22)"
-            f"&pageSize=1&sortColumns=TRADE_DATE&sortTypes=-1"
-        )
-        resp = eastmoney_get(url, timeout=10)
-        d = resp.json()
-        data = d.get("result", {}).get("data", [])
-        if data:
-            item = data[0]
-            si = float(item.get("SUPERDEAL_INFLOW", 0)) / 10000
-            so = float(item.get("SUPERDEAL_OUTFLOW", 0)) / 10000
-            bi = float(item.get("BIGDEAL_INFLOW", 0)) / 10000
-            bo = float(item.get("BIGDEAL_OUTFLOW", 0)) / 10000
-            result.append({
-                "date": item["TRADE_DATE"][:10],
-                "main_net": round((si + bi) - (so + bo), 2),
-                "super_net": round(si - so, 2),
-                "mid_large_net": round(bi - bo, 2),
-                "retail_net": 0,
-                "small_net": 0,
-            })
-    except Exception:
-        pass
-
-    # === 第三层：浏览器降级（由 cron agent 手动触发） ===
-    # 通过 browser(profile=openclaw) 打开东方财富资金流向页面，
-    # 从 DOM table 中提取历史数据，保存到缓存文件
-    # 详情见 fetch_fund_flow_browser.py
-    if result and cached:
-        result = _merge_fund_flow_rows(cached, result, limit=max(days, len(cached)))
-
-    if result and not _is_fund_flow_history_fresh(result):
-        result = None
-
-    if not result and cached and _is_fund_flow_history_fresh(cached):
-        return cached
-
-    if result:
-        _save_cache(cache_path, result)
-    return result
+    return cached
 
 
 def _save_cache(path, data):
@@ -951,25 +819,21 @@ def _save_fundamentals_cache_entry(code, market, data):
 
 
 def _fetch_fundamentals_ulist_snapshot(code, market):
-    secid = f"0.{code}" if market == "sz" else f"1.{code}"
     try:
-        url = (
-            "https://push2.eastmoney.com/api/qt/ulist.np/get"
-            f"?fltt=2&secids={secid}&fields=f2,f9,f12,f20"
+        result = _data_gateway().fetch_fundamentals_batch(
+            [code],
+            trade_date=_today_trade_date(),
+            key=code,
         )
-        resp = eastmoney_get(url, timeout=10)
-        data = resp.json()
-        diff = data.get("data", {}).get("diff", [])
-        if not diff:
+        data = result.data if isinstance(result.data, dict) else {}
+        item = data.get(code)
+        if not item:
             return None
-        item = diff[0]
-        pe_raw = item.get("f9")
-        mv_raw = item.get("f20")
         return _normalize_fundamentals_snapshot({
-            "price": item.get("f2"),
-            "pe": float(pe_raw) if pe_raw not in (None, "", "-") else None,
+            "price": item.get("price"),
+            "pe": item.get("pe") or item.get("pe_ttm"),
             "pb": None,
-            "total_mv_yi": float(mv_raw) / 1e8 if mv_raw not in (None, "", "-") else None,
+            "total_mv_yi": item.get("total_mv_yi") or item.get("total_mv"),
             "circ_mv_yi": None,
             "roe": None,
             "gross_margin": None,
@@ -979,7 +843,7 @@ def _fetch_fundamentals_ulist_snapshot(code, market):
 
 
 def fetch_fundamentals(code, market):
-    """获取基本面数据（东方财富），失败时回退批量快照/本地缓存。"""
+    """获取基本面数据，统一走 DataGateway。"""
     cache_entry = _load_fundamentals_cache_entry(code, market)
     cached = cache_entry["fundamentals"] if cache_entry else None
     snapshot = _fetch_fundamentals_ulist_snapshot(code, market)
@@ -987,25 +851,23 @@ def fetch_fundamentals(code, market):
         merged = _merge_fundamentals_snapshots(cached, snapshot)
         _save_fundamentals_cache_entry(code, market, merged)
         return merged
-
-    secid = f"0.{code}" if market == "sz" else f"1.{code}"
     try:
-        url = (
-            "https://push2.eastmoney.com/api/qt/stock/get"
-            f"?secid={secid}&fields=f43,f167,f168,f116,f117,f173,f186"
+        result = _data_gateway().fetch_fundamentals(
+            code,
+            trade_date=_today_trade_date(),
+            key=code,
+            allow_fallback=True,
         )
-        resp = eastmoney_get(url, timeout=10)
-        data = resp.json()
-        fdata = data.get("data", {})
+        fdata = result.data if isinstance(result.data, dict) else {}
         if fdata:
             live = _normalize_fundamentals_snapshot({
-                "price": float(fdata.get("f43")) / 100 if fdata.get("f43") not in (None, "", "-") else None,
-                "pe": float(fdata.get("f167")) / 10 if fdata.get("f167") not in (None, "", "-") else None,
-                "pb": float(fdata.get("f168")) / 10 if fdata.get("f168") not in (None, "", "-") else None,
-                "total_mv_yi": float(fdata.get("f116")) / 1e8 if fdata.get("f116") not in (None, "", "-") else None,
-                "circ_mv_yi": float(fdata.get("f117")) / 1e8 if fdata.get("f117") not in (None, "", "-") else None,
-                "roe": fdata.get("f173"),
-                "gross_margin": fdata.get("f186"),
+                "price": fdata.get("price"),
+                "pe": fdata.get("pe") or fdata.get("pe_ttm"),
+                "pb": fdata.get("pb"),
+                "total_mv_yi": fdata.get("total_mv_yi") or fdata.get("total_mv"),
+                "circ_mv_yi": fdata.get("circ_mv_yi"),
+                "roe": fdata.get("roe"),
+                "gross_margin": fdata.get("gross_margin") or fdata.get("margin"),
             })
             merged = _merge_fundamentals_snapshots(cached, snapshot, live)
             if merged:
@@ -1147,39 +1009,24 @@ _sector_cache = {}
 
 
 def fetch_sector(sector_code):
-    """获取板块涨跌幅（东方财富 push2his kline 接口）"""
+    """获取板块涨跌幅，统一走 DataGateway。"""
     if sector_code in _sector_cache:
         return _sector_cache[sector_code]
 
     try:
-        # 用 push2his 的 kline 接口获取板块最新K线，从中提取今日涨跌幅
-        url = (
-            f"https://push2his.eastmoney.com/api/qt/stock/kline/get"
-            f"?secid=90.{sector_code}&fields1=f1,f2,f3,f4,f5,f6"
-            f"&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"
-            f"&klt=101&fqt=1&end=20990101&lmt=1"
+        result = _data_gateway().fetch_sector_snapshot(
+            sector_code,
+            trade_date=_today_trade_date(),
+            key=str(sector_code).strip(),
         )
-        resp = eastmoney_get(url, timeout=10)
-        data = resp.json()
-        kdata = data.get("data", {})
-        klines = kdata.get("klines", [])
-
-        if not klines:
+        payload = result.data if isinstance(result.data, dict) else {}
+        if not payload:
             _sector_cache[sector_code] = None
             return None
-
-        # kline格式: date, open, close, high, low, volume, amount, change%, amplitude, turnover%, ...
-        parts = klines[0].split(",")
-        if len(parts) < 8:
-            _sector_cache[sector_code] = None
-            return None
-
-        change_pct = round(float(parts[7]), 2)
-        sector_name = kdata.get("name", "")
 
         result = {
-            "change_pct": change_pct,
-            "name": sector_name,
+            "change_pct": round(float(payload.get("change_pct") or 0), 2),
+            "name": payload.get("name", ""),
         }
         _sector_cache[sector_code] = result
         return result
@@ -1737,6 +1584,48 @@ def build_snapshot_record(stock, snapshot, tech_indicators, trade_levels, intrad
     }
 
 
+def _load_first_manifest(dataset_name, trade_date, keys):
+    repo = _dataset_repository()
+    for key in keys:
+        manifest = repo.load_manifest(dataset_name, trade_date, key)
+        if manifest:
+            return manifest
+    return None
+
+
+def _watchlist_upstream_manifests(trade_date, records):
+    manifests = []
+    flags = []
+    for code, record in sorted((records or {}).items()):
+        quote_manifest = _load_first_manifest("quotes.snapshot", trade_date, [code])
+        bars_manifest = _load_first_manifest("bars.daily", trade_date, [code])
+        capital_manifest = (
+            _load_first_manifest("capital_flow.batch", trade_date, [code])
+            or _load_first_manifest("capital_flow.daily", trade_date, [code, f"{code}-history"])
+        )
+        for dataset_name, manifest in (
+            ("quotes.snapshot", quote_manifest),
+            ("bars.daily", bars_manifest),
+            ("capital_flow", capital_manifest),
+        ):
+            if manifest:
+                manifests.append(manifest)
+            else:
+                flags.append(f"missing_required_manifest:{dataset_name}:{code}")
+
+        for dataset_name in ("fundamentals.snapshot", "fundamentals.batch", "announcements.latest", "news.latest"):
+            manifest = _load_first_manifest(dataset_name, trade_date, [code])
+            if manifest:
+                manifests.append(manifest)
+
+        sector_code = str((record or {}).get("sector_code") or "").strip()
+        if sector_code:
+            manifest = _load_first_manifest("sector.snapshot", trade_date, [sector_code])
+            if manifest:
+                manifests.append(manifest)
+    return manifests, flags
+
+
 def save_daily_snapshots(today, records, replace_existing=False):
     """保存今日快照。"""
     if not records:
@@ -1760,6 +1649,31 @@ def save_daily_snapshots(today, records, replace_existing=False):
         "flow_basis": "东方财富资金流",
         "tech_basis": "240分钟K线",
         "stocks": {**existing, **records},
+    }
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+    upstream_manifests, manifest_flags = _watchlist_upstream_manifests(today, records)
+    ingress_manifest = build_pipeline_manifest(
+        dataset="watchlist.snapshot",
+        trade_date=today,
+        payload=payload,
+        upstream_manifests=upstream_manifests,
+        ttl_seconds=900,
+        required_dataset_groups=[
+            {"quotes.snapshot"},
+            {"bars.daily"},
+            {"capital_flow.batch", "capital_flow.daily"},
+        ],
+        fetched_at=payload["generated_at"],
+        quality_flags=manifest_flags,
+    )
+    manifest_path = write_sidecar_manifest(path, ingress_manifest)
+    payload["data_ingress"] = {
+        "dataset": ingress_manifest["dataset"],
+        "manifest_path": str(manifest_path.resolve()),
+        "freshness_status": ingress_manifest["freshness_status"],
+        "live_small_allowed": ingress_manifest["live_small_allowed"],
     }
     with open(path, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)

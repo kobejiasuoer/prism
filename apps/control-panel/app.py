@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 from datetime import datetime
@@ -59,13 +60,38 @@ from control_panel.dashboard_data import (
     update_today_action_decision,
 )
 from watchlist_registry import archive_watchlist_stock, restore_watchlist_stock, upsert_watchlist_stock
+from refresh_policy import (
+    PAGE_POLICIES,
+    TASK_POLICIES,
+    active_auto_windows,
+    build_policy_payload,
+    current_market_mode,
+    eligible_lightweight_task,
+    evaluate_auto_refresh,
+    normalize_task_name,
+    page_cooldown_state,
+    page_policy,
+    pick_recommended_task as policy_pick_recommended_task,
+    task_family,
+    task_is_running,
+    task_policy,
+    validate_cron_policies,
+)
+from readiness import expected_trade_date as readiness_expected_trade_date
+from prism_data.freshness import update_manifest_freshness
+from prism_data.repositories import DatasetRepository
+from prism_data.utils import default_dataset_repository_root
 
 
 TASK_RUNNER = INVEST_FLOW_ROOT / "scripts" / "control_panel_task_runner.py"
 PREVIEW_MAX_BYTES = 220_000
 WATCHLIST_REFRESH_COMMAND = ["bash", "apps/scripts/run_watchlist_refresh.sh"]
+LIGHTWEIGHT_REFRESH_COMMAND = [sys.executable, "apps/scripts/refresh_lightweight_data.py"]
 PARAMETERS_PATH = STOCK_ANALYZER_ROOT / "config" / "stocks.json"
 WEB_ORIGIN = os.environ.get("PRISM_WEB_ORIGIN", "http://127.0.0.1:8000").rstrip("/")
+TASK_NAME_ALIASES = {
+    "watchlist": "watchlist_refresh",
+}
 
 app = FastAPI(title="Prism Control", version="0.1.0")
 
@@ -107,6 +133,80 @@ app.add_middleware(
 
 def now_stamp() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+
+
+def canonical_task_name(task_name: str) -> str:
+    normalized = str(task_name or "").strip()
+    return TASK_NAME_ALIASES.get(normalized, normalized)
+
+
+def feishu_channel_status() -> dict[str, Any]:
+    openclaw_bin = shutil.which("openclaw")
+    if not openclaw_bin:
+        return {
+            "available": False,
+            "installed": False,
+            "configured": False,
+            "reason": "openclaw_missing",
+            "detail": "未安装 openclaw，无法发送飞书。",
+        }
+
+    try:
+        proc = subprocess.run(
+            [openclaw_bin, "channels", "list", "--json"],
+            cwd=str(WORKSPACE_ROOT),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=8,
+            check=False,
+        )
+    except Exception as exc:
+        return {
+            "available": False,
+            "installed": True,
+            "configured": False,
+            "reason": "probe_failed",
+            "detail": f"飞书通道探测失败：{exc}",
+        }
+
+    output = (proc.stdout or "").strip()
+    if proc.returncode != 0 or not output:
+        detail = (proc.stderr or proc.stdout or "飞书通道未就绪").strip()
+        return {
+            "available": False,
+            "installed": True,
+            "configured": False,
+            "reason": "probe_failed",
+            "detail": detail,
+        }
+
+    try:
+        payload = json.loads(output)
+    except json.JSONDecodeError:
+        return {
+            "available": False,
+            "installed": True,
+            "configured": False,
+            "reason": "probe_invalid_json",
+            "detail": output,
+        }
+
+    chat = payload.get("chat") if isinstance(payload, dict) else None
+    feishu = chat.get("feishu") if isinstance(chat, dict) else None
+    accounts = feishu.get("accounts") if isinstance(feishu, dict) else None
+    installed = bool(feishu and feishu.get("installed"))
+    configured = isinstance(accounts, list) and len(accounts) > 0
+    available = installed and configured
+    detail = "飞书通道可用。" if available else "飞书插件已安装，但还没有可用账号。"
+    return {
+        "available": available,
+        "installed": installed,
+        "configured": configured,
+        "accounts": accounts if isinstance(accounts, list) else [],
+        "reason": "" if available else "not_configured",
+        "detail": detail,
+    }
 
 
 def web_redirect(path: str, *, query: str = "") -> RedirectResponse:
@@ -486,62 +586,15 @@ def parse_bool_value(value: Any, default: bool = False) -> bool:
 
 REFRESH_STATE_PATH = CONTROL_PANEL_STATE_DIR / "refresh_state.json"
 REFRESH_PAGE_CONFIG: dict[str, dict[str, Any]] = {
-    "today": {
-        "allowed_tasks": {"watchlist_refresh", "command_brief", "midday_refresh", "aggressive"},
-        "related_tasks": {
-            "watchlist_refresh",
-            "watchlist",
-            "command_brief",
-            "aggressive",
-            "midday_refresh",
-            "midday_confirmation",
-        },
-        "poll_seconds": {"trading": 45, "standby": 120, "off": 300},
-        "cooldown_seconds": {"trading": 900, "standby": 1200, "off": 1800},
-        "stale_after_seconds": {"trading": 2700, "standby": 5400, "off": 14_400},
-    },
-    "watchlist": {
-        "allowed_tasks": {"watchlist_refresh", "watchlist"},
-        "related_tasks": {"watchlist_refresh", "watchlist", "command_brief"},
-        "poll_seconds": {"trading": 60, "standby": 150, "off": 300},
-        "cooldown_seconds": {"trading": 900, "standby": 1200, "off": 1800},
-        "stale_after_seconds": {"trading": 3600, "standby": 7200, "off": 14_400},
-    },
-    "opportunities": {
-        "allowed_tasks": {"midday_refresh", "aggressive", "midday_confirmation"},
-        "related_tasks": {"aggressive", "midday_refresh", "midday_confirmation"},
-        "poll_seconds": {"trading": 40, "standby": 120, "off": 300},
-        "cooldown_seconds": {"trading": 600, "standby": 900, "off": 1800},
-        "stale_after_seconds": {"trading": 1800, "standby": 3600, "off": 10_800},
-    },
-    "review": {
-        "allowed_tasks": {"command_brief"},
-        "related_tasks": {"command_brief"},
-        "poll_seconds": {"trading": 120, "standby": 180, "off": 600},
-        "cooldown_seconds": {"trading": 1200, "standby": 1800, "off": 3600},
-        "stale_after_seconds": {"trading": 7200, "standby": 14_400, "off": 86_400},
-    },
+    page: policy.as_dict() for page, policy in PAGE_POLICIES.items()
 }
 
 
 def normalize_refresh_page(value: Any) -> str:
     page = str(value or "").strip().lower()
-    if page not in REFRESH_PAGE_CONFIG:
+    if page_policy(page) is None:
         raise HTTPException(status_code=400, detail="unsupported page")
     return page
-
-
-def current_market_mode(now_dt: datetime | None = None) -> tuple[str, str]:
-    now = now_dt or datetime.now()
-    if now.weekday() >= 5:
-        return "off", "周末休市"
-
-    clock = now.hour * 60 + now.minute
-    if (570 <= clock < 690) or (780 <= clock < 900):
-        return "trading", "交易时段"
-    if (540 <= clock < 570) or (690 <= clock < 780) or (900 <= clock < 930):
-        return "standby", "盘前/午间/收盘过渡"
-    return "off", "非交易时段"
 
 
 def age_label(seconds: int | None) -> str:
@@ -561,12 +614,22 @@ def age_label(seconds: int | None) -> str:
 
 def load_refresh_state() -> dict[str, Any]:
     ensure_runtime_dirs()
-    payload = APP_STATE_REPOSITORY.get("refresh_state", legacy_path=REFRESH_STATE_PATH, default={"pages": {}})
+    payload = APP_STATE_REPOSITORY.get(
+        "refresh_state",
+        legacy_path=REFRESH_STATE_PATH,
+        default={"pages": {}, "tasks": {}, "audit_events": []},
+    )
     if not isinstance(payload, dict):
-        return {"pages": {}}
+        return {"pages": {}, "tasks": {}, "audit_events": []}
     pages = payload.get("pages")
     if not isinstance(pages, dict):
         payload["pages"] = {}
+    tasks = payload.get("tasks")
+    if not isinstance(tasks, dict):
+        payload["tasks"] = {}
+    audit_events = payload.get("audit_events")
+    if not isinstance(audit_events, list):
+        payload["audit_events"] = []
     return payload
 
 
@@ -576,7 +639,27 @@ def save_refresh_state(payload: dict[str, Any]) -> None:
 
 
 def resolve_refresh_task(task_name: str) -> dict[str, Any]:
-    normalized = str(task_name or "").strip()
+    normalized = normalize_task_name(str(task_name or "").strip())
+    policy = task_policy(normalized)
+    if normalized in {"quotes_light", "capital_flow_light"}:
+        kind = "quotes" if normalized == "quotes_light" else "capital_flow"
+        return {
+            "task_name": normalized,
+            "title": policy.title if policy else ("轻量行情补刷" if kind == "quotes" else "轻量资金流补刷"),
+            "command": [*LIGHTWEIGHT_REFRESH_COMMAND, "--kind", kind],
+            "cwd": str(WORKSPACE_ROOT),
+            "send_to_feishu": False,
+        }
+
+    if normalized in {"preclose_risk_refresh", "postclose_command_brief"}:
+        return {
+            "task_name": normalized,
+            "title": policy.title if policy else "投资总控简报",
+            "command": ["bash", "apps/scripts/run_command_brief.sh"],
+            "cwd": str(WORKSPACE_ROOT),
+            "send_to_feishu": False,
+        }
+
     if normalized == "watchlist_refresh":
         return {
             "task_name": normalized,
@@ -640,62 +723,30 @@ def build_page_freshness(page: str, market_mode: str) -> list[dict[str, Any]]:
 
 
 def build_running_refresh_tasks(page: str) -> list[dict[str, Any]]:
-    related = REFRESH_PAGE_CONFIG[page]["related_tasks"]
+    cfg = page_policy(page)
+    related = {normalize_task_name(item) for item in (cfg.related_tasks if cfg else ())}
+    related_families = {task_family(item) for item in related}
     rows: list[dict[str, Any]] = []
     for item in list_runs(limit=80):
         if str(item.get("status") or "") != "running":
             continue
-        task_name = str(item.get("task_name") or "").strip()
-        if task_name not in related:
+        task_name = normalize_task_name(str(item.get("task_name") or "").strip())
+        family = task_family(task_name)
+        if task_name not in related and family not in related_families:
             continue
+        policy = task_policy(task_name)
         rows.append(
             {
                 "task_name": task_name,
                 "title": str(item.get("title") or task_name),
+                "task_kind": policy.kind if policy else "unknown",
+                "task_family": family,
                 "status": "running",
                 "started_at": str(item.get("started_at") or ""),
                 "summary": str(item.get("summary") or "后台执行中"),
             }
         )
     return rows
-
-
-def build_refresh_cooldown(page: str, market_mode: str) -> dict[str, Any]:
-    cooldown_seconds = int(REFRESH_PAGE_CONFIG[page]["cooldown_seconds"][market_mode])
-    state = load_refresh_state()
-    pages = state.get("pages")
-    page_state = pages.get(page) if isinstance(pages, dict) and isinstance(pages.get(page), dict) else {}
-    last_trigger_at = str(page_state.get("last_trigger_at") or "").strip()
-    last_trigger_dt = parse_timestamp(last_trigger_at)
-    if not last_trigger_dt:
-        remaining = 0
-    else:
-        elapsed = max(int((datetime.now() - last_trigger_dt).total_seconds()), 0)
-        remaining = max(cooldown_seconds - elapsed, 0)
-    return {
-        "seconds": cooldown_seconds,
-        "remaining_seconds": remaining,
-        "ready": remaining == 0,
-        "last_trigger_at": last_trigger_at,
-        "last_task_name": str(page_state.get("task_name") or ""),
-        "last_run_id": str(page_state.get("run_id") or ""),
-    }
-
-
-def pick_recommended_task(page: str, freshness: list[dict[str, Any]], market_mode: str) -> str:
-    if page == "watchlist":
-        return "watchlist_refresh"
-    if page == "opportunities":
-        return "midday_refresh" if market_mode != "off" else "aggressive"
-    if page == "review":
-        return "command_brief"
-
-    stale_labels = {str(item.get("label") or "") for item in freshness if item.get("stale")}
-    if {"自选股", "自选股快照"} & stale_labels:
-        return "watchlist_refresh"
-    if {"观察池", "机会扫描", "早盘批次", "午盘确认"} & stale_labels:
-        return "midday_refresh" if market_mode != "off" else "aggressive"
-    return "command_brief"
 
 
 def _readiness_freshness_rows(
@@ -732,10 +783,248 @@ def _readiness_freshness_rows(
     return rows
 
 
-def build_refresh_status_payload(page: str) -> dict[str, Any]:
-    market_mode, market_label = current_market_mode()
+def _manifest_dt(value: Any) -> datetime | None:
+    return parse_timestamp(str(value or ""))
+
+
+def _manifest_sort_key(manifest: dict[str, Any]) -> datetime:
+    return (
+        _manifest_dt(manifest.get("asof"))
+        or _manifest_dt(manifest.get("fetched_at"))
+        or datetime.min
+    )
+
+
+def _latest_dataset_manifest(
+    *,
+    repository: DatasetRepository,
+    dataset: str,
+    expected_date: str,
+    now: datetime,
+) -> dict[str, Any] | None:
+    manifests = repository.list_manifests(dataset, expected_date)
+    if not manifests:
+        return None
+    refreshed = [update_manifest_freshness(dict(item), expected_date, now=now) for item in manifests]
+    return max(refreshed, key=_manifest_sort_key)
+
+
+def _dataset_manifest_freshness_rows(*, expected_date: str, now: datetime) -> list[dict[str, Any]]:
+    try:
+        repository = DatasetRepository(os.environ.get("PRISM_DATASET_REPOSITORY_ROOT", "").strip() or default_dataset_repository_root())
+    except Exception:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    labels = {
+        "quotes.snapshot": "轻量行情快照",
+        "quotes.batch": "轻量行情批量",
+        "capital_flow.daily": "轻量资金流单票",
+        "capital_flow.batch": "轻量资金流批量",
+    }
+    for dataset, label in labels.items():
+        manifest = _latest_dataset_manifest(
+            repository=repository,
+            dataset=dataset,
+            expected_date=expected_date,
+            now=now,
+        )
+        reasons: list[str] = []
+        if not manifest:
+            rows.append(
+                {
+                    "key": dataset,
+                    "label": label,
+                    "value": "-",
+                    "detail": "dataset_manifest_missing",
+                    "available": False,
+                    "age_seconds": None,
+                    "age_label": "-",
+                    "stale": True,
+                    "stale_after_seconds": int((task_policy("quotes_light") if dataset.startswith("quotes.") else task_policy("capital_flow_light")).cooldown_seconds),
+                    "trade_date": None,
+                    "stale_reasons": ["manifest_missing"],
+                    "dataset_manifest": True,
+                }
+            )
+            continue
+
+        raw_value = manifest.get("asof") or manifest.get("fetched_at")
+        parsed = parse_timestamp(str(raw_value or ""))
+        age_seconds = max(int((now - parsed).total_seconds()), 0) if parsed else None
+        trade_date = str(manifest.get("trade_date") or "").strip() or None
+        freshness_status = str(manifest.get("freshness_status") or "").strip().lower()
+        status = str(manifest.get("status") or "").strip().lower()
+        if status and status != "ok":
+            reasons.append(f"manifest_status_{status}")
+        if freshness_status in {"stale", "expired"}:
+            reasons.append(f"freshness_{freshness_status}")
+        elif not freshness_status:
+            reasons.append("freshness_unknown")
+        if trade_date != expected_date:
+            reasons.append("trade_date_mismatch" if trade_date else "trade_date_unknown")
+        if not bool(manifest.get("live_small_allowed")):
+            reasons.append("live_small_not_allowed")
+        if bool(manifest.get("fallback_used")) and not bool(manifest.get("live_small_allowed")):
+            reasons.append("fallback_not_allowed")
+        if not parsed:
+            reasons.append("missing")
+        if manifest.get("error") and status != "ok":
+            reasons.append("provider_failure")
+
+        rows.append(
+            {
+                "key": dataset,
+                "label": label,
+                "value": str(raw_value or "-"),
+                "detail": str(manifest.get("provider") or ""),
+                "available": bool(parsed),
+                "age_seconds": age_seconds,
+                "age_label": age_label(age_seconds),
+                "stale": bool(reasons),
+                "stale_after_seconds": int(manifest.get("ttl_seconds") or 0),
+                "trade_date": trade_date,
+                "stale_reasons": reasons,
+                "provider": manifest.get("provider"),
+                "provider_role": manifest.get("provider_role"),
+                "freshness_status": freshness_status,
+                "fallback_used": bool(manifest.get("fallback_used")),
+                "live_small_allowed": bool(manifest.get("live_small_allowed")),
+                "manifest_path": manifest.get("manifest_path"),
+                "dataset_manifest": True,
+            }
+        )
+    return rows
+
+
+def _stale_subset(freshness: list[dict[str, Any]], dependencies: list[str]) -> list[dict[str, Any]]:
+    if not dependencies:
+        return freshness
+    dependency_set = set(dependencies)
+    subset = [
+        item
+        for item in freshness
+        if _freshness_row_matches_dependency(item, dependency_set)
+    ]
+    return subset or freshness
+
+
+def _freshness_row_matches_dependency(item: dict[str, Any], dependencies: set[str]) -> bool:
+    key = str(item.get("key") or "")
+    label = str(item.get("label") or "")
+    if key in dependencies or label in dependencies:
+        return True
+    aliases = {
+        "watchlist": "watchlist.snapshot",
+        "screening": "screening.batch",
+        "confirmation": "screening.confirmation",
+        "decision_brief": "decision_brief.snapshot",
+    }
+    return aliases.get(key, "") in dependencies
+
+
+def _latest_audit_event(*, state: dict[str, Any], trigger_type: str | None = None) -> dict[str, Any] | None:
+    events = state.get("audit_events") if isinstance(state, dict) else []
+    if not isinstance(events, list):
+        return None
+    for event in reversed(events):
+        if not isinstance(event, dict):
+            continue
+        if trigger_type and event.get("trigger_type") != trigger_type:
+            continue
+        return event
+    return None
+
+
+def _build_readiness_recovery_steps(
+    *,
+    page: str,
+    readiness_payload: dict[str, Any] | None,
+    recommended_task_name: str,
+    recommended_task: dict[str, Any],
+    running: list[dict[str, Any]],
+    cooldown: dict[str, Any],
+) -> list[dict[str, Any]]:
+    if page != "today":
+        return []
+
+    allowed_tasks = {normalize_task_name(item) for item in REFRESH_PAGE_CONFIG[page]["allowed_tasks"]}
+    task_order = ["watchlist_refresh", "aggressive", "midday_confirmation", "command_brief"]
+    issue_map: dict[str, list[dict[str, Any]]] = {}
+    for issue in [
+        *((readiness_payload or {}).get("blockers") or []),
+        *((readiness_payload or {}).get("warnings") or []),
+    ]:
+        task_name = normalize_task_name(str(issue.get("recommended_task") or "").strip())
+        if task_name:
+            issue_map.setdefault(task_name, []).append(issue)
+
+    ordered_tasks: list[str] = []
+    for task_name in task_order:
+        if task_name in allowed_tasks and task_name in issue_map:
+            ordered_tasks.append(task_name)
+    if recommended_task_name and recommended_task_name in allowed_tasks and recommended_task_name not in ordered_tasks:
+        ordered_tasks.insert(0, recommended_task_name)
+
+    if not ordered_tasks and recommended_task_name:
+        ordered_tasks = [recommended_task_name]
+
+    state = load_refresh_state()
+
+    steps: list[dict[str, Any]] = []
+    for index, task_name in enumerate(ordered_tasks, start=1):
+        try:
+            task = resolve_refresh_task(task_name)
+        except HTTPException:
+            continue
+        issues = issue_map.get(task_name) or []
+        if task_name == recommended_task_name and not issues:
+            issues = [{
+                "label": "建议动作",
+                "message": f"运行 {recommended_task.get('title') or task['title']} 后重新检查 readiness。",
+            }]
+        step_cooldown = page_cooldown_state(page=page, task_name=task_name, state=state)
+        cooldown_remaining = int(step_cooldown.get("remaining_seconds") or 0)
+        status = "ready"
+        if task_is_running(task_name, running):
+            status = "running"
+        elif cooldown_remaining > 0:
+            status = "cooldown"
+        steps.append(
+            {
+                "step": index,
+                "task_name": task_name,
+                "title": task["title"],
+                "status": status,
+                "can_trigger": status == "ready",
+                "cooldown_remaining_seconds": cooldown_remaining if status == "cooldown" else 0,
+                "next_allowed_at": step_cooldown.get("next_allowed_at") or "",
+                "issue_count": len(issues),
+                "issues": [
+                    {
+                        "code": item.get("code"),
+                        "label": item.get("label") or "阻断项",
+                        "message": item.get("message") or "",
+                    }
+                    for item in issues[:3]
+                ],
+            }
+        )
+    return steps
+
+
+def build_refresh_status_payload(
+    page: str,
+    *,
+    auto: bool = False,
+    now: datetime | None = None,
+    skip_auto: bool = False,
+) -> dict[str, Any]:
+    current = now or datetime.now()
+    market_mode, market_label = current_market_mode(current)
     running = build_running_refresh_tasks(page)
-    cooldown = build_refresh_cooldown(page, market_mode)
+    cfg = page_policy(page)
+    state = load_refresh_state()
 
     # Single source of truth for the today page: readiness drives freshness,
     # stale_count, recommended_task and the readiness_mode signature.  The
@@ -754,42 +1043,120 @@ def build_refresh_status_payload(page: str) -> dict[str, Any]:
         freshness = _readiness_freshness_rows(
             readiness_payload, fallback_threshold=fallback_threshold
         )
-        stale_count = int(readiness_payload.get("stale_count") or 0)
+        try:
+            expected_date = str(readiness_payload.get("expected_trade_date") or readiness_expected_trade_date(current))
+        except Exception:
+            expected_date = current.strftime("%Y-%m-%d")
+        freshness.extend(_dataset_manifest_freshness_rows(expected_date=expected_date, now=current))
+        page_stale_count = int(readiness_payload.get("stale_count") or 0)
         readiness_recommendations = [
-            str(name).strip()
+            normalize_task_name(str(name).strip())
             for name in (readiness_payload.get("recommended_tasks") or [])
             if str(name).strip()
         ]
     else:
         freshness = build_page_freshness(page, market_mode)
-        stale_count = sum(1 for item in freshness if item.get("stale"))
+        page_stale_count = sum(1 for item in freshness if item.get("stale"))
         readiness_recommendations = []
 
-    # Recommended task: prefer readiness when it is not green (so the operator
-    # gets the task that actually clears the blocker).  Otherwise fall back to
-    # the page-specific heuristic.
-    recommended_task_name: str | None = None
-    if readiness_payload and not readiness_payload.get("ready"):
-        for candidate in readiness_recommendations:
-            try:
-                resolved = resolve_refresh_task(candidate)
-            except HTTPException:
-                continue
-            recommended_task_name = candidate
-            recommended_task = resolved
-            break
-    if recommended_task_name is None:
-        recommended_task_name = pick_recommended_task(page, freshness, market_mode)
-        recommended_task = resolve_refresh_task(recommended_task_name)
+    if readiness_payload and readiness_payload.get("ready"):
+        freshness = [item for item in freshness if not item.get("dataset_manifest")]
+    elif page != "today":
+        try:
+            freshness.extend(
+                _dataset_manifest_freshness_rows(
+                    expected_date=readiness_expected_trade_date(current),
+                    now=current,
+                )
+            )
+        except Exception:
+            pass
+
+    allowed_tasks = list(cfg.allowed_tasks if cfg else ())
+    lightweight_task = None if (page == "today" and readiness_payload and not readiness_payload.get("ready")) else eligible_lightweight_task(
+        page=page,
+        freshness=freshness,
+        allowed_tasks=allowed_tasks,
+    )
+    recommended_task_name = lightweight_task or policy_pick_recommended_task(
+        page=page,
+        freshness=freshness,
+        market_mode=market_mode,
+        readiness_payload=readiness_payload,
+        now=current,
+    )
+    recommended_task_name = normalize_task_name(recommended_task_name)
+    recommended_task = resolve_refresh_task(recommended_task_name)
+    policy = task_policy(recommended_task_name)
+    policy_freshness = _stale_subset(
+        freshness,
+        list(policy.manifest_dependencies if policy else ()),
+    )
+    manifest_stale_count = sum(1 for item in freshness if item.get("stale"))
+    task_stale_count = sum(1 for item in policy_freshness if item.get("stale"))
+    cooldown = page_cooldown_state(
+        page=page,
+        task_name=recommended_task_name,
+        state=state,
+        now=current,
+    )
+    auto_decision = evaluate_auto_refresh(
+        page=page,
+        recommended_task=recommended_task_name,
+        freshness=policy_freshness,
+        readiness_payload=readiness_payload,
+        running=running,
+        cooldown=cooldown,
+        force=False,
+        now=current,
+    )
+    trigger_result: dict[str, Any] | None = None
+    if auto and not skip_auto and auto_decision.get("should_trigger"):
+        trigger_result = trigger_refresh_task(
+            page=page,
+            task_name=recommended_task_name,
+            force=False,
+            trigger_type="auto",
+            reason=str(auto_decision.get("summary") or "auto_refresh"),
+            decision=auto_decision,
+            freshness=policy_freshness,
+        )
+        auto_decision = {
+            **auto_decision,
+            "triggered": True,
+            "trigger": trigger_result,
+        }
+        state = load_refresh_state()
+        running = build_running_refresh_tasks(page)
+        cooldown = page_cooldown_state(
+            page=page,
+            task_name=recommended_task_name,
+            state=state,
+            now=current,
+        )
+        auto_decision["cooldown_remaining_seconds"] = int(cooldown.get("remaining_seconds") or 0)
+        auto_decision["next_allowed_at"] = str(cooldown.get("next_allowed_at") or "")
+    else:
+        auto_decision = {**auto_decision, "triggered": False, "trigger": None}
 
     suggested_poll_seconds = int(REFRESH_PAGE_CONFIG[page]["poll_seconds"][market_mode])
     if running:
         suggested_poll_seconds = min(suggested_poll_seconds, 25)
 
+    recovery_steps = _build_readiness_recovery_steps(
+        page=page,
+        readiness_payload=readiness_payload,
+        recommended_task_name=recommended_task_name,
+        recommended_task=recommended_task,
+        running=running,
+        cooldown=cooldown,
+    )
+
     signature_payload = {
         "page": page,
         "recommended_task": recommended_task_name,
-        "stale_count": stale_count,
+        "recovery_steps": [(item.get("task_name"), item.get("status")) for item in recovery_steps],
+        "stale_count": page_stale_count,
         "freshness": [
             (item.get("label"), item.get("value"), bool(item.get("stale")))
             for item in freshness
@@ -797,24 +1164,40 @@ def build_refresh_status_payload(page: str) -> dict[str, Any]:
         "running": [(item.get("task_name"), item.get("started_at")) for item in running],
         "cooldown_remaining": cooldown.get("remaining_seconds"),
         "readiness_mode": (readiness_payload or {}).get("readiness_mode"),
+        "auto_refresh": auto_decision,
     }
     signature_seed = json.dumps(signature_payload, ensure_ascii=False, sort_keys=True)
     snapshot_signature = hashlib.sha1(signature_seed.encode("utf-8")).hexdigest()[:16]
 
     payload = {
         "page": page,
-        "server_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "server_time": current.strftime("%Y-%m-%d %H:%M:%S"),
         "market_mode": market_mode,
         "market_label": market_label,
         "suggested_poll_seconds": suggested_poll_seconds,
         "freshness": freshness,
-        "stale_count": stale_count,
+        "stale_count": page_stale_count,
+        "manifest_stale_count": manifest_stale_count,
+        "task_stale_count": task_stale_count,
         "running": running,
         "recommended_task": {
             "task_name": recommended_task_name,
             "title": recommended_task["title"],
+            "kind": policy.kind if policy else "unknown",
+            "cooldown_seconds": policy.cooldown_seconds if policy else cooldown.get("seconds"),
+            "manifest_dependencies": list(policy.manifest_dependencies if policy else ()),
         },
+        "recovery_steps": recovery_steps,
         "cooldown": cooldown,
+        "auto_refresh": auto_decision,
+        "last_auto_refresh": _latest_audit_event(state=state, trigger_type="auto"),
+        "last_refresh_event": _latest_audit_event(state=state),
+        "policy": {
+            "page": cfg.as_dict() if cfg else {},
+            "task": policy.as_dict() if policy else {},
+        },
+        "policy_catalog": build_policy_payload(),
+        "active_auto_windows": active_auto_windows(current),
         "snapshot_signature": snapshot_signature,
     }
     if readiness_payload:
@@ -824,20 +1207,116 @@ def build_refresh_status_payload(page: str) -> dict[str, Any]:
     return payload
 
 
-def save_refresh_trigger(page: str, task_name: str, run_id: str, force: bool) -> None:
+def save_refresh_trigger(
+    *,
+    page: str,
+    task_name: str,
+    run_id: str,
+    force: bool,
+    trigger_type: str,
+    reason: str,
+    decision: dict[str, Any] | None = None,
+    freshness: list[dict[str, Any]] | None = None,
+) -> None:
     state = load_refresh_state()
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    normalized_task = normalize_task_name(task_name)
     pages = state.setdefault("pages", {})
     if not isinstance(pages, dict):
         pages = {}
         state["pages"] = pages
     pages[page] = {
-        "task_name": task_name,
+        "task_name": normalized_task,
         "run_id": run_id,
         "forced": bool(force),
-        "last_trigger_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "last_trigger_at": timestamp,
+        "trigger_type": trigger_type,
+        "reason": reason,
+        "decision": decision or {},
     }
-    state["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    tasks = state.setdefault("tasks", {})
+    if not isinstance(tasks, dict):
+        tasks = {}
+        state["tasks"] = tasks
+    task_event = {
+        "task_name": normalized_task,
+        "task_family": task_family(normalized_task),
+        "page": page,
+        "run_id": run_id,
+        "forced": bool(force),
+        "last_trigger_at": timestamp,
+        "trigger_type": trigger_type,
+        "reason": reason,
+        "decision": decision or {},
+    }
+    tasks[normalized_task] = task_event
+    audit_events = state.setdefault("audit_events", [])
+    if not isinstance(audit_events, list):
+        audit_events = []
+        state["audit_events"] = audit_events
+    audit_events.append(
+        {
+            "ts": timestamp,
+            "trigger_type": trigger_type,
+            "page": page,
+            "task_name": normalized_task,
+            "task_family": task_family(normalized_task),
+            "run_id": run_id,
+            "force": bool(force),
+            "reason": reason,
+            "manifest_state": [
+                {
+                    "key": item.get("key"),
+                    "label": item.get("label"),
+                    "stale": bool(item.get("stale")),
+                    "freshness_status": item.get("freshness_status"),
+                    "trade_date": item.get("trade_date"),
+                    "stale_reasons": list(item.get("stale_reasons") or []),
+                }
+                for item in (freshness or [])[:12]
+            ],
+            "cooldown": {
+                "remaining_seconds": int((decision or {}).get("cooldown_remaining_seconds") or 0),
+                "next_allowed_at": str((decision or {}).get("next_allowed_at") or ""),
+            },
+            "decision": decision or {},
+        }
+    )
+    state["audit_events"] = audit_events[-100:]
+    state["updated_at"] = timestamp
     save_refresh_state(state)
+
+
+def trigger_refresh_task(
+    *,
+    page: str,
+    task_name: str,
+    force: bool,
+    trigger_type: str,
+    reason: str,
+    decision: dict[str, Any] | None = None,
+    freshness: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    normalized = normalize_task_name(task_name)
+    task = resolve_refresh_task(normalized)
+    result = launch_background_task(
+        task_name=task["task_name"],
+        title=task["title"],
+        command=task["command"],
+        cwd=task["cwd"],
+        send_to_feishu=bool(task.get("send_to_feishu", False)),
+    )
+    save_refresh_trigger(
+        page=page,
+        task_name=normalized,
+        run_id=str(result.get("run_id") or ""),
+        force=force,
+        trigger_type=trigger_type,
+        reason=reason,
+        decision=decision,
+        freshness=freshness,
+    )
+    return result
 
 
 @app.get("/", include_in_schema=False)
@@ -1107,9 +1586,19 @@ async def api_opportunities() -> JSONResponse:
 
 
 @app.get("/api/refresh/status")
-async def api_refresh_status(page: str) -> JSONResponse:
+async def api_refresh_status(page: str, auto: bool = False) -> JSONResponse:
     normalized_page = normalize_refresh_page(page)
-    return JSONResponse(build_refresh_status_payload(normalized_page))
+    return JSONResponse(build_refresh_status_payload(normalized_page, auto=auto))
+
+
+@app.get("/api/refresh/policy")
+async def api_refresh_policy() -> JSONResponse:
+    return JSONResponse(build_policy_payload())
+
+
+@app.get("/api/cron/validate")
+async def api_cron_validate() -> JSONResponse:
+    return JSONResponse(validate_cron_policies())
 
 
 @app.get("/api/readiness/live")
@@ -1152,34 +1641,51 @@ async def api_refresh_trigger(request: Request) -> JSONResponse:
 
     page = normalize_refresh_page(payload.get("page"))
     force = parse_bool_value(payload.get("force"), False)
+    requested_reason = str(payload.get("reason") or "").strip()
     status = build_refresh_status_payload(page)
     running = status.get("running") or []
-    cooldown = status.get("cooldown") or {}
-    remaining = int(cooldown.get("remaining_seconds") or 0)
-
-    if running and not force:
-        raise HTTPException(status_code=409, detail="刷新任务仍在运行，请稍后再试。")
-    if remaining > 0 and not force:
-        raise HTTPException(status_code=429, detail=f"刷新冷却中，请 {remaining} 秒后再试。")
-
     suggested = str((status.get("recommended_task") or {}).get("task_name") or "").strip()
-    task_name = str(payload.get("task_name") or suggested).strip()
+    task_name = normalize_task_name(str(payload.get("task_name") or suggested).strip())
     if not task_name:
         raise HTTPException(status_code=400, detail="missing task_name")
 
-    allowed_tasks = REFRESH_PAGE_CONFIG[page]["allowed_tasks"]
+    allowed_tasks = {normalize_task_name(item) for item in REFRESH_PAGE_CONFIG[page]["allowed_tasks"]}
     if task_name not in allowed_tasks:
         raise HTTPException(status_code=400, detail="当前页面不支持该刷新任务")
 
     task = resolve_refresh_task(task_name)
-    result = launch_background_task(
-        task_name=task["task_name"],
-        title=task["title"],
-        command=task["command"],
-        cwd=task["cwd"],
-        send_to_feishu=bool(task.get("send_to_feishu", False)),
+    state = load_refresh_state()
+    cooldown = page_cooldown_state(page=page, task_name=task_name, state=state)
+    remaining = int(cooldown.get("remaining_seconds") or 0)
+    if task_is_running(task_name, running):
+        raise HTTPException(status_code=409, detail="同类刷新任务仍在运行，请稍后再试。")
+    if remaining > 0 and not force:
+        raise HTTPException(status_code=429, detail=f"刷新冷却中，请 {remaining} 秒后再试。")
+
+    policy = task_policy(task_name)
+    freshness = _stale_subset(
+        list(status.get("freshness") or []),
+        list(policy.manifest_dependencies if policy else ()),
     )
-    save_refresh_trigger(page, task_name, str(result.get("run_id") or ""), force)
+    decision = evaluate_auto_refresh(
+        page=page,
+        recommended_task=task_name,
+        freshness=freshness,
+        readiness_payload=status.get("readiness") if isinstance(status.get("readiness"), dict) else None,
+        running=running,
+        cooldown=cooldown,
+        force=force,
+    )
+    reason = requested_reason or ("manual_force" if force else "manual")
+    result = trigger_refresh_task(
+        page=page,
+        task_name=task_name,
+        force=force,
+        trigger_type="manual",
+        reason=reason,
+        decision=decision,
+        freshness=freshness,
+    )
     return JSONResponse(
         {
             "ok": True,
@@ -1190,7 +1696,7 @@ async def api_refresh_trigger(request: Request) -> JSONResponse:
                 "title": task["title"],
             },
             "trigger": result,
-            "status": build_refresh_status_payload(page),
+            "status": build_refresh_status_payload(page, skip_auto=True),
         }
     )
 
@@ -1406,7 +1912,15 @@ async def api_save_parameters(request: Request) -> JSONResponse:
 
 @app.post("/api/tasks/{task_name}/run")
 async def run_task(task_name: str, request: Request) -> JSONResponse:
-    task = TASK_DEFINITIONS.get(task_name)
+    normalized_task_name = canonical_task_name(task_name)
+    if normalized_task_name == "watchlist_refresh":
+        task = {
+            "title": "自选股全流程刷新",
+            "command": WATCHLIST_REFRESH_COMMAND,
+            "cwd": str(WORKSPACE_ROOT),
+        }
+    else:
+        task = TASK_DEFINITIONS.get(normalized_task_name)
     if not task:
         raise HTTPException(status_code=404, detail="unknown task")
 
@@ -1416,14 +1930,29 @@ async def run_task(task_name: str, request: Request) -> JSONResponse:
         payload = {}
 
     send_to_feishu = bool(payload.get("send_to_feishu", False))
+    feishu_status = feishu_channel_status() if send_to_feishu else None
+    feishu_warning = ""
+    if send_to_feishu and feishu_status and not feishu_status.get("available"):
+        send_to_feishu = False
+        feishu_warning = str(feishu_status.get("detail") or "飞书通道当前不可用，本次仅执行任务本体。")
+
     result = launch_background_task(
-        task_name=task_name,
+        task_name=normalized_task_name,
         title=task["title"],
         command=task["command"],
         cwd=task["cwd"],
         send_to_feishu=send_to_feishu,
     )
-    return JSONResponse({"ok": True, **result})
+    return JSONResponse(
+        {
+            "ok": True,
+            **result,
+            "requested_task_name": task_name,
+            "canonical_task_name": normalized_task_name,
+            "feishu_warning": feishu_warning,
+            "feishu_status": feishu_status,
+        }
+    )
 
 
 @app.get("/api/runs/{run_id}")
@@ -1482,7 +2011,15 @@ async def artifact(path: str) -> FileResponse:
 
 @app.get("/healthz")
 async def healthz() -> JSONResponse:
-    return JSONResponse({"ok": True, "workspace": str(WORKSPACE_ROOT)})
+    return JSONResponse(
+        {
+            "ok": True,
+            "workspace": str(WORKSPACE_ROOT),
+            "channels": {
+                "feishu": feishu_channel_status(),
+            },
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1512,7 +2049,9 @@ async def api_portfolio_mode(request: Request) -> JSONResponse:
     mode = str(payload.get("mode") or "").strip().lower()
     note = str(payload.get("note") or "").strip()
     starting_cash = payload.get("starting_cash")
-    allow_unsafe = bool(payload.get("allow_unsafe"))
+    allow_unsafe = parse_bool_value(payload.get("allow_unsafe"), False)
+    if allow_unsafe and not note:
+        raise HTTPException(status_code=400, detail="allow_unsafe requires note/reason")
     try:
         set_account_mode(
             mode,

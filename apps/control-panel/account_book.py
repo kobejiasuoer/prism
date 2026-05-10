@@ -184,6 +184,9 @@ def _empty_state() -> dict[str, Any]:
         "version": 1,
         "mode": "research",
         "mode_updated_at": "",
+        "unsafe_bypass_active": False,
+        "unsafe_bypass_note": "",
+        "unsafe_bypass_at": "",
         "starting_cash": 0.0,
         "cash_balance": 0.0,
         "currency": "CNY",
@@ -191,6 +194,7 @@ def _empty_state() -> dict[str, Any]:
         "cash_adjustments": [],
         "reconciliations": [],
         "no_fill_intents": [],
+        "mode_history": [],
         "updated_at": "",
     }
 
@@ -204,6 +208,9 @@ def _coerce_state(data: Any) -> dict[str, Any]:
         mode = "research"
     state["mode"] = mode
     state["mode_updated_at"] = str(data.get("mode_updated_at") or "")
+    state["unsafe_bypass_active"] = bool(data.get("unsafe_bypass_active"))
+    state["unsafe_bypass_note"] = str(data.get("unsafe_bypass_note") or "")
+    state["unsafe_bypass_at"] = str(data.get("unsafe_bypass_at") or "")
     try:
         state["starting_cash"] = _round_money(float(data.get("starting_cash") or 0))
     except (TypeError, ValueError):
@@ -222,6 +229,9 @@ def _coerce_state(data: Any) -> dict[str, Any]:
     ]
     state["no_fill_intents"] = [
         dict(item) for item in (data.get("no_fill_intents") or []) if isinstance(item, Mapping)
+    ]
+    state["mode_history"] = [
+        dict(item) for item in (data.get("mode_history") or []) if isinstance(item, Mapping)
     ]
     state["updated_at"] = str(data.get("updated_at") or "")
     return state
@@ -253,17 +263,27 @@ def set_account_mode(
 ) -> dict[str, Any]:
     """Switch the account mode.
 
-    ``live_small`` requires a positive cash balance and at least one
-    reconciliation event within ``RECONCILIATION_FRESH_SECONDS`` unless
-    ``allow_unsafe=True``.  Callers must pass the override explicitly so
-    that operator UI/CLI cannot silently flip the gate.
+    ``live_small`` requires:
+    - Positive cash balance
+    - At least one reconciliation event within 36 hours
+    - Most recent reconciliation delta within thresholds (cash ≤100, equity ≤200)
+
+    Use ``allow_unsafe=True`` to bypass these checks (requires explicit audit).
     """
+
+    # Reconciliation delta thresholds (same as readiness)
+    RECON_CASH_DELTA_THRESHOLD = 100.0
+    RECON_EQUITY_DELTA_THRESHOLD = 200.0
 
     normalized = str(mode or "").strip().lower()
     if normalized not in ACCOUNT_MODES:
         raise AccountBookError(f"invalid mode: {mode!r}")
+    note_text = str(note or "").strip()
+    if allow_unsafe and not note_text:
+        raise AccountBookError("allow_unsafe requires a non-empty note/reason for audit")
 
     state = load_account_book()
+    previous_mode = str(state.get("mode") or "research")
     if starting_cash is not None:
         try:
             cash_value = _round_money(float(starting_cash))
@@ -291,13 +311,35 @@ def set_account_mode(
                 "live_small mode requires a reconciliation event within the "
                 "last 36 hours; record /api/portfolio/reconcile first"
             )
+        # Check reconciliation delta thresholds
+        recon_items = state.get("reconciliations") or []
+        if recon_items:
+            last_recon = recon_items[-1]
+            delta_cash = abs(_round_money(last_recon.get("delta_cash", 0.0)))
+            delta_equity = abs(_round_money(last_recon.get("delta_equity", 0.0)))
+            if delta_cash > RECON_CASH_DELTA_THRESHOLD or delta_equity > RECON_EQUITY_DELTA_THRESHOLD:
+                raise AccountBookError(
+                    f"live_small mode requires reconciliation delta within thresholds: "
+                    f"cash delta {delta_cash:.2f} (threshold {RECON_CASH_DELTA_THRESHOLD:.0f}), "
+                    f"equity delta {delta_equity:.2f} (threshold {RECON_EQUITY_DELTA_THRESHOLD:.0f}). "
+                    f"Reconcile again or pass allow_unsafe=True"
+                )
 
     state["mode"] = normalized
     state["mode_updated_at"] = _now()
-    if note:
-        state.setdefault("mode_history", []).append(
-            {"mode": normalized, "ts": state["mode_updated_at"], "note": str(note)}
-        )
+    state["unsafe_bypass_active"] = bool(allow_unsafe)
+    state["unsafe_bypass_note"] = note_text if allow_unsafe else ""
+    state["unsafe_bypass_at"] = state["mode_updated_at"] if allow_unsafe else ""
+    state.setdefault("mode_history", []).append(
+        {
+            "ts": state["mode_updated_at"],
+            "from_mode": previous_mode,
+            "to_mode": normalized,
+            "note": note_text,
+            "allow_unsafe": bool(allow_unsafe),
+            "starting_cash": state.get("starting_cash"),
+        }
+    )
     return _persist(state)
 
 
@@ -349,7 +391,12 @@ def record_fill(
     note: str | None = None,
     ts: str | None = None,
 ) -> dict[str, Any]:
-    """Append a fill, update cash, and return the new state."""
+    """Append a fill, update cash, and return the new state.
+
+    Oversell protection: All modes (research/shadow/live_small) block sells
+    that exceed current position. If you need to record an erroneous fill or
+    a correction event, use a separate correction mechanism, not record_fill.
+    """
 
     trade_date_n = _normalize_trade_date(trade_date)
     code_n = _normalize_code(code)
@@ -363,6 +410,17 @@ def record_fill(
 
     state = load_account_book()
     notional = _round_money(qty_n * price_n)
+
+    # For sells, check if we have enough position to sell (all modes)
+    if side_n == "sell":
+        positions = _compute_positions(state.get("fills") or [])
+        current_qty = positions.get(code_n, {}).get("qty", 0)
+        if qty_n > current_qty:
+            raise AccountBookError(
+                f"cannot sell {qty_n} shares of {code_n}: only {current_qty} shares held. "
+                f"Oversell is blocked in all modes to prevent account book pollution. "
+                f"If this is a correction event, use a separate correction mechanism."
+            )
 
     if side_n == "buy":
         cash_delta = -_round_money(notional + fees_n)
@@ -578,6 +636,9 @@ def compute_account_view(state: Mapping[str, Any] | None = None) -> dict[str, An
         "mode_label": ACCOUNT_MODE_LABELS.get(book.get("mode", "research"), "研究态"),
         "mode_tone": ACCOUNT_MODE_TONES.get(book.get("mode", "research"), "info"),
         "mode_updated_at": book.get("mode_updated_at", ""),
+        "unsafe_bypass_active": bool(book.get("unsafe_bypass_active")),
+        "unsafe_bypass_note": str(book.get("unsafe_bypass_note") or ""),
+        "unsafe_bypass_at": str(book.get("unsafe_bypass_at") or ""),
         "currency": book.get("currency", "CNY"),
         "starting_cash": starting,
         "cash_balance": cash,
@@ -591,6 +652,7 @@ def compute_account_view(state: Mapping[str, Any] | None = None) -> dict[str, An
         "last_fill_at": fills[-1]["ts"] if fills else "",
         "reconciliations": list(book.get("reconciliations") or [])[-5:],
         "no_fill_intents": list(book.get("no_fill_intents") or []),
+        "mode_history": list(book.get("mode_history") or [])[-20:],
         "fills": fills,
         "updated_at": book.get("updated_at", ""),
     }

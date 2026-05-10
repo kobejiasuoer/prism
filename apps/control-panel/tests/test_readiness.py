@@ -38,43 +38,77 @@ from control_panel.dashboard_data import (  # noqa: E402
 )
 
 
+def _manifest(dataset: str, trade_date: str, generated_at: str, *, live_small_allowed: bool = True, freshness_status: str = "fresh") -> dict[str, object]:
+    return {
+        "dataset": dataset,
+        "provider": "pipeline",
+        "provider_role": "primary",
+        "trade_date": trade_date,
+        "fetched_at": generated_at,
+        "asof": generated_at,
+        "ttl_seconds": 900,
+        "status": "ok",
+        "freshness_status": freshness_status,
+        "fallback_used": False,
+        "row_count": 1,
+        "payload_hash": "test",
+        "live_small_allowed": live_small_allowed,
+        "quality_flags": [],
+        "manifest_path": f"/tmp/{dataset}.manifest.json",
+    }
+
+
+def _source(dataset: str, trade_date: str, generated_at: str, **extra):
+    payload = {
+        "trade_date": trade_date,
+        "generated_at": generated_at,
+        "manifest": _manifest(dataset, trade_date, generated_at),
+    }
+    payload.update(extra)
+    return payload
+
+
 def _stale_artifacts(trade_date: str = "2026-04-27", generated_at: str = "2026-04-27 09:25:00"):
     """Return canonical-ish artifacts where everything is 8 days stale."""
 
-    watchlist = {
-        "trade_date": trade_date,
-        "generated_at": generated_at,
-        "stocks": [],
-        "priority_codes": [],
-        "follow_codes": [],
-        "observe_codes": [],
-        "stock_count": 0,
-    }
-    screening_batch = {
-        "trade_date": trade_date,
-        "generated_at": generated_at,
-        "candidates": [],
-        "screening_summary": {},
-        "market_regime": {},
-        "candidate_count": 0,
-        "pool_label": "全市场",
-    }
-    confirmation = {
-        "trade_date": trade_date,
-        "generated_at": generated_at,
-        "validation_status": "ok",
-        "confirmed": [],
-        "downgraded": [],
-        "fresh_candidates": [],
-        "counts": {},
-    }
-    decision_brief = {
-        "trade_date": trade_date,
-        "generated_at": generated_at,
-        "summary": {"main_theme": "test"},
-        "focus": {},
-        "paths": {},
-    }
+    watchlist = _source(
+        "watchlist.snapshot",
+        trade_date,
+        generated_at,
+        stocks=[],
+        priority_codes=[],
+        follow_codes=[],
+        observe_codes=[],
+        stock_count=0,
+    )
+    screening_batch = _source(
+        "screening.batch",
+        trade_date,
+        generated_at,
+        candidates=[],
+        screening_summary={},
+        market_regime={},
+        candidate_count=0,
+        pool_label="全市场",
+    )
+    confirmation = _source(
+        "screening.confirmation",
+        trade_date,
+        generated_at,
+        validation_status="ok",
+        confirmed=[],
+        downgraded=[],
+        fresh_candidates=[],
+        counts={},
+    )
+    decision_brief = _source(
+        "decision_brief.snapshot",
+        trade_date,
+        generated_at,
+        summary={"main_theme": "test"},
+        focus={},
+        paths={},
+    )
     quality_status = {
         "lanes": {
             "watchlist": {
@@ -136,16 +170,12 @@ class ReadinessModelTest(unittest.TestCase):
         now = datetime(2026, 5, 6, 14, 30, 0)
 
         # Even with all *sources* at expected date, stale quality blocks readiness.
-        watchlist = {
-            "trade_date": "2026-05-06",
-            "generated_at": "2026-05-06 09:25:00",
-            "stocks": [], "priority_codes": [],
-        }
+        watchlist = _source("watchlist.snapshot", "2026-05-06", "2026-05-06 09:25:00", stocks=[], priority_codes=[])
         readiness = compute_readiness(
             watchlist=watchlist,
-            screening_batch={"trade_date": "2026-05-06", "generated_at": "2026-05-06 09:30:00"},
-            confirmation={"trade_date": "2026-05-06", "generated_at": "2026-05-06 11:35:00"},
-            decision_brief={"trade_date": "2026-05-06", "generated_at": "2026-05-06 12:00:00"},
+            screening_batch=_source("screening.batch", "2026-05-06", "2026-05-06 09:30:00"),
+            confirmation=_source("screening.confirmation", "2026-05-06", "2026-05-06 11:35:00"),
+            decision_brief=_source("decision_brief.snapshot", "2026-05-06", "2026-05-06 12:00:00"),
             quality_status=quality,  # checked_at is 2026-04-21
             now=now,
             expected_date="2026-05-06",
@@ -163,12 +193,12 @@ class ReadinessModelTest(unittest.TestCase):
         brief must NOT be considered live.
         """
 
-        watchlist = {"trade_date": "2026-04-27", "generated_at": "2026-04-27 09:25:00"}
-        brief = {"trade_date": "2026-04-27", "generated_at": "2026-04-27 21:00:00"}
+        watchlist = _source("watchlist.snapshot", "2026-04-27", "2026-04-27 09:25:00")
+        brief = _source("decision_brief.snapshot", "2026-04-27", "2026-04-27 21:00:00")
         readiness = compute_readiness(
             watchlist=watchlist,
-            screening_batch={"trade_date": "2026-04-27", "generated_at": "2026-04-27 09:30:00"},
-            confirmation={"trade_date": "2026-04-27", "generated_at": "2026-04-27 11:35:00"},
+            screening_batch=_source("screening.batch", "2026-04-27", "2026-04-27 09:30:00"),
+            confirmation=_source("screening.confirmation", "2026-04-27", "2026-04-27 11:35:00"),
             decision_brief=brief,
             quality_status={},
             now=datetime(2026, 5, 6, 14, 30, 0),
@@ -176,12 +206,27 @@ class ReadinessModelTest(unittest.TestCase):
         )
         self.assertFalse(readiness["brief_is_live"])
 
+    def test_missing_manifest_fails_closed(self) -> None:
+        readiness = compute_readiness(
+            watchlist={"trade_date": "2026-05-06", "generated_at": "2026-05-06 09:25:00"},
+            screening_batch=_source("screening.batch", "2026-05-06", "2026-05-06 09:30:00"),
+            confirmation=_source("screening.confirmation", "2026-05-06", "2026-05-06 11:35:00"),
+            decision_brief=_source("decision_brief.snapshot", "2026-05-06", "2026-05-06 12:00:00"),
+            quality_status={},
+            now=datetime(2026, 5, 6, 14, 30, 0),
+            expected_date="2026-05-06",
+        )
+        watchlist_source = next(item for item in readiness["source_freshness"] if item["key"] == "watchlist")
+        self.assertTrue(watchlist_source["stale"])
+        self.assertIn("manifest_missing", watchlist_source["stale_reasons"])
+        self.assertFalse(readiness["ready"])
+
     def test_session_aware_confirmation_warning_in_morning(self) -> None:
         """Morning sessions: missing midday confirmation is a warning, not a block."""
 
-        watchlist = {"trade_date": "2026-05-06", "generated_at": "2026-05-06 09:25:00"}
-        screening = {"trade_date": "2026-05-06", "generated_at": "2026-05-06 09:35:00"}
-        brief = {"trade_date": "2026-05-06", "generated_at": "2026-05-06 09:45:00"}
+        watchlist = _source("watchlist.snapshot", "2026-05-06", "2026-05-06 09:25:00")
+        screening = _source("screening.batch", "2026-05-06", "2026-05-06 09:35:00")
+        brief = _source("decision_brief.snapshot", "2026-05-06", "2026-05-06 09:45:00")
         quality = {
             "lanes": {
                 "watchlist": {"validation_status": "ok", "checked_at": "2026-05-06 09:25:00"},
@@ -205,9 +250,9 @@ class ReadinessModelTest(unittest.TestCase):
         self.assertNotIn("confirmation_missing", blocker_codes)
 
     def test_session_aware_confirmation_blocker_in_afternoon(self) -> None:
-        watchlist = {"trade_date": "2026-05-06", "generated_at": "2026-05-06 09:25:00"}
-        screening = {"trade_date": "2026-05-06", "generated_at": "2026-05-06 09:35:00"}
-        brief = {"trade_date": "2026-05-06", "generated_at": "2026-05-06 09:45:00"}
+        watchlist = _source("watchlist.snapshot", "2026-05-06", "2026-05-06 09:25:00")
+        screening = _source("screening.batch", "2026-05-06", "2026-05-06 09:35:00")
+        brief = _source("decision_brief.snapshot", "2026-05-06", "2026-05-06 09:45:00")
         readiness = compute_readiness(
             watchlist=watchlist,
             screening_batch=screening,
@@ -223,13 +268,13 @@ class ReadinessModelTest(unittest.TestCase):
     def test_weekend_is_at_most_shadow_only(self) -> None:
         """Weekends/holidays must never produce live_ready."""
 
-        watchlist = {"trade_date": "2026-05-08", "generated_at": "2026-05-08 09:25:00"}
+        watchlist = _source("watchlist.snapshot", "2026-05-08", "2026-05-08 09:25:00")
         # All freshness OK relative to a Friday expected_trade_date
         readiness = compute_readiness(
             watchlist=watchlist,
-            screening_batch={"trade_date": "2026-05-08", "generated_at": "2026-05-08 09:30:00"},
-            confirmation={"trade_date": "2026-05-08", "generated_at": "2026-05-08 11:35:00"},
-            decision_brief={"trade_date": "2026-05-08", "generated_at": "2026-05-08 12:00:00"},
+            screening_batch=_source("screening.batch", "2026-05-08", "2026-05-08 09:30:00"),
+            confirmation=_source("screening.confirmation", "2026-05-08", "2026-05-08 11:35:00"),
+            decision_brief=_source("decision_brief.snapshot", "2026-05-08", "2026-05-08 12:00:00"),
             quality_status={
                 "lanes": {
                     "watchlist": {"validation_status": "ok", "checked_at": "2026-05-08 09:25:00"},
@@ -248,10 +293,10 @@ class ReadinessModelTest(unittest.TestCase):
             self.assertEqual(expected_trade_date(datetime(2026, 5, 9, 10, 0, 0)), "2026-05-06")
 
     def test_live_ready_when_everything_aligned_on_weekday(self) -> None:
-        watchlist = {"trade_date": "2026-05-06", "generated_at": "2026-05-06 09:25:00"}
-        screening = {"trade_date": "2026-05-06", "generated_at": "2026-05-06 09:35:00"}
-        confirmation = {"trade_date": "2026-05-06", "generated_at": "2026-05-06 11:35:00"}
-        brief = {"trade_date": "2026-05-06", "generated_at": "2026-05-06 12:00:00"}
+        watchlist = _source("watchlist.snapshot", "2026-05-06", "2026-05-06 09:25:00")
+        screening = _source("screening.batch", "2026-05-06", "2026-05-06 09:35:00")
+        confirmation = _source("screening.confirmation", "2026-05-06", "2026-05-06 11:35:00")
+        brief = _source("decision_brief.snapshot", "2026-05-06", "2026-05-06 12:00:00")
         quality = {
             "lanes": {
                 "watchlist": {"validation_status": "ok", "checked_at": "2026-05-06 09:25:00"},
@@ -388,10 +433,10 @@ class UnsafeApplyParsingTest(unittest.TestCase):
 def _all_aligned_artifacts(trade_date: str = "2026-05-06", generated_at: str = "2026-05-06 09:25:00"):
     """Return artifacts where everything is on the expected trade date."""
 
-    watchlist = {"trade_date": trade_date, "generated_at": generated_at}
-    screening = {"trade_date": trade_date, "generated_at": "2026-05-06 09:35:00"}
-    confirmation = {"trade_date": trade_date, "generated_at": "2026-05-06 11:35:00"}
-    brief = {"trade_date": trade_date, "generated_at": "2026-05-06 12:00:00"}
+    watchlist = _source("watchlist.snapshot", trade_date, generated_at)
+    screening = _source("screening.batch", trade_date, "2026-05-06 09:35:00")
+    confirmation = _source("screening.confirmation", trade_date, "2026-05-06 11:35:00")
+    brief = _source("decision_brief.snapshot", trade_date, "2026-05-06 12:00:00")
     quality = {
         "lanes": {
             "watchlist": {
@@ -425,7 +470,7 @@ class QualityExpectedTimestampTest(unittest.TestCase):
 
     def test_checked_today_but_expected_yesterday_is_not_timely(self) -> None:
         watchlist, screening, _confirmation, brief, _quality = _all_aligned_artifacts()
-        confirmation = {"trade_date": "2026-05-06", "generated_at": "2026-05-06 11:35:00"}
+        confirmation = _source("screening.confirmation", "2026-05-06", "2026-05-06 11:35:00")
         # Quality lane was *checked* today but the producer believed yesterday
         # was the trading day — the lane is comparing against the wrong baseline.
         quality_with_stale_expected = {
@@ -492,9 +537,9 @@ class ConfirmationRecommendedTaskTest(unittest.TestCase):
     """
 
     def test_confirmation_blocker_recommends_midday_confirmation(self) -> None:
-        watchlist = {"trade_date": "2026-05-06", "generated_at": "2026-05-06 09:25:00"}
-        screening = {"trade_date": "2026-05-06", "generated_at": "2026-05-06 09:35:00"}
-        brief = {"trade_date": "2026-05-06", "generated_at": "2026-05-06 09:45:00"}
+        watchlist = _source("watchlist.snapshot", "2026-05-06", "2026-05-06 09:25:00")
+        screening = _source("screening.batch", "2026-05-06", "2026-05-06 09:35:00")
+        brief = _source("decision_brief.snapshot", "2026-05-06", "2026-05-06 09:45:00")
         readiness = compute_readiness(
             watchlist=watchlist,
             screening_batch=screening,
@@ -530,9 +575,9 @@ class ConfirmationRecommendedTaskTest(unittest.TestCase):
         self.assertNotIn("midday_refresh", readiness["recommended_tasks"])
 
     def test_morning_warning_still_uses_midday_confirmation(self) -> None:
-        watchlist = {"trade_date": "2026-05-06", "generated_at": "2026-05-06 09:25:00"}
-        screening = {"trade_date": "2026-05-06", "generated_at": "2026-05-06 09:35:00"}
-        brief = {"trade_date": "2026-05-06", "generated_at": "2026-05-06 09:45:00"}
+        watchlist = _source("watchlist.snapshot", "2026-05-06", "2026-05-06 09:25:00")
+        screening = _source("screening.batch", "2026-05-06", "2026-05-06 09:35:00")
+        brief = _source("decision_brief.snapshot", "2026-05-06", "2026-05-06 09:45:00")
         readiness = compute_readiness(
             watchlist=watchlist,
             screening_batch=screening,
@@ -608,6 +653,21 @@ class TodayRefreshConsistencyTest(unittest.TestCase):
                     readiness_sources[key],
                     msg=f"freshness row {key} disagrees with readiness",
                 )
+
+    def test_refresh_status_includes_operator_recovery_steps(self) -> None:
+        refresh_payload = self.client.get("/api/refresh/status?page=today").json()
+        today_ready = self.client.get("/api/today").json()["readiness"]
+        steps = refresh_payload.get("recovery_steps") or []
+
+        self.assertIsInstance(steps, list)
+        if today_ready["readiness_mode"] != "live_ready":
+            self.assertGreater(len(steps), 0)
+            step_task_names = [step.get("task_name") for step in steps]
+            self.assertIn(refresh_payload["recommended_task"]["task_name"], step_task_names)
+            for step in steps:
+                self.assertIn("title", step)
+                self.assertIn("can_trigger", step)
+                self.assertIn("issues", step)
 
     def test_same_day_data_is_not_stale_in_refresh_status(self) -> None:
         """When all artifacts align with today, refresh/status must reflect

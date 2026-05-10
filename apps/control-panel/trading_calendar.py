@@ -28,9 +28,8 @@ Holidays included only count whole days when the market was closed; partial
 trading days are NOT included.  Weekends are handled separately.
 
 Sources: CSRC / SSE & SZSE annual notices.  Update by hand at the start of
-each new calendar year — if the user adds an akshare integration later we can
-swap this for ``ak.tool_trade_date_hist_sina`` and keep the static list as a
-fallback.
+each new calendar year and keep the static list aligned with the latest
+published exchange calendar.
 """
 
 from __future__ import annotations

@@ -7,6 +7,7 @@ import type { CSSProperties } from "react";
 import { Badge } from "@/components/badge";
 import {
   useRuns,
+  useRefreshStatus,
   useTodayData,
 } from "@/lib/hooks";
 import type {
@@ -14,6 +15,7 @@ import type {
   ReadinessIssue,
   ReadinessMode,
   ReadinessPayload,
+  RefreshStatus,
   RiskRow,
   RunItem,
   SourceCardData,
@@ -82,6 +84,24 @@ const TASK_TITLES: Record<string, string> = {
   command_brief: "总控简报",
 };
 
+const AUTO_REASON_COPY: Record<string, string> = {
+  cooldown: "冷却未结束",
+  running: "同类任务运行中",
+  outside_auto_window: "非自动刷新窗口",
+  manifest_not_stale: "manifest 未 stale/expired",
+  no_manifest_trigger: "没有 manifest 触发原因",
+  provider_failure: "provider 失败",
+  fallback_not_allowed: "fallback 不可进 live_small",
+  live_small_not_allowed: "不允许 live_small",
+  manifest_missing: "manifest 缺失",
+  freshness_stale: "manifest stale",
+  freshness_expired: "manifest expired",
+  trade_date_mismatch: "交易日不匹配",
+};
+
+function autoReasonCopy(value: string) {
+  return AUTO_REASON_COPY[value] || value;
+}
 
 const ACTION_STATE_COPY: Record<TodayActionDisplayValue, {
   label: string;
@@ -286,6 +306,43 @@ function TodayPrimaryCTA({
           <ChevronRight size={14} />
         </Link>
       </div>
+    </section>
+  );
+}
+
+function AutoRefreshBanner({ status }: { status?: RefreshStatus }) {
+  if (!status?.auto_refresh) {
+    return null;
+  }
+  const decision = status.auto_refresh;
+  const blocked = decision.blocked_reasons || [];
+  const reasons = blocked.length ? blocked : decision.reason_codes || [];
+  const tone = decision.triggered ? "positive" : blocked.length ? "warning" : "info";
+
+  return (
+    <section className="war-inline-note">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge tone={tone}>{decision.triggered ? "已自动补刷" : "自动刷新状态"}</Badge>
+        <span className="text-[12px] text-[var(--text-tertiary)]">
+          建议 {status.recommended_task?.title || status.recommended_task?.task_name || "-"} · 冷却 {status.cooldown?.remaining_seconds || 0}s
+          {status.cooldown?.next_allowed_at ? ` · 下次 ${status.cooldown.next_allowed_at}` : ""}
+        </span>
+      </div>
+      <div className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">
+        {decision.summary || "等待策略判断。"}
+      </div>
+      {reasons.length ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {reasons.slice(0, 5).map((reason) => (
+            <Badge key={reason} tone={blocked.length ? "warning" : "info"}>{autoReasonCopy(reason)}</Badge>
+          ))}
+        </div>
+      ) : null}
+      {status.last_auto_refresh ? (
+        <div className="mt-2 text-[11px] text-[var(--text-tertiary)]">
+          最近自动刷新：{status.last_auto_refresh.ts || "-"} · {status.last_auto_refresh.reason || "-"}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -742,6 +799,7 @@ function IntelligenceRail({
 export default function CommandCenterPage() {
   const today = useTodayData();
   const runsQuery = useRuns();
+  const refreshStatus = useRefreshStatus("today", true, { auto: true });
   const data = today.data;
   const hero = data?.command_hero;
   const readiness = data?.readiness;
@@ -931,6 +989,14 @@ export default function CommandCenterPage() {
             confirmed={data?.counts?.confirmed}
           />
         </div>
+        <details className="war-inline-note">
+          <summary className="cursor-pointer text-[12px] font-medium text-[var(--text-primary)]">
+            数据健康 / 工程状态
+          </summary>
+          <div className="mt-3">
+            <AutoRefreshBanner status={refreshStatus.data} />
+          </div>
+        </details>
       </div>
     </main>
   );

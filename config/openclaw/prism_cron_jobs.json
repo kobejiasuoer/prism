@@ -1,0 +1,185 @@
+{
+  "version": 1,
+  "jobs": [
+    {
+      "id": "prism-watchlist_refresh",
+      "agentId": "invest",
+      "sessionKey": "agent:invest:main",
+      "name": "自选股早盘分析",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "50 9 * * 1-5",
+        "tz": "Asia/Shanghai"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "执行 自选股早盘分析。发往飞书的消息由 shell runner 自己完成；最终回复只允许写 `DONE` 或 `FAILED: ...`。\n\n直接执行：`SEND_TO_FEISHU=1 FEISHU_TARGET= bash apps/scripts/run_watchlist_refresh.sh`\n如果 runner 已在运行或返回 running 状态，禁止重复执行。",
+        "timeoutSeconds": 600,
+        "toolsAllow": [
+          "exec"
+        ],
+        "thinking": "off",
+        "lightContext": true
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "feishu",
+        "to": ""
+      },
+      "state": {}
+    },
+    {
+      "id": "prism-aggressive",
+      "agentId": "invest",
+      "sessionKey": "agent:invest:main",
+      "name": "进攻型选股-早盘",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "30 10 * * 1-5",
+        "tz": "Asia/Shanghai"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "执行 进攻型选股-早盘。发往飞书的消息由 shell runner 自己完成；最终回复只允许写 `DONE` 或 `FAILED: ...`。\n\n直接执行：`SEND_TO_FEISHU=1 FEISHU_TARGET= bash packages/screener/run_full_workflow_cron.sh --pool aggressive --top 10 --handoff-analyzer --handoff-top 3 --handoff-min-consistency 6`\n如果 runner 已在运行或返回 running 状态，禁止重复执行。",
+        "timeoutSeconds": 600,
+        "toolsAllow": [
+          "exec"
+        ],
+        "thinking": "off",
+        "lightContext": true
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "feishu",
+        "to": ""
+      },
+      "state": {}
+    },
+    {
+      "id": "prism-midday_refresh",
+      "agentId": "invest",
+      "sessionKey": "agent:invest:main",
+      "name": "进攻型选股-午盘",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "10 13 * * 1-5",
+        "tz": "Asia/Shanghai"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "执行 进攻型选股-午盘。发往飞书的消息由 shell runner 自己完成；最终回复只允许写 `DONE` 或 `FAILED: ...`。\n\n直接执行：`SEND_TO_FEISHU=1 FEISHU_TARGET= bash packages/screener/run_midday_refresh_cron.sh --pool aggressive --top 10`\n如果 runner 已在运行或返回 running 状态，禁止重复执行。",
+        "timeoutSeconds": 600,
+        "toolsAllow": [
+          "exec"
+        ],
+        "thinking": "off",
+        "lightContext": true
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "feishu",
+        "to": ""
+      },
+      "state": {}
+    },
+    {
+      "id": "prism-midday_confirmation",
+      "agentId": "invest",
+      "sessionKey": "agent:invest:main",
+      "name": "进攻型选股-午盘确认",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "45 13 * * 1-5",
+        "tz": "Asia/Shanghai"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "执行 进攻型选股-午盘确认。发往飞书的消息由 shell runner 自己完成；最终回复只允许写 `DONE` 或 `FAILED: ...`。\n\n直接执行：`SEND_TO_FEISHU=1 FEISHU_TARGET= bash packages/screener/run_midday_confirmation_cron.sh --pool aggressive --top 10`\n如果 runner 已在运行或返回 running 状态，禁止重复执行。",
+        "timeoutSeconds": 600,
+        "toolsAllow": [
+          "exec"
+        ],
+        "thinking": "off",
+        "lightContext": true
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "feishu",
+        "to": ""
+      },
+      "state": {}
+    },
+    {
+      "id": "prism-preclose_risk_refresh",
+      "agentId": "invest",
+      "sessionKey": "agent:invest:main",
+      "name": "收盘前风险刷新",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "50 14 * * 1-5",
+        "tz": "Asia/Shanghai"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "执行 收盘前风险刷新。发往飞书的消息由 shell runner 自己完成；最终回复只允许写 `DONE` 或 `FAILED: ...`。\n\n直接执行：`SEND_TO_FEISHU=1 FEISHU_TARGET= bash apps/scripts/run_command_brief.sh`\n如果 runner 已在运行或返回 running 状态，禁止重复执行。",
+        "timeoutSeconds": 600,
+        "toolsAllow": [
+          "exec"
+        ],
+        "thinking": "off",
+        "lightContext": true
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "feishu",
+        "to": ""
+      },
+      "state": {}
+    },
+    {
+      "id": "prism-postclose_command_brief",
+      "agentId": "invest",
+      "sessionKey": "agent:invest:main",
+      "name": "收盘后总控简报",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "5 15 * * 1-5",
+        "tz": "Asia/Shanghai"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "执行 收盘后总控简报。发往飞书的消息由 shell runner 自己完成；最终回复只允许写 `DONE` 或 `FAILED: ...`。\n\n直接执行：`SEND_TO_FEISHU=1 FEISHU_TARGET= bash apps/scripts/run_command_brief.sh`\n如果 runner 已在运行或返回 running 状态，禁止重复执行。",
+        "timeoutSeconds": 600,
+        "toolsAllow": [
+          "exec"
+        ],
+        "thinking": "off",
+        "lightContext": true
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "feishu",
+        "to": ""
+      },
+      "state": {}
+    }
+  ]
+}

@@ -20,43 +20,72 @@ if str(CONTROL_PANEL_ROOT) not in sys.path:
 import readiness  # type: ignore  # noqa: E402
 
 
+def _manifest(dataset: str, trade_date: str, generated_at: str) -> dict[str, object]:
+    return {
+        "dataset": dataset,
+        "provider": "pipeline",
+        "provider_role": "primary",
+        "trade_date": trade_date,
+        "fetched_at": generated_at,
+        "asof": generated_at,
+        "ttl_seconds": 900,
+        "status": "ok",
+        "freshness_status": "fresh",
+        "fallback_used": False,
+        "row_count": 1,
+        "payload_hash": "test",
+        "live_small_allowed": True,
+        "quality_flags": [],
+    }
+
+
+def _source(dataset: str, trade_date: str, generated_at: str, **extra):
+    payload = {"trade_date": trade_date, "generated_at": generated_at, "manifest": _manifest(dataset, trade_date, generated_at)}
+    payload.update(extra)
+    return payload
+
+
 def _fresh_artifacts(trade_date: str, generated_at: str):
     """Build artifacts that are themselves freshness-clean for ``trade_date``."""
 
-    watchlist = {
-        "trade_date": trade_date,
-        "generated_at": generated_at,
-        "stocks": [],
-        "priority_codes": [],
-        "follow_codes": [],
-        "observe_codes": [],
-        "stock_count": 0,
-    }
-    screening_batch = {
-        "trade_date": trade_date,
-        "generated_at": generated_at,
-        "candidates": [],
-        "screening_summary": {},
-        "market_regime": {},
-        "candidate_count": 0,
-        "pool_label": "全市场",
-    }
-    confirmation = {
-        "trade_date": trade_date,
-        "generated_at": generated_at,
-        "validation_status": "ok",
-        "confirmed": [],
-        "downgraded": [],
-        "fresh_candidates": [],
-        "counts": {},
-    }
-    decision_brief = {
-        "trade_date": trade_date,
-        "generated_at": generated_at,
-        "summary": {"main_theme": "test"},
-        "focus": {},
-        "paths": {},
-    }
+    watchlist = _source(
+        "watchlist.snapshot",
+        trade_date,
+        generated_at,
+        stocks=[],
+        priority_codes=[],
+        follow_codes=[],
+        observe_codes=[],
+        stock_count=0,
+    )
+    screening_batch = _source(
+        "screening.batch",
+        trade_date,
+        generated_at,
+        candidates=[],
+        screening_summary={},
+        market_regime={},
+        candidate_count=0,
+        pool_label="全市场",
+    )
+    confirmation = _source(
+        "screening.confirmation",
+        trade_date,
+        generated_at,
+        validation_status="ok",
+        confirmed=[],
+        downgraded=[],
+        fresh_candidates=[],
+        counts={},
+    )
+    decision_brief = _source(
+        "decision_brief.snapshot",
+        trade_date,
+        generated_at,
+        summary={"main_theme": "test"},
+        focus={},
+        paths={},
+    )
     quality_status = {
         "lanes": {
             "watchlist": {
@@ -238,6 +267,33 @@ class ReadinessAccountStateTests(unittest.TestCase):
         self.assertEqual(result["account_state"]["unreconciled_intents"], [])
         self.assertTrue(result["account_state"]["ready_for_live_small"])
         self.assertEqual(result["readiness_mode"], "live_ready")
+
+    def test_live_small_unsafe_bypass_stays_shadow_only(self) -> None:
+        now = datetime(2026, 5, 6, 10, 0, 0)
+        artifacts = _fresh_artifacts("2026-05-06", "2026-05-06 09:30:00")
+        result = readiness.compute_readiness(
+            watchlist=artifacts[0],
+            screening_batch=artifacts[1],
+            confirmation=artifacts[2],
+            decision_brief=artifacts[3],
+            quality_status=artifacts[4],
+            account_book={
+                "mode": "live_small",
+                "cash_balance": 10000.0,
+                "unsafe_bypass_active": True,
+                "unsafe_bypass_note": "temporary repair",
+                "fills": [],
+                "no_fill_intents": [],
+                "reconciliations": [
+                    {"ts": "2026-05-06 09:00:00", "trade_date": "2026-05-06"}
+                ],
+            },
+            today_action_decisions={"trade_dates": {}},
+            now=now,
+        )
+        warning_codes = [w["code"] for w in result["warnings"]]
+        self.assertIn("account_unsafe_bypass_active", warning_codes)
+        self.assertEqual(result["readiness_mode"], "shadow_only")
 
     def test_today_actions_do_not_block_intra_day(self) -> None:
         # A done decision on the same trading day must not be flagged

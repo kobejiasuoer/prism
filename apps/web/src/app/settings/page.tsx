@@ -20,8 +20,8 @@ import { MetricCard } from "@/components/metric-card";
 import { PageTitle } from "@/components/page-title";
 import { PreviewDrawer, type PreviewDrawerState } from "@/components/preview-drawer";
 import { api, ApiError } from "@/lib/api";
-import { useHealth, useOverview, useParameters, useRunTask, useRuns, useSaveParameters } from "@/lib/hooks";
-import type { ParametersResponse, RunItem, TaskDefinition } from "@/lib/types";
+import { useHealth, useOverview, useParameters, useRefreshStatus, useRunTask, useRuns, useSaveParameters } from "@/lib/hooks";
+import type { ParametersResponse, RefreshStatus, RunItem, TaskDefinition } from "@/lib/types";
 
 function runIdOf(run?: RunItem) {
   return String(run?.run_id || run?.task_id || "").trim();
@@ -42,6 +42,39 @@ function runTone(status?: string) {
     return "watch";
   }
   return "info";
+}
+
+const REFRESH_REASON_LABELS: Record<string, string> = {
+  cooldown: "冷却未结束",
+  running: "同类任务运行中",
+  outside_auto_window: "非自动刷新窗口",
+  manifest_not_stale: "manifest 未 stale/expired",
+  no_manifest_trigger: "没有 manifest 触发原因",
+  fixed_cron_only: "仅固定 cron",
+  fixed_cron_or_manual_only: "仅固定 cron 或手动",
+  page_auto_disabled: "页面未开启自动刷新",
+  provider_failure: "provider 失败",
+  live_small_not_allowed: "不允许 live_small",
+  fallback_not_allowed: "fallback 不可进 live_small",
+  manifest_missing: "manifest 缺失",
+  freshness_stale: "manifest stale",
+  freshness_expired: "manifest expired",
+  trade_date_mismatch: "交易日不匹配",
+};
+
+function refreshReasonLabel(value: string) {
+  return REFRESH_REASON_LABELS[value] || value;
+}
+
+function cooldownLabel(seconds?: number) {
+  const value = Number(seconds || 0);
+  if (value <= 0) {
+    return "已就绪";
+  }
+  if (value < 60) {
+    return `${value}s`;
+  }
+  return `${Math.ceil(value / 60)}m`;
 }
 
 function ParametersEditor() {
@@ -264,9 +297,13 @@ function ParametersEditor() {
 
 function TaskRunnerPanel({
   tasks,
+  feishuAvailable,
+  feishuDetail,
   onPreview,
 }: {
   tasks: TaskDefinition[];
+  feishuAvailable: boolean;
+  feishuDetail: string;
   onPreview: (state: PreviewDrawerState | ((current: PreviewDrawerState) => PreviewDrawerState)) => void;
 }) {
   const runTask = useRunTask();
@@ -371,7 +408,15 @@ function TaskRunnerPanel({
     runTask.mutate(
       { taskName, payload: { send_to_feishu: Boolean(sendToFeishu[taskName]) } },
       {
-        onSuccess: (payload) => setFeedback(`${payload.title || task.title || taskName} 已启动。`),
+        onSuccess: (payload) => {
+          const parts = [`${payload.title || task.title || taskName} 已启动。`];
+          if (payload.feishu_warning) {
+            parts.push(payload.feishu_warning);
+          } else if (payload.send_to_feishu) {
+            parts.push("本次会尝试发送飞书。");
+          }
+          setFeedback(parts.join(" "));
+        },
         onError: (error) => setFeedback(error instanceof Error ? error.message : "任务启动失败"),
       },
     );
@@ -409,10 +454,16 @@ function TaskRunnerPanel({
                     onChange={(event) =>
                       setSendToFeishu((current) => ({ ...current, [taskName]: event.target.checked }))
                     }
+                    disabled={!feishuAvailable}
                     className="h-4 w-4 accent-[var(--info)]"
                   />
-                  允许发送飞书
+                  {feishuAvailable ? "允许发送飞书" : "飞书当前不可用"}
                 </label>
+                {!feishuAvailable ? (
+                  <div className="mb-3 rounded-md border border-[color-mix(in_srgb,var(--warning)_20%,transparent)] bg-[color-mix(in_srgb,var(--warning)_8%,transparent)] px-3 py-2 text-[12px] text-[var(--text-secondary)]">
+                    {feishuDetail || "飞书通道未配置，本次只能执行任务本体。"}
+                  </div>
+                ) : null}
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
@@ -537,15 +588,103 @@ function RecentRunsPanel({
   );
 }
 
+function RefreshPolicyPanel({ status }: { status?: RefreshStatus }) {
+  const tasks = Object.values(status?.policy_catalog?.tasks || {});
+  const pagePolicy = status?.policy?.page;
+  const auto = status?.auto_refresh;
+  const blocked = auto?.blocked_reasons || [];
+  const reasons = auto?.reason_codes || [];
+
+  return (
+    <Panel title="自动刷新策略" eyebrow="Refresh Policy">
+      <div className="surface-card p-4">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <Badge tone={status?.readiness_mode === "live_ready" ? "positive" : "warning"}>
+            {status?.readiness_mode || "等待 readiness"}
+          </Badge>
+          {status?.recommended_task?.task_name ? (
+            <Badge tone={status.recommended_task.kind === "lightweight" ? "info" : "watch"}>
+              {status.recommended_task.title || status.recommended_task.task_name}
+            </Badge>
+          ) : null}
+          <Badge tone={auto?.allowed ? "positive" : "watch"}>{auto?.allowed ? "auto allowed" : "auto blocked"}</Badge>
+        </div>
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+            <div className="text-[11px] text-[var(--text-tertiary)]">当前 freshness</div>
+            <div className="mt-1 text-[13px] font-medium text-[var(--text-primary)]">
+              stale {status?.stale_count ?? "-"} · manifest {status?.manifest_stale_count ?? "-"}
+            </div>
+          </div>
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+            <div className="text-[11px] text-[var(--text-tertiary)]">冷却</div>
+            <div className="mt-1 text-[13px] font-medium text-[var(--text-primary)]">
+              {cooldownLabel(status?.cooldown?.remaining_seconds)}
+            </div>
+            {status?.cooldown?.next_allowed_at ? (
+              <div className="mt-1 text-[11px] text-[var(--text-tertiary)]">{status.cooldown.next_allowed_at}</div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mt-3 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+          <div className="text-[12px] font-medium text-[var(--text-primary)]">策略判断</div>
+          <div className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">
+            {auto?.summary || "等待 /api/refresh/status?page=today&auto=1。"}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {(blocked.length ? blocked : reasons).slice(0, 6).map((reason) => (
+              <Badge key={reason} tone={blocked.length ? "warning" : "info"}>
+                {refreshReasonLabel(reason)}
+              </Badge>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-3 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+          <div className="text-[12px] font-medium text-[var(--text-primary)]">Today 页策略</div>
+          <div className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">
+            自动打开：{pagePolicy?.auto_on_open ? "开启" : "关闭"} · 轮询 {pagePolicy?.poll_seconds?.trading || "-"}s · 允许任务 {(pagePolicy?.allowed_tasks || []).join(" / ") || "-"}
+          </div>
+        </div>
+
+        {status?.last_auto_refresh ? (
+          <div className="mt-3 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+            <div className="text-[12px] font-medium text-[var(--text-primary)]">最近自动刷新原因</div>
+            <div className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">
+              {status.last_auto_refresh.ts || "-"} · {status.last_auto_refresh.task_name || "-"} · {status.last_auto_refresh.reason || "-"}
+            </div>
+          </div>
+        ) : null}
+
+        {tasks.length ? (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {tasks.map((task) => (
+              <Badge key={task.task_name || task.title} tone={task.kind === "lightweight" ? "info" : "watch"}>
+                {task.title || task.task_name}: {cooldownLabel(task.cooldown_seconds)}
+              </Badge>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </Panel>
+  );
+}
+
 export default function SettingsPage() {
   const overview = useOverview();
   const health = useHealth();
   const runs = useRuns();
+  const refreshStatus = useRefreshStatus("today", true, { auto: true });
   const [preview, setPreview] = useState<PreviewDrawerState>({
     open: false,
     title: "",
   });
   const runRows = runs.data?.runs || overview.data?.runs || [];
+  const feishuChannel = health.data?.channels?.feishu;
+  const feishuAvailable = Boolean(feishuChannel?.available);
+  const feishuDetail = feishuChannel?.detail || "";
 
   return (
     <>
@@ -584,7 +723,13 @@ export default function SettingsPage() {
 
           <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
             <div className="flex flex-col gap-6">
-              <TaskRunnerPanel tasks={overview.data?.tasks || []} onPreview={setPreview} />
+              <TaskRunnerPanel
+                tasks={overview.data?.tasks || []}
+                feishuAvailable={feishuAvailable}
+                feishuDetail={feishuDetail}
+                onPreview={setPreview}
+              />
+              <RefreshPolicyPanel status={refreshStatus.data} />
               <ParametersEditor />
             </div>
 
@@ -601,6 +746,12 @@ export default function SettingsPage() {
                     </div>
                   </div>
                   <Badge tone={health.data?.ok ? "positive" : "warning"}>{health.data?.ok ? "online" : "unknown"}</Badge>
+                  <div className="mt-3 text-[12px] text-[var(--text-secondary)]">
+                    飞书通道：{feishuAvailable ? "可用" : "未就绪"}
+                  </div>
+                  <div className="mt-1 text-[12px] text-[var(--text-tertiary)]">
+                    {feishuDetail || "等待飞书状态检查"}
+                  </div>
                 </div>
               </Panel>
 

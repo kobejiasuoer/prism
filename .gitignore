@@ -15,6 +15,7 @@ data/runtime/
 data/cache/
 data/artifacts/
 data/analytics/
+data/prism_data/
 data/quant/reports/
 packages/data/
 packages/reports/

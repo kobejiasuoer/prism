@@ -14,7 +14,7 @@ export const queryKeys = {
   review: ["review"] as const,
   ask: (query: string) => ["ask", query] as const,
   askSuggest: (query: string) => ["ask-suggest", query] as const,
-  refreshStatus: (page: string) => ["refresh-status", page] as const,
+  refreshStatus: (page: string, auto = false) => ["refresh-status", page, auto ? "auto" : "passive"] as const,
   stockProfiles: ["stock-profile"] as const,
   stockProfile: (code: string) => ["stock-profile", code] as const,
   parameters: ["parameters"] as const,
@@ -124,13 +124,17 @@ export function useHealth() {
   });
 }
 
-export function useRefreshStatus(page: string, enabled = true) {
+export function useRefreshStatus(page: string, enabled = true, options: { auto?: boolean } = {}) {
+  const auto = Boolean(options.auto);
   return useQuery({
-    queryKey: queryKeys.refreshStatus(page),
-    queryFn: () => api.getRefreshStatus(page),
+    queryKey: queryKeys.refreshStatus(page, auto),
+    queryFn: () => api.getRefreshStatus(page, { auto }),
     enabled: Boolean(page) && enabled,
     staleTime: 20_000,
-    refetchInterval: 60_000,
+    refetchInterval: (query) => {
+      const suggested = query.state.data?.suggested_poll_seconds;
+      return Math.max(30_000, Number(suggested || 60) * 1000);
+    },
   });
 }
 
@@ -178,10 +182,10 @@ export function useTriggerRefresh(page: string, options: { stockCode?: string } 
   const stockCode = options.stockCode?.trim();
 
   return useMutation({
-    mutationFn: (payload?: { task_name?: string; force?: boolean }) =>
+    mutationFn: (payload?: { task_name?: string; force?: boolean; reason?: string }) =>
       api.triggerRefresh({ page, ...(payload || {}) }),
     onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.refreshStatus(page) });
+      void queryClient.invalidateQueries({ queryKey: ["refresh-status", page] });
       void queryClient.invalidateQueries({ queryKey: queryKeys.overview });
       void queryClient.invalidateQueries({ queryKey: queryKeys.runs });
       if (page === "today") {

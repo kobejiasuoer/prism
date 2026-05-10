@@ -291,20 +291,20 @@ for path in sorted(ai_history_dir.glob("ai_screening_*.json")):
         continue
     if reference_ts.strftime("%Y-%m-%d") != target_date:
         continue
-    if reference_ts.hour >= 12:
-        continue
     candidates.append({
         "path": str(path),
         "timestamp": timestamp,
         "source_scan_timestamp": source_scan_timestamp,
         "reference_ts": reference_ts,
+        "is_morning_window": reference_ts.hour < 12,
         "is_ten_oclock_batch": reference_ts.hour == 10,
     })
 
 if not candidates:
     sys.exit(1)
 
-ten_oclock = [item for item in candidates if item["is_ten_oclock_batch"]]
+morning_window = [item for item in candidates if item["is_morning_window"]]
+ten_oclock = [item for item in morning_window if item["is_ten_oclock_batch"]]
 if ten_oclock:
     chosen = max(
         ten_oclock,
@@ -314,8 +314,17 @@ if ten_oclock:
             item["path"],
         ),
     )
+elif morning_window:
+    chosen = max(
+        morning_window,
+        key=lambda item: (
+            item["reference_ts"],
+            item["timestamp"] or item["reference_ts"],
+            item["path"],
+        ),
+    )
 else:
-    chosen = min(
+    chosen = max(
         candidates,
         key=lambda item: (
             item["reference_ts"],

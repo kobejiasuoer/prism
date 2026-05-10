@@ -5,8 +5,6 @@ import json
 import os
 import re
 import sys
-import urllib.error
-import urllib.request
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
@@ -74,6 +72,7 @@ from watchlist_registry import (
 )
 from prism_storage import AppStateRepository, ArtifactRepository, TaskRunRepository
 from prism_storage.paths import RUNTIME_ROOT, ensure_data_dirs, resolve_workspace_path
+from prism_data.providers.common import request_json_http
 
 RESEARCH_REPORTS_DIR = STOCK_SCREENER_ROOT / "data" / "research_backfill" / "reports"
 ARTIFACTS_ROOT = SKILLS_ROOT / "data" / "artifacts"
@@ -89,6 +88,9 @@ TODAY_ACTION_STATE_PATH = CONTROL_PANEL_STATE_DIR / "today_action_decisions.json
 ASK_RECENT_STATE_PATH = CONTROL_PANEL_STATE_DIR / "ask_recent_queries.json"
 QUALITY_DASHBOARD_PATH = INVEST_FLOW_ROOT / "reports" / "feishu-quality-dashboard.md"
 WATCHLIST_REFRESH_TASK_NAME = "watchlist_refresh"
+TASK_NAME_ALIASES = {
+    "watchlist": WATCHLIST_REFRESH_TASK_NAME,
+}
 APP_STATE_REPOSITORY = AppStateRepository()
 ARTIFACT_REPOSITORY = ArtifactRepository()
 TASK_RUN_REPOSITORY = TaskRunRepository()
@@ -271,6 +273,13 @@ def parse_timestamp(value: str | None) -> datetime | None:
         except ValueError:
             continue
     return None
+
+
+def canonical_task_name(task_name: str | None) -> str:
+    normalized = str(task_name or "").strip()
+    if not normalized:
+        return ""
+    return TASK_NAME_ALIASES.get(normalized, normalized)
 
 
 def fmt_dt(value: str | None) -> str:
@@ -541,7 +550,8 @@ def reference_dt_for_lane(quality: dict[str, Any] | None, task_name: str | None 
 
 
 def matched_run_for_task(task_name: str, reference_dt: datetime | None, max_delta_seconds: int) -> dict[str, Any] | None:
-    candidates = [item for item in list_runs(limit=80) if item.get("task_name") == task_name]
+    expected = canonical_task_name(task_name)
+    candidates = [item for item in list_runs(limit=80) if canonical_task_name(item.get("task_name")) == expected]
     if not candidates:
         return None
     if not reference_dt:
@@ -690,6 +700,10 @@ def extract_run_summary(run: dict[str, Any]) -> str:
     text = load_log_tail(log_path) if log_path.exists() else ""
     if text:
         lines = [clean_log_line(line) for line in text.splitlines()]
+        if any("Feishu send failed:" in line and "502" in line for line in lines):
+            return "飞书上游接口返回 502，但总控简报已生成"
+        if any("tenant_access_token" in line and "undefined" in line for line in lines):
+            return "飞书插件已加载，但缺少 tenant_access_token 配置"
         skip_prefixes = (
             "start ",
             "command:",
@@ -709,6 +723,8 @@ def extract_run_summary(run: dict[str, Any]) -> str:
                 continue
             if "SEND_TO_FEISHU 已开启，但 FEISHU_TARGET 为空" in line:
                 return "允许发飞书，但飞书收件人为空"
+            if "tenant_access_token" in line and "undefined" in line:
+                return "飞书插件已加载，但缺少 tenant_access_token 配置"
             if line.startswith("ModuleNotFoundError:"):
                 missing = re.search(r"No module named '([^']+)'", line)
                 if missing:
@@ -888,8 +904,9 @@ def list_runs(limit: int = 12) -> list[dict[str, Any]]:
 
 
 def latest_run_for_task(task_name: str) -> dict[str, Any] | None:
+    expected = canonical_task_name(task_name)
     for item in list_runs(limit=50):
-        if item.get("task_name") == task_name:
+        if canonical_task_name(item.get("task_name")) == expected:
             return item
     return None
 
@@ -900,7 +917,7 @@ def task_cards() -> list[dict[str, Any]]:
         latest_run = latest_run_for_task(task_name)
         cards.append(
             {
-                "task_name": task_name,
+                "task_name": canonical_task_name(task_name),
                 "title": config["title"],
                 "description": config["description"],
                 "lane": config["lane"],
@@ -1025,7 +1042,7 @@ def lane_cards() -> list[dict[str, Any]]:
         },
         {
             "key": "watchlist",
-            "task_name": "watchlist",
+            "task_name": WATCHLIST_REFRESH_TASK_NAME,
             "title": "自选股",
             "subtitle": "日常持仓/观察池摘要",
             "quality": latest_quality_item("watchlist"),
@@ -3241,20 +3258,19 @@ def ask_followup_enhancement_from_model(
             },
         ],
     }
-    request = urllib.request.Request(
-        config["endpoint"],
-        data=json.dumps(request_body, ensure_ascii=False).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {config['api_key']}",
-        },
-        method="POST",
-    )
-
     try:
-        with urllib.request.urlopen(request, timeout=float(config["timeout"])) as response:
-            payload = json.loads(response.read().decode("utf-8", errors="replace"))
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError, OSError):
+        payload, _, _, _ = request_json_http(
+            "POST",
+            config["endpoint"],
+            json_body=request_body,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {config['api_key']}",
+            },
+            timeout=float(config["timeout"]),
+            retries=0,
+        )
+    except (RuntimeError, json.JSONDecodeError, OSError, ValueError):
         return None
 
     if not isinstance(payload, dict):

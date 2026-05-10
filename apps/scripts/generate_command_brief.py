@@ -16,6 +16,7 @@ for path in (SCRIPT_DIR, PACKAGES_ROOT, STOCK_ANALYZER_ROOT):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
+from prism_data import build_pipeline_manifest, write_sidecar_manifest
 from prism_canonical import load_confirmation, load_screening_batch, load_watchlist_snapshot
 
 
@@ -79,6 +80,8 @@ def normalize_watchlist_section(watchlist: dict[str, Any]) -> dict[str, Any]:
     return {
         "snapshot_path": watchlist.get("snapshot_path"),
         "generated_at": watchlist.get("generated_at"),
+        "manifest": watchlist.get("manifest"),
+        "manifest_path": watchlist.get("manifest_path"),
         "price_basis": watchlist.get("price_basis"),
         "flow_basis": watchlist.get("flow_basis"),
         "tech_basis": watchlist.get("tech_basis"),
@@ -97,6 +100,8 @@ def normalize_screener_section(screening: dict[str, Any]) -> dict[str, Any]:
     return {
         "path": screening.get("path"),
         "timestamp": screening.get("generated_at"),
+        "manifest": screening.get("manifest"),
+        "manifest_path": screening.get("manifest_path"),
         "source_scan_timestamp": screening.get("source_scan_timestamp"),
         "market_regime": screening.get("market_regime") or {},
         "market_themes": screening.get("market_themes") or {},
@@ -113,6 +118,8 @@ def normalize_midday_section(confirmation: dict[str, Any]) -> dict[str, Any]:
         return {
             "path": "",
             "timestamp": "",
+            "manifest": None,
+            "manifest_path": "",
             "validation_status": "missing",
             "confirmed": [],
             "downgraded": [],
@@ -121,6 +128,8 @@ def normalize_midday_section(confirmation: dict[str, Any]) -> dict[str, Any]:
     return {
         "path": confirmation.get("path"),
         "timestamp": confirmation.get("generated_at"),
+        "manifest": confirmation.get("manifest"),
+        "manifest_path": confirmation.get("manifest_path"),
         "validation_status": confirmation.get("validation_status"),
         "confirmed": confirmation.get("confirmed") or [],
         "downgraded": confirmation.get("downgraded") or [],
@@ -168,6 +177,12 @@ def build_payload(trade_date: str) -> dict[str, Any]:
         "watchlist": watchlist_section,
         "screener": screener_section,
         "midday": midday_section,
+        "data_ingress": {
+            "dataset": "",
+            "manifest_path": "",
+            "freshness_status": "expired",
+            "live_small_allowed": False,
+        },
     }
 
 
@@ -301,6 +316,37 @@ def main() -> int:
     payload = build_payload(args.date)
     write_text(args.brief_output, render_brief(payload))
     write_text(args.report_output, render_report(payload))
+    json_target = Path(args.json_output).expanduser()
+    upstream_manifests = [
+        manifest
+        for manifest in (
+            (payload.get("watchlist") or {}).get("manifest"),
+            (payload.get("screener") or {}).get("manifest"),
+            (payload.get("midday") or {}).get("manifest"),
+        )
+        if isinstance(manifest, dict)
+    ]
+    ingress_manifest = build_pipeline_manifest(
+        dataset="decision_brief.snapshot",
+        trade_date=args.date,
+        payload=payload,
+        upstream_manifests=upstream_manifests,
+        ttl_seconds=900,
+        required_dataset_groups=[
+            {"watchlist.snapshot"},
+            {"screening.batch"},
+            {"screening.confirmation"},
+        ],
+        fetched_at=(payload.get("summary") or {}).get("generated_at"),
+    )
+    write_text(args.json_output, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+    manifest_path = write_sidecar_manifest(json_target, ingress_manifest)
+    payload["data_ingress"] = {
+        "dataset": ingress_manifest.get("dataset"),
+        "manifest_path": str(manifest_path.resolve()),
+        "freshness_status": ingress_manifest.get("freshness_status"),
+        "live_small_allowed": bool(ingress_manifest.get("live_small_allowed")),
+    }
     write_text(args.json_output, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
     return 0
 

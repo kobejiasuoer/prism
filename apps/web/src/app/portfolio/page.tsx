@@ -366,17 +366,23 @@ function UnreconciledList({ items }: { items: AccountReadinessState["unreconcile
 function ModeSwitch({ data }: { data: PortfolioAccountResponse }) {
   const mutation = useSetPortfolioMode();
   const [startingCash, setStartingCash] = useState<string>(String(data.account.starting_cash || ""));
+  const [showUnsafeControls, setShowUnsafeControls] = useState(false);
   const [allowUnsafe, setAllowUnsafe] = useState(false);
+  const [unsafeNote, setUnsafeNote] = useState("");
+  const [unsafeConfirmText, setUnsafeConfirmText] = useState("");
 
   const handle = (mode: AccountMode) => {
+    const useUnsafeBypass = mode === "live_small" && allowUnsafe;
     mutation.mutate({
       mode,
       starting_cash: startingCash ? Number(startingCash) : undefined,
-      allow_unsafe: allowUnsafe,
+      allow_unsafe: useUnsafeBypass,
+      note: useUnsafeBypass ? unsafeNote : undefined,
     });
   };
 
   const errorMsg = mutation.error instanceof ApiError ? mutation.error.message : null;
+  const unsafeConfirmReady = unsafeConfirmText.trim() === "LIVE_SMALL";
 
   return (
     <div className="flex flex-col gap-3">
@@ -385,7 +391,7 @@ function ModeSwitch({ data }: { data: PortfolioAccountResponse }) {
           <button
             key={opt.value}
             type="button"
-            disabled={mutation.isPending}
+            disabled={mutation.isPending || (opt.value === "live_small" && allowUnsafe && (!unsafeNote.trim() || !unsafeConfirmReady))}
             onClick={() => handle(opt.value)}
             className={`focus-ring rounded-md border px-3 py-1.5 text-[12px] ${
               data.account.mode === opt.value
@@ -410,11 +416,49 @@ function ModeSwitch({ data }: { data: PortfolioAccountResponse }) {
             className="mt-1 w-44 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-2 py-1 text-[12px]"
           />
         </label>
-        <label className="flex items-center gap-1 text-[11px] text-[var(--text-tertiary)]">
-          <input type="checkbox" checked={allowUnsafe} onChange={(e) => setAllowUnsafe(e.target.checked)} />
-          allow_unsafe（跳过 live_small 前置校验，仅紧急修复用）
-        </label>
+        <button
+          type="button"
+          onClick={() => setShowUnsafeControls((value) => !value)}
+          className="focus-ring rounded-md border border-[var(--border-subtle)] px-3 py-1.5 text-[11px] text-[var(--text-secondary)]"
+        >
+          {showUnsafeControls ? "隐藏紧急 bypass" : "显示紧急 bypass"}
+        </button>
       </div>
+      {showUnsafeControls ? (
+        <div className="rounded-md border border-[var(--tone-risk)]/30 bg-[var(--tone-risk)]/5 p-3 text-[11px] text-[var(--text-secondary)]">
+          <div className="mb-2 font-medium text-[var(--tone-risk)]">仅在紧急修账时使用 allow_unsafe</div>
+          <div className="mb-3">
+            这会把当前模式标记成 bypass 风险态，readiness 不会显示为绿色。启用前必须填写原因，并输入确认文本。
+          </div>
+          <label className="mb-3 flex items-center gap-2">
+            <input type="checkbox" checked={allowUnsafe} onChange={(e) => setAllowUnsafe(e.target.checked)} />
+            允许本次切换跳过 live_small 前置校验
+          </label>
+          {allowUnsafe ? (
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="flex flex-col text-[11px] text-[var(--text-tertiary)]">
+                bypass 原因
+                <input
+                  required={allowUnsafe}
+                  value={unsafeNote}
+                  onChange={(e) => setUnsafeNote(e.target.value)}
+                  placeholder="例如：刚补录历史入金，待券商对账完成后重新切回正常校验"
+                  className="mt-1 w-80 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-2 py-1 text-[12px]"
+                />
+              </label>
+              <label className="flex flex-col text-[11px] text-[var(--text-tertiary)]">
+                输入 `LIVE_SMALL` 确认
+                <input
+                  required={allowUnsafe}
+                  value={unsafeConfirmText}
+                  onChange={(e) => setUnsafeConfirmText(e.target.value)}
+                  className="mt-1 w-40 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-2 py-1 text-[12px]"
+                />
+              </label>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {errorMsg ? <div className="text-[12px] text-[var(--tone-risk)]">{errorMsg}</div> : null}
     </div>
   );
