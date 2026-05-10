@@ -9,6 +9,7 @@ node_modules/
 .next/
 .env
 .superpowers/
+.codex-artifacts/
 *.log
 data/runtime/
 data/cache/
