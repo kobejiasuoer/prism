@@ -9,6 +9,7 @@ import { PreviewDrawer, type PreviewDrawerState } from "./preview-drawer";
 import { SourceCard } from "./source-card";
 import { api } from "@/lib/api";
 import { useRefreshStatus, useTriggerRefresh } from "@/lib/hooks";
+import { formatCooldown, readinessModeCopy, refreshReasonCopy, refreshReasonLabel } from "@/lib/readiness-copy";
 import type { BasicCard, SourceCardData } from "@/lib/types";
 
 type EvidenceRefreshPage = "today" | "watchlist" | "opportunities" | "review";
@@ -27,40 +28,6 @@ function artifactPath(card: BasicCard) {
 
 function artifactTitle(card: BasicCard) {
   return card.title || card.label || card.detail_link_text || "原始文件";
-}
-
-const AUTO_REASON_LABELS: Record<string, string> = {
-  cooldown: "冷却未结束",
-  running: "同类任务运行中",
-  outside_auto_window: "非自动刷新窗口",
-  manifest_not_stale: "manifest 未 stale/expired",
-  no_manifest_trigger: "没有 manifest 触发原因",
-  fixed_cron_only: "仅固定 cron",
-  fixed_cron_or_manual_only: "仅固定 cron 或手动",
-  page_auto_disabled: "页面未开启自动刷新",
-  task_not_allowed_for_page: "页面不允许该任务",
-  provider_failure: "provider 失败",
-  live_small_not_allowed: "不允许 live_small",
-  fallback_not_allowed: "fallback 不可进 live_small",
-  freshness_stale: "manifest stale",
-  freshness_expired: "manifest expired",
-  manifest_missing: "manifest 缺失",
-  trade_date_mismatch: "交易日不匹配",
-};
-
-function reasonLabel(reason: string) {
-  return AUTO_REASON_LABELS[reason] || reason;
-}
-
-function formatCooldown(seconds?: number) {
-  const value = Number(seconds || 0);
-  if (value <= 0) {
-    return "已就绪";
-  }
-  if (value < 60) {
-    return `${value}s`;
-  }
-  return `${Math.ceil(value / 60)}m`;
 }
 
 export function EvidencePanel({
@@ -98,6 +65,9 @@ export function EvidencePanel({
   const blockedReasons = autoDecision?.blocked_reasons || [];
   const autoReasons = autoDecision?.reason_codes || [];
   const lastAuto = refresh.data?.last_auto_refresh;
+  const readinessCopy = readinessModeCopy(refresh.data?.readiness_mode);
+  const firstReason = (blockedReasons.length ? blockedReasons : autoReasons)[0];
+  const firstReasonDetail = firstReason ? refreshReasonCopy(firstReason).detail : "";
 
   async function openArtifact(card: BasicCard) {
     const path = artifactPath(card);
@@ -220,7 +190,7 @@ export function EvidencePanel({
                 <Badge tone={refresh.data.stale_count ? "warning" : "positive"}>
                   过期源 {refresh.data.stale_count}
                 </Badge>
-                {refresh.data.readiness_mode ? <Badge tone={refresh.data.readiness_mode === "live_ready" ? "positive" : "warning"}>{refresh.data.readiness_mode}</Badge> : null}
+                {refresh.data.readiness_mode ? <Badge tone={readinessCopy.tone}>{readinessCopy.title}</Badge> : null}
                 {refresh.data.recommended_task?.task_name ? (
                   <Badge tone={refresh.data.recommended_task.kind === "lightweight" ? "info" : "watch"}>
                     建议 {refresh.data.recommended_task.title || refresh.data.recommended_task.task_name}
@@ -249,7 +219,7 @@ export function EvidencePanel({
                 <div className="flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-secondary)]">
                   <span className="font-medium text-[var(--text-primary)]">自动刷新</span>
                   <Badge tone={autoDecision?.allowed ? "positive" : "watch"}>
-                    {autoDecision?.allowed ? "允许" : "未触发"}
+                    {autoDecision?.allowed ? "允许自动补刷" : "未自动补刷"}
                   </Badge>
                   <span>冷却 {formatCooldown(refresh.data.cooldown?.remaining_seconds)}</span>
                   {refresh.data.cooldown?.next_allowed_at ? <span>下次 {refresh.data.cooldown.next_allowed_at}</span> : null}
@@ -257,16 +227,21 @@ export function EvidencePanel({
                 <div className="mt-1 text-[12px] leading-5 text-[var(--text-tertiary)]">
                   {autoDecision?.summary || "等待刷新策略判断。"}
                 </div>
+                {firstReasonDetail ? (
+                  <div className="mt-1 text-[12px] leading-5 text-[var(--text-tertiary)]">
+                    {firstReasonDetail}
+                  </div>
+                ) : null}
                 {blockedReasons.length ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {blockedReasons.slice(0, 4).map((reason) => (
-                      <Badge key={reason} tone="warning">{reasonLabel(reason)}</Badge>
+                      <Badge key={reason} tone="warning">{refreshReasonLabel(reason)}</Badge>
                     ))}
                   </div>
                 ) : autoReasons.length ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {autoReasons.slice(0, 4).map((reason) => (
-                      <Badge key={reason} tone="info">{reasonLabel(reason)}</Badge>
+                      <Badge key={reason} tone="info">{refreshReasonLabel(reason)}</Badge>
                     ))}
                   </div>
                 ) : null}

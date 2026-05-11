@@ -19,6 +19,7 @@ import {
   useStockProfile,
   useWatchlistManager,
 } from "@/lib/hooks";
+import { readinessHasStaleData, readinessModeCopy, refreshTaskCopy } from "@/lib/readiness-copy";
 import type { AskFollowupResponse, StockDetailData, StockProfileData, WatchlistManagerItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -271,11 +272,7 @@ function readinessFacts(readiness?: StockProfileData["readiness"]) {
   const session = readiness?.session;
   const isWeekend = session?.key === "weekend" || session?.calendar_status === "weekend";
   const isTradingDay = Boolean(session?.is_trading_day);
-  const dataStale = Boolean(
-    (readiness?.stale_count || 0) > 0 ||
-      (readiness?.source_freshness || []).some((item) => item.stale) ||
-      (readiness?.data_trade_date && readiness?.expected_trade_date && readiness.data_trade_date !== readiness.expected_trade_date),
-  );
+  const dataStale = readinessHasStaleData(readiness);
   const allowRealMoney = mode === "live_ready" && isTradingDay && !dataStale && Boolean(readiness?.ready);
   return { mode, session, isWeekend, isTradingDay, dataStale, allowRealMoney };
 }
@@ -283,17 +280,20 @@ function readinessFacts(readiness?: StockProfileData["readiness"]) {
 function TradingAvailabilityBar({ readiness }: { readiness?: StockProfileData["readiness"] }) {
   const { mode, session, isWeekend, dataStale, allowRealMoney } = readinessFacts(readiness);
   const modeTone = mode === "live_ready" ? "positive" : mode === "blocked" ? "risk" : "warning";
+  const copy = readinessModeCopy(mode);
+  const recommendedTask = readiness?.recommended_tasks?.[0];
+  const recommendedTaskTitle = recommendedTask ? refreshTaskCopy(recommendedTask).title : "";
   const statusLines = [
-    allowRealMoney ? "真钱执行：允许按纪律手工执行" : "真钱执行：禁止",
+    copy.realMoney,
     isWeekend ? "周末休市，仅可影子盘观察" : "",
     dataStale ? "数据偏旧，不可作为真钱依据" : "",
-    mode === "live_ready" ? "数据已就绪，可按纪律执行" : "",
-    mode === "blocked" ? "关键链路未就绪，先不要真钱执行。" : "",
+    copy.title,
+    recommendedTask && mode !== "live_ready" ? `建议下一步：去 Settings 运行 ${recommendedTaskTitle || recommendedTask}` : "",
     "真实成交仍需在外部券商完成，本系统不会自动下单。",
   ].filter(Boolean);
 
   const facts = [
-    { label: "当前状态", value: mode, tone: modeTone },
+    { label: "当前状态", value: copy.title, tone: modeTone },
     { label: "是否周末休市", value: isWeekend ? "是" : "否", tone: isWeekend ? "warning" : "info" },
     { label: "是否数据过期", value: dataStale ? "是" : "否", tone: dataStale ? "warning" : "positive" },
     { label: "是否允许真钱执行", value: allowRealMoney ? "是" : "否", tone: allowRealMoney ? "positive" : "risk" },
@@ -306,11 +306,11 @@ function TradingAvailabilityBar({ readiness }: { readiness?: StockProfileData["r
           <div className="text-[11px] font-medium uppercase text-[var(--text-tertiary)]">Trading Availability</div>
           <h2 className="mt-1 text-lg font-semibold text-[var(--text-primary)]">{allowRealMoney ? "真钱执行：可按纪律手工执行" : "真钱执行：禁止"}</h2>
           <p className="mt-2 text-[12px] leading-5 text-[var(--text-secondary)]">
-            {session?.label || "交易状态待确认"}；页面只给决策纪律和回写入口，不会连接券商自动下单。
+            {session?.label || "交易状态待确认"}；{copy.title}；页面只给决策纪律和回写入口，不会连接券商自动下单。
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Badge tone={modeTone}>{mode}</Badge>
+          <Badge tone={modeTone}>{copy.badge}</Badge>
           <Badge tone={allowRealMoney ? "positive" : "risk"}>{allowRealMoney ? "允许真钱执行" : "真钱执行：禁止"}</Badge>
         </div>
       </div>
@@ -467,9 +467,10 @@ function EvidenceCredibilityCard({
   onViewEvidence: () => void;
 }) {
   const { mode, dataStale } = readinessFacts(readiness);
+  const copy = readinessModeCopy(mode);
   const support = evidenceSupportItems(detail);
   const risks = evidenceRiskItems(detail, readiness);
-  const dataStatus = [mode === "shadow_only" ? "影子盘" : mode, dataStale ? "数据偏旧" : "数据新鲜"].filter(Boolean).join(" / ");
+  const dataStatus = [copy.title, dataStale ? "数据偏旧" : "数据新鲜"].filter(Boolean).join(" / ");
 
   return (
     <section className="surface-card p-4">

@@ -10,6 +10,7 @@ import {
   useRefreshStatus,
   useTodayData,
 } from "@/lib/hooks";
+import { readinessModeCopy, refreshReasonLabel, refreshTaskCopy } from "@/lib/readiness-copy";
 import type {
   QualityCardData,
   ReadinessIssue,
@@ -41,66 +42,6 @@ function formatTime(value?: string) {
 
 function sourceIsFresh(source: SourceCardData) {
   return source.available !== false && !source.stale && source.value !== "-";
-}
-
-const READINESS_MODE_COPY: Record<ReadinessMode, {
-  badge: string;
-  title: string;
-  tone: string;
-  iconColor: string;
-  bg: string;
-  border: string;
-}> = {
-  live_ready: {
-    badge: "Live Ready",
-    title: "数据已对齐当日，可按页面执行",
-    tone: "positive",
-    iconColor: "var(--positive)",
-    bg: "color-mix(in srgb, var(--positive) 8%, transparent)",
-    border: "color-mix(in srgb, var(--positive) 30%, transparent)",
-  },
-  shadow_only: {
-    badge: "Shadow Only",
-    title: "仅作影子盘观察，不可按页面真钱执行",
-    tone: "warning",
-    iconColor: "var(--warning)",
-    bg: "color-mix(in srgb, var(--warning) 10%, transparent)",
-    border: "color-mix(in srgb, var(--warning) 35%, transparent)",
-  },
-  blocked: {
-    badge: "Blocked",
-    title: "数据未就绪：请先把核心链路刷到当日",
-    tone: "negative",
-    iconColor: "var(--negative)",
-    bg: "color-mix(in srgb, var(--negative) 10%, transparent)",
-    border: "color-mix(in srgb, var(--negative) 40%, transparent)",
-  },
-};
-
-const TASK_TITLES: Record<string, string> = {
-  watchlist_refresh: "自选股全流程刷新",
-  aggressive: "进攻型早盘扫描",
-  midday_refresh: "午盘新增 + 复核",
-  command_brief: "总控简报",
-};
-
-const AUTO_REASON_COPY: Record<string, string> = {
-  cooldown: "冷却未结束",
-  running: "同类任务运行中",
-  outside_auto_window: "非自动刷新窗口",
-  manifest_not_stale: "manifest 未 stale/expired",
-  no_manifest_trigger: "没有 manifest 触发原因",
-  provider_failure: "provider 失败",
-  fallback_not_allowed: "fallback 不可进 live_small",
-  live_small_not_allowed: "不允许 live_small",
-  manifest_missing: "manifest 缺失",
-  freshness_stale: "manifest stale",
-  freshness_expired: "manifest expired",
-  trade_date_mismatch: "交易日不匹配",
-};
-
-function autoReasonCopy(value: string) {
-  return AUTO_REASON_COPY[value] || value;
 }
 
 const ACTION_STATE_COPY: Record<TodayActionDisplayValue, {
@@ -185,7 +126,7 @@ function ReadinessBanner({ readiness }: { readiness?: ReadinessPayload }) {
   if (!readiness) {
     return null;
   }
-  const copy = READINESS_MODE_COPY[readiness.readiness_mode] ?? READINESS_MODE_COPY.blocked;
+  const copy = readinessModeCopy(readiness.readiness_mode);
   const issues: ReadinessIssue[] =
     readiness.readiness_mode === "blocked"
       ? readiness.blockers
@@ -195,7 +136,7 @@ function ReadinessBanner({ readiness }: { readiness?: ReadinessPayload }) {
   const Icon = readiness.readiness_mode === "live_ready" ? ShieldCheck : ShieldAlert;
   const recommendedTaskName = readiness.recommended_tasks?.[0];
   const recommendedTaskTitle = recommendedTaskName
-    ? TASK_TITLES[recommendedTaskName] || recommendedTaskName
+    ? refreshTaskCopy(recommendedTaskName).title || recommendedTaskName
     : null;
 
   return (
@@ -334,7 +275,7 @@ function AutoRefreshBanner({ status }: { status?: RefreshStatus }) {
       {reasons.length ? (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {reasons.slice(0, 5).map((reason) => (
-            <Badge key={reason} tone={blocked.length ? "warning" : "info"}>{autoReasonCopy(reason)}</Badge>
+            <Badge key={reason} tone={blocked.length ? "warning" : "info"}>{refreshReasonLabel(reason)}</Badge>
           ))}
         </div>
       ) : null}
