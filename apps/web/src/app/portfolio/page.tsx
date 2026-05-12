@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AlertTriangle, RefreshCw, ShieldCheck, WalletCards } from "lucide-react";
 
@@ -1138,7 +1138,36 @@ function ReconcileForm({ defaultTradeDate }: { defaultTradeDate: string }) {
   );
 }
 
-export default function PortfolioPage() {
+function PortfolioPageFallback() {
+  return (
+    <main className="flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
+      <div className="mx-auto max-w-7xl">
+        <PageTitle
+          eyebrow={todayStr()}
+          title="账户控制台"
+          summary="这里分为真实账户执行区、决策执行回写区和研究自选股区。研究名单仅供跟踪，不代表真实持仓。"
+          icon={WalletCards}
+          badge="加载中"
+        />
+        <section className="mb-7 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <MetricSkeleton key={index} />
+          ))}
+        </section>
+        <section className="mb-7 grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <Panel title="持仓" eyebrow="Open positions" className="surface-card p-4">
+            <SkeletonBlock className="h-24 w-full" />
+          </Panel>
+          <Panel title="未对账动作" eyebrow="Unreconciled intents" className="surface-card p-4">
+            <SkeletonBlock className="h-16 w-full" />
+          </Panel>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function PortfolioPageContent() {
   const portfolio = usePortfolioAccount();
   const today = useTodayData();
   const watchlist = useWatchlist();
@@ -1446,5 +1475,13 @@ export default function PortfolioPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+export default function PortfolioPage() {
+  return (
+    <Suspense fallback={<PortfolioPageFallback />}>
+      <PortfolioPageContent />
+    </Suspense>
   );
 }
