@@ -27,6 +27,7 @@ from screener.parameters import build_intraday_observation_contract
 from watchlist_registry import load_active_watchlist_codes
 
 WATCHLIST_SNAPSHOT_DIR = STOCK_ANALYZER_ROOT / "data" / "daily_snapshots"
+WATCHLIST_SNAPSHOT_ARTIFACT_DIR = BASE_DIR.parent / "data" / "artifacts" / "analyzer" / "daily_snapshots"
 SCREENER_DATA_DIR = STOCK_SCREENER_ROOT / "data"
 CURRENT_SCREENER_DATA_DIR = PACKAGES_ROOT / "data"
 SCREENER_DATA_DIRS = (CURRENT_SCREENER_DATA_DIR, SCREENER_DATA_DIR)
@@ -62,6 +63,39 @@ def load_sidecar_manifest(path: Path | None, raw: dict[str, Any] | None = None) 
     if path.parent == COMMAND_BRIEF_DIR:
         artifact_manifest = BASE_DIR.parent / "data" / "artifacts" / "command_brief" / path.with_suffix(".manifest.json").name
         return load_manifest_file(artifact_manifest)
+    if path.parent == WATCHLIST_SNAPSHOT_ARTIFACT_DIR:
+        legacy_manifest = WATCHLIST_SNAPSHOT_DIR / path.with_suffix(".manifest.json").name
+        manifest = load_manifest_file(legacy_manifest)
+        if manifest:
+            return manifest
+    if isinstance(raw, dict):
+        ingress = raw.get("data_ingress") if isinstance(raw.get("data_ingress"), dict) else {}
+        dataset = str(ingress.get("dataset") or "").strip()
+        if dataset:
+            return {
+                "dataset": dataset,
+                "provider": "pipeline",
+                "provider_role": "primary",
+                "trade_date": raw.get("date") or raw.get("trade_date"),
+                "fetched_at": raw.get("generated_at"),
+                "asof": raw.get("generated_at"),
+                "ttl_seconds": 900,
+                "status": "ok",
+                "freshness_status": ingress.get("freshness_status") or "expired",
+                "fallback_used": False,
+                "row_count": len(raw.get("stocks") or []) if isinstance(raw.get("stocks"), list) else len(raw.get("stocks") or {}),
+                "live_small_allowed": bool(ingress.get("live_small_allowed")),
+                "quality_flags": ["sidecar_manifest_missing"],
+                "manifest_path": ingress.get("manifest_path"),
+                "source_lane": "pipeline",
+                "decision_scope": "live_small" if ingress.get("live_small_allowed") else "display_only",
+                "authority_provider": "pipeline",
+                "target_authority_provider": "pipeline",
+                "audit_providers": [],
+                "source_authority_ready": bool(ingress.get("live_small_allowed")),
+                "formal_decision_allowed": False,
+                "authority_flags": ["sidecar_manifest_missing"],
+            }
     return None
 
 
@@ -194,9 +228,13 @@ def resolve_watchlist_snapshot_path(path: str | None = None, trade_date: str | N
         candidate = WATCHLIST_SNAPSHOT_DIR / f"{trade_date}.json"
         if candidate.exists():
             return candidate
+        artifact_candidate = WATCHLIST_SNAPSHOT_ARTIFACT_DIR / f"{trade_date}.json"
+        if artifact_candidate.exists():
+            return artifact_candidate
     candidates = [
         candidate
-        for candidate in WATCHLIST_SNAPSHOT_DIR.glob("*.json")
+        for snapshot_dir in (WATCHLIST_SNAPSHOT_DIR, WATCHLIST_SNAPSHOT_ARTIFACT_DIR)
+        for candidate in snapshot_dir.glob("*.json")
         if re.match(r"^\d{4}-\d{2}-\d{2}\.json$", candidate.name)
     ]
     candidates.sort(key=_path_sort_key, reverse=True)

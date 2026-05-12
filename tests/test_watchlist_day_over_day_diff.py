@@ -132,6 +132,77 @@ def test_resolver_returns_none_when_reference_itself_missing(tmp_path: Path):
     assert resolve_previous_watchlist_snapshot_path(reference) is None
 
 
+def test_resolver_can_load_snapshot_from_artifact_store(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    import prism_canonical
+
+    legacy_dir = tmp_path / "stock-analyzer" / "data" / "daily_snapshots"
+    artifact_dir = tmp_path / "data" / "artifacts" / "analyzer" / "daily_snapshots"
+    legacy_dir.mkdir(parents=True)
+    artifact_dir.mkdir(parents=True)
+    artifact_snapshot = artifact_dir / "2026-05-12.json"
+    artifact_snapshot.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(prism_canonical, "WATCHLIST_SNAPSHOT_DIR", legacy_dir)
+    monkeypatch.setattr(prism_canonical, "WATCHLIST_SNAPSHOT_ARTIFACT_DIR", artifact_dir)
+
+    result = prism_canonical.resolve_watchlist_snapshot_path(trade_date="2026-05-12")
+
+    assert result == artifact_snapshot
+
+
+def test_artifact_store_snapshot_can_use_legacy_sidecar_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    import prism_canonical
+
+    legacy_dir = tmp_path / "stock-analyzer" / "data" / "daily_snapshots"
+    artifact_dir = tmp_path / "data" / "artifacts" / "analyzer" / "daily_snapshots"
+    legacy_dir.mkdir(parents=True)
+    artifact_dir.mkdir(parents=True)
+    (artifact_dir / "2026-05-12.json").write_text(
+        json.dumps(
+            {
+                "date": "2026-05-12",
+                "generated_at": "2026-05-12 09:35:00",
+                "stocks": {
+                    "600690": {
+                        "code": "600690",
+                        "name": "海尔智家",
+                        "action": "观望",
+                    }
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (legacy_dir / "2026-05-12.manifest.json").write_text(
+        json.dumps(
+            {
+                "dataset": "watchlist.snapshot",
+                "trade_date": "2026-05-12",
+                "manifest_path": "legacy-sidecar",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(prism_canonical, "WATCHLIST_SNAPSHOT_DIR", legacy_dir)
+    monkeypatch.setattr(prism_canonical, "WATCHLIST_SNAPSHOT_ARTIFACT_DIR", artifact_dir)
+    monkeypatch.setattr(prism_canonical, "load_active_watchlist_codes", lambda: [])
+
+    payload = prism_canonical.load_watchlist_snapshot(trade_date="2026-05-12")
+
+    assert payload["snapshot_path"] == str((artifact_dir / "2026-05-12.json").resolve())
+    assert payload["manifest"]["manifest_path"] == "legacy-sidecar"
+    assert payload["manifest"]["trade_date"] == "2026-05-12"
+
+
 # --- Block 2: diff_watchlist_snapshots ----
 
 

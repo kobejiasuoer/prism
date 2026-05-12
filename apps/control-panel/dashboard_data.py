@@ -8473,7 +8473,7 @@ def build_today_view() -> dict[str, Any]:
     ensure_runtime_dirs()
     trade_date_hint = expected_trade_date()
     decision_brief = safe_canonical_load(load_decision_brief, trade_date=trade_date_hint)
-    watchlist = safe_canonical_load(load_watchlist_snapshot)
+    watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
     screening_batch = safe_canonical_load(load_screening_batch)
     confirmation = safe_canonical_load(load_confirmation)
     quality_status = safe_canonical_load(load_quality_status, lane="all")
