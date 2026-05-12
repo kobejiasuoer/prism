@@ -3,8 +3,6 @@ from __future__ import annotations
 import json
 import re
 import sys
-import urllib.parse
-import urllib.request
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
@@ -19,8 +17,6 @@ if str(PACKAGES_ROOT) not in sys.path:
 WATCHLIST_CONFIG_PATH = REPO_ROOT / "stock-analyzer" / "config" / "stocks.json"
 STOCK_SCREENER_ROOT = REPO_ROOT / "stock-screener"
 CODE_PATTERN = re.compile(r"^\d{6}$")
-SINA_QUOTE_URL = "https://hq.sinajs.cn/list={sina_code}"
-SINA_SUGGEST_URL = "https://suggest3.sinajs.cn/suggest/type=11,12,13,14,15&key={query}"
 HISTORICAL_STOCK_SEARCH_SOURCES = (
     (STOCK_SCREENER_ROOT / "data" / "ai_history", "历史观察"),
     (STOCK_SCREENER_ROOT / "data" / "stale_outputs", "近期记录"),
@@ -32,8 +28,10 @@ _SINA_SUGGEST_CACHE: dict[str, dict[str, Any]] = {}
 SINA_SUGGEST_CACHE_TTL_SECONDS = 600
 
 try:
+    from prism_data.service import get_data_gateway
     from prism_storage import WatchlistConfigRepository
 except Exception:  # pragma: no cover - direct JSON remains the compatibility fallback.
+    get_data_gateway = None  # type: ignore[assignment]
     WatchlistConfigRepository = None  # type: ignore[assignment]
 
 
@@ -61,28 +59,25 @@ def infer_sina_code(code: Any, market: str | None = None) -> str:
     return f"{resolved_market}{normalized_code}"
 
 
+def _trade_date_today() -> str:
+    return datetime.now().strftime("%Y-%m-%d")
+
+
 def fetch_stock_name(code: Any, market: str | None = None, timeout: float = 6.0) -> str | None:
     normalized_code = normalize_stock_code(code)
-    sina_code = infer_sina_code(normalized_code, market)
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    request = urllib.request.Request(
-        SINA_QUOTE_URL.format(sina_code=sina_code),
-        headers={
-            "Referer": "https://finance.sina.com.cn",
-            "User-Agent": "Mozilla/5.0",
-        },
-    )
+    if get_data_gateway is None:
+        return None
     try:
-        with opener.open(request, timeout=timeout) as response:
-            raw = response.read()
+        result = get_data_gateway().fetch_quote(
+            infer_sina_code(normalized_code, market),
+            trade_date=_trade_date_today(),
+            key=normalized_code,
+            timeout=timeout,
+        )
     except Exception:
         return None
-
-    text = raw.decode("gbk", errors="replace")
-    match = re.search(r'"(.+?)"', text)
-    if not match:
-        return None
-    name = str(match.group(1).split(",")[0] or "").strip()
+    payload = result.data if isinstance(result.data, dict) else {}
+    name = str(payload.get("name") or "").strip()
     if not name or name == normalized_code:
         return None
     return name
@@ -99,51 +94,32 @@ def search_sina_stock_suggestions(query: str, limit: int = 8, timeout: float = 6
     if cached and now_ts - float(cached.get("stored_at") or 0) <= SINA_SUGGEST_CACHE_TTL_SECONDS:
         return [deepcopy(item) for item in (cached.get("items") or [])[:limit]]
 
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    request = urllib.request.Request(
-        SINA_SUGGEST_URL.format(query=urllib.parse.quote(normalized_query)),
-        headers={
-            "Referer": "https://finance.sina.com.cn",
-            "User-Agent": "Mozilla/5.0",
-        },
-    )
-
+    if get_data_gateway is None:
+        return []
     try:
-        with opener.open(request, timeout=timeout) as response:
-            raw = response.read()
+        result = get_data_gateway().search_stock(
+            normalized_query,
+            trade_date=_trade_date_today(),
+            key=cache_key,
+            timeout=timeout,
+        )
     except Exception:
         return []
-
-    text = raw.decode("gbk", errors="replace")
-    match = re.search(r'"(.*)"', text, re.S)
-    if not match:
-        return []
-
-    items: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for row in str(match.group(1) or "").split(";"):
-        fields = [field.strip() for field in row.split(",")]
-        if len(fields) < 4:
-            continue
-        name, _type_code, code, symbol = fields[:4]
+    items = []
+    for row in list(result.data or [])[:limit]:
+        code = str(row.get("code") or "").strip()
+        market = str(row.get("market") or infer_market_from_code(code)).strip().lower()
         if not CODE_PATTERN.fullmatch(code):
             continue
-        if not symbol.startswith(("sh", "sz")):
-            continue
-        if code in seen:
-            continue
-        seen.add(code)
         items.append(
             {
                 "code": code,
-                "name": name or code,
-                "market": symbol[:2],
-                "sina": symbol,
+                "name": str(row.get("name") or code).strip() or code,
+                "market": market,
+                "sina": infer_sina_code(code, market),
                 "source": "sina_search",
             }
         )
-        if len(items) >= limit:
-            break
 
     _SINA_SUGGEST_CACHE[cache_key] = {
         "stored_at": now_ts,

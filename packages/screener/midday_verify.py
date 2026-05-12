@@ -9,6 +9,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from prism_data import build_pipeline_manifest, load_manifest_file, write_sidecar_manifest
+
 try:
     from screener.capital_flow_contract import UNIT_YUAN, capital_flow_today_yi
     from screener.parameters import (
@@ -28,6 +30,28 @@ BASE = Path(__file__).resolve().parents[1]
 DEFAULT_MORNING = BASE / "data" / "ai_screening_result.json"
 DEFAULT_SCAN = BASE / "data" / "scan_result.json"
 DEFAULT_OUTPUT = BASE / "data" / "midday_verification_result.json"
+
+
+def load_sidecar_manifest(path: Path | str | None) -> dict | None:
+    if not path:
+        return None
+    return load_manifest_file(Path(path).expanduser().with_suffix(".manifest.json"))
+
+
+def ingress_summary(manifest: dict | None, manifest_path: Path | None) -> dict[str, object]:
+    if not manifest:
+        return {
+            "dataset": "",
+            "manifest_path": str(manifest_path) if manifest_path else "",
+            "freshness_status": "expired",
+            "live_small_allowed": False,
+        }
+    return {
+        "dataset": manifest.get("dataset"),
+        "manifest_path": str(manifest_path) if manifest_path else manifest.get("manifest_path") or "",
+        "freshness_status": manifest.get("freshness_status"),
+        "live_small_allowed": bool(manifest.get("live_small_allowed")),
+    }
 
 
 def safe_float(v, default=0.0):
@@ -569,9 +593,31 @@ def main():
     morning = load_json(Path(args.morning).expanduser())
     current = load_json(Path(args.scan).expanduser())
     output = run_verification(morning, current)
+    upstream_manifests = [
+        manifest
+        for manifest in (
+            load_sidecar_manifest(Path(args.morning).expanduser()),
+            load_sidecar_manifest(Path(args.scan).expanduser()),
+        )
+        if manifest
+    ]
+    ingress_manifest = build_pipeline_manifest(
+        dataset="screening.confirmation",
+        trade_date=output["timestamp"][:10],
+        payload=output,
+        upstream_manifests=upstream_manifests,
+        ttl_seconds=900,
+        required_dataset_groups=[{"screening.batch"}, {"screening.scan_result"}],
+        fetched_at=output["timestamp"],
+        quality_flags=list(output.get("validation_errors") or []),
+    )
 
     out_path = Path(args.output).expanduser()
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    output["data_ingress"] = ingress_summary(ingress_manifest, None)
+    out_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
+    manifest_path = write_sidecar_manifest(out_path, ingress_manifest)
+    output["data_ingress"] = ingress_summary(ingress_manifest, manifest_path)
     out_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
 
     if output["validation_status"] == "invalid":

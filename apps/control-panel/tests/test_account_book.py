@@ -126,8 +126,14 @@ class AccountBookTests(unittest.TestCase):
 
     def test_allow_unsafe_bypasses_live_small_gate(self) -> None:
         ab = self.account_book
-        state = ab.set_account_mode("live_small", starting_cash=0, allow_unsafe=True)
+        state = ab.set_account_mode(
+            "live_small",
+            starting_cash=0,
+            allow_unsafe=True,
+            note="bootstrap emergency setup",
+        )
         self.assertEqual(state["mode"], "live_small")
+        self.assertTrue(state["unsafe_bypass_active"])
 
     def test_buy_in_live_small_overdrafts_blocked(self) -> None:
         ab = self.account_book

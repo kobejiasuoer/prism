@@ -24,15 +24,15 @@ send_to_feishu() {
   fi
   if [[ -z "$FEISHU_TARGET" ]]; then
     echo "SEND_TO_FEISHU 已开启，但 FEISHU_TARGET 为空" >&2
-    return 1
+    return 0
   fi
   if ! command -v openclaw >/dev/null 2>&1; then
     echo "缺少 openclaw，无法发送飞书消息" >&2
-    return 1
+    return 0
   fi
   if [[ ! -f "$BRIEF_OUTPUT_PATH" ]]; then
     echo "总控简报正文不存在，无法发送: $BRIEF_OUTPUT_PATH" >&2
-    return 1
+    return 0
   fi
 
   local body
@@ -46,7 +46,10 @@ send_to_feishu() {
   if [[ -f "$REPORT_OUTPUT_PATH" ]]; then
     send_cmd+=(--media "$REPORT_OUTPUT_PATH")
   fi
-  "${send_cmd[@]}" >/dev/null
+  if ! "${send_cmd[@]}" >/dev/null; then
+    echo "飞书发送失败，但总控简报已生成" >&2
+  fi
+  return 0
 }
 
 copy_if_different() {

@@ -5,8 +5,6 @@ import json
 import os
 import re
 import sys
-import urllib.error
-import urllib.request
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
@@ -74,6 +72,7 @@ from watchlist_registry import (
 )
 from prism_storage import AppStateRepository, ArtifactRepository, TaskRunRepository
 from prism_storage.paths import RUNTIME_ROOT, ensure_data_dirs, resolve_workspace_path
+from prism_data.providers.common import request_json_http
 
 RESEARCH_REPORTS_DIR = STOCK_SCREENER_ROOT / "data" / "research_backfill" / "reports"
 ARTIFACTS_ROOT = SKILLS_ROOT / "data" / "artifacts"
@@ -89,6 +88,9 @@ TODAY_ACTION_STATE_PATH = CONTROL_PANEL_STATE_DIR / "today_action_decisions.json
 ASK_RECENT_STATE_PATH = CONTROL_PANEL_STATE_DIR / "ask_recent_queries.json"
 QUALITY_DASHBOARD_PATH = INVEST_FLOW_ROOT / "reports" / "feishu-quality-dashboard.md"
 WATCHLIST_REFRESH_TASK_NAME = "watchlist_refresh"
+TASK_NAME_ALIASES = {
+    "watchlist": WATCHLIST_REFRESH_TASK_NAME,
+}
 APP_STATE_REPOSITORY = AppStateRepository()
 ARTIFACT_REPOSITORY = ArtifactRepository()
 TASK_RUN_REPOSITORY = TaskRunRepository()
@@ -105,6 +107,22 @@ ACTION_DECISION_TONES = {
     "done": "positive",
     "watch": "watch",
     "skip": "risk",
+}
+
+ACTION_DISPLAY_LABELS = {
+    "pending": "待处理",
+    "done": "已完成",
+    "watch": "继续观察中",
+    "skip": "已放弃",
+    "no_fill": "未成交，已记录",
+}
+
+ACTION_DISPLAY_TONES = {
+    "pending": "watch",
+    "done": "positive",
+    "watch": "watch",
+    "skip": "risk",
+    "no_fill": "hold",
 }
 
 ACTION_TIER_LABELS = {
@@ -255,6 +273,13 @@ def parse_timestamp(value: str | None) -> datetime | None:
         except ValueError:
             continue
     return None
+
+
+def canonical_task_name(task_name: str | None) -> str:
+    normalized = str(task_name or "").strip()
+    if not normalized:
+        return ""
+    return TASK_NAME_ALIASES.get(normalized, normalized)
 
 
 def fmt_dt(value: str | None) -> str:
@@ -525,7 +550,8 @@ def reference_dt_for_lane(quality: dict[str, Any] | None, task_name: str | None 
 
 
 def matched_run_for_task(task_name: str, reference_dt: datetime | None, max_delta_seconds: int) -> dict[str, Any] | None:
-    candidates = [item for item in list_runs(limit=80) if item.get("task_name") == task_name]
+    expected = canonical_task_name(task_name)
+    candidates = [item for item in list_runs(limit=80) if canonical_task_name(item.get("task_name")) == expected]
     if not candidates:
         return None
     if not reference_dt:
@@ -674,6 +700,10 @@ def extract_run_summary(run: dict[str, Any]) -> str:
     text = load_log_tail(log_path) if log_path.exists() else ""
     if text:
         lines = [clean_log_line(line) for line in text.splitlines()]
+        if any("Feishu send failed:" in line and "502" in line for line in lines):
+            return "飞书上游接口返回 502，但总控简报已生成"
+        if any("tenant_access_token" in line and "undefined" in line for line in lines):
+            return "飞书插件已加载，但缺少 tenant_access_token 配置"
         skip_prefixes = (
             "start ",
             "command:",
@@ -693,6 +723,8 @@ def extract_run_summary(run: dict[str, Any]) -> str:
                 continue
             if "SEND_TO_FEISHU 已开启，但 FEISHU_TARGET 为空" in line:
                 return "允许发飞书，但飞书收件人为空"
+            if "tenant_access_token" in line and "undefined" in line:
+                return "飞书插件已加载，但缺少 tenant_access_token 配置"
             if line.startswith("ModuleNotFoundError:"):
                 missing = re.search(r"No module named '([^']+)'", line)
                 if missing:
@@ -872,8 +904,9 @@ def list_runs(limit: int = 12) -> list[dict[str, Any]]:
 
 
 def latest_run_for_task(task_name: str) -> dict[str, Any] | None:
+    expected = canonical_task_name(task_name)
     for item in list_runs(limit=50):
-        if item.get("task_name") == task_name:
+        if canonical_task_name(item.get("task_name")) == expected:
             return item
     return None
 
@@ -884,7 +917,7 @@ def task_cards() -> list[dict[str, Any]]:
         latest_run = latest_run_for_task(task_name)
         cards.append(
             {
-                "task_name": task_name,
+                "task_name": canonical_task_name(task_name),
                 "title": config["title"],
                 "description": config["description"],
                 "lane": config["lane"],
@@ -1009,7 +1042,7 @@ def lane_cards() -> list[dict[str, Any]]:
         },
         {
             "key": "watchlist",
-            "task_name": "watchlist",
+            "task_name": WATCHLIST_REFRESH_TASK_NAME,
             "title": "自选股",
             "subtitle": "日常持仓/观察池摘要",
             "quality": latest_quality_item("watchlist"),
@@ -1518,6 +1551,14 @@ def action_decision_label(decision: str | None) -> str:
 
 def action_decision_tone(decision: str | None) -> str:
     return ACTION_DECISION_TONES.get(str(decision or "pending").strip(), "watch")
+
+
+def action_display_label(state: str | None) -> str:
+    return ACTION_DISPLAY_LABELS.get(str(state or "pending").strip(), "待处理")
+
+
+def action_display_tone(state: str | None) -> str:
+    return ACTION_DISPLAY_TONES.get(str(state or "pending").strip(), "watch")
 
 
 def load_today_action_decision_store() -> dict[str, Any]:
@@ -2501,6 +2542,67 @@ def find_today_action_match(code: str) -> dict[str, Any] | None:
     return None
 
 
+def build_today_action_context(
+    code: str,
+    today: dict[str, Any] | None = None,
+    account_book: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    normalized_code = str(code or "").strip()
+    if not normalized_code:
+        return None
+
+    if today is None:
+        try:
+            today = build_today_view()
+        except Exception:
+            return None
+
+    trade_date = str(today.get("trade_date") or today.get("expected_trade_date") or "").strip()
+    decision_map = get_today_action_decision_map(trade_date) if trade_date else {}
+    no_fill_index = build_no_fill_intent_index(account_book if account_book is not None else load_account_book())
+
+    matched_item = None
+    for item in (today.get("action_queue") or {}).get("items") or []:
+        key = str(item.get("key") or "").strip()
+        if key.endswith(normalized_code):
+            matched_item = item
+            break
+
+    if not matched_item:
+        for group in today.get("action_groups") or []:
+            for item in group.get("items") or []:
+                key = str(item.get("key") or "").strip()
+                if key.endswith(normalized_code):
+                    matched_item = item
+                    break
+            if matched_item:
+                break
+
+    if not matched_item:
+        return None
+
+    enriched_item = dict(matched_item)
+    if not enriched_item.get("decision"):
+        enriched_item["decision"] = build_today_action_decision_state(enriched_item, decision_map)
+    if not enriched_item.get("display_state") and trade_date:
+        enriched_item["display_state"] = build_today_action_display_state(
+            item=enriched_item,
+            trade_date=trade_date,
+            no_fill_index=no_fill_index,
+        )
+
+    return {
+        "key": str(enriched_item.get("key") or "").strip(),
+        "trade_date": trade_date,
+        "source": str(enriched_item.get("source") or "").strip(),
+        "status": str(enriched_item.get("status") or "").strip(),
+        "detail": str(enriched_item.get("detail") or "").strip(),
+        "group_title": str(enriched_item.get("group_title") or "").strip(),
+        "decision": enriched_item.get("decision") or None,
+        "display_state": enriched_item.get("display_state") or None,
+    }
+
+
 def build_ask_case_view(
     query: str,
     watchlist: dict[str, Any] | None,
@@ -3156,20 +3258,19 @@ def ask_followup_enhancement_from_model(
             },
         ],
     }
-    request = urllib.request.Request(
-        config["endpoint"],
-        data=json.dumps(request_body, ensure_ascii=False).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {config['api_key']}",
-        },
-        method="POST",
-    )
-
     try:
-        with urllib.request.urlopen(request, timeout=float(config["timeout"])) as response:
-            payload = json.loads(response.read().decode("utf-8", errors="replace"))
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError, OSError):
+        payload, _, _, _ = request_json_http(
+            "POST",
+            config["endpoint"],
+            json_body=request_body,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {config['api_key']}",
+            },
+            timeout=float(config["timeout"]),
+            retries=0,
+        )
+    except (RuntimeError, json.JSONDecodeError, OSError, ValueError):
         return None
 
     if not isinstance(payload, dict):
@@ -5002,8 +5103,52 @@ def build_today_action_decision_state(item: dict[str, Any], decision_map: dict[s
     }
 
 
-def build_today_action_queue(action_groups: list[dict[str, Any]], trade_date: str) -> dict[str, Any]:
+def build_no_fill_intent_index(account_book: dict[str, Any] | None) -> dict[tuple[str, str], dict[str, Any]]:
+    index: dict[tuple[str, str], dict[str, Any]] = {}
+    for item in (account_book or {}).get("no_fill_intents") or []:
+        if not isinstance(item, dict):
+            continue
+        trade_date = str(item.get("trade_date") or "").strip()
+        intent_key = str(item.get("intent_key") or "").strip()
+        if trade_date and intent_key:
+            index[(trade_date, intent_key)] = item
+    return index
+
+
+def build_today_action_display_state(
+    *,
+    item: dict[str, Any],
+    trade_date: str,
+    no_fill_index: dict[tuple[str, str], dict[str, Any]],
+) -> dict[str, Any]:
+    key = str(item.get("key") or "").strip()
+    decision = item.get("decision") or {}
+    decision_value = str(decision.get("value") or "pending").strip().lower()
+    no_fill = no_fill_index.get((str(trade_date or "").strip(), key))
+    state = "no_fill" if no_fill and decision_value == "pending" else decision_value
+    updated_at_raw = str(
+        ((no_fill or {}).get("ts") if state == "no_fill" else "")
+        or decision.get("updated_at_raw")
+        or ""
+    ).strip()
+    return {
+        "value": state,
+        "label": action_display_label(state),
+        "tone": action_display_tone(state),
+        "updated_at": fmt_dt(updated_at_raw) if updated_at_raw else str(decision.get("updated_at") or ""),
+        "updated_at_raw": updated_at_raw,
+        "reason": str((no_fill or {}).get("reason") or "").strip() if state == "no_fill" else "",
+    }
+
+
+def build_today_action_queue(
+    action_groups: list[dict[str, Any]],
+    trade_date: str,
+    *,
+    account_book: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     decision_map = get_today_action_decision_map(trade_date)
+    no_fill_index = build_no_fill_intent_index(account_book)
     ranked_items: list[dict[str, Any]] = []
 
     for group in action_groups:
@@ -5013,6 +5158,11 @@ def build_today_action_queue(action_groups: list[dict[str, Any]], trade_date: st
             queue_item["group_title"] = group.get("title") or ""
             queue_item["group_index"] = index
             queue_item["decision"] = build_today_action_decision_state(item, decision_map)
+            queue_item["display_state"] = build_today_action_display_state(
+                item=queue_item,
+                trade_date=trade_date,
+                no_fill_index=no_fill_index,
+            )
             ranked_items.append(queue_item)
 
     ranked_items.sort(key=today_action_queue_priority)
@@ -5020,14 +5170,15 @@ def build_today_action_queue(action_groups: list[dict[str, Any]], trade_date: st
 
     counts = {
         "total": len(selected_items),
-        "pending": sum(1 for item in selected_items if (item.get("decision") or {}).get("value") == "pending"),
-        "done": sum(1 for item in selected_items if (item.get("decision") or {}).get("value") == "done"),
-        "watch": sum(1 for item in selected_items if (item.get("decision") or {}).get("value") == "watch"),
-        "skip": sum(1 for item in selected_items if (item.get("decision") or {}).get("value") == "skip"),
+        "pending": sum(1 for item in selected_items if (item.get("display_state") or {}).get("value") == "pending"),
+        "done": sum(1 for item in selected_items if (item.get("display_state") or {}).get("value") == "done"),
+        "watch": sum(1 for item in selected_items if (item.get("display_state") or {}).get("value") == "watch"),
+        "skip": sum(1 for item in selected_items if (item.get("display_state") or {}).get("value") == "skip"),
+        "no_fill": sum(1 for item in selected_items if (item.get("display_state") or {}).get("value") == "no_fill"),
     }
 
     last_updated = max(
-        (((item.get("decision") or {}).get("updated_at_raw") or "") for item in selected_items),
+        (((item.get("display_state") or {}).get("updated_at_raw") or "") for item in selected_items),
         default="",
     )
     counts["last_updated"] = fmt_dt(last_updated) if last_updated else "-"
@@ -7892,6 +8043,43 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
     if not normalized_code:
         raise KeyError("stock code missing")
 
+    decision_brief = safe_canonical_load(load_decision_brief)
+    watchlist = safe_canonical_load(load_watchlist_snapshot)
+    screening_batch = safe_canonical_load(load_screening_batch)
+    confirmation = safe_canonical_load(load_confirmation)
+    quality_status = safe_canonical_load(load_quality_status, lane="all")
+    account_book = load_account_book()
+    today_action_decisions = load_today_action_decision_store()
+    readiness = compute_readiness(
+        watchlist=watchlist,
+        screening_batch=screening_batch,
+        confirmation=confirmation,
+        decision_brief=decision_brief,
+        quality_status=quality_status,
+        account_book=account_book,
+        today_action_decisions=today_action_decisions,
+    )
+    action_groups = build_today_action_groups(
+        watchlist,
+        screening_batch,
+        confirmation,
+        decision_brief,
+        quality_status,
+        brief_is_live=bool(readiness.get("brief_is_live")),
+        gate=(((screening_batch or {}).get("market_regime") or {}).get("execution_gate") or {}),
+    )
+    profile_trade_date = readiness.get("data_trade_date") or current_trade_date(watchlist, screening_batch, decision_brief)
+    today_context = {
+        "trade_date": profile_trade_date,
+        "expected_trade_date": readiness.get("expected_trade_date"),
+        "action_queue": build_today_action_queue(
+            action_groups,
+            profile_trade_date,
+            account_book=account_book,
+        ),
+        "action_groups": action_groups,
+    }
+
     errors: dict[str, str] = {}
     watchlist_detail: dict[str, Any] | None = None
     opportunity_detail: dict[str, Any] | None = None
@@ -7908,6 +8096,7 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
 
     primary_source = "watchlist" if watchlist_detail else ("opportunity" if opportunity_detail else None)
     primary_detail = watchlist_detail or opportunity_detail
+    today_action = build_today_action_context(normalized_code, today=today_context, account_book=account_book)
     available_sources = [
         key
         for key, detail in (
@@ -7921,6 +8110,9 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "code": normalized_code,
         "trade_date": (primary_detail or {}).get("trade_date"),
+        "expected_trade_date": readiness.get("expected_trade_date"),
+        "data_trade_date": readiness.get("data_trade_date"),
+        "readiness": readiness,
         "primary_source": primary_source,
         "primary_source_label": {
             "watchlist": "自选股链路",
@@ -7930,6 +8122,7 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
         "available_sources": available_sources,
         "watchlist": watchlist_detail,
         "opportunity": opportunity_detail,
+        "today_action": today_action,
         "errors": errors,
         "links": {
             "self": f"/stock/{normalized_code}",
@@ -8175,7 +8368,7 @@ def build_today_view() -> dict[str, Any]:
         brief_is_live=brief_is_live,
         gate=gate,
     )
-    action_queue = build_today_action_queue(action_groups, trade_date)
+    action_queue = build_today_action_queue(action_groups, trade_date, account_book=account_book)
 
     source_freshness_map = {item["key"]: item for item in readiness["source_freshness"]}
 

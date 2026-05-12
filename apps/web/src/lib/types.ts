@@ -13,6 +13,7 @@ export type Tone =
   | "stale";
 
 export type DecisionValue = "pending" | "done" | "watch" | "skip";
+export type TodayActionDisplayValue = DecisionValue | "no_fill";
 
 export interface LinkMap {
   today?: string;
@@ -329,6 +330,15 @@ export interface TodayActionDecision {
   updated_at_raw?: string;
 }
 
+export interface TodayActionDisplayState {
+  value: TodayActionDisplayValue;
+  label: string;
+  tone: Tone | string;
+  updated_at?: string;
+  updated_at_raw?: string;
+  reason?: string;
+}
+
 export interface TodayActionContext {
   value?: string;
   label?: string;
@@ -351,6 +361,7 @@ export interface TodayActionItem {
   group_title?: string;
   group_index?: number;
   decision: TodayActionDecision;
+  display_state?: TodayActionDisplayState;
   freshness?: TodayActionContext;
   confidence?: TodayActionContext;
 }
@@ -367,6 +378,7 @@ export interface TodayActionQueue {
     done: number;
     watch: number;
     skip: number;
+    no_fill?: number;
     last_updated?: string;
   };
 }
@@ -761,16 +773,31 @@ export interface StockDetailData {
   links?: LinkMap;
 }
 
+export interface StockTodayActionContext {
+  key: string;
+  trade_date?: string;
+  source?: string;
+  status?: string;
+  detail?: string;
+  group_title?: string;
+  decision?: TodayActionDecision | null;
+  display_state?: TodayActionDisplayState | null;
+}
+
 export interface StockProfileData {
   generated_at?: string;
   code: string;
   trade_date?: string;
+  expected_trade_date?: string;
+  data_trade_date?: string | null;
+  readiness?: ReadinessPayload;
   primary_source?: "watchlist" | "opportunity" | null;
   primary_source_label?: string;
   primary_detail?: StockDetailData;
   available_sources?: Array<"watchlist" | "opportunity">;
   watchlist?: StockDetailData;
   opportunity?: StockDetailData;
+  today_action?: StockTodayActionContext | null;
   errors?: Partial<Record<"watchlist" | "opportunity", string>>;
   links?: LinkMap;
 }
@@ -807,20 +834,146 @@ export interface RefreshStatus {
   suggested_poll_seconds: number;
   freshness: SourceCardData[];
   stale_count: number;
+  manifest_stale_count?: number;
+  task_stale_count?: number;
   running: RunItem[];
   recommended_task: {
     task_name: string;
     title: string;
+    kind?: string;
+    cooldown_seconds?: number;
+    manifest_dependencies?: string[];
   };
+  recovery_steps?: Array<{
+    step?: number;
+    task_name?: string;
+    title?: string;
+    status?: string;
+    can_trigger?: boolean;
+    cooldown_remaining_seconds?: number;
+    next_allowed_at?: string;
+    issue_count?: number;
+    issues?: ReadinessIssue[];
+  }>;
   cooldown: {
     seconds: number;
     remaining_seconds: number;
     ready: boolean;
+    next_allowed_at?: string;
     last_trigger_at?: string;
     last_task_name?: string;
     last_run_id?: string;
+    last_reason?: string;
+    last_decision?: Record<string, unknown>;
+    page_last_trigger_at?: string;
+    page_last_run_id?: string;
   };
+  auto_refresh?: RefreshAutoDecision;
+  last_auto_refresh?: RefreshAuditEvent | null;
+  last_refresh_event?: RefreshAuditEvent | null;
+  policy?: {
+    page?: RefreshPagePolicy;
+    task?: RefreshTaskPolicy;
+  };
+  policy_catalog?: {
+    tasks?: Record<string, RefreshTaskPolicy>;
+    pages?: Record<string, RefreshPagePolicy>;
+    windows?: Record<string, RefreshWindow>;
+    cron?: Array<{
+      task_name?: string;
+      name?: string;
+      cron_expr?: string;
+      command?: string[];
+      delivery_default?: boolean;
+      fixed_window?: boolean;
+    }>;
+  };
+  active_auto_windows?: RefreshWindow[];
+  readiness?: ReadinessPayload;
+  readiness_mode?: ReadinessMode;
+  recommended_tasks?: string[];
   snapshot_signature: string;
+}
+
+export interface RefreshWindow {
+  key: string;
+  label: string;
+  start: string;
+  end: string;
+}
+
+export interface RefreshTaskPolicy {
+  task_name?: string;
+  title?: string;
+  kind?: string;
+  cooldown_seconds?: number;
+  auto_windows?: string[];
+  manifest_dependencies?: string[];
+  stale_reasons?: string[];
+  auto_enabled?: boolean;
+  fixed_cron_only?: boolean;
+  same_family?: string;
+}
+
+export interface RefreshPagePolicy {
+  page?: string;
+  allowed_tasks?: string[];
+  related_tasks?: string[];
+  poll_seconds?: Record<string, number>;
+  stale_after_seconds?: Record<string, number>;
+  auto_on_open?: boolean;
+}
+
+export interface RefreshAutoDecision {
+  enabled?: boolean;
+  allowed?: boolean;
+  should_trigger?: boolean;
+  force?: boolean;
+  page?: string;
+  task_name?: string;
+  task_kind?: string;
+  reason_codes?: string[];
+  blocked_reasons?: string[];
+  active_windows?: RefreshWindow[];
+  required_windows?: string[];
+  manifest_reasons?: string[];
+  stale_count?: number;
+  cooldown_remaining_seconds?: number;
+  next_allowed_at?: string;
+  summary?: string;
+  triggered?: boolean;
+  trigger?: {
+    started?: boolean;
+    run_id?: string;
+    task_name?: string;
+    title?: string;
+    log_path?: string;
+    meta_path?: string;
+  } | null;
+}
+
+export interface RefreshAuditEvent {
+  ts?: string;
+  trigger_type?: string;
+  page?: string;
+  task_name?: string;
+  task_family?: string;
+  run_id?: string;
+  force?: boolean;
+  reason?: string;
+  manifest_state?: Array<{
+    key?: string;
+    label?: string;
+    stale?: boolean;
+    freshness_status?: string;
+    trade_date?: string | null;
+    stale_reasons?: string[];
+  }>;
+  cooldown?: {
+    remaining_seconds?: number;
+    next_allowed_at?: string;
+  };
+  decision?: RefreshAutoDecision | Record<string, unknown>;
 }
 
 export interface RefreshTriggerResponse {
@@ -887,8 +1040,19 @@ export interface TaskRunResponse {
   started?: boolean;
   run_id?: string;
   task_name?: string;
+  requested_task_name?: string;
+  canonical_task_name?: string;
   title?: string;
   send_to_feishu?: boolean;
+  feishu_warning?: string;
+  feishu_status?: {
+    available?: boolean;
+    installed?: boolean;
+    configured?: boolean;
+    detail?: string;
+    reason?: string;
+    accounts?: string[];
+  };
   meta_path?: string;
   log_path?: string;
 }
@@ -896,4 +1060,14 @@ export interface TaskRunResponse {
 export interface HealthResponse {
   ok: boolean;
   workspace?: string;
+  channels?: {
+    feishu?: {
+      available?: boolean;
+      installed?: boolean;
+      configured?: boolean;
+      detail?: string;
+      reason?: string;
+      accounts?: string[];
+    };
+  };
 }

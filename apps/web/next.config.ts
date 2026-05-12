@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 const backendOrigin = process.env.PRISM_BACKEND_ORIGIN ?? "http://127.0.0.1:8001";
 
 const nextConfig: NextConfig = {
+  env: {
+    NEXT_PUBLIC_PRISM_BACKEND_ORIGIN: backendOrigin,
+  },
   async redirects() {
     return [
       {

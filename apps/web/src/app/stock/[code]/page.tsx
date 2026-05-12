@@ -1,6 +1,7 @@
 "use client";
 
 import { Archive, FileSearch, LoaderCircle, Plus, RefreshCw, RotateCcw, SendHorizontal } from "lucide-react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -18,6 +19,7 @@ import {
   useStockProfile,
   useWatchlistManager,
 } from "@/lib/hooks";
+import { readinessHasStaleData, readinessModeCopy, refreshTaskCopy } from "@/lib/readiness-copy";
 import type { AskFollowupResponse, StockDetailData, StockProfileData, WatchlistManagerItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +30,28 @@ const followupHistoryTurnLimit = 3;
 const profileSourceIssueLabels: Record<StockProfileSource, string> = {
   watchlist: "自选股未命中",
   opportunity: "观察池未命中",
+};
+
+type DecisionContext = {
+  canonical_decision?: StockDetailData["canonical_decision"];
+  decision_cards?: StockDetailData["decision_cards"];
+  level_cards?: StockDetailData["level_cards"];
+  plan_rows?: StockDetailData["plan_rows"];
+  plan_levels?: StockDetailData["plan_levels"];
+  triggers?: StockDetailData["triggers"];
+  insight_groups?: StockDetailData["insight_groups"];
+  source_cards?: StockDetailData["source_cards"];
+  artifacts?: StockDetailData["artifacts"];
+  trade_date?: string;
+  generated_at?: string;
+};
+
+const todayActionStatusCopy: Record<string, string> = {
+  pending: "今日待处理",
+  done: "今日已处理：已完成",
+  watch: "今日已处理：继续观察中",
+  skip: "今日已处理：已放弃",
+  no_fill: "今日已处理：未成交，已记录",
 };
 
 function pickDetail(profile?: StockProfileData, activeTab?: string) {
@@ -63,6 +87,32 @@ function canonicalText(
   return String(value);
 }
 
+function hasDisplayValue(value: unknown) {
+  if (value === null || value === undefined) {
+    return false;
+  }
+  const text = String(value).trim();
+  return Boolean(text && text !== "-");
+}
+
+function displayText(value: unknown, fallback = "暂未给出") {
+  return hasDisplayValue(value) ? String(value) : fallback;
+}
+
+function uniqueTexts(values: unknown[]) {
+  const seen = new Set<string>();
+  return values
+    .map((value) => displayText(value, ""))
+    .filter(Boolean)
+    .filter((value) => {
+      if (seen.has(value)) {
+        return false;
+      }
+      seen.add(value);
+      return true;
+    });
+}
+
 function sourceScopeLabel(value: unknown) {
   switch (String(value || "")) {
     case "holdings":
@@ -84,6 +134,390 @@ function triggerCard(trigger: NonNullable<StockDetailData["triggers"]>[number], 
     detail: [condition, action].filter(Boolean).join(" / "),
     tone: "watch",
   };
+}
+
+function rowValueByLabel(rows: Array<{ label?: string; value?: unknown }> | undefined, labels: string[]) {
+  const match = (rows || []).find((row) => {
+    const label = String(row.label || "");
+    return labels.some((item) => label.includes(item));
+  });
+  return match?.value;
+}
+
+function triggerTextByKeyword(triggers: StockDetailData["triggers"] | undefined, keywords: string[]) {
+  const match = (triggers || []).find((trigger) => {
+    const text = [trigger.name, trigger.label, trigger.condition, trigger.detail, trigger.action].filter(Boolean).join(" ");
+    return keywords.some((keyword) => text.includes(keyword));
+  });
+  if (!match) {
+    return "";
+  }
+  return [match.condition || match.value || match.detail, match.action].filter(Boolean).join(" / ");
+}
+
+function insightItems(detail: DecisionContext | undefined, keywords: string[]) {
+  return (detail?.insight_groups || [])
+    .filter((group) => keywords.some((keyword) => String(group.title || "").includes(keyword)))
+    .flatMap((group) => group.items || []);
+}
+
+function todayActionStatusLabel(todayAction?: StockProfileData["today_action"]) {
+  const value = String(todayAction?.display_state?.value || todayAction?.decision?.value || "pending");
+  return todayActionStatusCopy[value] || todayActionStatusCopy.pending;
+}
+
+function todayActionTone(todayAction?: StockProfileData["today_action"]) {
+  return todayAction?.display_state?.tone || todayAction?.decision?.tone || "watch";
+}
+
+function todayActionIsProcessed(todayAction?: StockProfileData["today_action"]) {
+  const value = String(todayAction?.display_state?.value || todayAction?.decision?.value || "pending");
+  return ["done", "watch", "skip", "no_fill"].includes(value);
+}
+
+function conditionalActionText(canonical?: StockDetailData["canonical_decision"]) {
+  const trigger = displayText(canonical?.trigger_condition || canonical?.stop_condition || canonical?.continue_condition);
+  const action = displayText(canonical?.next_step || canonical?.avoid_action);
+  if (trigger !== "暂未给出" && action !== "暂未给出") {
+    return `${trigger} -> ${action}`;
+  }
+  return trigger !== "暂未给出" ? trigger : action;
+}
+
+function keyConditions(detail: DecisionContext | undefined) {
+  const canonical = detail?.canonical_decision;
+  const levelCards = detail?.level_cards || [];
+  const planRows = detail?.plan_rows || [];
+  const planLevels = detail?.plan_levels || [];
+  return [
+    {
+      label: "仓位纪律",
+      value: canonical?.position_guidance || rowValueByLabel(planRows, ["仓位"]),
+    },
+    {
+      label: "止损 / 失效线",
+      value:
+        canonical?.stop_condition ||
+        canonical?.risk_boundary ||
+        rowValueByLabel(levelCards, ["止损", "失效"]) ||
+        rowValueByLabel(planRows, ["失效"]) ||
+        rowValueByLabel(planLevels, ["失效"]),
+    },
+    {
+      label: "支撑位",
+      value: rowValueByLabel(levelCards, ["支撑"]) || rowValueByLabel(planLevels, ["回踩"]),
+    },
+    {
+      label: "压力位",
+      value: rowValueByLabel(levelCards, ["压力"]),
+    },
+    {
+      label: "确认线",
+      value:
+        triggerTextByKeyword(detail?.triggers, ["确认"]) ||
+        rowValueByLabel(planLevels, ["触发"]) ||
+        canonical?.trigger_condition,
+    },
+    {
+      label: "继续观察条件",
+      value: canonical?.continue_condition || canonical?.trigger_condition || rowValueByLabel(planRows, ["触发"]),
+    },
+    {
+      label: "放弃条件",
+      value: canonical?.avoid_action || canonical?.stop_condition || canonical?.risk_boundary || rowValueByLabel(planRows, ["回避"]),
+    },
+  ];
+}
+
+function evidenceSourceSummary(detail: DecisionContext | undefined, sourceLabel: string, todayAction?: StockProfileData["today_action"]) {
+  const labels = uniqueTexts([
+    sourceLabel,
+    ...(detail?.source_cards || []).map((item) => item.label),
+    ...(detail?.artifacts || []).map((item) => item.label),
+    todayAction ? "今日动作队列" : "",
+  ]);
+  return labels.length ? labels.slice(0, 4).join("、") : "自选股快照、持仓链路、今日动作队列";
+}
+
+function evidenceSupportItems(detail: DecisionContext | undefined) {
+  const canonical = detail?.canonical_decision;
+  const conclusionCard = (detail?.decision_cards || []).find((card) => String(card.label || "").includes("当前结论"));
+  const positives = insightItems(detail, ["正向", "加分", "支持"]);
+  return uniqueTexts([
+    canonical?.why_now,
+    conclusionCard?.detail,
+    ...positives,
+    canonical?.confidence_note,
+  ]).slice(0, 3);
+}
+
+function evidenceRiskItems(
+  detail: DecisionContext | undefined,
+  readiness: StockProfileData["readiness"] | undefined,
+) {
+  const canonical = detail?.canonical_decision;
+  const risks = insightItems(detail, ["风险", "警示", "硬风险"]);
+  const session = readiness?.session;
+  return uniqueTexts([
+    canonical?.stop_condition || canonical?.risk_boundary,
+    canonical?.avoid_action,
+    ...risks,
+    readiness?.stale_count ? "数据偏旧" : "",
+    session?.key === "weekend" ? "周末休市不可真钱执行" : "",
+  ]).slice(0, 4);
+}
+
+function readinessFacts(readiness?: StockProfileData["readiness"]) {
+  const mode = readiness?.readiness_mode || "blocked";
+  const session = readiness?.session;
+  const isWeekend = session?.key === "weekend" || session?.calendar_status === "weekend";
+  const isTradingDay = Boolean(session?.is_trading_day);
+  const dataStale = readinessHasStaleData(readiness);
+  const allowRealMoney = mode === "live_ready" && isTradingDay && !dataStale && Boolean(readiness?.ready);
+  return { mode, session, isWeekend, isTradingDay, dataStale, allowRealMoney };
+}
+
+function TradingAvailabilityBar({ readiness }: { readiness?: StockProfileData["readiness"] }) {
+  const { mode, session, isWeekend, dataStale, allowRealMoney } = readinessFacts(readiness);
+  const modeTone = mode === "live_ready" ? "positive" : mode === "blocked" ? "risk" : "warning";
+  const copy = readinessModeCopy(mode);
+  const recommendedTask = readiness?.recommended_tasks?.[0];
+  const recommendedTaskTitle = recommendedTask ? refreshTaskCopy(recommendedTask).title : "";
+  const statusLines = [
+    copy.realMoney,
+    isWeekend ? "周末休市，仅可影子盘观察" : "",
+    dataStale ? "数据偏旧，不可作为真钱依据" : "",
+    copy.title,
+    recommendedTask && mode !== "live_ready" ? `建议下一步：去 Settings 运行 ${recommendedTaskTitle || recommendedTask}` : "",
+    "真实成交仍需在外部券商完成，本系统不会自动下单。",
+  ].filter(Boolean);
+
+  const facts = [
+    { label: "当前状态", value: copy.title, tone: modeTone },
+    { label: "是否周末休市", value: isWeekend ? "是" : "否", tone: isWeekend ? "warning" : "info" },
+    { label: "是否数据过期", value: dataStale ? "是" : "否", tone: dataStale ? "warning" : "positive" },
+    { label: "是否允许真钱执行", value: allowRealMoney ? "是" : "否", tone: allowRealMoney ? "positive" : "risk" },
+  ];
+
+  return (
+    <section className="surface-card border-[var(--border-subtle)] p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="text-[11px] font-medium uppercase text-[var(--text-tertiary)]">Trading Availability</div>
+          <h2 className="mt-1 text-lg font-semibold text-[var(--text-primary)]">{allowRealMoney ? "真钱执行：可按纪律手工执行" : "真钱执行：禁止"}</h2>
+          <p className="mt-2 text-[12px] leading-5 text-[var(--text-secondary)]">
+            {session?.label || "交易状态待确认"}；{copy.title}；页面只给决策纪律和回写入口，不会连接券商自动下单。
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Badge tone={modeTone}>{copy.badge}</Badge>
+          <Badge tone={allowRealMoney ? "positive" : "risk"}>{allowRealMoney ? "允许真钱执行" : "真钱执行：禁止"}</Badge>
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {facts.map((item) => (
+          <div key={item.label} className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+            <div className="text-[11px] text-[var(--text-tertiary)]">{item.label}</div>
+            <div className="mt-1 flex items-center justify-between gap-2 text-[13px] font-medium text-[var(--text-primary)]">
+              <span>{item.value}</span>
+              <Badge tone={item.tone}>{item.value}</Badge>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 rounded-md border border-[color-mix(in_srgb,var(--tone-watch)_24%,transparent)] bg-[color-mix(in_srgb,var(--tone-watch)_8%,transparent)] px-3 py-2 text-[12px] leading-5 text-[var(--text-secondary)]">
+        {statusLines.map((line) => (
+          <div key={line}>{line}</div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DecisionLayerCard({
+  detail,
+  todayAction,
+}: {
+  detail?: DecisionContext;
+  todayAction?: StockProfileData["today_action"];
+}) {
+  const canonical = detail?.canonical_decision;
+  const rows = [
+    {
+      label: "研究结论",
+      value: displayText(canonical?.main_conclusion),
+      detail: "系统根据当前数据给出的研究判断。",
+      tone: "info",
+    },
+    {
+      label: "条件触发动作",
+      value: conditionalActionText(canonical),
+      detail: "如果条件触发时，应该怎么做。",
+      tone: "watch",
+    },
+    {
+      label: "今日处理状态",
+      value: todayActionStatusLabel(todayAction),
+      detail: "用户今天是否已经对这只票做过处理记录。",
+      tone: todayActionTone(todayAction),
+    },
+  ];
+
+  return (
+    <section className="surface-card p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-[11px] font-medium uppercase text-[var(--text-tertiary)]">Decision Layers</div>
+          <h2 className="mt-1 text-lg font-semibold text-[var(--text-primary)]">三层语义拆开看</h2>
+        </div>
+        <Badge tone="info">研究 ≠ 动作 ≠ 记录</Badge>
+      </div>
+      <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
+        {rows.map((row) => (
+          <div key={row.label} className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[11px] text-[var(--text-tertiary)]">{row.label}</span>
+              <Badge tone={row.tone}>{row.label}</Badge>
+            </div>
+            <div className="text-[13px] font-semibold leading-5 text-[var(--text-primary)]">{row.value}</div>
+            <p className="mt-2 text-[11px] leading-4 text-[var(--text-tertiary)]">{row.detail}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function TodayActionStatusCard({
+  todayAction,
+  executionHref,
+}: {
+  todayAction?: StockProfileData["today_action"];
+  executionHref: string;
+}) {
+  const status = todayActionStatusLabel(todayAction);
+  const processed = todayActionIsProcessed(todayAction);
+  return (
+    <section className="surface-card p-4">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-medium uppercase text-[var(--text-tertiary)]">Today State</div>
+          <h2 className="mt-1 text-lg font-semibold text-[var(--text-primary)]">今日处理状态</h2>
+        </div>
+        <Badge tone={todayActionTone(todayAction)}>{status}</Badge>
+      </div>
+      <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+        <div className="text-[15px] font-semibold text-[var(--text-primary)]">{status}</div>
+        <p className="mt-2 text-[12px] leading-5 text-[var(--text-secondary)]">
+          这是用户今天的处理记录，不是系统研究结论。
+        </p>
+        {todayAction?.key ? (
+          <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[var(--text-tertiary)]">
+            <Badge tone="info">{todayAction.key}</Badge>
+            {todayAction.trade_date ? <Badge tone="info">交易日 {todayAction.trade_date}</Badge> : null}
+            {todayAction.display_state?.updated_at ? <Badge tone={todayActionTone(todayAction)}>更新 {todayAction.display_state.updated_at}</Badge> : null}
+          </div>
+        ) : null}
+      </div>
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-[12px] leading-5 text-[var(--text-tertiary)]">记录执行结果不会自动下单，只会进入执行回写区。</p>
+        <Link
+          href={executionHref}
+          className="focus-ring inline-flex shrink-0 items-center justify-center rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-2 text-[12px] font-medium text-[var(--accent)]"
+        >
+          {processed ? "查看处理结果" : "记录执行结果"}
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+function KeyConditionsCard({ detail }: { detail?: DecisionContext }) {
+  return (
+    <section className="surface-card p-4">
+      <div className="mb-3">
+        <div className="text-[11px] font-medium uppercase text-[var(--text-tertiary)]">Key Conditions</div>
+        <h2 className="mt-1 text-lg font-semibold text-[var(--text-primary)]">关键条件</h2>
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {keyConditions(detail).map((item) => (
+          <div key={item.label} className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+            <div className="text-[11px] text-[var(--text-tertiary)]">{item.label}</div>
+            <div className="mt-1 text-[13px] font-medium leading-5 text-[var(--text-primary)]">{displayText(item.value)}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function EvidenceCredibilityCard({
+  detail,
+  readiness,
+  sourceLabel,
+  sourceTradeDate,
+  todayAction,
+  onViewEvidence,
+}: {
+  detail?: DecisionContext;
+  readiness?: StockProfileData["readiness"];
+  sourceLabel: string;
+  sourceTradeDate?: string;
+  todayAction?: StockProfileData["today_action"];
+  onViewEvidence: () => void;
+}) {
+  const { mode, dataStale } = readinessFacts(readiness);
+  const copy = readinessModeCopy(mode);
+  const support = evidenceSupportItems(detail);
+  const risks = evidenceRiskItems(detail, readiness);
+  const dataStatus = [copy.title, dataStale ? "数据偏旧" : "数据新鲜"].filter(Boolean).join(" / ");
+
+  return (
+    <section className="surface-card p-4">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="text-[11px] font-medium uppercase text-[var(--text-tertiary)]">Evidence</div>
+          <h2 className="mt-1 text-lg font-semibold text-[var(--text-primary)]">证据可信度</h2>
+        </div>
+        <Badge tone={dataStale ? "warning" : "positive"}>{dataStatus}</Badge>
+      </div>
+      <div className="space-y-3 text-[12px] leading-5 text-[var(--text-secondary)]">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+            <div className="text-[11px] text-[var(--text-tertiary)]">数据交易日</div>
+            <div className="mt-1 font-medium text-[var(--text-primary)]">{displayText(readiness?.data_trade_date || sourceTradeDate)}</div>
+          </div>
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+            <div className="text-[11px] text-[var(--text-tertiary)]">证据来源</div>
+            <div className="mt-1 font-medium text-[var(--text-primary)]">{evidenceSourceSummary(detail, sourceLabel, todayAction)}</div>
+          </div>
+        </div>
+        <div>
+          <div className="mb-1 font-medium text-[var(--text-primary)]">支持当前结论：</div>
+          <ul className="list-disc space-y-1 pl-4">
+            {(support.length ? support : ["暂无结构化支持摘要"]).map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <div className="mb-1 font-medium text-[var(--text-primary)]">主要风险：</div>
+          <ul className="list-disc space-y-1 pl-4">
+            {(risks.length ? risks : ["暂无结构化风险摘要"]).map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      <button
+        type="button"
+        className="focus-ring mt-3 inline-flex items-center rounded-md border border-[var(--border-subtle)] px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+        onClick={onViewEvidence}
+      >
+        查看证据 →
+      </button>
+    </section>
+  );
 }
 
 function DecisionSummary({
@@ -240,6 +674,42 @@ export default function StockProfilePage() {
       ...(detail.level_cards || []),
     ];
   }, [detail]);
+  const todayAction = profileData?.today_action;
+  const decisionContext = (detail || askCase) as DecisionContext | undefined;
+  const executionResultHref = useMemo(() => {
+    const params = new URLSearchParams();
+    const canonical = detail?.canonical_decision || askCase?.canonical_decision;
+
+    params.set("code", code);
+    params.set("source", "stock");
+    params.set("source_label", sourceLabel);
+
+    if (stockName) {
+      params.set("name", stockName);
+    }
+    if (todayAction?.key) {
+      params.set("intent_key", todayAction.key);
+      params.set("today_action_key", todayAction.key);
+    }
+    if (todayAction?.trade_date || sourceTradeDate) {
+      params.set("trade_date", todayAction?.trade_date || sourceTradeDate);
+    }
+    if (canonical?.main_conclusion) {
+      params.set("conclusion", canonical.main_conclusion);
+    }
+    if (canonical?.position_guidance) {
+      params.set("position", canonical.position_guidance);
+    }
+    if (canonical?.continue_condition) {
+      params.set("continue_condition", canonical.continue_condition);
+    }
+    if (canonical?.stop_condition) {
+      params.set("stop_condition", canonical.stop_condition);
+    }
+
+    return `/portfolio?${params.toString()}#decision-writeback`;
+  }, [askCase?.canonical_decision, code, detail?.canonical_decision, sourceLabel, sourceTradeDate, stockName, todayAction?.key, todayAction?.trade_date]);
+  const executionEntryLabel = todayActionIsProcessed(todayAction) ? "查看处理结果" : "记录执行结果";
   const askFallbackCards = [
     ...(askCase?.decision_cards || []),
     ...(askCase?.metric_cards || []),
@@ -414,6 +884,29 @@ export default function StockProfilePage() {
             <p className="mt-2 text-[12px] leading-5 text-[var(--text-tertiary)]">
               当前页只展示已有链路能回源的纪律参考；目标价、收益预测和完整财报研判暂不进入结果页。
             </p>
+          </div>
+        ) : null}
+
+        {detail || askCase ? (
+          <div className="mb-6 flex flex-col gap-4">
+            <TradingAvailabilityBar readiness={profileData?.readiness} />
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+              <div className="flex flex-col gap-4">
+                <DecisionLayerCard detail={decisionContext} todayAction={todayAction} />
+                <KeyConditionsCard detail={decisionContext} />
+              </div>
+              <div className="flex flex-col gap-4">
+                <TodayActionStatusCard todayAction={todayAction} executionHref={executionResultHref} />
+                <EvidenceCredibilityCard
+                  detail={decisionContext}
+                  readiness={profileData?.readiness}
+                  sourceLabel={sourceLabel}
+                  sourceTradeDate={sourceTradeDate}
+                  todayAction={todayAction}
+                  onViewEvidence={() => setActiveTab("证据")}
+                />
+              </div>
+            </div>
           </div>
         ) : null}
 
@@ -659,6 +1152,17 @@ export default function StockProfilePage() {
               </section>
 
               <Panel title="执行循环" eyebrow="Loop">
+                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-[12px] leading-5 text-[var(--text-tertiary)]">
+                    记录执行结果不会自动下单，只会进入执行回写区。
+                  </p>
+                  <Link
+                    href={executionResultHref}
+                    className="focus-ring inline-flex items-center justify-center gap-2 rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-1.5 text-[12px] text-[var(--accent)]"
+                  >
+                    {executionEntryLabel}
+                  </Link>
+                </div>
                 <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                   {(detail.execution_loop || []).map((card, index) => <DataCard key={`${card.label}-${index}`} card={card} />)}
                   {!detail.execution_loop?.length ? <EmptyState>暂无执行循环。</EmptyState> : null}

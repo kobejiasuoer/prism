@@ -21,6 +21,7 @@ if str(PACKAGES_ROOT) not in sys.path:
 if str(STOCK_ANALYZER_ROOT) not in sys.path:
     sys.path.insert(0, str(STOCK_ANALYZER_ROOT))
 
+from prism_data import load_manifest_file
 from screener.capital_flow_contract import UNIT_YUAN, normalize_capital_flow_payload
 from screener.parameters import build_intraday_observation_contract
 from watchlist_registry import load_active_watchlist_codes
@@ -34,8 +35,8 @@ RESEARCH_REPORTS_DIR = STOCK_SCREENER_ROOT / "data" / "research_backfill" / "rep
 
 QUALITY_PATTERNS = {
     "watchlist": STOCK_ANALYZER_ROOT / "data" / "quality_gate_watchlist_*.json",
-    "aggressive": STOCK_SCREENER_ROOT / "data" / "quality_gate_*.json",
-    "midday_confirmation": STOCK_SCREENER_ROOT / "data" / "quality_gate_midday_*.json",
+    "aggressive": CURRENT_SCREENER_DATA_DIR / "quality_gate_*.json",
+    "midday_confirmation": CURRENT_SCREENER_DATA_DIR / "quality_gate_midday_*.json",
 }
 
 
@@ -46,6 +47,16 @@ def load_json(path: Path | None) -> dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
+
+
+def load_sidecar_manifest(path: Path | None, raw: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    if path is None:
+        return None
+    manifest = load_manifest_file(path.with_suffix(".manifest.json"))
+    if manifest:
+        return manifest
+    ingress_path = (((raw or {}).get("data_ingress") or {}).get("manifest_path")) if isinstance(raw, dict) else None
+    return load_manifest_file(ingress_path)
 
 
 def parse_ts(value: str | None) -> datetime | None:
@@ -274,6 +285,7 @@ def load_watchlist_snapshot(path: str | None = None, trade_date: str | None = No
         raise FileNotFoundError("watchlist snapshot not found")
 
     raw = load_json(snapshot_path)
+    manifest = load_sidecar_manifest(snapshot_path, raw)
     stocks = raw.get("stocks") or {}
     active_codes = set(load_active_watchlist_codes())
     target_code = str(code or "").strip()
@@ -302,6 +314,8 @@ def load_watchlist_snapshot(path: str | None = None, trade_date: str | None = No
         "trade_date": raw.get("date") or trade_date,
         "generated_at": raw.get("generated_at"),
         "snapshot_path": str(snapshot_path.resolve()),
+        "manifest": manifest,
+        "manifest_path": (manifest or {}).get("manifest_path"),
         "price_basis": raw.get("price_basis"),
         "flow_basis": raw.get("flow_basis"),
         "tech_basis": raw.get("tech_basis"),
@@ -559,6 +573,7 @@ def load_screening_batch(path: str | None = None) -> dict[str, Any]:
         raise FileNotFoundError("screening batch not found")
 
     raw = load_json(batch_path)
+    manifest = load_sidecar_manifest(batch_path, raw)
     batch_id = build_id("screening_batch", raw.get("timestamp"), batch_path.stem)
     shortlist = [normalize_candidate(item or {}, batch_id) for item in (raw.get("shortlist") or [])]
 
@@ -574,6 +589,8 @@ def load_screening_batch(path: str | None = None) -> dict[str, Any]:
         "generated_at": raw.get("timestamp"),
         "source_scan_timestamp": raw.get("source_scan_timestamp"),
         "path": str(batch_path.resolve()),
+        "manifest": manifest,
+        "manifest_path": (manifest or {}).get("manifest_path"),
         "pool": raw.get("pool"),
         "pool_label": raw.get("pool_label"),
         "candidate_count": len(shortlist),
@@ -627,6 +644,7 @@ def load_confirmation(path: str | None = None) -> dict[str, Any]:
         raise FileNotFoundError("confirmation result not found")
 
     raw = load_json(confirm_path)
+    manifest = load_sidecar_manifest(confirm_path, raw)
     morning_batch_id = build_id("screening_batch", raw.get("source_morning_timestamp"), "morning")
     midday_batch_id = build_id("screening_batch", raw.get("verified_against_scan_timestamp"), "midday")
 
@@ -664,6 +682,8 @@ def load_confirmation(path: str | None = None) -> dict[str, Any]:
         "downgraded": downgraded,
         "fresh_candidates": fresh_candidates,
         "path": str(confirm_path.resolve()),
+        "manifest": manifest,
+        "manifest_path": (manifest or {}).get("manifest_path"),
     }
 
 
@@ -673,6 +693,7 @@ def load_decision_brief(path: str | None = None) -> dict[str, Any]:
         raise FileNotFoundError("decision brief not found")
 
     raw = load_json(brief_path)
+    manifest = load_sidecar_manifest(brief_path, raw)
     summary = raw.get("summary") or {}
     watchlist = raw.get("watchlist") or {}
     screener = raw.get("screener") or {}
@@ -742,6 +763,8 @@ def load_decision_brief(path: str | None = None) -> dict[str, Any]:
             "confirmation": confirmation_path,
             "confirmation_alias": confirmation_alias_path,
         },
+        "manifest": manifest,
+        "manifest_path": (manifest or {}).get("manifest_path"),
     }
 
 

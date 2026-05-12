@@ -37,6 +37,16 @@ export class ApiError extends Error {
 
 type JsonBody = Record<string, unknown> | unknown[];
 
+const backendOrigin =
+  process.env.NEXT_PUBLIC_PRISM_BACKEND_ORIGIN || process.env.PRISM_BACKEND_ORIGIN || "";
+
+function resolveApiUrl(path: string) {
+  if (!backendOrigin) {
+    return path;
+  }
+  return new URL(path, backendOrigin).toString();
+}
+
 async function readPayload(response: Response) {
   const text = await response.text();
   if (!text) {
@@ -89,7 +99,7 @@ async function fetchJson<T>(path: string, init?: RequestInit & { json?: JsonBody
     request.body = JSON.stringify(init.json);
   }
 
-  const response = await fetch(path, request);
+  const response = await fetch(resolveApiUrl(path), request);
   const payload = await readPayload(response);
 
   if (!response.ok) {
@@ -100,7 +110,7 @@ async function fetchJson<T>(path: string, init?: RequestInit & { json?: JsonBody
 }
 
 async function fetchText(path: string): Promise<string> {
-  const response = await fetch(path);
+  const response = await fetch(resolveApiUrl(path));
   const text = await response.text();
 
   if (!response.ok) {
@@ -214,15 +224,16 @@ export const api = {
   preview(path: string) {
     return fetchJson<PreviewPayload>(`/api/preview?path=${encodeURIComponent(path)}`);
   },
-  getRefreshStatus(page: string) {
-    return fetchJson<RefreshStatus>(`/api/refresh/status?page=${encodeURIComponent(page)}`);
+  getRefreshStatus(page: string, options: { auto?: boolean } = {}) {
+    const auto = options.auto ? "&auto=1" : "";
+    return fetchJson<RefreshStatus>(`/api/refresh/status?page=${encodeURIComponent(page)}${auto}`);
   },
   getReadinessLive() {
     return fetchJson<ReadinessPayload & { generated_at?: string; trade_date?: string }>(
       "/api/readiness/live",
     );
   },
-  triggerRefresh(payload: { page: string; task_name?: string; force?: boolean }) {
+  triggerRefresh(payload: { page: string; task_name?: string; force?: boolean; reason?: string }) {
     return fetchJson<RefreshTriggerResponse>("/api/refresh/trigger", {
       method: "POST",
       json: payload,

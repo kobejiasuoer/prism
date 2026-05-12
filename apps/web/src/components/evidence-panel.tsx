@@ -9,6 +9,7 @@ import { PreviewDrawer, type PreviewDrawerState } from "./preview-drawer";
 import { SourceCard } from "./source-card";
 import { api } from "@/lib/api";
 import { useRefreshStatus, useTriggerRefresh } from "@/lib/hooks";
+import { formatCooldown, readinessModeCopy, refreshReasonCopy, refreshReasonLabel } from "@/lib/readiness-copy";
 import type { BasicCard, SourceCardData } from "@/lib/types";
 
 type EvidenceRefreshPage = "today" | "watchlist" | "opportunities" | "review";
@@ -47,7 +48,7 @@ export function EvidencePanel({
   eyebrow?: string;
 }) {
   const refreshPage = mode === "ask" ? "" : page || "";
-  const refresh = useRefreshStatus(refreshPage, Boolean(refreshPage));
+  const refresh = useRefreshStatus(refreshPage, Boolean(refreshPage), { auto: true });
   const trigger = useTriggerRefresh(refreshPage, { stockCode });
   const [message, setMessage] = useState("");
   const [preview, setPreview] = useState<PreviewDrawerState>({
@@ -60,6 +61,13 @@ export function EvidencePanel({
   const canRefresh = Boolean(refreshPage && refresh.data?.recommended_task?.task_name);
   const isCooling = Boolean(refresh.data && !refresh.data.cooldown?.ready);
   const runningCount = refresh.data?.running?.length || 0;
+  const autoDecision = refresh.data?.auto_refresh;
+  const blockedReasons = autoDecision?.blocked_reasons || [];
+  const autoReasons = autoDecision?.reason_codes || [];
+  const lastAuto = refresh.data?.last_auto_refresh;
+  const readinessCopy = readinessModeCopy(refresh.data?.readiness_mode);
+  const firstReason = (blockedReasons.length ? blockedReasons : autoReasons)[0];
+  const firstReasonDetail = firstReason ? refreshReasonCopy(firstReason).detail : "";
 
   async function openArtifact(card: BasicCard) {
     const path = artifactPath(card);
@@ -129,7 +137,7 @@ export function EvidencePanel({
     }
     setMessage("");
     trigger.mutate(
-      { force },
+      { force, reason: force ? "manual_force_from_evidence_panel" : "manual_from_evidence_panel" },
       {
         onSuccess: (payload) => {
           setMessage(`${payload.task.title || payload.task.task_name} 已启动`);
@@ -182,10 +190,17 @@ export function EvidencePanel({
                 <Badge tone={refresh.data.stale_count ? "warning" : "positive"}>
                   过期源 {refresh.data.stale_count}
                 </Badge>
+                {refresh.data.readiness_mode ? <Badge tone={readinessCopy.tone}>{readinessCopy.title}</Badge> : null}
+                {refresh.data.recommended_task?.task_name ? (
+                  <Badge tone={refresh.data.recommended_task.kind === "lightweight" ? "info" : "watch"}>
+                    建议 {refresh.data.recommended_task.title || refresh.data.recommended_task.task_name}
+                  </Badge>
+                ) : null}
                 {runningCount ? <Badge tone="watch">运行中 {runningCount}</Badge> : null}
                 {isCooling ? (
                   <Badge tone="watch">冷却 {refresh.data.cooldown.remaining_seconds}s</Badge>
                 ) : null}
+                {autoDecision?.triggered ? <Badge tone="positive">已自动补刷</Badge> : null}
               </>
             ) : mode === "ask" ? (
               <>
@@ -197,6 +212,60 @@ export function EvidencePanel({
             )}
             {message ? <span className="text-[12px] text-[var(--text-tertiary)]">{message}</span> : null}
           </div>
+
+          {refreshPage && refresh.data ? (
+            <div className="mb-4 grid grid-cols-1 gap-2 lg:grid-cols-2">
+              <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-secondary)]">
+                  <span className="font-medium text-[var(--text-primary)]">自动刷新</span>
+                  <Badge tone={autoDecision?.allowed ? "positive" : "watch"}>
+                    {autoDecision?.allowed ? "允许自动补刷" : "未自动补刷"}
+                  </Badge>
+                  <span>冷却 {formatCooldown(refresh.data.cooldown?.remaining_seconds)}</span>
+                  {refresh.data.cooldown?.next_allowed_at ? <span>下次 {refresh.data.cooldown.next_allowed_at}</span> : null}
+                </div>
+                <div className="mt-1 text-[12px] leading-5 text-[var(--text-tertiary)]">
+                  {autoDecision?.summary || "等待刷新策略判断。"}
+                </div>
+                {firstReasonDetail ? (
+                  <div className="mt-1 text-[12px] leading-5 text-[var(--text-tertiary)]">
+                    {firstReasonDetail}
+                  </div>
+                ) : null}
+                {blockedReasons.length ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {blockedReasons.slice(0, 4).map((reason) => (
+                      <Badge key={reason} tone="warning">{refreshReasonLabel(reason)}</Badge>
+                    ))}
+                  </div>
+                ) : autoReasons.length ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {autoReasons.slice(0, 4).map((reason) => (
+                      <Badge key={reason} tone="info">{refreshReasonLabel(reason)}</Badge>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-secondary)]">
+                  <span className="font-medium text-[var(--text-primary)]">最近自动刷新</span>
+                  {lastAuto?.task_name ? <Badge tone="info">{lastAuto.task_name}</Badge> : <Badge tone="watch">暂无</Badge>}
+                  {lastAuto?.force ? <Badge tone="warning">force</Badge> : null}
+                </div>
+                <div className="mt-1 text-[12px] leading-5 text-[var(--text-tertiary)]">
+                  {lastAuto ? `${lastAuto.ts || "-"} · ${lastAuto.reason || "-"}` : "还没有自动刷新审计事件。"}
+                </div>
+                {refresh.data.active_auto_windows?.length ? (
+                  <div className="mt-2 text-[11px] text-[var(--text-tertiary)]">
+                    当前窗口：{refresh.data.active_auto_windows.map((window) => window.label).join(" / ")}
+                  </div>
+                ) : (
+                  <div className="mt-2 text-[11px] text-[var(--text-tertiary)]">当前不在自动刷新窗口。</div>
+                )}
+              </div>
+            </div>
+          ) : null}
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <div>

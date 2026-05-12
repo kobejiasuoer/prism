@@ -95,6 +95,14 @@ class PortfolioEndpointsTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("cash", response.json().get("detail", ""))
 
+    def test_allow_unsafe_requires_note(self) -> None:
+        response = self.client.post(
+            "/api/portfolio/mode",
+            json={"mode": "live_small", "allow_unsafe": True},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("note", response.json().get("detail", ""))
+
     def test_happy_path_flow(self) -> None:
         # 1. shadow mode + initial cash
         r1 = self.client.post(
@@ -165,6 +173,19 @@ class PortfolioEndpointsTests(unittest.TestCase):
         markers = response.json()["account"]["no_fill_intents"]
         self.assertEqual(len(markers), 1)
         self.assertEqual(markers[0]["intent_key"], "wl-priority-sh600690")
+
+    def test_allow_unsafe_mode_stays_risky_in_readiness(self) -> None:
+        self.client.post("/api/portfolio/cash", json={"delta": 5000.0, "reason": "seed"})
+        response = self.client.post(
+            "/api/portfolio/mode",
+            json={"mode": "live_small", "allow_unsafe": True, "note": "temporary bypass for audit recovery"},
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["account"]["unsafe_bypass_active"])
+        warning_codes = {item["code"] for item in (body["readiness"].get("warnings") or [])}
+        self.assertIn("account_unsafe_bypass_active", warning_codes)
+        self.assertNotEqual(body["readiness"]["readiness_mode"], "live_ready")
 
 
 if __name__ == "__main__":  # pragma: no cover

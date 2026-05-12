@@ -42,6 +42,8 @@ echo "[stage] command_brief:start 正在刷新总控简报"
 TRADE_DATE="$RUN_DATE" \
 RUN_STAMP="$RUN_STAMP" \
 SEND_TO_FEISHU="$COMMAND_SEND_TO_FEISHU" \
+FEISHU_CHANNEL="${FEISHU_CHANNEL:-}" \
+FEISHU_TARGET="${FEISHU_TARGET:-}" \
 bash "apps/scripts/run_command_brief.sh"
 echo "[stage] command_brief:done 总控简报已刷新"
 

@@ -234,12 +234,17 @@ def _build_source(
     fallback_trade_date_keys: Sequence[str] = (),
 ) -> dict[str, Any]:
     payload = payload or {}
-    raw_value = payload.get(timestamp_field)
+    manifest = payload.get("manifest") if isinstance(payload.get("manifest"), Mapping) else None
+    raw_value = (
+        (manifest or {}).get("asof")
+        or (manifest or {}).get("fetched_at")
+        or payload.get(timestamp_field)
+    )
     parsed = _parse_dt(raw_value)
     age = _age_seconds(now, parsed)
 
-    raw_trade_date = payload.get(trade_date_field)
-    if not raw_trade_date:
+    raw_trade_date = (manifest or {}).get("trade_date") or payload.get(trade_date_field)
+    if not raw_trade_date and not manifest:
         for alt in fallback_trade_date_keys:
             if payload.get(alt):
                 raw_trade_date = payload.get(alt)
@@ -251,6 +256,28 @@ def _build_source(
     available = bool(parsed)
     reasons: list[str] = []
     stale = False
+
+    if not manifest:
+        stale = True
+        reasons.append("manifest_missing")
+    else:
+        manifest_status = str(manifest.get("status") or "").strip().lower()
+        manifest_freshness = str(manifest.get("freshness_status") or "").strip().lower()
+        if manifest_status and manifest_status != "ok":
+            stale = True
+            reasons.append(f"manifest_status_{manifest_status}")
+        if manifest_freshness in {"stale", "expired"}:
+            stale = True
+            reasons.append(f"freshness_{manifest_freshness}")
+        elif not manifest_freshness:
+            stale = True
+            reasons.append("freshness_unknown")
+        if not bool(manifest.get("live_small_allowed")):
+            stale = True
+            reasons.append("live_small_not_allowed")
+        if bool(manifest.get("fallback_used")) and not bool(manifest.get("live_small_allowed")):
+            stale = True
+            reasons.append("fallback_not_allowed")
 
     if not available:
         stale = True
@@ -264,11 +291,17 @@ def _build_source(
         stale = True
         reasons.append("trade_date_unknown")
 
-    if age is not None and age > threshold_seconds:
+    if not manifest and age is not None and age > threshold_seconds:
         stale = True
         reasons.append("age_exceeded")
 
-    detail = payload.get("trade_date") or payload.get("pool_label") or payload.get("validation_status") or ""
+    detail = (
+        (manifest or {}).get("provider")
+        or payload.get("trade_date")
+        or payload.get("pool_label")
+        or payload.get("validation_status")
+        or ""
+    )
 
     return {
         "key": key,
@@ -280,8 +313,14 @@ def _build_source(
         "age_seconds": age,
         "age_label": _age_label(age),
         "stale": stale,
-        "stale_after_seconds": threshold_seconds,
+        "stale_after_seconds": int((manifest or {}).get("ttl_seconds") or threshold_seconds),
         "stale_reasons": reasons,
+        "provider": (manifest or {}).get("provider"),
+        "provider_role": (manifest or {}).get("provider_role"),
+        "freshness_status": (manifest or {}).get("freshness_status"),
+        "fallback_used": bool((manifest or {}).get("fallback_used")),
+        "live_small_allowed": bool((manifest or {}).get("live_small_allowed")) if manifest else False,
+        "manifest_path": (manifest or {}).get("manifest_path"),
     }
 
 
@@ -688,6 +727,10 @@ def _build_account_state(
     warnings: list[dict[str, Any]] = []
     recommended: list[str] = []
 
+    # Reconciliation delta thresholds for live_small (CNY)
+    RECON_CASH_DELTA_THRESHOLD = 100.0
+    RECON_EQUITY_DELTA_THRESHOLD = 200.0
+
     if account_book is None:
         # Caller didn't opt-in to account-state evaluation.  Treat as
         # research mode and surface a single warning so the UI can prompt
@@ -710,6 +753,8 @@ def _build_account_state(
 
     mode = str(account_book.get("mode") or "research").strip().lower()
     cash_balance = _to_money(account_book.get("cash_balance"))
+    unsafe_bypass_active = bool(account_book.get("unsafe_bypass_active"))
+    unsafe_bypass_note = str(account_book.get("unsafe_bypass_note") or "").strip()
     fills = list(account_book.get("fills") or [])
     positions = _summarize_positions(fills)
     open_positions = [p for p in positions.values() if p["qty"] > 0]
@@ -735,6 +780,18 @@ def _build_account_state(
     )
 
     if mode == "live_small":
+        if unsafe_bypass_active:
+            warnings.append(
+                {
+                    "code": "account_unsafe_bypass_active",
+                    "label": "Unsafe Bypass",
+                    "message": (
+                        f"当前 live_small 是通过 allow_unsafe 进入的，原因：{unsafe_bypass_note or '未填写'}。"
+                        "在重新完成正常校验前，不要把页面状态视为绿色放行。"
+                    ),
+                    "recommended_task": "portfolio_mode",
+                }
+            )
         if cash_balance <= 0:
             blockers.append(
                 {
@@ -757,6 +814,26 @@ def _build_account_state(
                 }
             )
             recommended.append("portfolio_reconcile")
+        else:
+            # Reconciliation is fresh — check delta thresholds
+            last_recon = recon_summary.get("last")
+            if last_recon:
+                delta_cash = abs(_to_money(last_recon.get("delta_cash")))
+                delta_equity = abs(_to_money(last_recon.get("delta_equity")))
+                if delta_cash > RECON_CASH_DELTA_THRESHOLD or delta_equity > RECON_EQUITY_DELTA_THRESHOLD:
+                    blockers.append(
+                        {
+                            "code": "account_reconcile_delta_exceeded",
+                            "label": "对账差异超阈值",
+                            "message": (
+                                f"最近对账现金差异 {delta_cash:.2f} 元、权益差异 {delta_equity:.2f} 元，"
+                                f"超过阈值（现金 {RECON_CASH_DELTA_THRESHOLD:.0f}、权益 {RECON_EQUITY_DELTA_THRESHOLD:.0f}），"
+                                "请先核对并修正账本或重新对账。"
+                            ),
+                            "recommended_task": "portfolio_reconcile",
+                        }
+                    )
+                    recommended.append("portfolio_reconcile")
         if pending:
             blockers.append(
                 {
@@ -798,7 +875,16 @@ def _build_account_state(
         and cash_balance > 0
         and recon_summary["fresh"]
         and not pending
+        and not unsafe_bypass_active
     )
+
+    # Additional check: if reconciliation is fresh but delta exceeds threshold, not ready
+    if ready_for_live_small and recon_summary.get("last"):
+        last_recon = recon_summary["last"]
+        delta_cash = abs(_to_money(last_recon.get("delta_cash")))
+        delta_equity = abs(_to_money(last_recon.get("delta_equity")))
+        if delta_cash > RECON_CASH_DELTA_THRESHOLD or delta_equity > RECON_EQUITY_DELTA_THRESHOLD:
+            ready_for_live_small = False
 
     return {
         "mode": mode,
@@ -812,6 +898,8 @@ def _build_account_state(
         "equity_at_cost": equity_at_cost,
         "positions_count": len(open_positions),
         "fills_count": len(fills),
+        "unsafe_bypass_active": unsafe_bypass_active,
+        "unsafe_bypass_note": unsafe_bypass_note,
         "reconciliation": recon_summary,
         "unreconciled_intents": pending,
         "blockers": blockers,

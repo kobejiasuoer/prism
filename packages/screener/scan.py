@@ -54,25 +54,10 @@ except ModuleNotFoundError:
 # 清除代理环境变量 — 手动按需启用
 for k in ['http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'no_proxy', 'NO_PROXY']:
     os.environ.pop(k, None)
-import urllib.request as _ureq
-
-# 无代理 opener（新浪等直连）
-_NO_PROXY_OPENER = _ureq.build_opener(_ureq.ProxyHandler({}))
-# 走 Clash 代理 opener（东方财富等需要代理的接口）
-_PROXY = os.environ.get('PRISM_PROXY_URL', '')
-_PROXY_OPENER = _ureq.build_opener(_ureq.ProxyHandler({'http': _PROXY, 'https': _PROXY})) if _PROXY else _NO_PROXY_OPENER
-
-# 默认直连
-_ureq.install_opener(_NO_PROXY_OPENER)
-
-from urllib.request import Request, urlopen
-from urllib.error import URLError
 from datetime import datetime
 
-try:
-    import akshare as ak
-except Exception:
-    ak = None
+from prism_data import build_pipeline_manifest, load_manifest_file, write_sidecar_manifest
+from prism_data.service import get_data_gateway, get_dataset_repository
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SKILL_DIR = Path(BASE_DIR).parent
@@ -86,41 +71,114 @@ FUNDAMENTALS_CACHE_DIR = DATA_DIR / 'fundamentals_cache'
 FUNDAMENTALS_CACHE_TTL_SECONDS = 12 * 60 * 60
 FUNDAMENTALS_BATCH_SIZE = 40
 REALTIME_QUOTE_BATCH_SIZE = 40
-H_SINA = {'Referer': 'https://finance.sina.com.cn', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'}
-H_EM = {'Referer': 'https://data.eastmoney.com', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'}
 
 
-def http_get(url, headers, timeout=10, retries=1, delay=2, use_proxy=False):
-    """通用HTTP GET，支持重试。use_proxy=True 走 Clash 代理"""
-    opener = _PROXY_OPENER if use_proxy else _NO_PROXY_OPENER
-    for attempt in range(retries + 1):
-        try:
-            req = Request(url, headers=headers)
-            with opener.open(req, timeout=timeout) as r:
-                return r.read()
-        except (URLError, OSError, Exception) as e:
-            if attempt < retries:
-                print(f'    [retry] {url[:60]}... ({e}), attempt {attempt+1}/{retries}', file=sys.stderr)
-                time.sleep(delay * (attempt + 1))
-            else:
-                print(f'    [fail] {url[:60]}... ({e})', file=sys.stderr)
-                return None
+def _data_gateway():
+    return get_data_gateway()
 
 
-def get_sina(url, timeout=10, retries=2):
-    """新浪接口返回GBK编码"""
-    raw = http_get(url, H_SINA, timeout=timeout, retries=retries, delay=1)
-    if raw is None:
+def _dataset_repository():
+    return get_dataset_repository()
+
+
+def _load_sidecar_manifest(path):
+    if not path:
         return None
-    return raw.decode('gbk', errors='replace')
+    target = Path(path).expanduser()
+    return load_manifest_file(target.with_suffix(".manifest.json"))
 
 
-def get_em(url, timeout=8, retries=1):
-    """东方财富接口返回UTF-8编码，走代理避免IP封锁"""
-    raw = http_get(url, H_EM, timeout=timeout, retries=retries, delay=1, use_proxy=True)
-    if raw is None:
-        return None
-    return raw.decode('utf-8', errors='replace')
+def _ingress_summary(manifest, manifest_path):
+    if not manifest:
+        return {
+            "dataset": "",
+            "manifest_path": str(manifest_path) if manifest_path else "",
+            "freshness_status": "expired",
+            "live_small_allowed": False,
+        }
+    return {
+        "dataset": manifest.get("dataset"),
+        "manifest_path": str(manifest_path) if manifest_path else manifest.get("manifest_path") or "",
+        "freshness_status": manifest.get("freshness_status"),
+        "live_small_allowed": bool(manifest.get("live_small_allowed")),
+    }
+
+
+def _manifest_source_label(manifest, *, suffix=""):
+    if not manifest:
+        return "none"
+    provider = str(manifest.get("provider") or "unknown").strip()
+    if suffix:
+        provider = f"{provider}{suffix}"
+    if manifest.get("fallback_used"):
+        return f"{provider}-fallback"
+    return provider
+
+
+def _dedupe_manifests(manifests):
+    seen = set()
+    unique = []
+    for manifest in manifests:
+        if not isinstance(manifest, dict):
+            continue
+        manifest_path = str(manifest.get("manifest_path") or "").strip()
+        request_key = str(manifest.get("request_key") or "").strip()
+        signature = (
+            str(manifest.get("dataset") or "").strip(),
+            str(manifest.get("provider") or "").strip(),
+            request_key,
+            manifest_path,
+        )
+        if signature in seen:
+            continue
+        seen.add(signature)
+        unique.append(manifest)
+    return unique
+
+
+def _scan_upstream_manifests(trade_date, *, pool, stage1_codes, stage2_codes):
+    repo = _dataset_repository()
+    manifests = []
+    flags = []
+    code_keys = {str(code).strip() for code in stage2_codes if str(code).strip()}
+    stage1_key_set = {str(code).strip() for code in stage1_codes if str(code).strip()}
+    pool_keys = {str(pool).strip()}
+    if pool == 'aggressive':
+        pool_keys.update({'hs300', 'zz500', 'hs300-csindex', 'zz500-csindex', 'hs300-sina', 'zz500-sina'})
+    elif pool == 'hs300':
+        pool_keys.update({'hs300-csindex', 'hs300-sina'})
+
+    def add_exact(dataset_name, keys, *, required=False):
+        for key in keys:
+            manifest = repo.load_manifest(dataset_name, trade_date, key)
+            if manifest:
+                manifests.append(manifest)
+            elif required:
+                flags.append(f'missing_upstream_manifest:{dataset_name}:{key}')
+
+    def add_by_prefix(dataset_name, prefixes):
+        for manifest in repo.list_manifests(dataset_name, trade_date):
+            request_key = str(manifest.get('request_key') or '').strip()
+            if not request_key or '__' in request_key:
+                continue
+            if any(request_key.startswith(prefix) for prefix in prefixes):
+                manifests.append(manifest)
+
+    add_exact('quotes.pool', pool_keys)
+    add_exact('index.constituents', pool_keys)
+    add_by_prefix('quotes.batch', {'scan-quotes-'})
+    add_by_prefix('capital_flow.batch', {'scan-capital-'})
+    add_by_prefix('fundamentals.batch', {'scan-fundamentals-'})
+    add_exact('bars.daily', stage1_key_set, required=True)
+    add_exact('capital_flow.daily', code_keys | {f'{code}-history' for code in code_keys} | {f'{code}-ths' for code in code_keys})
+    add_exact('fundamentals.snapshot', code_keys | {f'{code}-ths' for code in code_keys})
+    add_exact('announcements.latest', code_keys)
+
+    return _dedupe_manifests(manifests), flags
+
+
+def _today_trade_date():
+    return datetime.now().strftime('%Y-%m-%d')
 
 
 def get_sina_code(code):
@@ -269,7 +327,7 @@ def fetch_capital_flow_batch_today(codes):
     if not codes:
         return {}
 
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = _today_trade_date()
     snapshot = {}
     deduped_codes = []
     seen = set()
@@ -280,34 +338,16 @@ def fetch_capital_flow_batch_today(codes):
 
     for i in range(0, len(deduped_codes), CAPITAL_FLOW_BATCH_SIZE):
         chunk = deduped_codes[i:i + CAPITAL_FLOW_BATCH_SIZE]
-        secids = ','.join(get_em_secid(code) for code in chunk)
-        url = (f'https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2'
-               f'&secids={secids}&fields=f12,f62,f66')
-        text = get_em(url, timeout=8, retries=1)
-        if not text:
-            continue
         try:
-            data = json.loads(text)
-            diff = (data.get('data') or {}).get('diff', [])
-        except (json.JSONDecodeError, AttributeError, TypeError):
+            result = _data_gateway().fetch_capital_flow_batch(
+                chunk,
+                trade_date=today,
+                key=f"scan-capital-{i // CAPITAL_FLOW_BATCH_SIZE}",
+            )
+            data = result.data if isinstance(result.data, dict) else {}
+        except Exception:
             continue
-
-        for item in diff:
-            raw_code = item.get('f12')
-            if raw_code in (None, ''):
-                continue
-            code = str(raw_code)
-            if code.isdigit():
-                code = code.zfill(6)
-            main_raw = item.get('f62')
-            super_raw = item.get('f66')
-            if main_raw in (None, '-') and super_raw in (None, '-'):
-                continue
-            normalized_row = normalize_capital_flow_row({
-                'date': today,
-                'main_net': _safe_float(main_raw),
-                'super_large': _safe_float(super_raw),
-            }, source_unit=UNIT_YUAN)
+        for code, normalized_row in data.items():
             if normalized_row:
                 snapshot[code] = normalized_row
 
@@ -318,18 +358,17 @@ def fetch_capital_flow_batch_today(codes):
 
 
 def _fetch_capital_flow_history_em(code, limit=5, timeout=6, retries=0):
-    secid = get_em_secid(code)
-    url = (f'https://push2.eastmoney.com/api/qt/stock/fflow/daykline/get?'
-           f'secid={secid}&fields1=f1,f2,f3&fields2=f51,f52,f53,f54,f55,f56&lmt={limit}')
-    text = get_em(url, timeout=timeout, retries=retries)
-    if not text:
-        return None
     try:
-        data = json.loads(text)
-        klines = (data.get('data') or {}).get('klines', [])
-        rows = _parse_em_capital_flow_daykline(klines, limit=limit)
-        return rows or None
-    except (json.JSONDecodeError, AttributeError, TypeError):
+        result = _data_gateway().fetch_capital_flow(
+            code,
+            trade_date=_today_trade_date(),
+            key=f"{code}-history",
+            allow_fallback=False,
+            count=limit,
+        )
+        rows = list(result.data or [])
+        return _normalize_capital_flow_rows(rows, limit=limit) or None
+    except Exception:
         return None
 
 
@@ -437,33 +476,22 @@ def fetch_fundamentals_batch(codes):
 
     for i in range(0, len(deduped_codes), FUNDAMENTALS_BATCH_SIZE):
         chunk = deduped_codes[i:i + FUNDAMENTALS_BATCH_SIZE]
-        secids = ','.join(get_em_secid(code) for code in chunk)
-        url = (f'https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2'
-               f'&secids={secids}&fields=f12,f9,f20')
-        text = get_em(url, timeout=8, retries=1)
-        if not text:
-            continue
         try:
-            data = json.loads(text)
-            diff = (data.get('data') or {}).get('diff', [])
-        except (json.JSONDecodeError, AttributeError, TypeError):
+            result = _data_gateway().fetch_fundamentals_batch(
+                chunk,
+                trade_date=_today_trade_date(),
+                key=f"scan-fundamentals-{i // FUNDAMENTALS_BATCH_SIZE}",
+            )
+            data = result.data if isinstance(result.data, dict) else {}
+        except Exception:
             continue
-
-        for item in diff:
-            raw_code = item.get('f12')
-            if raw_code in (None, ''):
-                continue
-            code = str(raw_code)
-            if code.isdigit():
-                code = code.zfill(6)
-            pe_raw = item.get('f9')
-            mv_raw = item.get('f20')
+        for code, item in data.items():
             normalized = _normalize_fundamentals({
-                'pe_ttm': _safe_float(pe_raw, None) if pe_raw not in (None, '', '-') else None,
+                'pe_ttm': item.get('pe_ttm') or item.get('pe'),
                 'pb': None,
                 'roe': None,
                 'margin': None,
-                'total_mv': _safe_float(mv_raw, None) / 1e8 if mv_raw not in (None, '', '-') else None,
+                'total_mv': item.get('total_mv') or item.get('total_mv_yi'),
                 'industry': None,
                 'concept': None,
             })
@@ -491,39 +519,33 @@ def fetch_realtime_quotes_batch(codes):
 
     for i in range(0, len(deduped_codes), REALTIME_QUOTE_BATCH_SIZE):
         chunk = deduped_codes[i:i + REALTIME_QUOTE_BATCH_SIZE]
-        secids = ','.join(get_em_secid(code) for code in chunk)
-        url = (f'https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2'
-               f'&secids={secids}&fields=f12,f14,f2,f3,f17,f15,f16,f5,f6,f8,f9,f20,f18')
-        text = get_em(url, timeout=8, retries=1)
-        if not text:
-            continue
         try:
-            data = json.loads(text)
-            diff = (data.get('data') or {}).get('diff', [])
-        except (json.JSONDecodeError, AttributeError, TypeError):
+            result = _data_gateway().fetch_quotes_batch(
+                chunk,
+                trade_date=_today_trade_date(),
+                key=f"scan-quotes-{i // REALTIME_QUOTE_BATCH_SIZE}",
+            )
+            rows = list(result.data or [])
+        except Exception:
             continue
-
-        for item in diff:
-            raw_code = item.get('f12')
-            if raw_code in (None, ''):
+        for item in rows:
+            code = str(item.get('code') or '').strip()
+            if len(code) != 6 or not code.isdigit():
                 continue
-            code = str(raw_code)
-            if code.isdigit():
-                code = code.zfill(6)
             snapshot[code] = {
                 'code': code,
-                'name': item.get('f14') or '',
-                'price': _safe_float(item.get('f2')),
-                'change_pct': _safe_float(item.get('f3')),
-                'open': _safe_float(item.get('f17')),
-                'high': _safe_float(item.get('f15')),
-                'low': _safe_float(item.get('f16')),
-                'volume': _safe_float(item.get('f5')) * 100,  # 东方财富 f5 为手
-                'amount': _safe_float(item.get('f6')),
-                'turnover': _safe_float(item.get('f8')),
-                'pe': _safe_float(item.get('f9')),
-                'mktcap': _safe_float(item.get('f20')),
-                'prev': _safe_float(item.get('f18')),
+                'name': item.get('name') or '',
+                'price': _safe_float(item.get('price')),
+                'change_pct': _safe_float(item.get('change_pct')),
+                'open': _safe_float(item.get('open')),
+                'high': _safe_float(item.get('high')),
+                'low': _safe_float(item.get('low')),
+                'volume': _safe_float(item.get('volume')),
+                'amount': _safe_float(item.get('amount')),
+                'turnover': _safe_float(item.get('turnover')),
+                'pe': _safe_float(item.get('pe_ttm') if item.get('pe_ttm') is not None else item.get('pe')),
+                'mktcap': _safe_float(item.get('mktcap')),
+                'prev': _safe_float(item.get('prev_close')),
             }
 
         if i + REALTIME_QUOTE_BATCH_SIZE < len(deduped_codes):
@@ -606,23 +628,20 @@ def _load_index_cons_from_cache(source_pool):
 
 def fetch_announcements(code, count=5):
     """抓取东方财富公告标题，用于风险标签识别。"""
-    url = (
-        "https://np-anotice-stock.eastmoney.com/api/security/ann"
-        f"?sr=-1&page_size={count}&page_index=1"
-        f"&ann_type=A&client_source=web&stock_list={code}"
-    )
-    text = get_em(url, timeout=8, retries=1)
-    if text is None:
-        return []
     try:
-        data = json.loads(text)
-        items = data.get('data', {}).get('list', [])
+        result = _data_gateway().fetch_announcements(
+            code,
+            trade_date=_today_trade_date(),
+            key=code,
+            count=count,
+        )
+        items = list(result.data or [])
         result = []
         for item in items[:count]:
             title = item.get('title', '')
             clean_title = re.sub(r'^[\w\u4e00-\u9fff]+[:：]', '', title).strip()
             result.append({
-                'date': item.get('notice_date', '')[:10],
+                'date': str(item.get('date') or item.get('publish_date') or '')[:10],
                 'title': clean_title or title,
                 'source': item.get('source', '东方财富'),
             })
@@ -655,30 +674,29 @@ def classify_notice_risk(announcements):
 
 def _load_index_cons_with_em_quotes(symbol, source_pool):
     """官方指数成分 + 东方财富批量实时快照，用于新浪 node 失效时兜底。"""
-    if ak is None:
-        print(f'  [warn] akshare unavailable, cannot fallback {source_pool} {symbol}', file=sys.stderr)
-        return []
-
     try:
-        df = ak.index_stock_cons_csindex(symbol=symbol)
+        result = _data_gateway().fetch_index_constituents(
+            symbol,
+            trade_date=_today_trade_date(),
+            source='csindex',
+            key=f'{source_pool}-csindex',
+        )
+        rows = list(result.data or [])
     except Exception as e:
-        print(f'  [warn] akshare csindex {symbol} failed: {e}', file=sys.stderr)
+        print(f'  [warn] index constituents {symbol} failed: {e}', file=sys.stderr)
         return []
-
-    if df is None or df.empty:
+    if not rows:
         return []
-
-    rows = df.to_dict(orient='records')
     codes = []
     name_map = {}
     for row in rows:
-        code = str(row.get('成分券代码') or '').strip()
+        code = str(row.get('code') or '').strip()
         if code.isdigit():
             code = code.zfill(6)
         if not code:
             continue
         codes.append(code)
-        name_map[code] = (row.get('成分券名称') or '').strip()
+        name_map[code] = str(row.get('name') or '').strip()
 
     realtime = fetch_realtime_quotes_batch(codes)
     all_stocks = []
@@ -701,19 +719,19 @@ def _load_index_cons_with_em_quotes(symbol, source_pool):
 
 def _load_index_cons_with_sina_quotes(symbol, source_pool):
     """AkShare-Sina 指数成分行情兜底，适合 000300/000905 这类少数主流指数。"""
-    if ak is None:
-        return []
-
     try:
-        df = ak.index_stock_cons_sina(symbol=symbol)
+        result = _data_gateway().fetch_index_constituents(
+            symbol,
+            trade_date=_today_trade_date(),
+            source='sina',
+            key=f'{source_pool}-sina',
+        )
     except Exception as e:
-        print(f'  [warn] akshare sina-index {symbol} failed: {e}', file=sys.stderr)
+        print(f'  [warn] index constituents(sina) {symbol} failed: {e}', file=sys.stderr)
         return []
-
-    if df is None or df.empty:
+    rows = list(result.data or [])
+    if not rows:
         return []
-
-    rows = df.to_dict(orient='records')
     realtime = fetch_realtime_quotes_batch([
         str(row.get('code') or '').zfill(6)
         for row in rows
@@ -751,46 +769,26 @@ def _load_index_cons_with_sina_quotes(symbol, source_pool):
 
 def load_node_with_quotes(node, pages=3):
     """从新浪获取指定板块成分股+实时行情（含PE/PB/市值）"""
+    try:
+        result = _data_gateway().fetch_market_pool(
+            node,
+            trade_date=_today_trade_date(),
+            pages=pages,
+            key=node,
+        )
+    except Exception:
+        return []
     all_stocks = []
     seen = set()
-    for page in range(1, pages + 1):
-        url = (f'https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/'
-               f'Market_Center.getHQNodeData?page={page}&num=100&sort=changepercent&asc=0&node={node}&symbol=')
-        text = get_sina(url, timeout=15, retries=2)
-        if text is None:
-            print(f'  [warn] 新浪 {node} page{page}失败，跳过', file=sys.stderr)
-            time.sleep(0.5)
+    for item in list(result.data or []):
+        code = str(item.get('code', '') or '')
+        if code in seen:
             continue
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError:
-            print(f'  [warn] 新浪 {node} page{page} JSON解析失败', file=sys.stderr)
+        normalized = _normalize_stage0_stock(item, node)
+        if not normalized:
             continue
-        for item in data:
-            code = str(item.get('code', '') or '')
-            if code in seen:
-                continue
-            normalized = _normalize_stage0_stock({
-                'code': code,
-                'name': item.get('name', ''),
-                'price': item.get('trade', 0),
-                'prev': item.get('settlement', 0),
-                'open': item.get('open', 0),
-                'high': item.get('high', 0),
-                'low': item.get('low', 0),
-                'change_pct': item.get('changepercent', 0),
-                'volume': item.get('volume', 0),
-                'amount': item.get('amount', 0),
-                'pe': item.get('per', 0),
-                'pb': item.get('pb', 0),
-                'mktcap': item.get('mktcap', 0),
-                'turnover': item.get('turnoverratio', 0),
-            }, node)
-            if not normalized:
-                continue
-            seen.add(code)
-            all_stocks.append(normalized)
-        time.sleep(0.3)
+        seen.add(code)
+        all_stocks.append(normalized)
     return all_stocks
 
 
@@ -880,21 +878,27 @@ def load_aggressive_pool_with_quotes():
 
 def fetch_sina_kline(code, days=20):
     """新浪日K线，带重试"""
-    sina_code = get_sina_code(code)
-    url = (f'https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/'
-           f'CN_MarketData.getKLineData?symbol={sina_code}&scale=240&ma=no&datalen={days}')
-    text = get_sina(url, timeout=10, retries=2)
-    if text is None:
-        return []
     try:
-        data = json.loads(text)
-        if isinstance(data, list):
-            return data
-        # 兼容 eval 风格返回
-        if text.strip().startswith('['):
-            return eval(text)
-        return []
-    except (json.JSONDecodeError, SyntaxError):
+        result = _data_gateway().fetch_kline(
+            code,
+            trade_date=_today_trade_date(),
+            key=code,
+            count=days,
+        )
+        rows = list(result.data or [])
+        return [
+            {
+                'day': str(item.get('trade_date') or item.get('day') or '')[:10],
+                'open': item.get('open'),
+                'high': item.get('high'),
+                'low': item.get('low'),
+                'close': item.get('close'),
+                'volume': item.get('volume'),
+                'amount': item.get('amount'),
+            }
+            for item in rows
+        ]
+    except Exception:
         return []
 
 
@@ -1034,9 +1038,20 @@ def fetch_capital_flow(code, prefetched_today=None):
     today_row = prefetched_today
     source = 'eastmoney-batch'
     if not today_row:
-        single_snapshot = fetch_capital_flow_batch_today([code])
-        today_row = single_snapshot.get(code)
-        source = 'eastmoney'
+        try:
+            single_snapshot = _data_gateway().fetch_capital_flow(
+                code,
+                trade_date=today,
+                key=code,
+                allow_fallback=False,
+                mode="snapshot",
+            )
+            single_rows = list(single_snapshot.data or [])
+            today_row = single_rows[-1] if single_rows else None
+            source = _manifest_source_label(single_snapshot.manifest)
+        except Exception:
+            today_row = None
+            source = 'none'
 
     if today_row:
         merged = _merge_capital_flow_rows(today_row, cached_flows)
@@ -1054,158 +1069,27 @@ def fetch_capital_flow(code, prefetched_today=None):
         _save_capital_flow_cache(code, hist)
         return hist, 'eastmoney-history'
 
+    try:
+        fallback_result = _data_gateway().fetch_capital_flow(
+            code,
+            trade_date=today,
+            key=f"{code}-ths",
+            provider_name="ths",
+        )
+        fallback_rows = _normalize_capital_flow_rows(list(fallback_result.data or []), limit=5) or None
+        if fallback_rows:
+            merged = _merge_capital_flow_rows(fallback_rows[-1], cached_flows)
+            if merged:
+                _save_capital_flow_cache(code, merged)
+                return merged, _manifest_source_label(fallback_result.manifest)
+            return fallback_rows, _manifest_source_label(fallback_result.manifest)
+    except Exception:
+        pass
+
     if cached_flows:
         return cached_flows, 'eastmoney-stale-cache'
 
     return None, 'none'
-
-
-def _ths_get(url, timeout=15):
-    """同花顺页面请求（用 urllib，走直连）"""
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        'Accept': 'text/html',
-    }
-    req = Request(url, headers=headers)
-    resp = urlopen(req, timeout=timeout)
-    if resp.status != 200:
-        return None
-    return resp.read().decode('utf-8', errors='ignore')
-
-
-def fetch_capital_flow_ths(code):
-    """同花顺 fallback：从个股页面抓取当日资金流"""
-    try:
-        text = _ths_get(f'https://stockpage.10jqka.com.cn/{code}/')
-        if not text:
-            return None
-
-        # 从页面提取总流入、总流出、净额
-        import re
-        inflow_match = re.search(r'总流入[：:](\s*<[^>]*>)*(\d[\d.]*)', text)
-        outflow_match = re.search(r'总流出[：:](\s*<[^>]*>)*(\d[\d.]*)', text)
-        net_match = re.search(r'净[\s]*额[：:](\s*<[^>]*>)*(\d[\d.]*)', text)
-
-        net_val = None
-        if net_match:
-            net_val = float(net_match.group(2)) * 1e4  # 万元 → 元
-        elif inflow_match and outflow_match:
-            inflow = float(inflow_match.group(2))
-            outflow = float(outflow_match.group(2))
-            net_val = (inflow - outflow) * 1e4
-
-        if net_val is not None:
-            today = datetime.now().strftime('%Y-%m-%d')
-            return [normalize_capital_flow_row({'date': today, 'main_net': net_val, 'super_large': 0}, source_unit=UNIT_YUAN)]
-    except Exception as e:
-        print(f'    [ths-fallback] capital flow failed for {code}: {e}', file=sys.stderr)
-    return None
-
-
-def fetch_fundamentals_ths(code, base_funda=None):
-    """同花顺 fallback：从个股页面抓取基本面，结合 EM 市值算 PE/PB"""
-    try:
-        text = _ths_get(f'https://stockpage.10jqka.com.cn/{code}/')
-        if not text:
-            return None
-
-        result = {}
-
-        # 每股收益
-        eps_match = re.search(r'每股收益[：:]\s*</dt>\s*<dd>([\d.-]+)元', text)
-        eps = float(eps_match.group(1)) if eps_match else None
-
-        # 净利润
-        profit_match = re.search(r'净利润[：:]\s*</dt>\s*<dd>([\d.-]+)亿元', text)
-        if profit_match:
-            result['net_profit'] = float(profit_match.group(1))
-
-        # 营业收入
-        rev_match = re.search(r'营业收入[：:]\s*</dt>\s*<dd>([\d.-]+)亿元', text)
-        if rev_match:
-            result['revenue'] = float(rev_match.group(1))
-
-        # 总股本
-        shares_match = re.search(r'总股本[：:]\s*</dt>\s*<dd>([\d.]+)亿', text)
-        total_shares = float(shares_match.group(1)) if shares_match else None
-
-        # 每股净资产
-        bvps_match = re.search(r'每股净资产[：:]\s*</dt>\s*<dd>([\d.]+)元', text)
-
-        # 尝试从东方财富 ulist 获取总市值（这个接口比较稳定）
-        total_mv = None
-        merged_base = _merge_fundamentals(
-            (_load_fundamentals_cache(code) or {}).get('fundamentals'),
-            base_funda,
-        )
-        if merged_base and merged_base.get('total_mv'):
-            total_mv = merged_base['total_mv']
-        else:
-            batch_result = fetch_fundamentals_batch([code]).get(code)
-            if batch_result and batch_result.get('total_mv'):
-                total_mv = batch_result['total_mv']
-
-        # 用总市值 + EPS 算 PE
-        if total_mv and total_shares and eps and eps > 0:
-            price = total_mv / total_shares
-            pe = price / eps
-            if 3 <= pe <= 300:
-                result['pe_ttm'] = round(pe, 2)
-            result['total_mv'] = total_mv
-        elif total_mv:
-            result['total_mv'] = total_mv
-
-        # 用总市值 + 每股净资产算 PB
-        if total_mv and total_shares and bvps_match:
-            bvps = float(bvps_match.group(1))
-            price = total_mv / total_shares
-            if bvps > 0:
-                result['pb'] = round(price / bvps, 2)
-
-        if result:
-            return _merge_fundamentals(base_funda, result)
-    except Exception as e:
-        print(f'    [ths-fallback] fundamentals failed for {code}: {e}', file=sys.stderr)
-    return None
-
-
-def fetch_capital_flow_with_fallback(code, prefetched_today=None):
-    """资金流：东方财富单日/历史 → 同花顺页面 fallback。
-    优先保证“今天主力是否流入”可用，其次才追求历史完整性。
-    """
-    result, source = fetch_capital_flow(code, prefetched_today=prefetched_today)
-    if result:
-        return result, source
-    print(f'    [fallback] EM capital failed for {code}, trying THS...', file=sys.stderr)
-    result = fetch_capital_flow_ths(code)
-    if result:
-        cache_entry = _load_capital_flow_cache(code)
-        merged = _merge_capital_flow_rows(result[-1], cache_entry['flows'] if cache_entry else None)
-        if merged:
-            _save_capital_flow_cache(code, merged)
-            return merged, 'ths'
-        return result, 'ths'
-    return None, 'none'
-
-
-def fetch_fundamentals_with_fallback(code, prefetched=None):
-    """基本面：东方财富 → 同花顺 fallback"""
-    result, source = fetch_fundamentals(code, prefetched=prefetched)
-    # 只有 PE 或 PB 至少有一个有效值才算成功
-    if result and (result.get('pe_ttm') or result.get('pb')):
-        return result, source
-    # EM 失败或关键字段缺失，尝试 THS
-    if result:
-        print(f'    [fallback] EM funda returned but pe/pb missing for {code}, trying THS...', file=sys.stderr)
-    else:
-        print(f'    [fallback] EM funda failed for {code}, trying THS...', file=sys.stderr)
-    ths_result = fetch_fundamentals_ths(code, base_funda=result)
-    if ths_result:
-        _save_fundamentals_cache(code, ths_result)
-        return ths_result, 'ths'
-    return result, source  # 都失败了返回东方财富原始结果
-
-
 def fetch_fundamentals(code, prefetched=None):
     """基本面数据：优先批量快照+缓存，必要时才打 stock/get。"""
     cache_entry = _load_fundamentals_cache(code)
@@ -1227,29 +1111,37 @@ def fetch_fundamentals(code, prefetched=None):
             _save_fundamentals_cache(code, merged)
             return merged, 'eastmoney-batch'
 
-    secid = get_em_secid(code)
-    url = (f'https://push2.eastmoney.com/api/qt/stock/get?'
-           f'secid={secid}&fields=f43,f57,f58,f116,f127,f128,f163,f167,f168,f169,f170')
-    text = get_em(url, timeout=8, retries=1)
-    if text:
-        try:
-            data = json.loads(text)
-            d = data.get('data', {})
-            normalized = _normalize_fundamentals({
-                'pe_ttm': _safe_float(d.get('f163'), None) / 100 if d.get('f163') not in (None, 0, '-') else None,
-                'pb': _safe_float(d.get('f168'), None) / 100 if d.get('f168') not in (None, 0, '-') else None,
-                'roe': _safe_float(d.get('f169'), None) / 100 if d.get('f169') not in (None, 0, '-') else None,
-                'margin': _safe_float(d.get('f170'), None) / 100 if d.get('f170') not in (None, 0, '-') else None,
-                'total_mv': _safe_float(d.get('f116'), None) / 1e8 if d.get('f116') not in (None, 0, '-') else None,
-                'industry': d.get('f127') or None,
-                'concept': d.get('f128') or None,
-            })
-            merged = _merge_fundamentals(cached_funda, normalized)
-            if merged:
+    try:
+        primary_result = _data_gateway().fetch_fundamentals(
+            code,
+            trade_date=_today_trade_date(),
+            key=code,
+            allow_fallback=False,
+        )
+        primary_payload = primary_result.data if isinstance(primary_result.data, dict) else {}
+        normalized = _normalize_fundamentals(primary_payload)
+        merged = _merge_fundamentals(cached_funda, snapshot, normalized)
+        if merged:
+            if merged.get('pe_ttm') or merged.get('pb'):
                 _save_fundamentals_cache(code, merged)
-                return merged, 'eastmoney-stock-get'
-        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-            pass
+                return merged, _manifest_source_label(primary_result.manifest)
+            try:
+                ths_result = _data_gateway().fetch_fundamentals(
+                    code,
+                    trade_date=_today_trade_date(),
+                    key=f"{code}-ths",
+                    provider_name="ths",
+                )
+                ths_payload = ths_result.data if isinstance(ths_result.data, dict) else {}
+                merged = _merge_fundamentals(merged, _normalize_fundamentals(ths_payload))
+                if merged:
+                    _save_fundamentals_cache(code, merged)
+                    return merged, _manifest_source_label(ths_result.manifest)
+            except Exception:
+                _save_fundamentals_cache(code, merged)
+                return merged, _manifest_source_label(primary_result.manifest)
+    except Exception:
+        pass
 
     if cached_funda:
         return cached_funda, 'eastmoney-stale-cache'
@@ -1432,7 +1324,7 @@ def stage2_enrich(candidates):
         print(f'    [fundamentals] 批量预取命中 {len(prefetched_funda_map)}/{len(codes)}', file=sys.stderr)
     enriched = []
     for i, stock in enumerate(candidates):
-        flows, flow_src = fetch_capital_flow_with_fallback(
+        flows, flow_src = fetch_capital_flow(
             stock['code'],
             prefetched_today=prefetched_flow_map.get(stock['code']),
         )
@@ -1440,7 +1332,7 @@ def stage2_enrich(candidates):
             time.sleep(random.uniform(0.12, 0.25))
         else:
             time.sleep(random.uniform(0.8, 1.2))
-        funda, funda_src = fetch_fundamentals_with_fallback(
+        funda, funda_src = fetch_fundamentals(
             stock['code'],
             prefetched=prefetched_funda_map.get(stock['code']),
         )
@@ -2491,12 +2383,43 @@ def main():
     archive_file.write_text(output)
     latest_file = DATA_DIR / 'scan_result.json'
     latest_file.write_text(output)
+
+    trade_date = result['timestamp'][:10]
+    upstream_manifests, manifest_flags = _scan_upstream_manifests(
+        trade_date,
+        pool=args.pool,
+        stage1_codes=[stock.get('code') for stock in candidates],
+        stage2_codes=[stock.get('code') for stock in enriched],
+    )
+    ingress_manifest = build_pipeline_manifest(
+        dataset='screening.scan_result',
+        trade_date=trade_date,
+        payload=result,
+        upstream_manifests=upstream_manifests,
+        ttl_seconds=900,
+        required_dataset_groups=[
+            {'quotes.pool', 'index.constituents', 'quotes.batch'},
+            {'bars.daily'},
+            {'capital_flow.batch', 'capital_flow.daily'},
+            {'fundamentals.batch', 'fundamentals.snapshot'},
+        ],
+        fetched_at=result['timestamp'],
+        quality_flags=manifest_flags,
+    )
+    latest_manifest_path = write_sidecar_manifest(latest_file, ingress_manifest)
+    write_sidecar_manifest(archive_file, ingress_manifest)
+    result['data_ingress'] = _ingress_summary(ingress_manifest, latest_manifest_path)
+    output = json.dumps(result, ensure_ascii=False, indent=2)
+    latest_file.write_text(output, encoding='utf-8')
+    archive_file.write_text(output, encoding='utf-8')
     print(f'  自动归档: {archive_file}', file=sys.stderr)
     print(f'  最新结果: {latest_file}', file=sys.stderr)
 
     if args.output:
-        with open(args.output, 'w') as f:
-            f.write(output)
+        output_target = Path(args.output).expanduser()
+        output_target.parent.mkdir(parents=True, exist_ok=True)
+        output_target.write_text(output, encoding='utf-8')
+        write_sidecar_manifest(output_target, ingress_manifest)
         print(f'  结果保存: {args.output}', file=sys.stderr)
     else:
         print(output)

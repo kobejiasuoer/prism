@@ -8,6 +8,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from prism_data import build_pipeline_manifest, load_manifest_file, write_sidecar_manifest
+
 try:
     from screener.capital_flow_contract import (
         UNIT_YUAN,
@@ -71,6 +73,28 @@ SCREENING_RULES = [
     "追涨型 setup 必须额外满足执行质量、一致性和多策略共振，不再因单一策略高分直接放行",
     "跨策略去重后生成 shortlist，并给出建议送 analyzer 的前 3",
 ]
+
+
+def load_sidecar_manifest(path: Path | str | None) -> dict | None:
+    if not path:
+        return None
+    return load_manifest_file(Path(path).expanduser().with_suffix(".manifest.json"))
+
+
+def ingress_summary(manifest: dict | None, manifest_path: Path | None) -> dict[str, object]:
+    if not manifest:
+        return {
+            "dataset": "",
+            "manifest_path": str(manifest_path) if manifest_path else "",
+            "freshness_status": "expired",
+            "live_small_allowed": False,
+        }
+    return {
+        "dataset": manifest.get("dataset"),
+        "manifest_path": str(manifest_path) if manifest_path else manifest.get("manifest_path") or "",
+        "freshness_status": manifest.get("freshness_status"),
+        "live_small_allowed": bool(manifest.get("live_small_allowed")),
+    }
 
 
 def safe_float(value, default=0.0):
@@ -1185,15 +1209,34 @@ def main():
         scan_data = json.load(fh)
 
     result = run_screening(scan_data)
-    output_text = json.dumps(result, ensure_ascii=False, indent=2)
+    upstream_manifests = []
+    scan_manifest = load_sidecar_manifest(input_path)
+    if scan_manifest:
+        upstream_manifests.append(scan_manifest)
+    ingress_manifest = build_pipeline_manifest(
+        dataset="screening.batch",
+        trade_date=result["timestamp"][:10],
+        payload=result,
+        upstream_manifests=upstream_manifests,
+        ttl_seconds=900,
+        required_dataset_groups=[{"screening.scan_result"}],
+        fetched_at=result["timestamp"],
+    )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(output_text, encoding="utf-8")
-
     archive_dt = datetime.strptime(result["timestamp"], "%Y-%m-%d %H:%M:%S")
     archive_stamp = archive_dt.strftime("%Y-%m-%d_%H-%M-%S")
     archive_path = AI_HISTORY_DIR / f"ai_screening_{archive_stamp}.json"
     AI_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+    result["data_ingress"] = ingress_summary(ingress_manifest, None)
+    output_text = json.dumps(result, ensure_ascii=False, indent=2)
+    output_path.write_text(output_text, encoding="utf-8")
+    archive_path.write_text(output_text, encoding="utf-8")
+    output_manifest_path = write_sidecar_manifest(output_path, ingress_manifest)
+    write_sidecar_manifest(archive_path, ingress_manifest)
+    result["data_ingress"] = ingress_summary(ingress_manifest, output_manifest_path)
+    output_text = json.dumps(result, ensure_ascii=False, indent=2)
+    output_path.write_text(output_text, encoding="utf-8")
     archive_path.write_text(output_text, encoding="utf-8")
 
     if args.stdout:

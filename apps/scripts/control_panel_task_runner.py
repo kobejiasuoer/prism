@@ -144,6 +144,8 @@ def main() -> int:
 
     env, shell_env_sanitized = sanitize_shell_env(os.environ.copy())
     env["SEND_TO_FEISHU"] = args.send_to_feishu
+    if args.task_name == "watchlist_refresh":
+        env["COMMAND_SEND_TO_FEISHU"] = args.send_to_feishu
 
     feishu_delivery = {
         "requested": args.send_to_feishu == "1",
