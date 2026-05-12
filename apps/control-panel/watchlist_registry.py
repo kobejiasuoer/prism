@@ -83,7 +83,7 @@ def fetch_stock_name(code: Any, market: str | None = None, timeout: float = 6.0)
     return name
 
 
-def search_sina_stock_suggestions(query: str, limit: int = 8, timeout: float = 6.0) -> list[dict[str, Any]]:
+def search_sina_stock_suggestions(query: str, limit: int = 8, timeout: float = 2.5) -> list[dict[str, Any]]:
     normalized_query = str(query or "").strip()
     if not normalized_query:
         return []
@@ -102,6 +102,7 @@ def search_sina_stock_suggestions(query: str, limit: int = 8, timeout: float = 6
             trade_date=_trade_date_today(),
             key=cache_key,
             timeout=timeout,
+            retries=0,
         )
     except Exception:
         return []

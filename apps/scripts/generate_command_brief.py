@@ -26,6 +26,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--brief-output", required=True)
     parser.add_argument("--report-output", required=True)
     parser.add_argument("--json-output", required=True)
+    parser.add_argument("--allow-stale-watchlist", action="store_true", help="Allow falling back to the latest watchlist snapshot when --date is missing")
     return parser.parse_args()
 
 
@@ -78,6 +79,7 @@ def normalize_watchlist_section(watchlist: dict[str, Any]) -> dict[str, Any]:
     follow = [item for item in stocks if item.get("code") in follow_codes]
     observe = [item for item in stocks if item.get("code") in observe_codes]
     return {
+        "trade_date": watchlist.get("trade_date"),
         "snapshot_path": watchlist.get("snapshot_path"),
         "generated_at": watchlist.get("generated_at"),
         "manifest": watchlist.get("manifest"),
@@ -137,10 +139,12 @@ def normalize_midday_section(confirmation: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_payload(trade_date: str) -> dict[str, Any]:
+def build_payload(trade_date: str, *, allow_stale_watchlist: bool = False) -> dict[str, Any]:
     watchlist = safe_load(load_watchlist_snapshot, trade_date=trade_date)
-    if not watchlist:
+    if not watchlist and allow_stale_watchlist:
         watchlist = safe_load(load_watchlist_snapshot)
+    if not watchlist:
+        raise FileNotFoundError(f"watchlist snapshot for {trade_date} not found")
     screening = safe_load(load_screening_batch)
     confirmation = safe_load(load_confirmation)
 
@@ -173,6 +177,8 @@ def build_payload(trade_date: str) -> dict[str, Any]:
         "midday_summary": summarize_midday(midday_section),
     }
     return {
+        "trade_date": trade_date,
+        "generated_at": summary["generated_at"],
         "summary": summary,
         "watchlist": watchlist_section,
         "screener": screener_section,
@@ -313,7 +319,7 @@ def write_text(path: str | Path, text: str) -> None:
 
 def main() -> int:
     args = parse_args()
-    payload = build_payload(args.date)
+    payload = build_payload(args.date, allow_stale_watchlist=args.allow_stale_watchlist)
     write_text(args.brief_output, render_brief(payload))
     write_text(args.report_output, render_report(payload))
     json_target = Path(args.json_output).expanduser()

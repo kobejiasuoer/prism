@@ -39,6 +39,14 @@ class DataManifest:
     data_path: str | None = None
     upstream_manifests: list[dict[str, Any]] = field(default_factory=list)
     provider_provenance: list[dict[str, Any]] = field(default_factory=list)
+    source_lane: str = "unknown"
+    decision_scope: str = "display_only"
+    authority_provider: str = ""
+    target_authority_provider: str = ""
+    audit_providers: list[str] = field(default_factory=list)
+    source_authority_ready: bool = True
+    formal_decision_allowed: bool = False
+    authority_flags: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "DataManifest":
@@ -67,6 +75,14 @@ class DataManifest:
             data_path=data.get("data_path"),
             upstream_manifests=list(data.get("upstream_manifests") or []),
             provider_provenance=list(data.get("provider_provenance") or []),
+            source_lane=str(data.get("source_lane") or "unknown"),
+            decision_scope=str(data.get("decision_scope") or "display_only"),
+            authority_provider=str(data.get("authority_provider") or ""),
+            target_authority_provider=str(data.get("target_authority_provider") or ""),
+            audit_providers=list(data.get("audit_providers") or []),
+            source_authority_ready=bool(data.get("source_authority_ready", True)),
+            formal_decision_allowed=bool(data.get("formal_decision_allowed")),
+            authority_flags=list(data.get("authority_flags") or []),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -95,6 +111,14 @@ class DataManifest:
             "data_path": self.data_path,
             "upstream_manifests": self.upstream_manifests,
             "provider_provenance": self.provider_provenance,
+            "source_lane": self.source_lane,
+            "decision_scope": self.decision_scope,
+            "authority_provider": self.authority_provider,
+            "target_authority_provider": self.target_authority_provider,
+            "audit_providers": self.audit_providers,
+            "source_authority_ready": self.source_authority_ready,
+            "formal_decision_allowed": self.formal_decision_allowed,
+            "authority_flags": self.authority_flags,
         }
 
 
@@ -107,6 +131,12 @@ class DatasetDefinition:
     ttl_intraday: int = 900
     ttl_post_close: int = 86400
     required_for_live_small: bool = False
+    source_lane: str = "live"
+    decision_scope: str = "live_small"
+    authority_provider: str | None = None
+    target_authority_provider: str | None = None
+    audit_providers: list[str] = field(default_factory=list)
+    allow_fallback_for_live: bool = False
 
 
 DATASET_REGISTRY: dict[str, DatasetDefinition] = {
@@ -118,6 +148,10 @@ DATASET_REGISTRY: dict[str, DatasetDefinition] = {
         ttl_intraday=120,
         ttl_post_close=86400,
         required_for_live_small=True,
+        source_lane="live",
+        decision_scope="live_small",
+        authority_provider="sina",
+        audit_providers=["eastmoney"],
     ),
     "quotes.batch": DatasetDefinition(
         name="quotes.batch",
@@ -127,6 +161,10 @@ DATASET_REGISTRY: dict[str, DatasetDefinition] = {
         ttl_intraday=120,
         ttl_post_close=86400,
         required_for_live_small=True,
+        source_lane="live",
+        decision_scope="live_small",
+        authority_provider="eastmoney",
+        audit_providers=["sina"],
     ),
     "quotes.pool": DatasetDefinition(
         name="quotes.pool",
@@ -136,6 +174,9 @@ DATASET_REGISTRY: dict[str, DatasetDefinition] = {
         ttl_intraday=900,
         ttl_post_close=86400,
         required_for_live_small=False,
+        source_lane="live",
+        decision_scope="display_only",
+        authority_provider="sina",
     ),
     "bars.daily": DatasetDefinition(
         name="bars.daily",
@@ -145,6 +186,11 @@ DATASET_REGISTRY: dict[str, DatasetDefinition] = {
         ttl_intraday=3600,
         ttl_post_close=86400,
         required_for_live_small=True,
+        source_lane="authoritative_daily",
+        decision_scope="live_small",
+        authority_provider="sina",
+        target_authority_provider="tushare",
+        audit_providers=["akshare", "baostock"],
     ),
     "capital_flow.daily": DatasetDefinition(
         name="capital_flow.daily",
@@ -154,6 +200,10 @@ DATASET_REGISTRY: dict[str, DatasetDefinition] = {
         ttl_intraday=600,
         ttl_post_close=86400,
         required_for_live_small=True,
+        source_lane="live",
+        decision_scope="live_small",
+        authority_provider="eastmoney",
+        audit_providers=["ths"],
     ),
     "capital_flow.batch": DatasetDefinition(
         name="capital_flow.batch",
@@ -163,6 +213,9 @@ DATASET_REGISTRY: dict[str, DatasetDefinition] = {
         ttl_intraday=420,
         ttl_post_close=86400,
         required_for_live_small=True,
+        source_lane="live",
+        decision_scope="live_small",
+        authority_provider="eastmoney",
     ),
     "fundamentals.snapshot": DatasetDefinition(
         name="fundamentals.snapshot",
@@ -172,6 +225,10 @@ DATASET_REGISTRY: dict[str, DatasetDefinition] = {
         ttl_intraday=43200,
         ttl_post_close=86400,
         required_for_live_small=False,
+        source_lane="reference",
+        decision_scope="display_only",
+        authority_provider="eastmoney",
+        audit_providers=["ths"],
     ),
     "fundamentals.batch": DatasetDefinition(
         name="fundamentals.batch",
@@ -181,6 +238,9 @@ DATASET_REGISTRY: dict[str, DatasetDefinition] = {
         ttl_intraday=43200,
         ttl_post_close=86400,
         required_for_live_small=False,
+        source_lane="reference",
+        decision_scope="display_only",
+        authority_provider="eastmoney",
     ),
     "announcements.latest": DatasetDefinition(
         name="announcements.latest",
@@ -190,6 +250,11 @@ DATASET_REGISTRY: dict[str, DatasetDefinition] = {
         ttl_intraday=14400,
         ttl_post_close=86400,
         required_for_live_small=False,
+        source_lane="disclosure",
+        decision_scope="display_only",
+        authority_provider="eastmoney",
+        target_authority_provider="official_exchange",
+        audit_providers=["cninfo", "sse", "szse"],
     ),
     "news.latest": DatasetDefinition(
         name="news.latest",
@@ -199,6 +264,9 @@ DATASET_REGISTRY: dict[str, DatasetDefinition] = {
         ttl_intraday=14400,
         ttl_post_close=86400,
         required_for_live_small=False,
+        source_lane="news",
+        decision_scope="display_only",
+        authority_provider="eastmoney",
     ),
     "stock.search": DatasetDefinition(
         name="stock.search",
@@ -208,6 +276,9 @@ DATASET_REGISTRY: dict[str, DatasetDefinition] = {
         ttl_intraday=86400,
         ttl_post_close=86400,
         required_for_live_small=False,
+        source_lane="reference",
+        decision_scope="display_only",
+        authority_provider="sina",
     ),
     "index.constituents": DatasetDefinition(
         name="index.constituents",
@@ -217,6 +288,11 @@ DATASET_REGISTRY: dict[str, DatasetDefinition] = {
         ttl_intraday=86400,
         ttl_post_close=86400,
         required_for_live_small=False,
+        source_lane="reference",
+        decision_scope="display_only",
+        authority_provider="akshare",
+        target_authority_provider="official_index",
+        audit_providers=["csindex", "sina"],
     ),
     "sector.snapshot": DatasetDefinition(
         name="sector.snapshot",
@@ -226,6 +302,9 @@ DATASET_REGISTRY: dict[str, DatasetDefinition] = {
         ttl_intraday=1800,
         ttl_post_close=86400,
         required_for_live_small=False,
+        source_lane="live",
+        decision_scope="display_only",
+        authority_provider="eastmoney",
     ),
     "watchlist.snapshot": DatasetDefinition(
         name="watchlist.snapshot",
@@ -235,6 +314,9 @@ DATASET_REGISTRY: dict[str, DatasetDefinition] = {
         ttl_intraday=900,
         ttl_post_close=86400,
         required_for_live_small=True,
+        source_lane="pipeline",
+        decision_scope="live_small",
+        authority_provider="pipeline",
     ),
     "screening.scan_result": DatasetDefinition(
         name="screening.scan_result",
@@ -244,6 +326,9 @@ DATASET_REGISTRY: dict[str, DatasetDefinition] = {
         ttl_intraday=900,
         ttl_post_close=86400,
         required_for_live_small=True,
+        source_lane="pipeline",
+        decision_scope="live_small",
+        authority_provider="pipeline",
     ),
     "screening.batch": DatasetDefinition(
         name="screening.batch",
@@ -253,6 +338,9 @@ DATASET_REGISTRY: dict[str, DatasetDefinition] = {
         ttl_intraday=900,
         ttl_post_close=86400,
         required_for_live_small=True,
+        source_lane="pipeline",
+        decision_scope="live_small",
+        authority_provider="pipeline",
     ),
     "screening.confirmation": DatasetDefinition(
         name="screening.confirmation",
@@ -262,6 +350,9 @@ DATASET_REGISTRY: dict[str, DatasetDefinition] = {
         ttl_intraday=900,
         ttl_post_close=86400,
         required_for_live_small=True,
+        source_lane="pipeline",
+        decision_scope="live_small",
+        authority_provider="pipeline",
     ),
     "decision_brief.snapshot": DatasetDefinition(
         name="decision_brief.snapshot",
@@ -271,12 +362,171 @@ DATASET_REGISTRY: dict[str, DatasetDefinition] = {
         ttl_intraday=900,
         ttl_post_close=86400,
         required_for_live_small=True,
+        source_lane="pipeline",
+        decision_scope="live_small",
+        authority_provider="pipeline",
+    ),
+    "trade_calendar": DatasetDefinition(
+        name="trade_calendar",
+        description="Trading calendar source of truth",
+        primary_provider="tushare",
+        fallback_providers=["baostock"],
+        ttl_intraday=86400,
+        ttl_post_close=86400,
+        required_for_live_small=False,
+        source_lane="authoritative_daily",
+        decision_scope="formal_candidate",
+        authority_provider="tushare",
+        audit_providers=["baostock", "official_exchange"],
+    ),
+    "benchmark.index_daily": DatasetDefinition(
+        name="benchmark.index_daily",
+        description="CSI500 / HS300 benchmark daily bars",
+        primary_provider="tushare",
+        fallback_providers=["baostock", "akshare"],
+        ttl_intraday=86400,
+        ttl_post_close=86400,
+        required_for_live_small=False,
+        source_lane="authoritative_daily",
+        decision_scope="formal_candidate",
+        authority_provider="tushare",
+        audit_providers=["baostock", "akshare", "csindex"],
+    ),
+    "adjustment.factor": DatasetDefinition(
+        name="adjustment.factor",
+        description="Adjustment factor source for formal adjusted returns",
+        primary_provider="tushare",
+        fallback_providers=[],
+        ttl_intraday=86400,
+        ttl_post_close=86400,
+        required_for_live_small=False,
+        source_lane="authoritative_daily",
+        decision_scope="formal_candidate",
+        authority_provider="tushare",
+    ),
+    "price_limit.daily": DatasetDefinition(
+        name="price_limit.daily",
+        description="Historical up/down limit prices",
+        primary_provider="tushare",
+        fallback_providers=[],
+        ttl_intraday=86400,
+        ttl_post_close=86400,
+        required_for_live_small=False,
+        source_lane="execution",
+        decision_scope="formal_candidate",
+        authority_provider="tushare",
+        audit_providers=["ricequant", "joinquant"],
+    ),
+    "execution.flags": DatasetDefinition(
+        name="execution.flags",
+        description="Execution availability flags: paused/ST/limit/tick constraints",
+        primary_provider="ricequant",
+        fallback_providers=["joinquant"],
+        ttl_intraday=86400,
+        ttl_post_close=86400,
+        required_for_live_small=False,
+        source_lane="execution",
+        decision_scope="formal_candidate",
+        authority_provider="ricequant",
+        audit_providers=["joinquant", "tushare"],
     ),
 }
 
 
 def get_dataset_definition(name: str) -> DatasetDefinition | None:
     return DATASET_REGISTRY.get(name)
+
+
+def _authority_metadata(
+    *,
+    dataset: str,
+    provider: str,
+    provider_role: str,
+    status: str,
+    live_small_allowed: bool,
+    payload_hash: str,
+) -> dict[str, Any]:
+    definition = get_dataset_definition(dataset)
+    source_lane = definition.source_lane if definition else "unknown"
+    configured_authority = (definition.authority_provider if definition else None) or (definition.primary_provider if definition else provider)
+    target_authority = (definition.target_authority_provider if definition else None) or configured_authority
+    fallback_providers = list(definition.fallback_providers if definition else [])
+    audit_providers = list(definition.audit_providers if definition else [])
+    authority_flags: list[str] = []
+
+    if provider_role == ProviderRole.FALLBACK.value:
+        authority_flags.append("fallback_provider")
+        if not live_small_allowed:
+            authority_flags.append("fallback_display_only")
+
+    if configured_authority and provider != configured_authority:
+        if provider in fallback_providers:
+            authority_flags.append("non_primary_fallback")
+        else:
+            authority_flags.append("non_authority_provider")
+
+    if target_authority and provider != target_authority:
+        authority_flags.append(f"target_authority_not_in_use:{target_authority}")
+
+    if status != DatasetStatus.OK.value:
+        authority_flags.append("provider_not_ok")
+    if not payload_hash:
+        authority_flags.append("payload_hash_missing")
+
+    source_authority_ready = (
+        status == DatasetStatus.OK.value
+        and bool(payload_hash)
+        and provider == configured_authority
+        and provider == target_authority
+    )
+    decision_scope = (definition.decision_scope if definition else "live_small") if live_small_allowed else "display_only"
+    formal_decision_allowed = (
+        source_lane in {"authoritative_daily", "execution"}
+        and source_authority_ready
+        and live_small_allowed
+    )
+
+    return {
+        "source_lane": source_lane,
+        "decision_scope": decision_scope,
+        "authority_provider": configured_authority,
+        "target_authority_provider": target_authority,
+        "audit_providers": audit_providers,
+        "source_authority_ready": source_authority_ready,
+        "formal_decision_allowed": formal_decision_allowed,
+        "authority_flags": authority_flags,
+    }
+
+
+def _pipeline_authority_metadata(
+    *,
+    live_small_allowed: bool,
+    upstream_rows: list[DataManifest],
+    quality_flags: list[str],
+) -> dict[str, Any]:
+    upstream_flags: list[str] = []
+    for row in upstream_rows:
+        for flag in row.authority_flags:
+            if flag not in upstream_flags:
+                upstream_flags.append(flag)
+    if not upstream_rows:
+        upstream_flags.append("upstream_authority_missing")
+    if any(not row.source_authority_ready for row in upstream_rows):
+        upstream_flags.append("upstream_authority_not_ready")
+    if any(not row.formal_decision_allowed for row in upstream_rows):
+        upstream_flags.append("upstream_formal_not_allowed")
+
+    decision_scope = "live_small" if live_small_allowed else "display_only"
+    return {
+        "source_lane": "pipeline",
+        "decision_scope": decision_scope,
+        "authority_provider": "pipeline",
+        "target_authority_provider": "pipeline",
+        "audit_providers": [],
+        "source_authority_ready": bool(live_small_allowed and not quality_flags and "upstream_authority_not_ready" not in upstream_flags),
+        "formal_decision_allowed": bool(live_small_allowed and upstream_rows and "upstream_formal_not_allowed" not in upstream_flags),
+        "authority_flags": upstream_flags,
+    }
 
 
 def _format_datetime(value: datetime | None) -> str | None:
@@ -294,6 +544,14 @@ def manifest_from_provider_result(
     data_path: str | None = None,
     upstream_manifests: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    authority = _authority_metadata(
+        dataset=result.dataset,
+        provider=result.provider,
+        provider_role=result.provider_role.value,
+        status=result.status.value,
+        live_small_allowed=live_small_allowed,
+        payload_hash=result.payload_hash,
+    )
     manifest = {
         "schema_version": 1,
         "dataset": result.dataset,
@@ -328,6 +586,7 @@ def manifest_from_provider_result(
                 "live_small_allowed": bool(live_small_allowed),
             }
         ],
+        **authority,
     }
     update_manifest_freshness(manifest, expected_trade_date)
     manifest["provider_provenance"][0]["freshness_status"] = manifest["freshness_status"]
@@ -390,6 +649,11 @@ def build_pipeline_manifest(
         for row in upstream_rows
     ]
     row_count = len(payload) if isinstance(payload, list) else (len(payload) if isinstance(payload, dict) else 1)
+    authority = _pipeline_authority_metadata(
+        live_small_allowed=live_small_allowed,
+        upstream_rows=upstream_rows,
+        quality_flags=flags,
+    )
     manifest = {
         "schema_version": 1,
         "dataset": dataset,
@@ -413,6 +677,7 @@ def build_pipeline_manifest(
         "request_key": "",
         "upstream_manifests": [row.to_dict() for row in upstream_rows],
         "provider_provenance": provider_provenance,
+        **authority,
     }
     return manifest
 

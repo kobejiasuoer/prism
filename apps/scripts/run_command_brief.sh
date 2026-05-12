@@ -17,6 +17,7 @@ PRISM_WRITE_LEGACY_ARTIFACTS="${PRISM_WRITE_LEGACY_ARTIFACTS:-1}"
 SEND_TO_FEISHU="${SEND_TO_FEISHU:-0}"
 FEISHU_CHANNEL="${FEISHU_CHANNEL:-feishu}"
 FEISHU_TARGET="${FEISHU_TARGET:-}"
+ALLOW_STALE_WATCHLIST="${ALLOW_STALE_WATCHLIST:-0}"
 
 send_to_feishu() {
   if [[ "$SEND_TO_FEISHU" != "1" && "$SEND_TO_FEISHU" != "true" ]]; then
@@ -102,11 +103,18 @@ register_command_brief_artifacts() {
 
 mkdir -p "$(dirname "$BRIEF_OUTPUT_PATH")" "$(dirname "$REPORT_OUTPUT_PATH")" "$(dirname "$JSON_OUTPUT_PATH")"
 
-python3 "$SCRIPT_DIR/generate_command_brief.py" \
+generate_args=(
+  "$SCRIPT_DIR/generate_command_brief.py"
   --date "$TRADE_DATE" \
   --brief-output "$BRIEF_OUTPUT_PATH" \
   --report-output "$REPORT_OUTPUT_PATH" \
   --json-output "$JSON_OUTPUT_PATH"
+)
+if [[ "$ALLOW_STALE_WATCHLIST" == "1" || "$ALLOW_STALE_WATCHLIST" == "true" ]]; then
+  generate_args+=(--allow-stale-watchlist)
+fi
+
+python3 "${generate_args[@]}"
 
 write_legacy_artifacts
 register_command_brief_artifacts

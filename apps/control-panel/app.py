@@ -73,6 +73,7 @@ from refresh_policy import (
     page_policy,
     pick_recommended_task as policy_pick_recommended_task,
     task_family,
+    task_conflict_is_running,
     task_is_running,
     task_policy,
     validate_cron_policies,
@@ -778,6 +779,8 @@ def _readiness_freshness_rows(
                 ),
                 "trade_date": item.get("trade_date"),
                 "stale_reasons": list(item.get("stale_reasons") or []),
+                "degraded": bool(item.get("degraded")),
+                "degradation_reasons": list(item.get("degradation_reasons") or []),
             }
         )
     return rows
@@ -891,6 +894,14 @@ def _dataset_manifest_freshness_rows(*, expected_date: str, now: datetime) -> li
                 "fallback_used": bool(manifest.get("fallback_used")),
                 "live_small_allowed": bool(manifest.get("live_small_allowed")),
                 "manifest_path": manifest.get("manifest_path"),
+                "source_lane": manifest.get("source_lane"),
+                "decision_scope": manifest.get("decision_scope"),
+                "authority_provider": manifest.get("authority_provider"),
+                "target_authority_provider": manifest.get("target_authority_provider"),
+                "audit_providers": list(manifest.get("audit_providers") or []),
+                "source_authority_ready": bool(manifest.get("source_authority_ready", True)),
+                "formal_decision_allowed": bool(manifest.get("formal_decision_allowed")),
+                "authority_flags": list(manifest.get("authority_flags") or []),
                 "dataset_manifest": True,
             }
         )
@@ -986,7 +997,7 @@ def _build_readiness_recovery_steps(
         step_cooldown = page_cooldown_state(page=page, task_name=task_name, state=state)
         cooldown_remaining = int(step_cooldown.get("remaining_seconds") or 0)
         status = "ready"
-        if task_is_running(task_name, running):
+        if task_conflict_is_running(task_name, running):
             status = "running"
         elif cooldown_remaining > 0:
             status = "cooldown"
@@ -1657,7 +1668,7 @@ async def api_refresh_trigger(request: Request) -> JSONResponse:
     state = load_refresh_state()
     cooldown = page_cooldown_state(page=page, task_name=task_name, state=state)
     remaining = int(cooldown.get("remaining_seconds") or 0)
-    if task_is_running(task_name, running):
+    if task_conflict_is_running(task_name, running):
         raise HTTPException(status_code=409, detail="同类刷新任务仍在运行，请稍后再试。")
     if remaining > 0 and not force:
         raise HTTPException(status_code=429, detail=f"刷新冷却中，请 {remaining} 秒后再试。")

@@ -13,7 +13,7 @@ import { formatCooldown, readinessModeCopy, refreshReasonCopy, refreshReasonLabe
 import type { BasicCard, SourceCardData } from "@/lib/types";
 
 type EvidenceRefreshPage = "today" | "watchlist" | "opportunities" | "review";
-type EvidenceMode = "standard" | "ask";
+type EvidenceMode = "standard" | "ask" | "readonly";
 
 function artifactPath(card: BasicCard) {
   if (card.path) {
@@ -47,7 +47,7 @@ export function EvidencePanel({
   title?: string;
   eyebrow?: string;
 }) {
-  const refreshPage = mode === "ask" ? "" : page || "";
+  const refreshPage = mode === "standard" ? page || "" : "";
   const refresh = useRefreshStatus(refreshPage, Boolean(refreshPage), { auto: true });
   const trigger = useTriggerRefresh(refreshPage, { stockCode });
   const [message, setMessage] = useState("");
@@ -206,6 +206,11 @@ export function EvidencePanel({
               <>
                 <Badge tone="warning">Ask 临时证据</Badge>
                 <Badge tone="info">仅展示页内来源</Badge>
+              </>
+            ) : mode === "readonly" ? (
+              <>
+                <Badge tone="info">只读证据</Badge>
+                <Badge tone="warning">不触发刷新</Badge>
               </>
             ) : (
               <Badge tone="info">页内证据</Badge>

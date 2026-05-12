@@ -11,16 +11,32 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+CONTROL_PANEL_ROOT = REPO_ROOT / "apps" / "control-panel"
 PACKAGES_ROOT = REPO_ROOT / "packages"
-if str(PACKAGES_ROOT) not in sys.path:
-    sys.path.insert(0, str(PACKAGES_ROOT))
+for path in (str(PACKAGES_ROOT), str(CONTROL_PANEL_ROOT)):
+    if path not in sys.path:
+        sys.path.insert(0, path)
 
 try:
     from prism_storage import TaskRunRepository
 except Exception:  # pragma: no cover - task metadata JSON remains the fallback.
     TaskRunRepository = None  # type: ignore[assignment]
 
-CRON_JOBS_PATH = Path.home() / ".openclaw" / "cron" / "jobs.json"
+from trading_calendar import calendar_status
+
+DELIVERY_CONFIG_PATH = REPO_ROOT / "data" / "config" / "prism-delivery.local.json"
+TRADING_DAY_PROTECTED_TASKS = {
+    "aggressive",
+    "capital_flow_light",
+    "command_brief",
+    "midday_confirmation",
+    "midday_refresh",
+    "postclose_command_brief",
+    "preclose_risk_refresh",
+    "quotes_light",
+    "watchlist",
+    "watchlist_refresh",
+}
 TASK_JOB_NAME_PREFERENCES = {
     "watchlist": ["自选股早盘分析"],
     "aggressive": ["进攻型选股-早盘"],
@@ -42,6 +58,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--meta", required=True)
     parser.add_argument("--log", required=True)
     parser.add_argument("--send-to-feishu", choices=["0", "1"], default="0")
+    parser.add_argument("--allow-non-trading-day", action="store_true")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     return parser.parse_args()
 
@@ -57,50 +74,34 @@ def write_meta(path: Path, payload: dict[str, Any]) -> None:
         return
 
 
-def load_cron_jobs() -> list[dict]:
-    if not CRON_JOBS_PATH.exists():
-        return []
+def load_delivery_config() -> dict[str, Any]:
+    if not DELIVERY_CONFIG_PATH.exists():
+        return {}
     try:
-        data = json.loads(CRON_JOBS_PATH.read_text(encoding="utf-8"))
+        data = json.loads(DELIVERY_CONFIG_PATH.read_text(encoding="utf-8"))
     except Exception:
-        return []
-    jobs = data.get("jobs")
-    return jobs if isinstance(jobs, list) else []
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def resolve_default_feishu_delivery(task_name: str) -> dict[str, str] | None:
-    jobs = load_cron_jobs()
-    if not jobs:
+    config = load_delivery_config()
+    feishu = config.get("feishu") if isinstance(config.get("feishu"), dict) else {}
+    tasks = feishu.get("tasks") if isinstance(feishu.get("tasks"), dict) else {}
+    task_delivery = tasks.get(task_name) if isinstance(tasks.get(task_name), dict) else {}
+    default_delivery = feishu.get("default") if isinstance(feishu.get("default"), dict) else {}
+    delivery = {**default_delivery, **task_delivery}
+    target = str(delivery.get("target") or delivery.get("to") or "").strip()
+    if not target:
         return None
 
-    preferred_names = TASK_JOB_NAME_PREFERENCES.get(task_name, [])
-
-    def pick(candidates: list[dict]) -> dict[str, str] | None:
-        for job in candidates:
-            delivery = job.get("delivery") or {}
-            channel = str(delivery.get("channel") or "").strip()
-            target = str(delivery.get("to") or "").strip()
-            if channel != "feishu" or not target:
-                continue
-            return {
-                "channel": channel,
-                "target": target,
-                "job_id": str(job.get("id") or "").strip(),
-                "job_name": str(job.get("name") or "").strip(),
-            }
-        return None
-
-    named_matches = [job for job in jobs if str(job.get("name") or "") in preferred_names]
-    delivery = pick(named_matches)
-    if delivery:
-        return delivery
-
-    invest_jobs = [job for job in jobs if str(job.get("agentId") or "").strip() == "invest"]
-    delivery = pick(invest_jobs)
-    if delivery:
-        return delivery
-
-    return pick(jobs)
+    return {
+        "channel": str(delivery.get("channel") or "feishu").strip(),
+        "target": target,
+        "job_id": "",
+        "job_name": ",".join(TASK_JOB_NAME_PREFERENCES.get(task_name, [])),
+        "source": str(DELIVERY_CONFIG_PATH),
+    }
 
 
 def sanitize_shell_env(env: dict[str, str]) -> tuple[dict[str, str], bool]:
@@ -128,6 +129,14 @@ def sanitize_shell_env(env: dict[str, str]) -> tuple[dict[str, str], bool]:
         stripped = True
 
     return sanitized, stripped
+
+
+def should_skip_for_calendar(*, task_name: str, status: dict[str, Any], allow_non_trading_day: bool) -> bool:
+    return (
+        task_name in TRADING_DAY_PROTECTED_TASKS
+        and status.get("status") != "trading"
+        and not allow_non_trading_day
+    )
 
 
 def main() -> int:
@@ -165,7 +174,7 @@ def main() -> int:
             if not feishu_delivery["target"]:
                 env["FEISHU_TARGET"] = default_delivery["target"]
                 feishu_delivery["target"] = default_delivery["target"]
-                feishu_delivery["source"] = "cron_jobs"
+                feishu_delivery["source"] = default_delivery.get("source") or "delivery_config"
             feishu_delivery["job_id"] = default_delivery["job_id"]
             feishu_delivery["job_name"] = default_delivery["job_name"]
         if not feishu_delivery["channel"]:
@@ -191,12 +200,35 @@ def main() -> int:
         "meta_path": str(meta_path),
         "feishu_delivery": feishu_delivery,
         "shell_env_sanitized": shell_env_sanitized,
+        "calendar": calendar_status(datetime.now()),
     }
     write_meta(meta_path, payload)
+
+    if should_skip_for_calendar(
+        task_name=args.task_name,
+        status=payload["calendar"],
+        allow_non_trading_day=args.allow_non_trading_day,
+    ):
+        payload.update(
+            {
+                "status": "skipped",
+                "skip_reason": f"non_trading_day:{payload['calendar'].get('status')}",
+                "finished_at": now_str(),
+                "exit_code": 0,
+            }
+        )
+        write_meta(meta_path, payload)
+        log_path.write_text(
+            f"[{now_str()}] skip {args.title}: {payload['calendar'].get('status')} "
+            f"({payload['calendar'].get('reason')})\n",
+            encoding="utf-8",
+        )
+        return 0
 
     with log_path.open("w", encoding="utf-8") as log_file:
         log_file.write(f"[{now_str()}] start {args.title}\n")
         log_file.write(f"[{now_str()}] command: {' '.join(command)}\n")
+        log_file.write(f"[{now_str()}] calendar: {json.dumps(payload['calendar'], ensure_ascii=False)}\n")
         if shell_env_sanitized:
             log_file.write(f"[{now_str()}] shell env sanitized: removed control-panel-venv from PATH\n")
         if args.send_to_feishu == "1":

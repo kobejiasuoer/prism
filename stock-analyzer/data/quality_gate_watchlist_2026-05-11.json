@@ -1,0 +1,17 @@
+{
+  "checked_at": "2026-05-11 22:21:04",
+  "mode": "watchlist",
+  "validation_status": "ok",
+  "errors": [],
+  "warnings": [],
+  "paths": {
+    "snapshot": "<redacted-path>",
+    "report": "<redacted-path>",
+    "generator": "<redacted-path>"
+  },
+  "expected_timestamp": "2026-05-11 22:21:04",
+  "stats": {
+    "stock_count": 1,
+    "report_sections": 11
+  }
+}

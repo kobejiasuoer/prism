@@ -46,28 +46,34 @@ export function CommandBar({
     }
 
     const controller = new AbortController();
+    let cancelled = false;
     const timer = window.setTimeout(() => {
       setLoading(true);
+      const timeout = window.setTimeout(() => {
+        controller.abort();
+      }, 3_500);
       api
-        .askSuggest(query.trim())
+        .askSuggest(query.trim(), { signal: controller.signal })
         .then((payload) => {
-          if (!controller.signal.aborted) {
+          if (!cancelled) {
             setSuggestions(payload.items?.length ? payload.items : payload.recent_queries ?? []);
           }
         })
         .catch(() => {
-          if (!controller.signal.aborted) {
+          if (!cancelled) {
             setSuggestions([]);
           }
         })
         .finally(() => {
-          if (!controller.signal.aborted) {
+          window.clearTimeout(timeout);
+          if (!cancelled) {
             setLoading(false);
           }
         });
     }, 160);
 
     return () => {
+      cancelled = true;
       controller.abort();
       window.clearTimeout(timer);
     };
@@ -91,6 +97,16 @@ export function CommandBar({
   function goTo(path: string) {
     onOpenChange(false);
     router.push(path);
+  }
+
+  function stockPath(item: AskSuggestion) {
+    const params = new URLSearchParams();
+    const name = String(item.name || "").trim();
+    if (name && name !== item.code) {
+      params.set("name", name);
+    }
+    const suffix = params.toString();
+    return `/stock/${encodeURIComponent(item.code)}${suffix ? `?${suffix}` : ""}`;
   }
 
   return (
@@ -153,7 +169,7 @@ export function CommandBar({
                       <Command.Item
                         key={`${item.code}-${item.name}`}
                         value={`stock:${item.code}:${item.name}`}
-                        onSelect={() => goTo(`/stock/${encodeURIComponent(item.code)}`)}
+                        onSelect={() => goTo(stockPath(item))}
                         className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 text-[13px] text-[var(--text-secondary)] data-[selected=true]:bg-[var(--bg-tertiary)] data-[selected=true]:text-[var(--text-primary)]"
                       >
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] text-[11px] text-[var(--text-tertiary)]">

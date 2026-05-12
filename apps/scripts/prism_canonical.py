@@ -159,23 +159,24 @@ def mutable_alias_path(path_value: str | None) -> str | None:
     return None
 
 
+def _path_sort_key(path: Path) -> tuple[datetime, float, str]:
+    name_stamp = re.search(r"(\d{4}-\d{2}-\d{2})(?:[_-](\d{2})-(\d{2})(?:-(\d{2}))?)?", path.stem)
+    if name_stamp:
+        date_part, hour, minute, second = name_stamp.groups()
+        parsed = parse_ts(
+            f"{date_part} {hour or '00'}:{minute or '00'}:{second or '00'}"
+        )
+        if parsed:
+            return (parsed, path.stat().st_mtime, path.name)
+    return (datetime.fromtimestamp(path.stat().st_mtime), path.stat().st_mtime, path.name)
+
+
 def latest_matching(pattern: Path, exclude_tokens: tuple[str, ...] = ()) -> Path | None:
     files = list(pattern.parent.glob(pattern.name))
     if exclude_tokens:
         files = [path for path in files if not any(token in path.name for token in exclude_tokens)]
 
-    def sort_key(path: Path) -> tuple[datetime, float, str]:
-        name_stamp = re.search(r"(\d{4}-\d{2}-\d{2})(?:[_-](\d{2})-(\d{2})(?:-(\d{2}))?)?", path.stem)
-        if name_stamp:
-            date_part, hour, minute, second = name_stamp.groups()
-            parsed = parse_ts(
-                f"{date_part} {hour or '00'}:{minute or '00'}:{second or '00'}"
-            )
-            if parsed:
-                return (parsed, path.stat().st_mtime, path.name)
-        return (datetime.fromtimestamp(path.stat().st_mtime), path.stat().st_mtime, path.name)
-
-    files.sort(key=sort_key, reverse=True)
+    files.sort(key=_path_sort_key, reverse=True)
     return files[0] if files else None
 
 
@@ -220,11 +221,44 @@ def resolve_confirmation_path(path: str | None = None) -> Path | None:
     return None
 
 
-def resolve_decision_brief_path(path: str | None = None) -> Path | None:
+def _decision_brief_trade_dates(path: Path) -> tuple[str | None, str | None]:
+    raw = load_json(path)
+    manifest = load_sidecar_manifest(path, raw)
+    summary = raw.get("summary") if isinstance(raw.get("summary"), dict) else {}
+    summary_trade_date = summary.get("trade_date") or raw.get("trade_date")
+    manifest_trade_date = (manifest or {}).get("trade_date")
+    return str(summary_trade_date) if summary_trade_date else None, str(manifest_trade_date) if manifest_trade_date else None
+
+
+def _decision_brief_rank(path: Path, trade_date: str | None = None) -> tuple[int, datetime, float, str]:
+    summary_trade_date, manifest_trade_date = _decision_brief_trade_dates(path)
+    if trade_date:
+        if manifest_trade_date == trade_date:
+            priority = 3
+        elif not manifest_trade_date and summary_trade_date == trade_date:
+            priority = 2
+        elif summary_trade_date == trade_date:
+            priority = 1
+        else:
+            priority = 0
+    elif manifest_trade_date and summary_trade_date and manifest_trade_date == summary_trade_date:
+        priority = 2
+    elif not manifest_trade_date and summary_trade_date:
+        priority = 1
+    else:
+        priority = 0
+    return (priority, *_path_sort_key(path))
+
+
+def resolve_decision_brief_path(path: str | None = None, trade_date: str | None = None) -> Path | None:
     if path:
         candidate = Path(path).expanduser()
         return candidate if candidate.exists() else None
-    return latest_matching(COMMAND_BRIEF_DIR / "prism_command_brief_*.json")
+    files = list(COMMAND_BRIEF_DIR.glob("prism_command_brief_*.json"))
+    if not files:
+        return None
+    files.sort(key=lambda candidate: _decision_brief_rank(candidate, trade_date), reverse=True)
+    return files[0]
 
 
 def action_rank(action: str | None) -> int:
@@ -687,8 +721,8 @@ def load_confirmation(path: str | None = None) -> dict[str, Any]:
     }
 
 
-def load_decision_brief(path: str | None = None) -> dict[str, Any]:
-    brief_path = resolve_decision_brief_path(path=path)
+def load_decision_brief(path: str | None = None, trade_date: str | None = None) -> dict[str, Any]:
+    brief_path = resolve_decision_brief_path(path=path, trade_date=trade_date)
     if not brief_path:
         raise FileNotFoundError("decision brief not found")
 

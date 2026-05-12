@@ -2,7 +2,7 @@
 
 import { Archive, FileSearch, LoaderCircle, Plus, RefreshCw, RotateCcw, SendHorizontal } from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/badge";
@@ -162,11 +162,17 @@ function insightItems(detail: DecisionContext | undefined, keywords: string[]) {
 }
 
 function todayActionStatusLabel(todayAction?: StockProfileData["today_action"]) {
+  if (todayAction?.actionable === false) {
+    return "今日动作不可执行";
+  }
   const value = String(todayAction?.display_state?.value || todayAction?.decision?.value || "pending");
   return todayActionStatusCopy[value] || todayActionStatusCopy.pending;
 }
 
 function todayActionTone(todayAction?: StockProfileData["today_action"]) {
+  if (todayAction?.actionable === false) {
+    return "risk";
+  }
   return todayAction?.display_state?.tone || todayAction?.decision?.tone || "watch";
 }
 
@@ -334,6 +340,72 @@ function TradingAvailabilityBar({ readiness }: { readiness?: StockProfileData["r
   );
 }
 
+function DataFreshnessGate({
+  readiness,
+  sourceTradeDate,
+  onViewEvidence,
+}: {
+  readiness?: StockProfileData["readiness"];
+  sourceTradeDate?: string;
+  onViewEvidence: () => void;
+}) {
+  const { mode, dataStale } = readinessFacts(readiness);
+  const locked = mode !== "live_ready" || dataStale;
+  if (!locked) {
+    return null;
+  }
+  const copy = readinessModeCopy(mode);
+  const recommendedTask = readiness?.recommended_tasks?.[0];
+  const recommendedTaskTitle = recommendedTask ? refreshTaskCopy(recommendedTask).title : "";
+
+  return (
+    <section className="surface-card border-[color-mix(in_srgb,var(--negative)_32%,transparent)] bg-[color-mix(in_srgb,var(--negative)_8%,transparent)] p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <Badge tone="risk">交易判断冻结</Badge>
+            <Badge tone="warning">{copy.title}</Badge>
+          </div>
+          <h2 className="text-lg font-semibold text-[var(--text-primary)]">不使用当前页面内容判断今天是否交易</h2>
+          <p className="mt-2 text-[12px] leading-5 text-[var(--text-secondary)]">
+            数据新鲜度未通过时，研究结论、仓位纪律、关键条件和执行入口都不作为今天依据。
+            当前仅保留只读证据和刷新指引。
+          </p>
+        </div>
+        <Link
+          href="/settings"
+          className="focus-ring inline-flex shrink-0 items-center justify-center rounded-md border border-[var(--border-strong)] bg-[var(--bg-secondary)] px-3 py-2 text-[12px] font-medium text-[var(--text-primary)]"
+        >
+          去 Settings 刷新
+        </Link>
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+          <div className="text-[11px] text-[var(--text-tertiary)]">预期交易日</div>
+          <div className="mt-1 text-[13px] font-medium text-[var(--text-primary)]">{readiness?.expected_trade_date || "-"}</div>
+        </div>
+        <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+          <div className="text-[11px] text-[var(--text-tertiary)]">当前数据交易日</div>
+          <div className="mt-1 text-[13px] font-medium text-[var(--text-primary)]">{readiness?.data_trade_date || sourceTradeDate || "-"}</div>
+        </div>
+        <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+          <div className="text-[11px] text-[var(--text-tertiary)]">建议刷新</div>
+          <div className="mt-1 text-[13px] font-medium text-[var(--text-primary)]">{recommendedTaskTitle || recommendedTask || "先回 Settings 看推荐任务"}</div>
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="focus-ring rounded-md border border-[var(--border-subtle)] px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          onClick={onViewEvidence}
+        >
+          只读查看证据
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function DecisionLayerCard({
   detail,
   todayAction,
@@ -397,6 +469,9 @@ function TodayActionStatusCard({
 }) {
   const status = todayActionStatusLabel(todayAction);
   const processed = todayActionIsProcessed(todayAction);
+  const readonlyReason = todayAction?.actionable === false
+    ? todayAction.confidence?.note || "readiness 未就绪，这条记录只作为线索复核。"
+    : "";
   return (
     <section className="surface-card p-4">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
@@ -409,12 +484,13 @@ function TodayActionStatusCard({
       <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
         <div className="text-[15px] font-semibold text-[var(--text-primary)]">{status}</div>
         <p className="mt-2 text-[12px] leading-5 text-[var(--text-secondary)]">
-          这是用户今天的处理记录，不是系统研究结论。
+          {readonlyReason || "这是用户今天的处理记录，不是系统研究结论。"}
         </p>
         {todayAction?.key ? (
           <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[var(--text-tertiary)]">
             <Badge tone="info">{todayAction.key}</Badge>
             {todayAction.trade_date ? <Badge tone="info">交易日 {todayAction.trade_date}</Badge> : null}
+            {todayAction.actionable === false ? <Badge tone="risk">只读线索</Badge> : null}
             {todayAction.display_state?.updated_at ? <Badge tone={todayActionTone(todayAction)}>更新 {todayAction.display_state.updated_at}</Badge> : null}
           </div>
         ) : null}
@@ -604,14 +680,16 @@ function historyPayload(messages: AskFollowupResponse[]) {
 
 export default function StockProfilePage() {
   const params = useParams<{ code: string }>();
+  const searchParams = useSearchParams();
   const code = String(params.code || "");
+  const queryName = String(searchParams.get("name") || "").trim();
   const profile = useStockProfile(code);
-  const ask = useAsk(code);
-  const managerQuery = useWatchlistManager();
   const addStock = useAddWatchlistStock();
   const archiveStock = useArchiveWatchlistStock();
   const restoreStock = useRestoreWatchlistStock();
   const [activeTab, setActiveTab] = useState<StockTab>("决策");
+  const ask = useAsk(code, activeTab === "追问");
+  const managerQuery = useWatchlistManager();
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<AskFollowupResponse[]>([]);
   const [pendingQuestion, setPendingQuestion] = useState("");
@@ -640,7 +718,7 @@ export default function StockProfilePage() {
     items.push("证据");
     return items;
   }, [hasOpportunityDetail, hasWatchlistDetail]);
-  const stockName = detail?.name || activeManagerItem?.name || archivedManagerItem?.name || askCase?.name || code;
+  const stockName = detail?.name || profileData?.name || queryName || activeManagerItem?.name || archivedManagerItem?.name || askCase?.name || code;
   const followupShell = ask.data?.followup || askCase?.evidence_layer?.followup || null;
   const sourceLabel =
     profileData?.primary_source_label && activeTab === "决策"
@@ -662,6 +740,7 @@ export default function StockProfilePage() {
     detail?.trade_date ||
     askCase?.trade_date ||
     canonicalText(detail?.canonical_decision || askCase?.canonical_decision, "trade_date", "");
+  const displayTradeDate = sourceTradeDate || profileData?.data_trade_date || profileData?.expected_trade_date || "";
   const sourceIssues = useMemo(() => sourceIssueBadges(profileData), [profileData]);
   const allMetricCards = useMemo(() => {
     if (!detail) {
@@ -676,6 +755,16 @@ export default function StockProfilePage() {
   }, [detail]);
   const todayAction = profileData?.today_action;
   const decisionContext = (detail || askCase) as DecisionContext | undefined;
+  const decisionLocked = Boolean(profileData?.readiness && (profileData.readiness.readiness_mode !== "live_ready" || readinessHasStaleData(profileData.readiness)));
+  const pageTitle = decisionLocked
+    ? `${stockName || "个股档案"} ${code}`
+    : detail?.hero?.title || askCase?.hero?.title || `${stockName || "个股档案"} · ${code}`;
+  const pageSummary = decisionLocked
+    ? "数据新鲜度未通过，旧结论已从首屏移除；当前只允许查看证据和刷新状态。"
+    : detail?.hero?.summary || detail?.topline?.verdict_summary || askCase?.hero?.summary || "统一查看这只股票的决策、持仓、发现和证据。";
+  const pageBadge = decisionLocked
+    ? "交易判断冻结"
+    : detail?.hero?.status_label || detail?.topline?.verdict_badge || askCase?.hero?.status_label || askCase?.hero?.decision_label || "个股档案";
   const executionResultHref = useMemo(() => {
     const params = new URLSearchParams();
     const canonical = detail?.canonical_decision || askCase?.canonical_decision;
@@ -805,11 +894,11 @@ export default function StockProfilePage() {
     <main className="flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
       <div className="mx-auto max-w-7xl">
         <PageTitle
-          eyebrow={detail?.trade_date || askCase?.trade_date || code}
-          title={detail?.hero?.title || askCase?.hero?.title || `${stockName || "个股档案"} · ${code}`}
-          summary={detail?.hero?.summary || detail?.topline?.verdict_summary || askCase?.hero?.summary || "统一查看这只股票的决策、持仓、发现和证据。"}
+          eyebrow={displayTradeDate || code}
+          title={pageTitle}
+          summary={pageSummary}
           icon={FileSearch}
-          badge={detail?.hero?.status_label || detail?.topline?.verdict_badge || askCase?.hero?.status_label || askCase?.hero?.decision_label || "个股档案"}
+          badge={pageBadge}
           actions={
             <div className="flex flex-wrap items-center gap-2">
               {managerUnavailable ? (
@@ -878,35 +967,46 @@ export default function StockProfilePage() {
               <Badge tone={hasWatchlistDetail ? "positive" : hasOpportunityDetail ? "watch" : "info"}>{sourceLabel}</Badge>
               {sourceTradeDate ? <Badge tone="info">交易日 {sourceTradeDate}</Badge> : null}
               {sourceGeneratedAt ? <Badge tone="info">更新 {sourceGeneratedAt}</Badge> : null}
+              {decisionLocked ? <Badge tone="risk">仅作证据来源</Badge> : null}
               {!detail && askCase ? <Badge tone="warning">临时抓取</Badge> : null}
               {sourceIssues.map((item) => <Badge key={item.key} tone="watch">{item.label}</Badge>)}
             </div>
             <p className="mt-2 text-[12px] leading-5 text-[var(--text-tertiary)]">
-              当前页只展示已有链路能回源的纪律参考；目标价、收益预测和完整财报研判暂不进入结果页。
+              {decisionLocked
+                ? "当前链路只作为证据来源保留，不进入今天的交易判断。"
+                : "当前页只展示已有链路能回源的纪律参考；目标价、收益预测和完整财报研判暂不进入结果页。"}
             </p>
           </div>
         ) : null}
 
-        {detail || askCase ? (
+        {detail || askCase || (decisionLocked && profileData?.readiness) ? (
           <div className="mb-6 flex flex-col gap-4">
             <TradingAvailabilityBar readiness={profileData?.readiness} />
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
-              <div className="flex flex-col gap-4">
-                <DecisionLayerCard detail={decisionContext} todayAction={todayAction} />
-                <KeyConditionsCard detail={decisionContext} />
+            {decisionLocked ? (
+              <DataFreshnessGate
+                readiness={profileData?.readiness}
+                sourceTradeDate={displayTradeDate}
+                onViewEvidence={() => setActiveTab("证据")}
+              />
+            ) : (
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+                <div className="flex flex-col gap-4">
+                  <DecisionLayerCard detail={decisionContext} todayAction={todayAction} />
+                  <KeyConditionsCard detail={decisionContext} />
+                </div>
+                <div className="flex flex-col gap-4">
+                  <TodayActionStatusCard todayAction={todayAction} executionHref={executionResultHref} />
+                  <EvidenceCredibilityCard
+                    detail={decisionContext}
+                    readiness={profileData?.readiness}
+                    sourceLabel={sourceLabel}
+                    sourceTradeDate={sourceTradeDate}
+                    todayAction={todayAction}
+                    onViewEvidence={() => setActiveTab("证据")}
+                  />
+                </div>
               </div>
-              <div className="flex flex-col gap-4">
-                <TodayActionStatusCard todayAction={todayAction} executionHref={executionResultHref} />
-                <EvidenceCredibilityCard
-                  detail={decisionContext}
-                  readiness={profileData?.readiness}
-                  sourceLabel={sourceLabel}
-                  sourceTradeDate={sourceTradeDate}
-                  todayAction={todayAction}
-                  onViewEvidence={() => setActiveTab("证据")}
-                />
-              </div>
-            </div>
+            )}
           </div>
         ) : null}
 
@@ -930,6 +1030,12 @@ export default function StockProfilePage() {
           <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {Array.from({ length: 4 }).map((_, index) => <MetricSkeleton key={index} />)}
           </section>
+        ) : null}
+
+        {decisionLocked && (activeTab === "决策" || activeTab === "持仓" || activeTab === "发现") ? (
+          <EmptyState>
+            数据新鲜度未通过，{activeTab} 内容已冻结。请先去 Settings 刷新，或切到“证据”只读查看来源。
+          </EmptyState>
         ) : null}
 
         {activeTab === "追问" ? (
@@ -1097,7 +1203,7 @@ export default function StockProfilePage() {
           </div>
         ) : null}
 
-        {!detail && askCase && activeTab === "决策" ? (
+        {!decisionLocked && !detail && askCase && activeTab === "决策" ? (
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
             <div className="flex flex-col gap-6">
               <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1142,7 +1248,7 @@ export default function StockProfilePage() {
           </div>
         ) : null}
 
-        {detail && activeTab === "决策" ? (
+        {!decisionLocked && detail && activeTab === "决策" ? (
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
             <div className="flex flex-col gap-6">
               <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1176,7 +1282,7 @@ export default function StockProfilePage() {
           </div>
         ) : null}
 
-        {detail && activeTab === "持仓" ? (
+        {!decisionLocked && detail && activeTab === "持仓" ? (
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
             <Panel title="持仓指标" eyebrow="Holdings">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1201,7 +1307,7 @@ export default function StockProfilePage() {
           </div>
         ) : null}
 
-        {detail && activeTab === "发现" ? (
+        {!decisionLocked && detail && activeTab === "发现" ? (
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
             <Panel title="发现指标" eyebrow="Discovery">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">

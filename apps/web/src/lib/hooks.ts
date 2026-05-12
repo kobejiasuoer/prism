@@ -11,7 +11,10 @@ export const queryKeys = {
   watchlist: ["watchlist"] as const,
   watchlistManager: ["watchlist-manager"] as const,
   opportunities: ["opportunities"] as const,
-  review: ["review"] as const,
+  review: (params: { baseline?: string; window?: string } = {}) =>
+    ["review", params.baseline || "", params.window || ""] as const,
+  reviewDetail: (params: { section?: string; label?: string; baseline?: string; window?: string } = {}) =>
+    ["review-detail", params.section || "", params.label || "", params.baseline || "", params.window || ""] as const,
   ask: (query: string) => ["ask", query] as const,
   askSuggest: (query: string) => ["ask-suggest", query] as const,
   refreshStatus: (page: string, auto = false) => ["refresh-status", page, auto ? "auto" : "passive"] as const,
@@ -69,10 +72,26 @@ export function useOpportunities() {
   });
 }
 
-export function useReview() {
+export function useReview(params: { baseline?: string; window?: string } = {}) {
   return useQuery({
-    queryKey: queryKeys.review,
-    queryFn: api.getReview,
+    queryKey: queryKeys.review(params),
+    queryFn: () => api.getReview(params),
+    staleTime: 300_000,
+    refetchInterval: false,
+  });
+}
+
+export function useReviewDetail(params: { section?: string; label?: string; baseline?: string; window?: string }) {
+  return useQuery({
+    queryKey: queryKeys.reviewDetail(params),
+    queryFn: () =>
+      api.getReviewDetail({
+        section: params.section || "",
+        label: params.label || "",
+        baseline: params.baseline,
+        window: params.window,
+      }),
+    enabled: Boolean(params.section && params.label),
     staleTime: 300_000,
     refetchInterval: false,
   });
@@ -88,11 +107,11 @@ export function useStockProfile(code: string) {
   });
 }
 
-export function useAsk(query: string) {
+export function useAsk(query: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.ask(query),
     queryFn: () => api.ask(query),
-    enabled: Boolean(query),
+    enabled: Boolean(query) && enabled,
     staleTime: 60_000,
   });
 }

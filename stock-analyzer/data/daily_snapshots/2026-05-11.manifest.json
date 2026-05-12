@@ -1,0 +1,423 @@
+{
+  "schema_version": 1,
+  "dataset": "watchlist.snapshot",
+  "provider": "pipeline",
+  "provider_role": "primary",
+  "trade_date": "2026-05-11",
+  "fetched_at": "2026-05-11 22:21:04",
+  "asof": "2026-05-11 22:21:04",
+  "ttl_seconds": 900,
+  "status": "ok",
+  "freshness_status": "expired",
+  "fallback_used": false,
+  "row_count": 6,
+  "payload_hash": "13cb0de1cbb1add3",
+  "live_small_allowed": false,
+  "quality_flags": [
+    "required_dataset_group_not_live:quotes.snapshot",
+    "required_dataset_group_not_live:bars.daily",
+    "required_dataset_group_not_live:capital_flow.batch|capital_flow.daily",
+    "upstream_not_fresh"
+  ],
+  "source_endpoint": "pipeline",
+  "params_hash": "",
+  "license_scope": "internal_research",
+  "error": null,
+  "request_key": "",
+  "upstream_manifests": [
+    {
+      "schema_version": 1,
+      "dataset": "quotes.snapshot",
+      "provider": "sina",
+      "provider_role": "primary",
+      "trade_date": "2026-05-11",
+      "fetched_at": "2026-05-11 22:20:34",
+      "asof": "2026-05-11 15:00:00",
+      "ttl_seconds": 120,
+      "status": "ok",
+      "freshness_status": "expired",
+      "fallback_used": false,
+      "row_count": 17,
+      "payload_hash": "5b893f26bb34ca0f",
+      "live_small_allowed": true,
+      "quality_flags": [],
+      "source_endpoint": "https://hq.sinajs.cn/list=sh600690",
+      "params_hash": "44136fa355b3678a",
+      "license_scope": "internal_research",
+      "error": null,
+      "request_key": "600690",
+      "manifest_path": "<redacted-path>",
+      "data_path": "<redacted-path>",
+      "upstream_manifests": [],
+      "provider_provenance": [
+        {
+          "dataset": "quotes.snapshot",
+          "provider": "sina",
+          "provider_role": "primary",
+          "trade_date": "2026-05-11",
+          "freshness_status": "expired",
+          "live_small_allowed": true
+        }
+      ],
+      "source_lane": "live",
+      "decision_scope": "live_small",
+      "authority_provider": "sina",
+      "target_authority_provider": "sina",
+      "audit_providers": [
+        "eastmoney"
+      ],
+      "source_authority_ready": true,
+      "formal_decision_allowed": false,
+      "authority_flags": []
+    },
+    {
+      "schema_version": 1,
+      "dataset": "bars.daily",
+      "provider": "sina",
+      "provider_role": "primary",
+      "trade_date": "2026-05-11",
+      "fetched_at": "2026-05-11 22:20:39",
+      "asof": "2026-05-11 00:00:00",
+      "ttl_seconds": 3600,
+      "status": "ok",
+      "freshness_status": "expired",
+      "fallback_used": false,
+      "row_count": 120,
+      "payload_hash": "d8acb8c709f3b087",
+      "live_small_allowed": true,
+      "quality_flags": [],
+      "source_endpoint": "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData",
+      "params_hash": "3a214ae888a66584",
+      "license_scope": "internal_research",
+      "error": null,
+      "request_key": "600690",
+      "manifest_path": "<redacted-path>",
+      "data_path": "<redacted-path>",
+      "upstream_manifests": [],
+      "provider_provenance": [
+        {
+          "dataset": "bars.daily",
+          "provider": "sina",
+          "provider_role": "primary",
+          "trade_date": "2026-05-11",
+          "freshness_status": "expired",
+          "live_small_allowed": true
+        }
+      ],
+      "source_lane": "authoritative_daily",
+      "decision_scope": "live_small",
+      "authority_provider": "sina",
+      "target_authority_provider": "tushare",
+      "audit_providers": [
+        "akshare",
+        "baostock"
+      ],
+      "source_authority_ready": false,
+      "formal_decision_allowed": false,
+      "authority_flags": [
+        "target_authority_not_in_use:tushare"
+      ]
+    },
+    {
+      "schema_version": 1,
+      "dataset": "capital_flow.batch",
+      "provider": "eastmoney",
+      "provider_role": "primary",
+      "trade_date": "2026-05-11",
+      "fetched_at": "2026-05-11 22:21:01",
+      "asof": null,
+      "ttl_seconds": 420,
+      "status": "failed",
+      "freshness_status": "fresh",
+      "fallback_used": false,
+      "row_count": 0,
+      "payload_hash": "74234e98afe7498f",
+      "live_small_allowed": false,
+      "quality_flags": [
+        "fetch_failed"
+      ],
+      "source_endpoint": "redacted",
+      "params_hash": "",
+      "license_scope": "internal_research",
+      "error": "HTTPSConnectionPool(host='push2delay.eastmoney.com', port=443): Read timed out. (read timeout=10)",
+      "request_key": "600690",
+      "manifest_path": "<redacted-path>",
+      "data_path": null,
+      "upstream_manifests": [],
+      "provider_provenance": [
+        {
+          "dataset": "capital_flow.batch",
+          "provider": "eastmoney",
+          "provider_role": "primary",
+          "trade_date": "2026-05-11",
+          "freshness_status": "fresh",
+          "live_small_allowed": false
+        }
+      ],
+      "source_lane": "live",
+      "decision_scope": "display_only",
+      "authority_provider": "eastmoney",
+      "target_authority_provider": "eastmoney",
+      "audit_providers": [],
+      "source_authority_ready": false,
+      "formal_decision_allowed": false,
+      "authority_flags": [
+        "provider_not_ok"
+      ]
+    },
+    {
+      "schema_version": 1,
+      "dataset": "fundamentals.snapshot",
+      "provider": "eastmoney",
+      "provider_role": "primary",
+      "trade_date": "2026-05-11",
+      "fetched_at": "2026-05-11 21:57:33",
+      "asof": "2026-05-11 21:57:33",
+      "ttl_seconds": 43200,
+      "status": "ok",
+      "freshness_status": "fresh",
+      "fallback_used": false,
+      "row_count": 16,
+      "payload_hash": "1738d44ffc1ade64",
+      "live_small_allowed": true,
+      "quality_flags": [],
+      "source_endpoint": "https://push2.eastmoney.com/api/qt/stock/get",
+      "params_hash": "f279cc9574d32887",
+      "license_scope": "internal_research",
+      "error": null,
+      "request_key": "600690",
+      "manifest_path": "<redacted-path>",
+      "data_path": "<redacted-path>",
+      "upstream_manifests": [],
+      "provider_provenance": [
+        {
+          "dataset": "fundamentals.snapshot",
+          "provider": "eastmoney",
+          "provider_role": "primary",
+          "trade_date": "2026-05-11",
+          "freshness_status": "fresh",
+          "live_small_allowed": true
+        }
+      ],
+      "source_lane": "reference",
+      "decision_scope": "display_only",
+      "authority_provider": "eastmoney",
+      "target_authority_provider": "eastmoney",
+      "audit_providers": [
+        "ths"
+      ],
+      "source_authority_ready": true,
+      "formal_decision_allowed": false,
+      "authority_flags": []
+    },
+    {
+      "schema_version": 1,
+      "dataset": "fundamentals.batch",
+      "provider": "eastmoney",
+      "provider_role": "primary",
+      "trade_date": "2026-05-11",
+      "fetched_at": "2026-05-11 22:21:04",
+      "asof": "2026-05-11 22:21:04",
+      "ttl_seconds": 43200,
+      "status": "ok",
+      "freshness_status": "fresh",
+      "fallback_used": false,
+      "row_count": 1,
+      "payload_hash": "f56d43121a68a1ce",
+      "live_small_allowed": true,
+      "quality_flags": [],
+      "source_endpoint": "https://push2.eastmoney.com/api/qt/ulist.np/get",
+      "params_hash": "e10cd852935bb0b7",
+      "license_scope": "internal_research",
+      "error": null,
+      "request_key": "600690",
+      "manifest_path": "<redacted-path>",
+      "data_path": "<redacted-path>",
+      "upstream_manifests": [],
+      "provider_provenance": [
+        {
+          "dataset": "fundamentals.batch",
+          "provider": "eastmoney",
+          "provider_role": "primary",
+          "trade_date": "2026-05-11",
+          "freshness_status": "fresh",
+          "live_small_allowed": true
+        }
+      ],
+      "source_lane": "reference",
+      "decision_scope": "display_only",
+      "authority_provider": "eastmoney",
+      "target_authority_provider": "eastmoney",
+      "audit_providers": [],
+      "source_authority_ready": true,
+      "formal_decision_allowed": false,
+      "authority_flags": []
+    },
+    {
+      "schema_version": 1,
+      "dataset": "announcements.latest",
+      "provider": "eastmoney",
+      "provider_role": "primary",
+      "trade_date": "2026-05-11",
+      "fetched_at": "2026-05-11 22:20:37",
+      "asof": "2026-05-11 22:20:37",
+      "ttl_seconds": 14400,
+      "status": "ok",
+      "freshness_status": "fresh",
+      "fallback_used": false,
+      "row_count": 5,
+      "payload_hash": "5c955df02732e0ab",
+      "live_small_allowed": true,
+      "quality_flags": [],
+      "source_endpoint": "https://np-anotice-stock.eastmoney.com/api/security/ann",
+      "params_hash": "3356ad727945daf6",
+      "license_scope": "internal_research",
+      "error": null,
+      "request_key": "600690",
+      "manifest_path": "<redacted-path>",
+      "data_path": "<redacted-path>",
+      "upstream_manifests": [],
+      "provider_provenance": [
+        {
+          "dataset": "announcements.latest",
+          "provider": "eastmoney",
+          "provider_role": "primary",
+          "trade_date": "2026-05-11",
+          "freshness_status": "fresh",
+          "live_small_allowed": true
+        }
+      ],
+      "source_lane": "disclosure",
+      "decision_scope": "display_only",
+      "authority_provider": "eastmoney",
+      "target_authority_provider": "official_exchange",
+      "audit_providers": [
+        "cninfo",
+        "sse",
+        "szse"
+      ],
+      "source_authority_ready": false,
+      "formal_decision_allowed": false,
+      "authority_flags": [
+        "target_authority_not_in_use:official_exchange"
+      ]
+    },
+    {
+      "schema_version": 1,
+      "dataset": "news.latest",
+      "provider": "eastmoney",
+      "provider_role": "primary",
+      "trade_date": "2026-05-11",
+      "fetched_at": "2026-05-11 22:20:35",
+      "asof": "2026-05-11 22:20:35",
+      "ttl_seconds": 14400,
+      "status": "ok",
+      "freshness_status": "fresh",
+      "fallback_used": false,
+      "row_count": 5,
+      "payload_hash": "4a809d3f94c0485f",
+      "live_small_allowed": true,
+      "quality_flags": [],
+      "source_endpoint": "https://search-api-web.eastmoney.com/search/jsonp",
+      "params_hash": "1fda5cf1e456022a",
+      "license_scope": "internal_research",
+      "error": null,
+      "request_key": "600690",
+      "manifest_path": "<redacted-path>",
+      "data_path": "<redacted-path>",
+      "upstream_manifests": [],
+      "provider_provenance": [
+        {
+          "dataset": "news.latest",
+          "provider": "eastmoney",
+          "provider_role": "primary",
+          "trade_date": "2026-05-11",
+          "freshness_status": "fresh",
+          "live_small_allowed": true
+        }
+      ],
+      "source_lane": "news",
+      "decision_scope": "display_only",
+      "authority_provider": "eastmoney",
+      "target_authority_provider": "eastmoney",
+      "audit_providers": [],
+      "source_authority_ready": true,
+      "formal_decision_allowed": false,
+      "authority_flags": []
+    }
+  ],
+  "provider_provenance": [
+    {
+      "dataset": "quotes.snapshot",
+      "provider": "sina",
+      "provider_role": "primary",
+      "trade_date": "2026-05-11",
+      "freshness_status": "expired",
+      "live_small_allowed": true
+    },
+    {
+      "dataset": "bars.daily",
+      "provider": "sina",
+      "provider_role": "primary",
+      "trade_date": "2026-05-11",
+      "freshness_status": "expired",
+      "live_small_allowed": true
+    },
+    {
+      "dataset": "capital_flow.batch",
+      "provider": "eastmoney",
+      "provider_role": "primary",
+      "trade_date": "2026-05-11",
+      "freshness_status": "fresh",
+      "live_small_allowed": false
+    },
+    {
+      "dataset": "fundamentals.snapshot",
+      "provider": "eastmoney",
+      "provider_role": "primary",
+      "trade_date": "2026-05-11",
+      "freshness_status": "fresh",
+      "live_small_allowed": true
+    },
+    {
+      "dataset": "fundamentals.batch",
+      "provider": "eastmoney",
+      "provider_role": "primary",
+      "trade_date": "2026-05-11",
+      "freshness_status": "fresh",
+      "live_small_allowed": true
+    },
+    {
+      "dataset": "announcements.latest",
+      "provider": "eastmoney",
+      "provider_role": "primary",
+      "trade_date": "2026-05-11",
+      "freshness_status": "fresh",
+      "live_small_allowed": true
+    },
+    {
+      "dataset": "news.latest",
+      "provider": "eastmoney",
+      "provider_role": "primary",
+      "trade_date": "2026-05-11",
+      "freshness_status": "fresh",
+      "live_small_allowed": true
+    }
+  ],
+  "source_lane": "pipeline",
+  "decision_scope": "display_only",
+  "authority_provider": "pipeline",
+  "target_authority_provider": "pipeline",
+  "audit_providers": [],
+  "source_authority_ready": false,
+  "formal_decision_allowed": false,
+  "authority_flags": [
+    "target_authority_not_in_use:tushare",
+    "provider_not_ok",
+    "target_authority_not_in_use:official_exchange",
+    "upstream_authority_not_ready",
+    "upstream_formal_not_allowed"
+  ],
+  "manifest_path": "<redacted-path>",
+  "data_path": "<redacted-path>"
+}

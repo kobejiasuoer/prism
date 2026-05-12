@@ -12,7 +12,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { useTheme, type ThemeMode } from "@/components/theme-provider";
-import { useOverview } from "@/lib/hooks";
+import { useOverview, useTodayData } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 
 export const navItems = [
@@ -62,7 +62,14 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const overview = useOverview();
+  const today = useTodayData();
   const statusOk = !overview.isError;
+  const readiness = today.data?.readiness;
+  const watchlistSource =
+    readiness?.source_freshness?.find((source) => source.key === "watchlist")
+    || overview.data?.freshness?.find((source) => source.label.includes("自选") || source.key?.includes("watch"));
+  const watchlistBlocked = readiness?.readiness_mode === "blocked" || Boolean(watchlistSource?.stale);
+  const watchlistLabel = watchlistSource?.age_label || (watchlistBlocked ? "不可用" : "待同步");
 
   return (
     <aside
@@ -136,9 +143,8 @@ export function Sidebar({
         </div>
         <div className="prism-status-line">
           <span>watchlist</span>
-          <span className="mono watch-text">
-            {overview.data?.freshness?.find((source) => source.label.includes("自选") || source.key?.includes("watch"))
-              ?.age_label || "数据可用"}
+          <span className={cn("mono", watchlistBlocked ? "sell-text" : "watch-text")}>
+            {watchlistBlocked ? `stale · ${watchlistLabel}` : watchlistLabel}
           </span>
         </div>
         <div className="prism-status-footer">

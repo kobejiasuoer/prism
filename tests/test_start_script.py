@@ -17,10 +17,13 @@ def test_start_script_targets_next_web_shell_and_local_backend() -> None:
     assert "node_modules/.bin/next" in content
     assert "scripts/dev.mjs" in content
     assert "PRISM_BACKEND_ORIGIN" in content
+    assert "prism_scheduler.py" in content
+    assert "PRISM_ENABLE_SCHEDULER" in content
     assert "127.0.0.1" in content
     assert "8001" in content
     assert "8000" in content
     assert "Starting Prism Next web app" in content
+    assert "Starting Prism scheduler" in content
 
 
 def test_next_rewrites_target_internal_backend_by_default() -> None:

@@ -70,6 +70,23 @@ function advancedTaskList(tasks: TaskDefinition[]) {
   return tasks.filter((task) => taskCategory(task) !== "safe");
 }
 
+function formatAuthorityLabel(value?: string) {
+  const key = String(value || "").trim();
+  const copy: Record<string, string> = {
+    authoritative_daily: "权威日线",
+    disclosure: "公告披露",
+    display_only: "仅展示",
+    execution: "执行约束",
+    formal_candidate: "Formal 候选",
+    live: "盘中快源",
+    live_small: "小额实盘",
+    news: "新闻",
+    pipeline: "工作流",
+    reference: "参考源",
+  };
+  return copy[key] || key || "-";
+}
+
 function ParametersEditor() {
   const parameters = useParameters();
   const saveParameters = useSaveParameters();
@@ -175,7 +192,7 @@ function ParametersEditor() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="focus-ring inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            className="focus-ring prism-btn prism-btn-secondary"
             onClick={reloadFromDisk}
             disabled={parameters.isFetching || !editorOpen}
           >
@@ -184,7 +201,7 @@ function ParametersEditor() {
           </button>
           <button
             type="button"
-            className="focus-ring inline-flex items-center gap-2 rounded-md bg-[var(--text-primary)] px-3 py-1.5 text-[12px] font-medium text-[var(--text-inverse)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="focus-ring prism-btn prism-btn-primary"
             onClick={() => save()}
             disabled={saveParameters.isPending || !raw.trim() || !editorOpen}
           >
@@ -259,7 +276,7 @@ function ParametersEditor() {
             </div>
             <button
               type="button"
-              className="focus-ring rounded-md border border-[var(--border-subtle)] px-2.5 py-1 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              className="focus-ring prism-btn prism-btn-secondary prism-btn-sm"
               onClick={formatJson}
             >
               格式化
@@ -325,7 +342,7 @@ function ParametersEditor() {
             </div>
             <button
               type="button"
-              className="mt-2 rounded-md border border-[color-mix(in_srgb,var(--negative)_35%,transparent)] px-2.5 py-1 text-[12px] text-[var(--negative)] disabled:cursor-not-allowed disabled:opacity-50"
+              className="focus-ring prism-btn prism-btn-danger mt-2"
               onClick={() => save(true)}
               disabled={saveParameters.isPending || !unsafeReady}
             >
@@ -355,6 +372,10 @@ function ReadinessStatusPanel({ status }: { status?: RefreshStatus }) {
   const staleReasons = (readiness?.source_freshness || [])
     .flatMap((source) => (source.stale_reasons || []).map((reason) => ({ reason, source: source.label })))
     .slice(0, 8);
+  const formalBlockers = readiness?.formal_blockers || [];
+  const formalSources = (readiness?.source_freshness || [])
+    .filter((source) => source.manifest_path)
+    .slice(0, 4);
   const account = readiness?.account_state;
 
   return (
@@ -385,6 +406,43 @@ function ReadinessStatusPanel({ status }: { status?: RefreshStatus }) {
           />
           <MetricCard label="过期源" value={String(readiness?.stale_count ?? status?.stale_count ?? "-")} detail="核心来源 stale 数" tone={(readiness?.stale_count || status?.stale_count) ? "warning" : "positive"} />
           <MetricCard label="账户模式" value={account?.mode_label || "-"} detail={account?.ready_for_live_small ? "live_small 已通过" : "未放行真钱"} tone={account?.ready_for_live_small ? "positive" : "watch"} />
+        </div>
+
+        <div className="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <Database size={15} className={readiness?.formal_ready ? "text-[var(--positive)]" : "text-[var(--warning)]"} />
+            <span className="text-[13px] font-medium text-[var(--text-primary)]">Formal 数据源闸门</span>
+            <Badge tone={readiness?.formal_ready ? "positive" : "watch"}>
+              {readiness?.formal_ready ? "Formal Ready" : "Live 快源 / Formal 未放行"}
+            </Badge>
+          </div>
+          <p className="text-[12px] leading-5 text-[var(--text-secondary)]">
+            Live-ready 只代表当前控制台数据可按纪律观察/小额执行；formal-ready 需要权威日线、复权、benchmark 和执行约束源全部通过。
+          </p>
+          {formalSources.length ? (
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {formalSources.map((source) => (
+                <div key={source.key} className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[12px] font-medium text-[var(--text-primary)]">{source.label}</span>
+                    <Badge tone={source.formal_decision_allowed ? "positive" : "watch"}>
+                      {source.formal_decision_allowed ? "formal" : formatAuthorityLabel(source.decision_scope)}
+                    </Badge>
+                  </div>
+                  <div className="mt-1 text-[11px] leading-5 text-[var(--text-tertiary)]">
+                    {formatAuthorityLabel(source.source_lane)} · 当前 {source.provider || "-"} · 目标 {source.target_authority_provider || source.authority_provider || "-"}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {formalBlockers.length ? (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {formalBlockers.slice(0, 6).map((item) => (
+                <Badge key={item.code} tone="warning">{item.label}</Badge>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
@@ -514,7 +572,7 @@ function SafeRefreshPanel({
                 ) : null}
                 <button
                   type="button"
-                  className="focus-ring mt-3 inline-flex items-center gap-2 rounded-md bg-[var(--text-primary)] px-3 py-1.5 text-[12px] font-medium text-[var(--text-inverse)] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="focus-ring prism-btn prism-btn-primary mt-3"
                   onClick={() => startRefresh(taskName)}
                   disabled={disabled}
                 >
@@ -723,7 +781,7 @@ function TaskRunnerPanel({
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    className="focus-ring inline-flex items-center gap-2 rounded-md bg-[var(--text-primary)] px-3 py-1.5 text-[12px] font-medium text-[var(--text-inverse)] disabled:cursor-not-allowed disabled:opacity-50"
+                    className="focus-ring prism-btn prism-btn-primary"
                     onClick={() => startTask(task)}
                     disabled={runTask.isPending || !taskName}
                   >
@@ -734,7 +792,7 @@ function TaskRunnerPanel({
                     <>
                       <button
                         type="button"
-                        className="focus-ring inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] px-3 py-1.5 text-[12px] text-[var(--text-secondary)]"
+                        className="focus-ring prism-btn prism-btn-secondary"
                         onClick={() => void openRunDetail(lastRun)}
                       >
                         <Eye size={13} />
@@ -742,7 +800,7 @@ function TaskRunnerPanel({
                       </button>
                       <button
                         type="button"
-                        className="focus-ring inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] px-3 py-1.5 text-[12px] text-[var(--text-secondary)]"
+                        className="focus-ring prism-btn prism-btn-secondary"
                         onClick={() => void openRunLog(lastRun)}
                       >
                         <FileJson size={13} />
@@ -830,7 +888,7 @@ function RecentRunsPanel({
               <div className="mt-2 flex gap-2">
                 <button
                   type="button"
-                  className="focus-ring rounded-md border border-[var(--border-subtle)] px-2 py-1 text-[11px] text-[var(--text-secondary)]"
+                  className="focus-ring prism-btn prism-btn-secondary prism-btn-sm"
                   onClick={() => onPreview({
                     open: true,
                     title: run.title || run.task_name || runId || "运行详情",
@@ -844,7 +902,7 @@ function RecentRunsPanel({
                 {(runId || run.log_path) ? (
                   <button
                     type="button"
-                    className="focus-ring rounded-md border border-[var(--border-subtle)] px-2 py-1 text-[11px] text-[var(--text-secondary)]"
+                    className="focus-ring prism-btn prism-btn-secondary prism-btn-sm"
                     onClick={() => void openLog(run)}
                   >
                     日志
@@ -985,7 +1043,7 @@ export default function SettingsPage() {
             actions={
               <button
                 type="button"
-                className="focus-ring inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] px-3 py-2 text-[12px] text-[var(--text-secondary)]"
+                className="focus-ring prism-btn prism-btn-secondary"
                 onClick={() => {
                   void overview.refetch();
                   void health.refetch();

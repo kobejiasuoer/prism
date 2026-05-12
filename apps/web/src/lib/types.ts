@@ -30,6 +30,8 @@ export interface MetricCardData {
   detail?: string;
   note?: string;
   tone?: Tone | string;
+  detail_url?: string;
+  detail_link_text?: string;
 }
 
 export interface SourceCardData {
@@ -44,6 +46,14 @@ export interface SourceCardData {
   stale_after_seconds?: number;
   trade_date?: string | null;
   stale_reasons?: string[];
+  source_lane?: string;
+  decision_scope?: string;
+  authority_provider?: string;
+  target_authority_provider?: string;
+  audit_providers?: string[];
+  source_authority_ready?: boolean;
+  formal_decision_allowed?: boolean;
+  authority_flags?: string[];
 }
 
 export type ReadinessMode = "live_ready" | "shadow_only" | "blocked";
@@ -74,6 +84,20 @@ export interface ReadinessSourceFreshness {
   stale: boolean;
   stale_after_seconds: number;
   stale_reasons: string[];
+  provider?: string;
+  provider_role?: string;
+  freshness_status?: string;
+  fallback_used?: boolean;
+  live_small_allowed?: boolean;
+  manifest_path?: string;
+  source_lane?: string;
+  decision_scope?: string;
+  authority_provider?: string;
+  target_authority_provider?: string;
+  audit_providers?: string[];
+  source_authority_ready?: boolean;
+  formal_decision_allowed?: boolean;
+  authority_flags?: string[];
 }
 
 export interface ReadinessQualityFreshness {
@@ -102,6 +126,8 @@ export interface ReadinessPayload {
   stale_count: number;
   blockers: ReadinessIssue[];
   warnings: ReadinessIssue[];
+  formal_ready?: boolean;
+  formal_blockers?: ReadinessIssue[];
   source_freshness: ReadinessSourceFreshness[];
   quality_freshness: ReadinessQualityFreshness[];
   recommended_tasks: string[];
@@ -233,6 +259,7 @@ export interface QualityCardData {
 }
 
 export interface BasicCard {
+  key?: string;
   label?: string;
   title?: string;
   subtitle?: string;
@@ -253,6 +280,101 @@ export interface BasicCard {
   detail_link_text?: string;
   url?: string;
   path?: string;
+  name?: string;
+  mtime?: string;
+  mtime_full?: string;
+  artifact_path?: string;
+  artifact_url?: string;
+}
+
+export interface ReviewSelectorOption {
+  label: string;
+  url: string;
+  active?: boolean;
+}
+
+export interface ReviewSelectorGroup {
+  title: string;
+  subtitle?: string;
+  options: ReviewSelectorOption[];
+}
+
+export interface ReviewChangeEntry {
+  title: string;
+  change: string;
+  detail: string;
+  tone?: Tone | string;
+  url?: string | null;
+}
+
+export interface ReviewChangeLog {
+  note?: string;
+  entries?: ReviewChangeEntry[];
+  empty?: string;
+}
+
+export interface ReviewLifecycleCard {
+  name: string;
+  code?: string;
+  tone?: Tone | string;
+  status?: string;
+  copy?: string;
+  metrics?: string[];
+  foot?: string;
+}
+
+export interface ReviewLifecycleGroup {
+  key: string;
+  title: string;
+  subtitle?: string;
+  count: number;
+  cards?: ReviewLifecycleCard[];
+  empty?: string;
+}
+
+export interface ReviewResearchPanel {
+  eyebrow?: string;
+  title: string;
+  summary?: string;
+  metric_cards?: MetricCardData[];
+  groups?: Array<{
+    title: string;
+    entries?: Array<{
+      label: string;
+      summary?: string;
+      detail_url?: string | null;
+    }>;
+  }>;
+  artifact_url?: string;
+  artifact_path?: string;
+}
+
+export interface ReviewComparisonPanel {
+  title: string;
+  subtitle?: string;
+  cards?: MetricCardData[];
+  empty?: string;
+  artifact_url?: string;
+  artifact_path?: string;
+}
+
+export interface ReviewDetailData {
+  generated_at: string;
+  section_key: string;
+  label: string;
+  hero?: {
+    eyebrow?: string;
+    title?: string;
+    summary?: string;
+  };
+  selector_groups?: ReviewSelectorGroup[];
+  comparison_note?: string;
+  missing_note?: string | null;
+  source_cards?: MetricCardData[];
+  summary_cards?: MetricCardData[];
+  comparison_panels?: ReviewComparisonPanel[];
+  artifacts?: BasicCard[];
+  links?: LinkMap;
 }
 
 export interface StockListCard {
@@ -364,6 +486,14 @@ export interface TodayActionItem {
   display_state?: TodayActionDisplayState;
   freshness?: TodayActionContext;
   confidence?: TodayActionContext;
+  actionable?: boolean;
+  trust?: {
+    trusted?: boolean;
+    trade_date?: string;
+    expected_trade_date?: string;
+    stale_reasons?: string[];
+  };
+  stale_reasons?: string[];
 }
 
 export interface TodayActionQueue {
@@ -371,7 +501,9 @@ export interface TodayActionQueue {
   subtitle?: string;
   note?: string;
   items: TodayActionItem[];
+  stale_items?: TodayActionItem[];
   hidden_count?: number;
+  stale_hidden_count?: number;
   counts: {
     total: number;
     pending: number;
@@ -379,6 +511,7 @@ export interface TodayActionQueue {
     watch: number;
     skip: number;
     no_fill?: number;
+    stale?: number;
     last_updated?: string;
   };
 }
@@ -610,6 +743,7 @@ export interface WatchlistData {
     verdict_title?: string;
     verdict_summary?: string;
     meta_pills?: Array<{ label: string; value: string }>;
+    cta_links?: Array<{ label?: string; href?: string }>;
   };
   summary_cards?: MetricCardData[];
   groups?: Array<CardGroup<StockListCard>>;
@@ -698,6 +832,7 @@ export interface OpportunitiesData {
     verdict_title?: string;
     verdict_summary?: string;
     meta_pills?: Array<{ label: string; value: string }>;
+    cta_links?: Array<{ label?: string; href?: string }>;
   };
   summary_cards?: MetricCardData[];
   groups?: Array<CardGroup<StockListCard>>;
@@ -725,13 +860,31 @@ export interface ReviewData {
     verdict_title?: string;
     verdict_summary?: string;
     meta_pills?: Array<{ label: string; value: string }>;
+    cta_links?: Array<{ label?: string; href?: string }>;
   };
   summary_cards?: MetricCardData[];
   verdict_cards?: BasicCard[];
+  selector_groups?: ReviewSelectorGroup[];
+  reading_compass?: MetricCardData[];
   action_rules?: RiskRow[];
+  change_log?: ReviewChangeLog;
+  mini_compare?: BasicCard[];
+  confidence_switch?: {
+    title?: string;
+    status?: string;
+    label?: string;
+    tone?: Tone | string;
+    summary?: string;
+    note?: string;
+    metrics?: MetricCardData[];
+    actions?: Array<{ title: string; url?: string; external?: boolean }>;
+  };
   comparison_cards?: MetricCardData[];
   lifecycle_cards?: MetricCardData[];
+  lifecycle_groups?: ReviewLifecycleGroup[];
+  research_panels?: ReviewResearchPanel[];
   source_cards?: SourceCardData[];
+  artifacts?: BasicCard[];
   verdict_note?: string;
   comparison_note?: string;
   lifecycle_note?: string;
@@ -780,6 +933,14 @@ export interface StockTodayActionContext {
   status?: string;
   detail?: string;
   group_title?: string;
+  actionable?: boolean;
+  trust?: {
+    trusted?: boolean;
+    trade_date?: string;
+    expected_trade_date?: string;
+    stale_reasons?: string[];
+  } | null;
+  confidence?: TodayActionContext | null;
   decision?: TodayActionDecision | null;
   display_state?: TodayActionDisplayState | null;
 }
@@ -787,6 +948,7 @@ export interface StockTodayActionContext {
 export interface StockProfileData {
   generated_at?: string;
   code: string;
+  name?: string | null;
   trade_date?: string;
   expected_trade_date?: string;
   data_trade_date?: string | null;

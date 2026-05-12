@@ -108,6 +108,17 @@ quarantine_stale_output() {
     echo "  旧产物已隔离: $target_path -> $backup_path"
     prism_mirror_artifact "$backup_path" "screener/stale_outputs/$(basename "$backup_path")" "stale_output" "screener"
   fi
+  local sidecar_path=""
+  if [[ "$target_path" == *.* ]]; then
+    sidecar_path="${target_path%.*}.manifest.json"
+  fi
+  if [[ -n "$sidecar_path" && -f "$sidecar_path" ]]; then
+    mkdir -p "$STALE_OUTPUT_DIR"
+    local sidecar_backup_path="$STALE_OUTPUT_DIR/${label}_${RUN_STAMP}.manifest.json"
+    mv "$sidecar_path" "$sidecar_backup_path"
+    echo "  旧 manifest 已隔离: $sidecar_path -> $sidecar_backup_path"
+    prism_mirror_artifact "$sidecar_backup_path" "screener/stale_outputs/$(basename "$sidecar_backup_path")" "stale_manifest" "screener"
+  fi
 }
 
 mirror_midday_confirmation_artifacts() {
@@ -213,6 +224,8 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+from prism_data import build_pipeline_manifest, write_sidecar_manifest
+
 
 def load_json(path_str: str) -> dict:
     if not path_str:
@@ -232,8 +245,9 @@ morning = load_json(morning_path)
 scan = load_json(scan_path) if os.environ.get("INCLUDE_SCAN_METADATA") == "true" else {}
 reason = os.environ.get("REASON", "").strip()
 
+timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 output = {
-    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    "timestamp": timestamp,
     "validation_status": os.environ.get("STATUS", "unknown"),
     "validation_errors": [reason] if reason else [],
     "runner_status": os.environ.get("RUNNER_STATUS", "completed"),
@@ -250,6 +264,25 @@ output = {
 
 output_path = Path(os.environ["OUTPUT_PATH"]).expanduser()
 output_path.parent.mkdir(parents=True, exist_ok=True)
+ingress_manifest = build_pipeline_manifest(
+    dataset="screening.confirmation",
+    trade_date=os.environ.get("TARGET_DATE", "") or timestamp[:10],
+    payload=output,
+    upstream_manifests=[],
+    ttl_seconds=900,
+    required_dataset_groups=[{"screening.batch"}, {"screening.scan_result"}],
+    fetched_at=timestamp,
+    quality_flags=list(output.get("validation_errors") or []) + [f"status:{output.get('validation_status')}"],
+)
+output["data_ingress"] = {
+    "dataset": ingress_manifest.get("dataset"),
+    "manifest_path": "",
+    "freshness_status": ingress_manifest.get("freshness_status"),
+    "live_small_allowed": bool(ingress_manifest.get("live_small_allowed")),
+}
+output_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
+manifest_path = write_sidecar_manifest(output_path, ingress_manifest)
+output["data_ingress"]["manifest_path"] = str(manifest_path)
 output_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
 PY
 }
@@ -478,7 +511,7 @@ if [[ -z "$MORNING_PATH" ]]; then
     echo "  feishu_message -> $MESSAGE_OUTPUT_PATH"
     echo "  markdown_report -> $REPORT_OUTPUT_PATH"
     echo "  validation_status -> missing_baseline"
-    exit 0
+    exit 1
   fi
 else
   MORNING_PATH="$(python3 -c 'import pathlib, sys; print(pathlib.Path(sys.argv[1]).expanduser())' "$MORNING_PATH")"
@@ -553,7 +586,7 @@ if [[ $verify_exit -ne 0 ]]; then
       echo "  feishu_message   -> $MESSAGE_OUTPUT_PATH"
       echo "  markdown_report  -> $REPORT_OUTPUT_PATH"
       echo "  validation_status -> invalid"
-      exit 0
+      exit 1
     fi
   fi
   write_status_output "verify_failed" "midday_verify.py 执行失败，请查看 stderr" "failed" "true"
@@ -609,3 +642,7 @@ echo "  sendable_doc     -> $SENDABLE_OUTPUT_PATH"
 echo "  validation_status -> ${validation_status:-unknown}"
 
 send_to_feishu
+
+if [[ "${validation_status:-unknown}" != "ok" ]]; then
+  exit 1
+fi

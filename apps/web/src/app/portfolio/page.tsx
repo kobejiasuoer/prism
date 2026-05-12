@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, RefreshCw, ShieldCheck, WalletCards } from "lucide-react";
+import { AlertTriangle, CheckCircle2, RefreshCw, ShieldCheck, WalletCards } from "lucide-react";
 
 import { Badge } from "@/components/badge";
 import { EmptyState, ErrorState, Panel, SkeletonBlock } from "@/components/data-card";
@@ -63,6 +63,8 @@ type WritebackOutcome = {
   note?: string;
 };
 
+type NextStepAction = "cash" | "reconcile" | "mode" | "review";
+
 const WRITEBACK_ACTIONS: Array<{ value: WritebackMode; label: string }> = [
   { value: "fill", label: "记录已成交" },
   { value: "no_fill", label: "记录未成交" },
@@ -82,10 +84,81 @@ function todayStr(): string {
   return `${d.getFullYear()}-${m}-${day}`;
 }
 
+function isPositiveNumber(value: string): boolean {
+  const parsed = Number(value);
+  return value.trim() !== "" && Number.isFinite(parsed) && parsed > 0;
+}
+
+function formStatusTone(kind: "success" | "warning" | "error") {
+  if (kind === "success") return "text-[var(--tone-positive)]";
+  if (kind === "warning") return "text-[var(--tone-watch)]";
+  return "text-[var(--tone-risk)]";
+}
+
 function readinessTone(mode: string | undefined): "buy" | "watch" | "risk" {
   if (mode === "live_ready") return "buy";
   if (mode === "shadow_only") return "watch";
   return "risk";
+}
+
+function readinessLabel(mode: string | undefined): string {
+  if (mode === "live_ready") return "数据源就绪";
+  if (mode === "shadow_only") return "仅观察";
+  return "已阻断";
+}
+
+function accountGateLabel(data: PortfolioAccountResponse): { label: string; tone: "buy" | "watch" | "risk" | "info" } {
+  const accountState = data.readiness.account_state;
+  if (!accountState) return { label: "账户未接入", tone: "watch" };
+  if (accountState.ready_for_live_small) return { label: "账户可实盘", tone: "buy" };
+  if (accountState.cash_balance < 0) return { label: "现金为负", tone: "risk" };
+  if (accountState.mode !== "live_small") return { label: "账户非实盘", tone: "watch" };
+  return { label: "账户未就绪", tone: "risk" };
+}
+
+function buildAccountNextStep(data: PortfolioAccountResponse): {
+  title: string;
+  detail: string;
+  tone: "buy" | "watch" | "risk" | "info";
+  action: NextStepAction;
+} {
+  const account = data.account;
+  const state = data.readiness.account_state;
+  if (state?.cash_balance && state.cash_balance < 0) {
+    return {
+      title: "先补录入金",
+      detail: `账本现金为 ${formatMoney(state.cash_balance)}。如果券商账户真实有现金，请在现金调整里补录入金；补完再对账。`,
+      tone: "risk",
+      action: "cash",
+    };
+  }
+  if (account.fills_count > 0 && !data.reconciliation?.fresh) {
+    return {
+      title: "录完成交后对账",
+      detail: "已有成交记录，但还没有近期券商对账。请把券商现金和持仓市值填进对账区。",
+      tone: "watch",
+      action: "reconcile",
+    };
+  }
+  if (state?.ready_for_live_small) {
+    return {
+      title: "账户账本可实盘",
+      detail: "现金、成交和对账已通过账户闸口。需要真钱执行时再切到小额实盘。",
+      tone: "buy",
+      action: "mode",
+    };
+  }
+  return {
+    title: "先保持研究态",
+    detail: "这页当前适合补录券商事实、复核持仓和对账；不要把研究态当成自动下单。",
+    tone: "info",
+    action: "review",
+  };
+}
+
+function scrollToSection(id: string) {
+  if (typeof document === "undefined") return;
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function ReadinessBanner({ data }: { data: PortfolioAccountResponse }) {
@@ -94,17 +167,13 @@ function ReadinessBanner({ data }: { data: PortfolioAccountResponse }) {
   const blockers = r.blockers || [];
   const warnings = r.warnings || [];
   const tone = readinessTone(r.readiness_mode);
+  const accountGate = accountGateLabel(data);
 
   return (
     <div className="surface-card mb-6 flex flex-col gap-3 p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge tone={tone}>
-          {r.readiness_mode === "live_ready"
-            ? "Live Ready"
-            : r.readiness_mode === "shadow_only"
-            ? "Shadow Only"
-            : "Blocked"}
-        </Badge>
+        <Badge tone={tone}>{readinessLabel(r.readiness_mode)}</Badge>
+        <Badge tone={accountGate.tone}>{accountGate.label}</Badge>
         <Badge tone={accountState?.mode_tone === "risk" ? "risk" : accountState?.mode_tone === "watch" ? "watch" : "info"}>
           {accountState?.mode_label || "研究态"}
         </Badge>
@@ -142,10 +211,68 @@ function ReadinessBanner({ data }: { data: PortfolioAccountResponse }) {
       {!blockers.length && !warnings.length ? (
         <div className="flex items-center gap-2 text-[12px] text-[var(--text-secondary)]">
           <ShieldCheck size={14} className="text-[var(--tone-positive)]" />
-          数据态与账户态均通过 readiness 闸口。
+          数据源通过新鲜度闸口；账户是否可实盘以上方账户标签为准。
+        </div>
+      ) : null}
+      {accountState && accountState.cash_balance < 0 ? (
+        <div className="rounded-md border border-[color-mix(in_srgb,var(--tone-risk)_30%,transparent)] bg-[color-mix(in_srgb,var(--tone-risk)_8%,transparent)] px-3 py-2 text-[12px] text-[var(--text-secondary)]">
+          <strong className="text-[var(--tone-risk)]">本地现金为负：</strong>
+          已录入成交会扣减本地账本现金。现在现金是 {formatMoney(accountState.cash_balance)}，
+          说明还没有补录入金 / 初始现金；请在“现金调整”里记录入金，或把这笔记录仅当研究账本。
         </div>
       ) : null}
     </div>
+  );
+}
+
+function AccountWorkflowCard({ data }: { data: PortfolioAccountResponse }) {
+  const step = buildAccountNextStep(data);
+  const actionTarget: Record<NextStepAction, string> = {
+    cash: "cash-adjust",
+    reconcile: "reconcile-form",
+    mode: "mode-switch",
+    review: "positions",
+  };
+  const actionLabel: Record<NextStepAction, string> = {
+    cash: "去补录现金",
+    reconcile: "去对账",
+    mode: "查看模式",
+    review: "查看账本",
+  };
+
+  return (
+    <section className="mb-7 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+      <div className="surface-card p-4">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <Badge tone={step.tone}>账户下一步</Badge>
+          <span className="text-[12px] text-[var(--text-tertiary)]">这页只记录券商事实，不会自动下单。</span>
+        </div>
+        <div className="text-xl font-semibold text-[var(--text-primary)]">{step.title}</div>
+        <p className="mt-2 text-[13px] leading-6 text-[var(--text-secondary)]">{step.detail}</p>
+        <button
+          type="button"
+          onClick={() => scrollToSection(actionTarget[step.action])}
+          className="focus-ring mt-4 rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-1.5 text-[12px] text-[var(--accent)]"
+        >
+          {actionLabel[step.action]}
+        </button>
+      </div>
+      <div className="surface-card p-4">
+        <div className="text-[11px] font-medium uppercase text-[var(--text-tertiary)]">Record Flow</div>
+        <div className="mt-3 grid grid-cols-1 gap-2 text-[12px]">
+          {([
+            { index: "1", label: "录入券商成交", done: data.account.fills_count > 0 },
+            { index: "2", label: "补录入金 / 出金", done: data.account.cash_balance >= 0 },
+            { index: "3", label: "按券商 App 对账", done: Boolean(data.reconciliation?.fresh) },
+          ] as const).map(({ index, label, done }) => (
+            <div key={String(index)} className="flex items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+              {done ? <CheckCircle2 size={15} className="text-[var(--tone-positive)]" /> : <span className="flex h-4 w-4 items-center justify-center rounded-full border border-[var(--border-subtle)] text-[10px] text-[var(--text-tertiary)]">{index}</span>}
+              <span className={done ? "text-[var(--text-secondary)]" : "text-[var(--text-primary)]"}>{label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -199,6 +326,7 @@ function FillsTable({ fills }: { fills: PortfolioAccountResponse["recent_fills"]
             <th className="px-2 py-1 text-left">时间</th>
             <th className="px-2 py-1 text-left">交易日</th>
             <th className="px-2 py-1 text-left">代码</th>
+            <th className="px-2 py-1 text-left">名称</th>
             <th className="px-2 py-1 text-left">方向</th>
             <th className="px-2 py-1 text-right">数量</th>
             <th className="px-2 py-1 text-right">价格</th>
@@ -212,6 +340,7 @@ function FillsTable({ fills }: { fills: PortfolioAccountResponse["recent_fills"]
               <td className="px-2 py-1 text-[var(--text-tertiary)]">{f.ts}</td>
               <td className="px-2 py-1">{f.trade_date}</td>
               <td className="px-2 py-1 font-mono">{f.code}</td>
+              <td className="px-2 py-1">{f.name || "-"}</td>
               <td className="px-2 py-1">
                 <Badge tone={f.side === "buy" ? "buy" : "sell"}>{f.side === "buy" ? "买" : "卖"}</Badge>
               </td>
@@ -370,19 +499,29 @@ function ModeSwitch({ data }: { data: PortfolioAccountResponse }) {
   const [allowUnsafe, setAllowUnsafe] = useState(false);
   const [unsafeNote, setUnsafeNote] = useState("");
   const [unsafeConfirmText, setUnsafeConfirmText] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   const handle = (mode: AccountMode) => {
     const useUnsafeBypass = mode === "live_small" && allowUnsafe;
-    mutation.mutate({
-      mode,
-      starting_cash: startingCash ? Number(startingCash) : undefined,
-      allow_unsafe: useUnsafeBypass,
-      note: useUnsafeBypass ? unsafeNote : undefined,
-    });
+    setSuccessMessage("");
+    mutation.mutate(
+      {
+        mode,
+        starting_cash: startingCash ? Number(startingCash) : undefined,
+        allow_unsafe: useUnsafeBypass,
+        note: useUnsafeBypass ? unsafeNote : undefined,
+      },
+      {
+        onSuccess: (response) => {
+          setSuccessMessage(`已切换到 ${response.account.mode_label || mode}。`);
+        },
+      },
+    );
   };
 
   const errorMsg = mutation.error instanceof ApiError ? mutation.error.message : null;
   const unsafeConfirmReady = unsafeConfirmText.trim() === "LIVE_SMALL";
+  const unsafeBlocked = allowUnsafe && (!unsafeNote.trim() || !unsafeConfirmReady);
 
   return (
     <div className="flex flex-col gap-3">
@@ -391,7 +530,7 @@ function ModeSwitch({ data }: { data: PortfolioAccountResponse }) {
           <button
             key={opt.value}
             type="button"
-            disabled={mutation.isPending || (opt.value === "live_small" && allowUnsafe && (!unsafeNote.trim() || !unsafeConfirmReady))}
+            disabled={mutation.isPending || (opt.value === "live_small" && unsafeBlocked)}
             onClick={() => handle(opt.value)}
             className={`focus-ring rounded-md border px-3 py-1.5 text-[12px] ${
               data.account.mode === opt.value
@@ -459,25 +598,44 @@ function ModeSwitch({ data }: { data: PortfolioAccountResponse }) {
           ) : null}
         </div>
       ) : null}
+      {mutation.isPending ? <div className="text-[12px] text-[var(--text-tertiary)]">正在切换运行模式...</div> : null}
+      {unsafeBlocked ? <div className="text-[12px] text-[var(--tone-watch)]">启用 bypass 时，需要填写原因并输入 LIVE_SMALL。</div> : null}
+      {successMessage ? <div className="text-[12px] text-[var(--tone-positive)]">{successMessage}</div> : null}
       {errorMsg ? <div className="text-[12px] text-[var(--tone-risk)]">{errorMsg}</div> : null}
     </div>
   );
 }
 
-function CashAdjustForm() {
+function CashAdjustForm({ suggestedDeposit }: { suggestedDeposit?: number }) {
   const mutation = useRecordPortfolioCash();
   const [delta, setDelta] = useState("");
   const [reason, setReason] = useState("");
+  const [touchedSubmit, setTouchedSubmit] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  const hasSuggestedDeposit = typeof suggestedDeposit === "number" && suggestedDeposit > 0;
+
+  const disabledReason =
+    !delta.trim()
+      ? "请先填写现金变动金额。"
+      : Number(delta) === 0 || !Number.isFinite(Number(delta))
+        ? "现金变动必须是非零数字。"
+        : !reason.trim()
+          ? "请先填写原因。"
+          : "";
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!delta || !reason) return;
+    setTouchedSubmit(true);
+    setSuccessMessage("");
+    if (disabledReason) return;
     mutation.mutate(
       { delta: Number(delta), reason },
       {
-        onSuccess: () => {
+        onSuccess: (response) => {
+          setSuccessMessage(`已记录现金调整，当前现金 ${formatMoney(response.account.cash_balance)}。`);
           setDelta("");
           setReason("");
+          setTouchedSubmit(false);
         },
       },
     );
@@ -486,7 +644,24 @@ function CashAdjustForm() {
   const errorMsg = mutation.error instanceof ApiError ? mutation.error.message : null;
 
   return (
-    <form onSubmit={submit} className="flex flex-wrap items-end gap-2">
+    <form onSubmit={submit} noValidate className="flex flex-wrap items-end gap-2">
+      {hasSuggestedDeposit ? (
+        <div className="basis-full rounded-md border border-[color-mix(in_srgb,var(--tone-risk)_28%,transparent)] bg-[color-mix(in_srgb,var(--tone-risk)_7%,transparent)] px-3 py-2 text-[12px] text-[var(--text-secondary)]">
+          <div className="font-medium text-[var(--tone-risk)]">当前现金为负，建议先补录入金 {formatMoney(suggestedDeposit)}。</div>
+          <button
+            type="button"
+            onClick={() => {
+              setDelta(String(suggestedDeposit));
+              setReason("补录券商入金 / 初始现金");
+              setTouchedSubmit(false);
+              setSuccessMessage("");
+            }}
+            className="focus-ring mt-2 rounded-md border border-[var(--border-subtle)] px-3 py-1 text-[11px] text-[var(--text-primary)]"
+          >
+            预填入金
+          </button>
+        </div>
+      ) : null}
       <label className="flex flex-col text-[11px] text-[var(--text-tertiary)]">
         现金变动（正=入金，负=出金）
         <input
@@ -513,8 +688,12 @@ function CashAdjustForm() {
         disabled={mutation.isPending}
         className="focus-ring rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-1.5 text-[12px] text-[var(--accent)]"
       >
-        记录现金调整
+        {mutation.isPending ? "记录中..." : "记录现金调整"}
       </button>
+      {touchedSubmit && disabledReason ? (
+        <div className={`basis-full text-[12px] ${formStatusTone("warning")}`}>{disabledReason}</div>
+      ) : null}
+      {successMessage ? <div className={`basis-full text-[12px] ${formStatusTone("success")}`}>{successMessage}</div> : null}
       {errorMsg ? <div className="basis-full text-[12px] text-[var(--tone-risk)]">{errorMsg}</div> : null}
     </form>
   );
@@ -532,9 +711,29 @@ function FillForm({ defaultTradeDate }: { defaultTradeDate: string }) {
   const [intent_key, setIntent] = useState("");
   const [broker_ref, setBroker] = useState("");
   const [confirmRealFill, setConfirmRealFill] = useState(false);
+  const [touchedSubmit, setTouchedSubmit] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+
+  const disabledReason =
+    !confirmRealFill
+      ? "请先勾选真实成交确认。"
+      : !trade_date.trim()
+        ? "请先填写交易日。"
+        : !code.trim()
+          ? "请先填写股票代码。"
+          : !isPositiveNumber(qty)
+            ? "请先填写大于 0 的数量。"
+            : !isPositiveNumber(price)
+              ? "请先填写大于 0 的成交价。"
+              : fees.trim() && (!Number.isFinite(Number(fees)) || Number(fees) < 0)
+                ? "费用必须是大于等于 0 的数字。"
+                : "";
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    setTouchedSubmit(true);
+    setSuccessMessage("");
+    if (disabledReason) return;
     mutation.mutate(
       {
         trade_date,
@@ -548,11 +747,14 @@ function FillForm({ defaultTradeDate }: { defaultTradeDate: string }) {
         broker_ref: broker_ref || undefined,
       },
       {
-        onSuccess: () => {
+        onSuccess: (response) => {
+          setSuccessMessage(`已录入成交，当前现金 ${formatMoney(response.account.cash_balance)}。`);
           setQty("");
           setPrice("");
           setFees("");
+          setBroker("");
           setConfirmRealFill(false);
+          setTouchedSubmit(false);
         },
       },
     );
@@ -561,7 +763,7 @@ function FillForm({ defaultTradeDate }: { defaultTradeDate: string }) {
   const errorMsg = mutation.error instanceof ApiError ? mutation.error.message : null;
 
   return (
-    <form onSubmit={submit} className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <form onSubmit={submit} noValidate className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       <div className="col-span-full">
         <FillRiskNotice
           confirmed={confirmRealFill}
@@ -662,12 +864,16 @@ function FillForm({ defaultTradeDate }: { defaultTradeDate: string }) {
       <div className="flex items-end sm:col-span-2">
         <button
           type="submit"
-          disabled={mutation.isPending || !confirmRealFill}
-          className="focus-ring rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-1.5 text-[12px] text-[var(--accent)]"
+          disabled={mutation.isPending}
+          className="focus-ring rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-1.5 text-[12px] text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
         >
-          录入成交
+          {mutation.isPending ? "录入中..." : "录入成交"}
         </button>
       </div>
+      {touchedSubmit && disabledReason ? (
+        <div className={`col-span-full text-[12px] ${formStatusTone("warning")}`}>{disabledReason}</div>
+      ) : null}
+      {successMessage ? <div className={`col-span-full text-[12px] ${formStatusTone("success")}`}>{successMessage}</div> : null}
       {errorMsg ? <div className="col-span-full text-[12px] text-[var(--tone-risk)]">{errorMsg}</div> : null}
     </form>
   );
@@ -895,7 +1101,7 @@ function DecisionWritebackPanel({
         ))}
       </div>
 
-      <form onSubmit={submit} className="space-y-3">
+      <form onSubmit={submit} noValidate className="space-y-3">
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <label className="flex flex-col text-[11px] text-[var(--text-tertiary)]">
             交易日
@@ -1055,15 +1261,37 @@ function DecisionWritebackPanel({
   );
 }
 
-function ReconcileForm({ defaultTradeDate }: { defaultTradeDate: string }) {
+function ReconcileForm({
+  defaultTradeDate,
+  suggestedCash,
+  suggestedEquity,
+}: {
+  defaultTradeDate: string;
+  suggestedCash?: number;
+  suggestedEquity?: number;
+}) {
   const mutation = useRecordPortfolioReconcile();
   const [trade_date, setTradeDate] = useState(defaultTradeDate);
   const [broker_cash, setBrokerCash] = useState("");
   const [broker_equity, setBrokerEquity] = useState("");
   const [note, setNote] = useState("");
+  const [touchedSubmit, setTouchedSubmit] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+
+  const disabledReason =
+    !trade_date.trim()
+      ? "请先填写对账日。"
+      : broker_cash.trim() === "" || !Number.isFinite(Number(broker_cash))
+        ? "请先填写券商现金。"
+        : broker_equity.trim() === "" || !Number.isFinite(Number(broker_equity))
+          ? "请先填写券商持仓市值。"
+          : "";
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    setTouchedSubmit(true);
+    setSuccessMessage("");
+    if (disabledReason) return;
     mutation.mutate(
       {
         trade_date,
@@ -1072,10 +1300,17 @@ function ReconcileForm({ defaultTradeDate }: { defaultTradeDate: string }) {
         note: note || undefined,
       },
       {
-        onSuccess: () => {
+        onSuccess: (response) => {
+          const lastRecon = response.account.reconciliations[response.account.reconciliations.length - 1];
+          setSuccessMessage(
+            lastRecon
+              ? `已记录对账，现金差异 ${formatMoney(lastRecon.delta_cash)}，持仓差异 ${formatMoney(lastRecon.delta_equity)}。`
+              : "已记录对账。",
+          );
           setBrokerCash("");
           setBrokerEquity("");
           setNote("");
+          setTouchedSubmit(false);
         },
       },
     );
@@ -1084,7 +1319,23 @@ function ReconcileForm({ defaultTradeDate }: { defaultTradeDate: string }) {
   const errorMsg = mutation.error instanceof ApiError ? mutation.error.message : null;
 
   return (
-    <form onSubmit={submit} className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <form onSubmit={submit} noValidate className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="col-span-full flex flex-wrap items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2 text-[12px] text-[var(--text-secondary)]">
+        <span>用本地账本预填：现金 {formatMoney(suggestedCash)}，持仓成本 {formatMoney(suggestedEquity)}</span>
+        <button
+          type="button"
+          onClick={() => {
+            setBrokerCash(String(suggestedCash ?? 0));
+            setBrokerEquity(String(suggestedEquity ?? 0));
+            setNote("按本地账本预填，待券商 App 核对");
+            setTouchedSubmit(false);
+            setSuccessMessage("");
+          }}
+          className="focus-ring rounded-md border border-[var(--border-subtle)] px-2 py-1 text-[11px] text-[var(--text-primary)]"
+        >
+          预填
+        </button>
+      </div>
       <label className="flex flex-col text-[11px] text-[var(--text-tertiary)]">
         对账日
         <input
@@ -1130,15 +1381,53 @@ function ReconcileForm({ defaultTradeDate }: { defaultTradeDate: string }) {
           disabled={mutation.isPending}
           className="focus-ring rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-1.5 text-[12px] text-[var(--accent)]"
         >
-          记录对账
+          {mutation.isPending ? "记录中..." : "记录对账"}
         </button>
       </div>
+      {touchedSubmit && disabledReason ? (
+        <div className={`col-span-full text-[12px] ${formStatusTone("warning")}`}>{disabledReason}</div>
+      ) : null}
+      {successMessage ? <div className={`col-span-full text-[12px] ${formStatusTone("success")}`}>{successMessage}</div> : null}
       {errorMsg ? <div className="col-span-full text-[12px] text-[var(--tone-risk)]">{errorMsg}</div> : null}
     </form>
   );
 }
 
-export default function PortfolioPage() {
+function LedgerForms({
+  data,
+  defaultTradeDate,
+}: {
+  data: PortfolioAccountResponse;
+  defaultTradeDate: string;
+}) {
+  const negativeCash = data.account.cash_balance < 0 ? Math.abs(data.account.cash_balance) : 0;
+
+  return (
+    <section className="mb-7 grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div id="mode-switch" className="scroll-mt-6">
+        <Panel title="切换运行模式" eyebrow="Mode" className="surface-card p-4">
+          <ModeSwitch data={data} />
+        </Panel>
+      </div>
+      <div id="cash-adjust" className="scroll-mt-6">
+        <Panel title="现金调整" eyebrow="Cash" className="surface-card p-4">
+          <CashAdjustForm suggestedDeposit={negativeCash || undefined} />
+        </Panel>
+      </div>
+      <div id="reconcile-form" className="scroll-mt-6">
+        <Panel title="对账（按券商真实数据）" eyebrow="Reconcile" className="surface-card p-4">
+          <ReconcileForm
+            defaultTradeDate={defaultTradeDate}
+            suggestedCash={data.account.cash_balance}
+            suggestedEquity={data.account.equity_at_cost}
+          />
+        </Panel>
+      </div>
+    </section>
+  );
+}
+
+function PortfolioPageContent() {
   const portfolio = usePortfolioAccount();
   const today = useTodayData();
   const watchlist = useWatchlist();
@@ -1328,6 +1617,8 @@ export default function PortfolioPage() {
 
         {data ? <ReadinessBanner data={data} /> : null}
 
+        {data ? <AccountWorkflowCard data={data} /> : <SkeletonBlock className="mb-7 h-36 w-full" />}
+
         <section className="mb-3">
           <div className="text-[11px] font-medium uppercase text-[var(--text-tertiary)]">真实账户执行区</div>
         </section>
@@ -1340,7 +1631,7 @@ export default function PortfolioPage() {
               ))}
         </section>
 
-        <section className="mb-7 grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <section id="positions" className="mb-7 grid grid-cols-1 gap-4 scroll-mt-6 xl:grid-cols-2">
           <Panel title="持仓" eyebrow="Open positions" className="surface-card p-4">
             {data ? <PositionsTable positions={data.account.open_positions} /> : <SkeletonBlock className="h-24 w-full" />}
           </Panel>
@@ -1361,20 +1652,10 @@ export default function PortfolioPage() {
           </Panel>
         </section>
 
-        <section className="mb-7 grid grid-cols-1 gap-4 xl:grid-cols-3">
-          <Panel title="切换运行模式" eyebrow="Mode" className="surface-card p-4">
-            {data ? <ModeSwitch data={data} /> : <SkeletonBlock className="h-16 w-full" />}
-          </Panel>
-          <Panel title="现金调整" eyebrow="Cash" className="surface-card p-4">
-            <CashAdjustForm />
-          </Panel>
-          <Panel title="对账（按券商真实数据）" eyebrow="Reconcile" className="surface-card p-4">
-            <ReconcileForm defaultTradeDate={defaultTradeDate} />
-          </Panel>
-        </section>
+        {data ? <LedgerForms data={data} defaultTradeDate={defaultTradeDate} /> : <SkeletonBlock className="mb-7 h-40 w-full" />}
 
         <section className="mb-7">
-          <Panel title="录入成交" eyebrow="Record fill" className="surface-card p-4">
+          <Panel title="补录券商成交" eyebrow="Write to ledger" className="surface-card p-4">
             <FillForm defaultTradeDate={defaultTradeDate} />
           </Panel>
         </section>
@@ -1446,5 +1727,26 @@ export default function PortfolioPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+export default function PortfolioPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
+          <div className="mx-auto max-w-7xl">
+            <SkeletonBlock className="mb-7 h-28 w-full" />
+            <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <MetricSkeleton key={index} />
+              ))}
+            </section>
+          </div>
+        </main>
+      }
+    >
+      <PortfolioPageContent />
+    </Suspense>
   );
 }

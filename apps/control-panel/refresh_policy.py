@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Iterable, Mapping, Sequence
 
+from trading_calendar import calendar_status
+
 
 MarketMode = str
 
@@ -361,8 +363,14 @@ def _clock_minutes(value: str) -> int:
 
 def current_market_mode(now: datetime | None = None) -> tuple[str, str]:
     current = now or datetime.now()
-    if current.weekday() >= 5:
-        return "off", "周末休市"
+    cal = calendar_status(current)
+    if cal.get("status") != "trading":
+        labels = {
+            "weekend": "周末休市",
+            "holiday": "交易所休市",
+            "unknown": "交易日历未知",
+        }
+        return "off", labels.get(str(cal.get("status") or ""), "非交易日")
 
     clock = current.hour * 60 + current.minute
     if (570 <= clock < 690) or (780 <= clock < 900):
@@ -374,7 +382,7 @@ def current_market_mode(now: datetime | None = None) -> tuple[str, str]:
 
 def active_auto_windows(now: datetime | None = None) -> list[dict[str, str]]:
     current = now or datetime.now()
-    if current.weekday() >= 5:
+    if calendar_status(current).get("status") != "trading":
         return []
     return [window.as_dict() for window in AUTO_WINDOWS.values() if window.contains(current)]
 
@@ -404,6 +412,18 @@ def task_is_running(task_name: str, running: Sequence[Mapping[str, Any]]) -> boo
     family = task_family(task_name)
     for item in running:
         if task_family(str(item.get("task_name") or "")) == family:
+            return True
+    return False
+
+
+def task_conflict_is_running(task_name: str, running: Sequence[Mapping[str, Any]]) -> bool:
+    task = normalize_task_name(task_name)
+    conflicts = {task_family(task)}
+    if task in {"command_brief", "preclose_risk_refresh", "postclose_command_brief"}:
+        conflicts.add(task_family("watchlist_refresh"))
+    for item in running:
+        running_task = normalize_task_name(str(item.get("task_name") or ""))
+        if task_family(running_task) in conflicts:
             return True
     return False
 
@@ -584,11 +604,14 @@ def evaluate_auto_refresh(
     policy = task_policy(task_name)
     manifest_reasons = manifest_trigger_reasons(freshness)
     stale_count = sum(1 for item in freshness if item.get("stale"))
+    current_calendar = calendar_status(current)
     auto_windows = active_auto_windows(current)
     active_window_keys = {item["key"] for item in auto_windows}
     reasons: list[str] = []
     blockers: list[str] = []
 
+    if current_calendar.get("status") != "trading":
+        blockers.append("non_trading_day")
     if page_cfg is None:
         blockers.append("unsupported_page")
     elif task_name not in {normalize_task_name(item) for item in page_cfg.allowed_tasks}:
@@ -610,7 +633,7 @@ def evaluate_auto_refresh(
 
     if not (page_cfg and page_cfg.auto_on_open) and not force:
         blockers.append("page_auto_disabled")
-    if task_is_running(task_name, running):
+    if task_conflict_is_running(task_name, running):
         blockers.append("running")
     if int(cooldown.get("remaining_seconds") or 0) > 0 and not force:
         blockers.append("cooldown")
@@ -645,6 +668,7 @@ def evaluate_auto_refresh(
         "stale_count": stale_count,
         "cooldown_remaining_seconds": int(cooldown.get("remaining_seconds") or 0),
         "next_allowed_at": str(cooldown.get("next_allowed_at") or ""),
+        "calendar_status": current_calendar,
         "summary": "",
     }
     decision["summary"] = summarize_auto_decision(decision)
@@ -671,6 +695,7 @@ def summarize_auto_decision(decision: Mapping[str, Any]) -> str:
         "page_auto_disabled": "该页面未开启打开即自动刷新",
         "task_not_allowed_for_page": "当前页面不允许该任务",
         "provider_failure": "上游 provider 失败",
+        "non_trading_day": "当前不是交易日",
     }
     return "没有自动刷新：" + "，".join(labels.get(item, item) for item in blocked) + "。"
 
@@ -735,7 +760,7 @@ def _source_needs_capital_refresh(item: Mapping[str, Any]) -> bool:
 
 def _in_window(key: str, current: datetime) -> bool:
     window = AUTO_WINDOWS.get(key)
-    return bool(window and current.weekday() < 5 and window.contains(current))
+    return bool(window and calendar_status(current).get("status") == "trading" and window.contains(current))
 
 
 def _unique(values: Iterable[str]) -> list[str]:
@@ -764,6 +789,7 @@ __all__ = [
     "pick_recommended_task",
     "summarize_auto_decision",
     "task_family",
+    "task_conflict_is_running",
     "task_is_running",
     "task_policy",
     "validate_cron_policies",

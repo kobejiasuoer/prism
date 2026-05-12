@@ -16,6 +16,8 @@ data/cache/
 data/artifacts/
 data/analytics/
 data/prism_data/
+data/scheduled_runs/
+data/config/*.local.json
 data/quant/reports/
 packages/data/
 packages/reports/

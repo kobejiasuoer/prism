@@ -189,6 +189,8 @@ class SinaProvider(BaseProvider):
                 url,
                 referer="https://finance.sina.com.cn",
                 encoding="gbk",
+                timeout=kwargs.get("timeout") or self.timeout,
+                retries=int(kwargs.get("retries") if kwargs.get("retries") is not None else 0),
             )
             match = re.search(r'"(.*)"', text, re.S)
             items = []

@@ -1,11 +1,1083 @@
 {
-  "pages": {
-    "watchlist": {
+  "audit_events": [
+    {
+      "cooldown": {
+        "next_allowed_at": "2026-04-21 19:47:37",
+        "remaining_seconds": 0
+      },
+      "decision": {
+        "active_windows": [
+          {
+            "end": "09:24",
+            "key": "premarket",
+            "label": "盘前准备窗口",
+            "start": "09:00"
+          }
+        ],
+        "allowed": true,
+        "blocked_reasons": [],
+        "cooldown_remaining_seconds": 0,
+        "enabled": true,
+        "force": false,
+        "manifest_reasons": [
+          "manifest_missing",
+          "trade_date_mismatch",
+          "freshness_stale",
+          "live_small_not_allowed",
+          "freshness_expired"
+        ],
+        "next_allowed_at": "2026-04-21 19:47:37",
+        "page": "today",
+        "reason_codes": [
+          "manifest_missing",
+          "trade_date_mismatch",
+          "freshness_stale",
+          "live_small_not_allowed",
+          "freshness_expired"
+        ],
+        "required_windows": [
+          "premarket",
+          "morning",
+          "afternoon",
+          "preclose"
+        ],
+        "should_trigger": true,
+        "stale_count": 4,
+        "summary": "自动触发 自选股全流程刷新：manifest_missing, trade_date_mismatch, freshness_stale, live_small_not_allowed, freshness_expired。",
+        "task_kind": "heavyweight",
+        "task_name": "watchlist_refresh"
+      },
+      "force": false,
+      "manifest_state": [
+        {
+          "freshness_status": null,
+          "key": "watchlist",
+          "label": "自选股",
+          "stale": true,
+          "stale_reasons": [
+            "manifest_missing",
+            "trade_date_mismatch",
+            "age_exceeded"
+          ],
+          "trade_date": "2026-04-21"
+        },
+        {
+          "freshness_status": "stale",
+          "key": "quotes.snapshot",
+          "label": "轻量行情快照",
+          "stale": true,
+          "stale_reasons": [
+            "freshness_stale",
+            "trade_date_mismatch",
+            "live_small_not_allowed"
+          ],
+          "trade_date": "2026-05-08"
+        },
+        {
+          "freshness_status": "stale",
+          "key": "capital_flow.daily",
+          "label": "轻量资金流单票",
+          "stale": true,
+          "stale_reasons": [
+            "freshness_stale",
+            "trade_date_mismatch",
+            "live_small_not_allowed"
+          ],
+          "trade_date": "2026-05-08"
+        },
+        {
+          "freshness_status": "expired",
+          "key": "capital_flow.batch",
+          "label": "轻量资金流批量",
+          "stale": true,
+          "stale_reasons": [
+            "freshness_expired"
+          ],
+          "trade_date": "2026-05-11"
+        }
+      ],
+      "page": "today",
+      "reason": "自动触发 自选股全流程刷新：manifest_missing, trade_date_mismatch, freshness_stale, live_small_not_allowed, freshness_expired。",
+      "run_id": "watchlist_refresh_20260511_090211_841232",
+      "task_family": "watchlist_refresh",
       "task_name": "watchlist_refresh",
-      "run_id": "refresh_smoke_1",
+      "trigger_type": "auto",
+      "ts": "2026-05-11 09:02:11"
+    },
+    {
+      "cooldown": {
+        "next_allowed_at": "",
+        "remaining_seconds": 0
+      },
+      "decision": {
+        "active_windows": [
+          {
+            "end": "15:00",
+            "key": "afternoon",
+            "label": "午后交易窗口",
+            "start": "13:00"
+          }
+        ],
+        "allowed": true,
+        "blocked_reasons": [],
+        "cooldown_remaining_seconds": 0,
+        "enabled": true,
+        "force": false,
+        "manifest_reasons": [
+          "manifest_missing"
+        ],
+        "next_allowed_at": "",
+        "page": "opportunities",
+        "reason_codes": [
+          "manifest_missing"
+        ],
+        "required_windows": [
+          "premarket",
+          "morning",
+          "midday",
+          "afternoon",
+          "preclose"
+        ],
+        "should_trigger": true,
+        "stale_count": 1,
+        "summary": "自动触发 轻量行情补刷：manifest_missing。",
+        "task_kind": "lightweight",
+        "task_name": "quotes_light"
+      },
+      "force": false,
+      "manifest_state": [
+        {
+          "freshness_status": null,
+          "key": "quotes.batch",
+          "label": "轻量行情批量",
+          "stale": true,
+          "stale_reasons": [
+            "manifest_missing"
+          ],
+          "trade_date": null
+        }
+      ],
+      "page": "opportunities",
+      "reason": "自动触发 轻量行情补刷：manifest_missing。",
+      "run_id": "quotes_light_20260511_140241_580440",
+      "task_family": "lightweight_market_data",
+      "task_name": "quotes_light",
+      "trigger_type": "auto",
+      "ts": "2026-05-11 14:02:41"
+    },
+    {
+      "cooldown": {
+        "next_allowed_at": "",
+        "remaining_seconds": 0
+      },
+      "decision": {
+        "active_windows": [],
+        "allowed": false,
+        "blocked_reasons": [
+          "outside_auto_window"
+        ],
+        "cooldown_remaining_seconds": 0,
+        "enabled": true,
+        "force": false,
+        "manifest_reasons": [
+          "freshness_stale",
+          "live_small_not_allowed",
+          "freshness_expired",
+          "fallback_not_allowed",
+          "trade_date_mismatch"
+        ],
+        "next_allowed_at": "",
+        "page": "today",
+        "reason_codes": [
+          "freshness_stale",
+          "live_small_not_allowed",
+          "freshness_expired",
+          "fallback_not_allowed",
+          "trade_date_mismatch"
+        ],
+        "required_windows": [
+          "morning",
+          "midday",
+          "afternoon",
+          "preclose",
+          "postclose"
+        ],
+        "should_trigger": false,
+        "stale_count": 4,
+        "summary": "没有自动刷新：不在允许自动刷新窗口。",
+        "task_kind": "heavyweight",
+        "task_name": "command_brief"
+      },
+      "force": false,
+      "manifest_state": [
+        {
+          "freshness_status": null,
+          "key": "watchlist",
+          "label": "自选股",
+          "stale": true,
+          "stale_reasons": [
+            "freshness_stale",
+            "live_small_not_allowed"
+          ],
+          "trade_date": "2026-05-11"
+        },
+        {
+          "freshness_status": null,
+          "key": "screening",
+          "label": "观察池基线",
+          "stale": true,
+          "stale_reasons": [
+            "freshness_expired",
+            "live_small_not_allowed",
+            "fallback_not_allowed",
+            "trade_date_mismatch"
+          ],
+          "trade_date": "2026-05-08"
+        },
+        {
+          "freshness_status": null,
+          "key": "confirmation",
+          "label": "午盘确认",
+          "stale": true,
+          "stale_reasons": [
+            "freshness_expired",
+            "live_small_not_allowed",
+            "fallback_not_allowed",
+            "trade_date_mismatch"
+          ],
+          "trade_date": "2026-05-08"
+        },
+        {
+          "freshness_status": null,
+          "key": "decision_brief",
+          "label": "总控简报",
+          "stale": true,
+          "stale_reasons": [
+            "freshness_expired",
+            "live_small_not_allowed",
+            "fallback_not_allowed"
+          ],
+          "trade_date": "2026-05-11"
+        }
+      ],
+      "page": "today",
+      "reason": "manual_from_settings_safe_refresh",
+      "run_id": "command_brief_20260511_155331_230327",
+      "task_family": "command_brief",
+      "task_name": "command_brief",
+      "trigger_type": "manual",
+      "ts": "2026-05-11 15:53:31"
+    },
+    {
+      "cooldown": {
+        "next_allowed_at": "2026-05-11 09:17:11",
+        "remaining_seconds": 0
+      },
+      "decision": {
+        "active_windows": [],
+        "allowed": false,
+        "blocked_reasons": [
+          "outside_auto_window",
+          "provider_failure"
+        ],
+        "cooldown_remaining_seconds": 0,
+        "enabled": true,
+        "force": false,
+        "manifest_reasons": [
+          "freshness_stale",
+          "live_small_not_allowed",
+          "freshness_expired",
+          "fallback_not_allowed"
+        ],
+        "next_allowed_at": "2026-05-11 09:17:11",
+        "page": "today",
+        "reason_codes": [
+          "freshness_stale",
+          "live_small_not_allowed",
+          "freshness_expired",
+          "fallback_not_allowed"
+        ],
+        "required_windows": [
+          "premarket",
+          "morning",
+          "afternoon",
+          "preclose"
+        ],
+        "should_trigger": false,
+        "stale_count": 4,
+        "summary": "没有自动刷新：不在允许自动刷新窗口，上游 provider 失败。",
+        "task_kind": "heavyweight",
+        "task_name": "watchlist_refresh"
+      },
+      "force": false,
+      "manifest_state": [
+        {
+          "freshness_status": null,
+          "key": "watchlist",
+          "label": "自选股",
+          "stale": true,
+          "stale_reasons": [
+            "freshness_stale",
+            "live_small_not_allowed"
+          ],
+          "trade_date": "2026-05-11"
+        },
+        {
+          "freshness_status": "expired",
+          "key": "quotes.snapshot",
+          "label": "轻量行情快照",
+          "stale": true,
+          "stale_reasons": [
+            "freshness_expired"
+          ],
+          "trade_date": "2026-05-11"
+        },
+        {
+          "freshness_status": "expired",
+          "key": "capital_flow.daily",
+          "label": "轻量资金流单票",
+          "stale": true,
+          "stale_reasons": [
+            "manifest_status_failed",
+            "freshness_expired",
+            "live_small_not_allowed",
+            "fallback_not_allowed",
+            "provider_failure"
+          ],
+          "trade_date": "2026-05-11"
+        },
+        {
+          "freshness_status": "expired",
+          "key": "capital_flow.batch",
+          "label": "轻量资金流批量",
+          "stale": true,
+          "stale_reasons": [
+            "manifest_status_failed",
+            "freshness_expired",
+            "live_small_not_allowed",
+            "provider_failure"
+          ],
+          "trade_date": "2026-05-11"
+        }
+      ],
+      "page": "today",
+      "reason": "manual_from_settings_safe_refresh",
+      "run_id": "watchlist_refresh_20260511_155332_775340",
+      "task_family": "watchlist_refresh",
+      "task_name": "watchlist_refresh",
+      "trigger_type": "manual",
+      "ts": "2026-05-11 15:53:32"
+    },
+    {
+      "cooldown": {
+        "next_allowed_at": "2026-05-11 16:08:32",
+        "remaining_seconds": 0
+      },
+      "decision": {
+        "active_windows": [],
+        "allowed": false,
+        "blocked_reasons": [
+          "outside_auto_window"
+        ],
+        "cooldown_remaining_seconds": 0,
+        "enabled": true,
+        "force": false,
+        "manifest_reasons": [
+          "freshness_expired",
+          "live_small_not_allowed",
+          "fallback_not_allowed",
+          "freshness_stale"
+        ],
+        "next_allowed_at": "2026-05-11 16:08:32",
+        "page": "today",
+        "reason_codes": [
+          "freshness_expired",
+          "live_small_not_allowed",
+          "fallback_not_allowed",
+          "freshness_stale"
+        ],
+        "required_windows": [
+          "premarket",
+          "morning",
+          "afternoon",
+          "preclose"
+        ],
+        "should_trigger": false,
+        "stale_count": 4,
+        "summary": "没有自动刷新：不在允许自动刷新窗口。",
+        "task_kind": "heavyweight",
+        "task_name": "watchlist_refresh"
+      },
+      "force": false,
+      "manifest_state": [
+        {
+          "freshness_status": null,
+          "key": "watchlist",
+          "label": "自选股",
+          "stale": true,
+          "stale_reasons": [
+            "freshness_expired",
+            "live_small_not_allowed",
+            "fallback_not_allowed"
+          ],
+          "trade_date": "2026-05-11"
+        },
+        {
+          "freshness_status": "expired",
+          "key": "quotes.snapshot",
+          "label": "轻量行情快照",
+          "stale": true,
+          "stale_reasons": [
+            "freshness_expired"
+          ],
+          "trade_date": "2026-05-11"
+        },
+        {
+          "freshness_status": "stale",
+          "key": "capital_flow.daily",
+          "label": "轻量资金流单票",
+          "stale": true,
+          "stale_reasons": [
+            "freshness_stale"
+          ],
+          "trade_date": "2026-05-11"
+        },
+        {
+          "freshness_status": "stale",
+          "key": "capital_flow.batch",
+          "label": "轻量资金流批量",
+          "stale": true,
+          "stale_reasons": [
+            "freshness_stale"
+          ],
+          "trade_date": "2026-05-11"
+        }
+      ],
+      "page": "today",
+      "reason": "manual_from_settings_safe_refresh",
+      "run_id": "watchlist_refresh_20260511_222032_275548",
+      "task_family": "watchlist_refresh",
+      "task_name": "watchlist_refresh",
+      "trigger_type": "manual",
+      "ts": "2026-05-11 22:20:32"
+    },
+    {
+      "cooldown": {
+        "next_allowed_at": "2026-05-11 16:05:31",
+        "remaining_seconds": 0
+      },
+      "decision": {
+        "active_windows": [],
+        "allowed": false,
+        "blocked_reasons": [
+          "outside_auto_window"
+        ],
+        "cooldown_remaining_seconds": 0,
+        "enabled": true,
+        "force": false,
+        "manifest_reasons": [
+          "freshness_expired",
+          "live_small_not_allowed",
+          "fallback_not_allowed",
+          "trade_date_mismatch"
+        ],
+        "next_allowed_at": "2026-05-11 16:05:31",
+        "page": "today",
+        "reason_codes": [
+          "freshness_expired",
+          "live_small_not_allowed",
+          "fallback_not_allowed",
+          "trade_date_mismatch"
+        ],
+        "required_windows": [
+          "morning",
+          "midday",
+          "afternoon",
+          "preclose",
+          "postclose"
+        ],
+        "should_trigger": false,
+        "stale_count": 2,
+        "summary": "没有自动刷新：不在允许自动刷新窗口。",
+        "task_kind": "heavyweight",
+        "task_name": "command_brief"
+      },
+      "force": false,
+      "manifest_state": [
+        {
+          "freshness_status": null,
+          "key": "watchlist",
+          "label": "自选股",
+          "stale": false,
+          "stale_reasons": [],
+          "trade_date": "2026-05-11"
+        },
+        {
+          "freshness_status": null,
+          "key": "screening",
+          "label": "观察池基线",
+          "stale": true,
+          "stale_reasons": [
+            "freshness_expired",
+            "live_small_not_allowed",
+            "fallback_not_allowed",
+            "trade_date_mismatch",
+            "age_exceeded"
+          ],
+          "trade_date": "2026-05-08"
+        },
+        {
+          "freshness_status": null,
+          "key": "confirmation",
+          "label": "午盘确认",
+          "stale": true,
+          "stale_reasons": [
+            "freshness_expired",
+            "live_small_not_allowed",
+            "fallback_not_allowed",
+            "trade_date_mismatch",
+            "age_exceeded"
+          ],
+          "trade_date": "2026-05-08"
+        },
+        {
+          "freshness_status": null,
+          "key": "decision_brief",
+          "label": "总控简报",
+          "stale": false,
+          "stale_reasons": [],
+          "trade_date": "2026-05-11"
+        }
+      ],
+      "page": "today",
+      "reason": "manual_from_settings_safe_refresh",
+      "run_id": "command_brief_20260511_223055_439982",
+      "task_family": "command_brief",
+      "task_name": "command_brief",
+      "trigger_type": "manual",
+      "ts": "2026-05-11 22:30:55"
+    },
+    {
+      "cooldown": {
+        "next_allowed_at": "2026-05-11 22:35:32",
+        "remaining_seconds": 0
+      },
+      "decision": {
+        "active_windows": [
+          {
+            "end": "11:30",
+            "key": "morning",
+            "label": "早盘交易窗口",
+            "start": "09:25"
+          }
+        ],
+        "allowed": true,
+        "blocked_reasons": [],
+        "cooldown_remaining_seconds": 0,
+        "enabled": true,
+        "force": false,
+        "manifest_reasons": [
+          "trade_date_mismatch",
+          "freshness_stale",
+          "live_small_not_allowed",
+          "manifest_missing",
+          "freshness_expired"
+        ],
+        "next_allowed_at": "2026-05-11 22:35:32",
+        "page": "today",
+        "reason_codes": [
+          "trade_date_mismatch",
+          "freshness_stale",
+          "live_small_not_allowed",
+          "manifest_missing",
+          "freshness_expired"
+        ],
+        "required_windows": [
+          "premarket",
+          "morning",
+          "afternoon",
+          "preclose"
+        ],
+        "should_trigger": true,
+        "stale_count": 4,
+        "summary": "自动触发 自选股全流程刷新：trade_date_mismatch, freshness_stale, live_small_not_allowed, manifest_missing, freshness_expired。",
+        "task_kind": "heavyweight",
+        "task_name": "watchlist_refresh"
+      },
+      "force": false,
+      "manifest_state": [
+        {
+          "freshness_status": null,
+          "key": "watchlist",
+          "label": "自选股",
+          "stale": true,
+          "stale_reasons": [
+            "trade_date_mismatch",
+            "age_exceeded"
+          ],
+          "trade_date": "2026-05-11"
+        },
+        {
+          "freshness_status": "stale",
+          "key": "quotes.snapshot",
+          "label": "轻量行情快照",
+          "stale": true,
+          "stale_reasons": [
+            "freshness_stale",
+            "trade_date_mismatch",
+            "live_small_not_allowed"
+          ],
+          "trade_date": "2026-05-11"
+        },
+        {
+          "freshness_status": null,
+          "key": "capital_flow.daily",
+          "label": "轻量资金流单票",
+          "stale": true,
+          "stale_reasons": [
+            "manifest_missing"
+          ],
+          "trade_date": null
+        },
+        {
+          "freshness_status": "expired",
+          "key": "capital_flow.batch",
+          "label": "轻量资金流批量",
+          "stale": true,
+          "stale_reasons": [
+            "freshness_expired"
+          ],
+          "trade_date": "2026-05-12"
+        }
+      ],
+      "page": "today",
+      "reason": "自动触发 自选股全流程刷新：trade_date_mismatch, freshness_stale, live_small_not_allowed, manifest_missing, freshness_expired。",
+      "run_id": "watchlist_refresh_20260512_110446_934090",
+      "task_family": "watchlist_refresh",
+      "task_name": "watchlist_refresh",
+      "trigger_type": "auto",
+      "ts": "2026-05-12 11:04:46"
+    },
+    {
+      "cooldown": {
+        "next_allowed_at": "2026-05-11 22:42:55",
+        "remaining_seconds": 0
+      },
+      "decision": {
+        "active_windows": [
+          {
+            "end": "11:30",
+            "key": "morning",
+            "label": "早盘交易窗口",
+            "start": "09:25"
+          }
+        ],
+        "allowed": true,
+        "blocked_reasons": [],
+        "cooldown_remaining_seconds": 0,
+        "enabled": true,
+        "force": false,
+        "manifest_reasons": [
+          "trade_date_mismatch"
+        ],
+        "next_allowed_at": "2026-05-11 22:42:55",
+        "page": "today",
+        "reason_codes": [
+          "trade_date_mismatch"
+        ],
+        "required_windows": [
+          "morning",
+          "midday",
+          "afternoon",
+          "preclose",
+          "postclose"
+        ],
+        "should_trigger": true,
+        "stale_count": 4,
+        "summary": "自动触发 投资总控简报：trade_date_mismatch。",
+        "task_kind": "heavyweight",
+        "task_name": "command_brief"
+      },
+      "force": false,
+      "manifest_state": [
+        {
+          "freshness_status": null,
+          "key": "watchlist",
+          "label": "自选股",
+          "stale": true,
+          "stale_reasons": [
+            "trade_date_mismatch",
+            "age_exceeded"
+          ],
+          "trade_date": "2026-05-11"
+        },
+        {
+          "freshness_status": null,
+          "key": "screening",
+          "label": "观察池基线",
+          "stale": true,
+          "stale_reasons": [
+            "trade_date_mismatch",
+            "age_exceeded"
+          ],
+          "trade_date": "2026-05-11"
+        },
+        {
+          "freshness_status": null,
+          "key": "confirmation",
+          "label": "午盘确认",
+          "stale": true,
+          "stale_reasons": [
+            "trade_date_mismatch",
+            "age_exceeded"
+          ],
+          "trade_date": "2026-05-11"
+        },
+        {
+          "freshness_status": null,
+          "key": "decision_brief",
+          "label": "总控简报",
+          "stale": true,
+          "stale_reasons": [
+            "trade_date_mismatch"
+          ],
+          "trade_date": "2026-05-11"
+        }
+      ],
+      "page": "today",
+      "reason": "manual_from_settings_safe_refresh",
+      "run_id": "command_brief_20260512_110459_102416",
+      "task_family": "command_brief",
+      "task_name": "command_brief",
+      "trigger_type": "manual",
+      "ts": "2026-05-12 11:04:59"
+    },
+    {
+      "ts": "2026-05-12 11:17:22",
+      "trigger_type": "auto",
+      "page": "today",
+      "task_name": "command_brief",
+      "task_family": "command_brief",
+      "run_id": "command_brief_20260512_111722_699906",
+      "force": false,
+      "reason": "自动触发 投资总控简报：trade_date_mismatch。",
+      "manifest_state": [
+        {
+          "key": "watchlist",
+          "label": "自选股",
+          "stale": false,
+          "freshness_status": null,
+          "trade_date": "2026-05-12",
+          "stale_reasons": []
+        },
+        {
+          "key": "screening",
+          "label": "观察池基线",
+          "stale": false,
+          "freshness_status": null,
+          "trade_date": "2026-05-12",
+          "stale_reasons": []
+        },
+        {
+          "key": "confirmation",
+          "label": "午盘确认",
+          "stale": true,
+          "freshness_status": null,
+          "trade_date": "2026-05-11",
+          "stale_reasons": [
+            "trade_date_mismatch",
+            "age_exceeded"
+          ]
+        },
+        {
+          "key": "decision_brief",
+          "label": "总控简报",
+          "stale": true,
+          "freshness_status": null,
+          "trade_date": "2026-05-11",
+          "stale_reasons": [
+            "trade_date_mismatch"
+          ]
+        }
+      ],
+      "cooldown": {
+        "remaining_seconds": 0,
+        "next_allowed_at": "2026-05-12 11:16:59"
+      },
+      "decision": {
+        "enabled": true,
+        "allowed": true,
+        "should_trigger": true,
+        "force": false,
+        "page": "today",
+        "task_name": "command_brief",
+        "task_kind": "heavyweight",
+        "reason_codes": [
+          "trade_date_mismatch"
+        ],
+        "blocked_reasons": [],
+        "active_windows": [
+          {
+            "key": "morning",
+            "label": "早盘交易窗口",
+            "start": "09:25",
+            "end": "11:30"
+          }
+        ],
+        "required_windows": [
+          "morning",
+          "midday",
+          "afternoon",
+          "preclose",
+          "postclose"
+        ],
+        "manifest_reasons": [
+          "trade_date_mismatch"
+        ],
+        "stale_count": 2,
+        "cooldown_remaining_seconds": 0,
+        "next_allowed_at": "2026-05-12 11:16:59",
+        "summary": "自动触发 投资总控简报：trade_date_mismatch。"
+      }
+    }
+  ],
+  "pages": {
+    "opportunities": {
+      "decision": {
+        "active_windows": [
+          {
+            "end": "15:00",
+            "key": "afternoon",
+            "label": "午后交易窗口",
+            "start": "13:00"
+          }
+        ],
+        "allowed": true,
+        "blocked_reasons": [],
+        "cooldown_remaining_seconds": 0,
+        "enabled": true,
+        "force": false,
+        "manifest_reasons": [
+          "manifest_missing"
+        ],
+        "next_allowed_at": "",
+        "page": "opportunities",
+        "reason_codes": [
+          "manifest_missing"
+        ],
+        "required_windows": [
+          "premarket",
+          "morning",
+          "midday",
+          "afternoon",
+          "preclose"
+        ],
+        "should_trigger": true,
+        "stale_count": 1,
+        "summary": "自动触发 轻量行情补刷：manifest_missing。",
+        "task_kind": "lightweight",
+        "task_name": "quotes_light"
+      },
+      "forced": false,
+      "last_trigger_at": "2026-05-11 14:02:41",
+      "reason": "自动触发 轻量行情补刷：manifest_missing。",
+      "run_id": "quotes_light_20260511_140241_580440",
+      "task_name": "quotes_light",
+      "trigger_type": "auto"
+    },
+    "today": {
+      "task_name": "command_brief",
+      "run_id": "command_brief_20260512_111722_699906",
+      "forced": false,
+      "last_trigger_at": "2026-05-12 11:17:22",
+      "trigger_type": "auto",
+      "reason": "自动触发 投资总控简报：trade_date_mismatch。",
+      "decision": {
+        "enabled": true,
+        "allowed": true,
+        "should_trigger": true,
+        "force": false,
+        "page": "today",
+        "task_name": "command_brief",
+        "task_kind": "heavyweight",
+        "reason_codes": [
+          "trade_date_mismatch"
+        ],
+        "blocked_reasons": [],
+        "active_windows": [
+          {
+            "key": "morning",
+            "label": "早盘交易窗口",
+            "start": "09:25",
+            "end": "11:30"
+          }
+        ],
+        "required_windows": [
+          "morning",
+          "midday",
+          "afternoon",
+          "preclose",
+          "postclose"
+        ],
+        "manifest_reasons": [
+          "trade_date_mismatch"
+        ],
+        "stale_count": 2,
+        "cooldown_remaining_seconds": 0,
+        "next_allowed_at": "2026-05-12 11:16:59",
+        "summary": "自动触发 投资总控简报：trade_date_mismatch。"
+      }
+    },
+    "watchlist": {
       "forced": true,
-      "last_trigger_at": "2026-04-21 19:32:37"
+      "last_trigger_at": "2026-04-21 19:32:37",
+      "run_id": "refresh_smoke_1",
+      "task_name": "watchlist_refresh"
     }
   },
-  "updated_at": "2026-04-21 19:32:37"
+  "tasks": {
+    "command_brief": {
+      "task_name": "command_brief",
+      "task_family": "command_brief",
+      "page": "today",
+      "run_id": "command_brief_20260512_111722_699906",
+      "forced": false,
+      "last_trigger_at": "2026-05-12 11:17:22",
+      "trigger_type": "auto",
+      "reason": "自动触发 投资总控简报：trade_date_mismatch。",
+      "decision": {
+        "enabled": true,
+        "allowed": true,
+        "should_trigger": true,
+        "force": false,
+        "page": "today",
+        "task_name": "command_brief",
+        "task_kind": "heavyweight",
+        "reason_codes": [
+          "trade_date_mismatch"
+        ],
+        "blocked_reasons": [],
+        "active_windows": [
+          {
+            "key": "morning",
+            "label": "早盘交易窗口",
+            "start": "09:25",
+            "end": "11:30"
+          }
+        ],
+        "required_windows": [
+          "morning",
+          "midday",
+          "afternoon",
+          "preclose",
+          "postclose"
+        ],
+        "manifest_reasons": [
+          "trade_date_mismatch"
+        ],
+        "stale_count": 2,
+        "cooldown_remaining_seconds": 0,
+        "next_allowed_at": "2026-05-12 11:16:59",
+        "summary": "自动触发 投资总控简报：trade_date_mismatch。"
+      }
+    },
+    "quotes_light": {
+      "decision": {
+        "active_windows": [
+          {
+            "end": "15:00",
+            "key": "afternoon",
+            "label": "午后交易窗口",
+            "start": "13:00"
+          }
+        ],
+        "allowed": true,
+        "blocked_reasons": [],
+        "cooldown_remaining_seconds": 0,
+        "enabled": true,
+        "force": false,
+        "manifest_reasons": [
+          "manifest_missing"
+        ],
+        "next_allowed_at": "",
+        "page": "opportunities",
+        "reason_codes": [
+          "manifest_missing"
+        ],
+        "required_windows": [
+          "premarket",
+          "morning",
+          "midday",
+          "afternoon",
+          "preclose"
+        ],
+        "should_trigger": true,
+        "stale_count": 1,
+        "summary": "自动触发 轻量行情补刷：manifest_missing。",
+        "task_kind": "lightweight",
+        "task_name": "quotes_light"
+      },
+      "forced": false,
+      "last_trigger_at": "2026-05-11 14:02:41",
+      "page": "opportunities",
+      "reason": "自动触发 轻量行情补刷：manifest_missing。",
+      "run_id": "quotes_light_20260511_140241_580440",
+      "task_family": "lightweight_market_data",
+      "task_name": "quotes_light",
+      "trigger_type": "auto"
+    },
+    "watchlist_refresh": {
+      "decision": {
+        "active_windows": [
+          {
+            "end": "11:30",
+            "key": "morning",
+            "label": "早盘交易窗口",
+            "start": "09:25"
+          }
+        ],
+        "allowed": true,
+        "blocked_reasons": [],
+        "cooldown_remaining_seconds": 0,
+        "enabled": true,
+        "force": false,
+        "manifest_reasons": [
+          "trade_date_mismatch",
+          "freshness_stale",
+          "live_small_not_allowed",
+          "manifest_missing",
+          "freshness_expired"
+        ],
+        "next_allowed_at": "2026-05-11 22:35:32",
+        "page": "today",
+        "reason_codes": [
+          "trade_date_mismatch",
+          "freshness_stale",
+          "live_small_not_allowed",
+          "manifest_missing",
+          "freshness_expired"
+        ],
+        "required_windows": [
+          "premarket",
+          "morning",
+          "afternoon",
+          "preclose"
+        ],
+        "should_trigger": true,
+        "stale_count": 4,
+        "summary": "自动触发 自选股全流程刷新：trade_date_mismatch, freshness_stale, live_small_not_allowed, manifest_missing, freshness_expired。",
+        "task_kind": "heavyweight",
+        "task_name": "watchlist_refresh"
+      },
+      "forced": false,
+      "last_trigger_at": "2026-05-12 11:04:46",
+      "page": "today",
+      "reason": "自动触发 自选股全流程刷新：trade_date_mismatch, freshness_stale, live_small_not_allowed, manifest_missing, freshness_expired。",
+      "run_id": "watchlist_refresh_20260512_110446_934090",
+      "task_family": "watchlist_refresh",
+      "task_name": "watchlist_refresh",
+      "trigger_type": "auto"
+    }
+  },
+  "updated_at": "2026-05-12 11:17:22"
 }

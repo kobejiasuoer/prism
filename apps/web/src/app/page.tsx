@@ -114,6 +114,23 @@ function firstPendingAction(items: TodayActionItem[]) {
   return items.find((item) => actionStateValue(item) === "pending");
 }
 
+function datePart(value?: string) {
+  return String(value || "").match(/\d{4}-\d{2}-\d{2}/)?.[0] || "";
+}
+
+function actionItemTradeDate(item: TodayActionItem) {
+  return datePart(item.freshness?.value || item.freshness?.label || item.display_state?.updated_at_raw || item.display_state?.updated_at);
+}
+
+function actionItemIsStale(item: TodayActionItem, expectedTradeDate?: string) {
+  const itemDate = actionItemTradeDate(item);
+  return Boolean(expectedTradeDate && itemDate && itemDate !== expectedTradeDate);
+}
+
+function actionStackIsTrustworthy(readiness?: ReadinessPayload) {
+  return readiness?.readiness_mode === "live_ready" && Boolean(readiness?.ready);
+}
+
 function dataLooksStale(readiness?: ReadinessPayload, sourceCards: SourceCardData[] = []) {
   return Boolean(
     readiness?.stale_count ||
@@ -306,7 +323,57 @@ function HeroSkeleton() {
   );
 }
 
-function fallbackHeroActions(): TodayCommandHeroAction[] {
+function fallbackHeroActions(readiness?: ReadinessPayload): TodayCommandHeroAction[] {
+  if (readiness?.readiness_mode === "blocked") {
+    return [
+      {
+        label: "1 · 恢复",
+        title: "先恢复数据链路",
+        detail: "当前没有可信的今天动作；先去 Settings 运行安全刷新。",
+        tone: "avoid",
+        tier: "blocked",
+      },
+      {
+        label: "2 · 复核",
+        title: "只读复核历史线索",
+        detail: "旧线索可以查看来源，但不可作为真钱执行依据。",
+        tone: "watch",
+        tier: "readonly",
+      },
+      {
+        label: "3 · 禁止",
+        title: "真钱执行：禁止",
+        detail: "等 readiness 回到 live_ready 后，再按仓位纪律处理。",
+        tone: "avoid",
+        tier: "avoid",
+      },
+    ];
+  }
+  if (readiness?.readiness_mode === "shadow_only") {
+    return [
+      {
+        label: "1 · 观察",
+        title: "仅影子盘观察",
+        detail: "当前可复盘和记录观察，不做真钱执行。",
+        tone: "watch",
+        tier: "shadow_only",
+      },
+      {
+        label: "2 · 等待",
+        title: "等数据完全就绪",
+        detail: "若需要真钱执行，先在 Settings 复核 freshness 和推荐刷新任务。",
+        tone: "watch",
+        tier: "wait_trigger",
+      },
+      {
+        label: "3 · 禁止",
+        title: "真钱执行：禁止",
+        detail: "shadow_only 下只做观察和记录。",
+        tone: "avoid",
+        tier: "avoid",
+      },
+    ];
+  }
   return [
     {
       label: "1 · 先做",
@@ -384,6 +451,7 @@ function DecisionBrief({
   const liveTone = readinessMode === "live_ready" ? "positive" : readinessMode === "shadow_only" ? "warning" : "negative";
   const liveLabel =
     readinessMode === "live_ready" ? "允许真钱" : readinessMode === "shadow_only" ? "影子盘" : "禁止";
+  const decisionLocked = readinessMode !== "live_ready";
   const sourceTone = readinessMode === "live_ready" ? "buy-text" : "watch-text";
   const qualityTone = qualityTimely === qualityTotal && qualityTotal > 0 ? "buy-text" : "watch-text";
   const qualityLabel = qualityTotal > 0 ? `${qualityTimely}/${qualityTotal}` : "-";
@@ -410,7 +478,11 @@ function DecisionBrief({
           <Badge tone="watch">{gateLabel}</Badge>
         </div>
         <div className="war-cap mono">{cap}</div>
-        <p>弱环境下只做验证，不扩大仓位。主线：{mainTheme}。</p>
+        <p>
+          {decisionLocked
+            ? "数据新鲜度未通过时，不展示主线、仓位和交易建议。"
+            : `弱环境下只做验证，不扩大仓位。主线：${mainTheme}。`}
+        </p>
         <div className="war-gate-meter">
           <span style={{ width: cap === "0成" ? "8%" : "50%" }} />
         </div>
@@ -462,10 +534,13 @@ function SignalStrip({
 
 function ActionStack({
   items,
+  staleItems,
   counts,
   loading,
+  readiness,
 }: {
   items: TodayActionItem[];
+  staleItems: TodayActionItem[];
   counts?: {
     total: number;
     pending: number;
@@ -473,24 +548,54 @@ function ActionStack({
     watch: number;
     skip: number;
     no_fill?: number;
+    stale?: number;
     last_updated?: string;
   };
   loading: boolean;
+  readiness?: ReadinessPayload;
 }) {
   const handled = (counts?.done || 0) + (counts?.watch || 0) + (counts?.skip || 0) + (counts?.no_fill || 0);
+  const expectedTradeDate = readiness?.expected_trade_date;
+  const trustworthy = actionStackIsTrustworthy(readiness);
+  const hasStaleItems = staleItems.length > 0;
+  const frozen = Boolean(!trustworthy && (items.length || hasStaleItems));
+  const headerTitle = frozen ? "暂无可信的今天动作" : "今天只看这几件事";
+  const headerDetail = frozen
+    ? hasStaleItems
+      ? `后端已把 ${staleItems.length} 条旧线索移出待处理队列，当前不作为今天依据。`
+      : "当前 readiness 未就绪，待处理队列已按 fail-closed 关闭。"
+    : "";
+
   return (
-    <section id="action-queue" className="war-stack" data-od-id="action-queue">
+    <section id="action-queue" className={cn("war-stack", frozen ? "is-frozen" : "")} data-od-id="action-queue">
       <header className="war-section-head">
         <div>
           <span className="war-eyebrow">Action Stack</span>
-          <h2>今天只看这几件事</h2>
+          <h2>{headerTitle}</h2>
+          {headerDetail ? <p>{headerDetail}</p> : null}
         </div>
         <div className="war-counts">
-          <span>待处理 {counts?.pending ?? items.length}</span>
+          {frozen ? <span>只读复核</span> : null}
+          <span>可信动作 {counts?.total ?? items.length}</span>
+          {hasStaleItems ? <span>历史线索 {counts?.stale ?? staleItems.length}</span> : null}
+          {!frozen ? <span>待处理 {counts?.pending ?? items.length}</span> : null}
           <span>已处理 {handled}/{counts?.total ?? items.length}</span>
           {counts?.no_fill ? <span>未成交 {counts.no_fill}</span> : null}
         </div>
       </header>
+
+      {frozen ? (
+        <div className="war-action-freeze">
+          <Badge tone="risk">真钱执行：禁止</Badge>
+          <span>
+            这组数据不能当作今天的动作清单。先去 Settings 跑安全刷新；刷新后如果仍然 blocked，只做观察和日志排查。
+          </span>
+          <Link href="/settings" className="focus-ring war-check is-on">
+            去刷新数据
+            <ChevronRight size={14} />
+          </Link>
+        </div>
+      ) : null}
 
       {loading && !items.length ? (
         <div className="war-action-list">
@@ -509,12 +614,36 @@ function ActionStack({
               key={item.key}
               item={item}
               index={index}
+              frozen={frozen}
+              stale={actionItemIsStale(item, expectedTradeDate)}
+              expectedTradeDate={expectedTradeDate}
             />
           ))}
         </div>
       ) : (
-        <div className="war-empty">当前没有必须处理的动作。</div>
+        <div className="war-empty">{frozen ? "当前没有可信的今天动作。" : "当前没有必须处理的动作。"}</div>
       )}
+
+      {hasStaleItems ? (
+        <div className="war-action-legacy">
+          <div className="war-legacy-head">
+            <span className="war-eyebrow">Historical Clues</span>
+            <strong>历史线索，仅供复核</strong>
+          </div>
+          <div className="war-action-list">
+            {staleItems.slice(0, 5).map((item, index) => (
+              <WarActionCard
+                key={`stale-${item.key}`}
+                item={item}
+                index={index}
+                frozen
+                stale={actionItemIsStale(item, expectedTradeDate)}
+                expectedTradeDate={expectedTradeDate}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -522,9 +651,15 @@ function ActionStack({
 function WarActionCard({
   item,
   index,
+  frozen = false,
+  stale = false,
+  expectedTradeDate,
 }: {
   item: TodayActionItem;
   index: number;
+  frozen?: boolean;
+  stale?: boolean;
+  expectedTradeDate?: string;
 }) {
   const state = actionStateValue(item);
   const stateCopy = actionStateCopy(item);
@@ -542,9 +677,15 @@ function WarActionCard({
     item.confidence?.label ||
     item.group_title ||
     "数据可用";
+  const itemDate = actionItemTradeDate(item);
+  const staleMessage = stale
+    ? `旧数据 ${itemDate || "-"}，不是 ${expectedTradeDate || "预期交易日"}`
+    : frozen
+      ? "readiness 未就绪，只读复核"
+      : "";
 
   return (
-    <article className={cn("war-action-card", checked ? "is-done" : "")}>
+    <article className={cn("war-action-card", checked ? "is-done" : "", frozen ? "is-frozen" : "", stale ? "is-stale" : "")}>
       <ToneRail tone={tone} />
       <div className="war-action-rank mono">{String(index + 1).padStart(2, "0")}</div>
       <div className="war-action-body">
@@ -554,13 +695,26 @@ function WarActionCard({
         </Link>
         <p>{item.detail || item.foot || item.status || "等待系统给出下一步。"}</p>
         <div className="war-action-meta">
-          <Badge tone={stateCopy.tone}>{item.display_state?.label || stateCopy.label}</Badge>
+          <Badge tone={frozen ? "risk" : stateCopy.tone}>{frozen ? "只读线索" : item.display_state?.label || stateCopy.label}</Badge>
+          {stale ? <Badge tone="warning">数据偏旧</Badge> : null}
           <span>{item.source || item.group_title || freshnessLabel}</span>
           {state === "no_fill" && item.display_state?.reason ? <span>{item.display_state.reason}</span> : null}
+          {staleMessage ? <span>{staleMessage}</span> : null}
         </div>
       </div>
       <div className="war-action-control">
-        {state === "pending" ? (
+        {frozen ? (
+          href !== "#" ? (
+            <Link href={href} className="focus-ring war-check">
+              查看线索
+              <ChevronRight size={14} />
+            </Link>
+          ) : (
+            <button type="button" className="focus-ring war-check" disabled>
+              暂无详情
+            </button>
+          )
+        ) : state === "pending" ? (
           href !== "#" ? (
             <Link href={href} className="focus-ring war-check">
               {stateCopy.button}
@@ -600,6 +754,7 @@ function IntelligenceRail({
   candidateTotal,
   freshCandidates,
   confirmed,
+  decisionLocked,
 }: {
   risks: RiskRow[];
   sources: SourceCardData[];
@@ -614,6 +769,7 @@ function IntelligenceRail({
   candidateTotal?: number;
   freshCandidates?: number;
   confirmed?: number;
+  decisionLocked?: boolean;
 }) {
   const fresh = sources.filter(sourceIsFresh).length;
   const links = [
@@ -639,9 +795,17 @@ function IntelligenceRail({
       <section className="war-rail-card">
         <div className="war-rail-head">
           <span>风险雷达</span>
-          <Badge tone="sell">先看</Badge>
+          <Badge tone={decisionLocked ? "risk" : "sell"}>{decisionLocked ? "冻结" : "先看"}</Badge>
         </div>
-        {risks.length ? (
+        {decisionLocked ? (
+          <div className="war-rail-row">
+            <ToneRail tone="risk" />
+            <div>
+              <strong>交易判断已冻结</strong>
+              <p>不展示旧风险、旧机会或旧主线；先恢复数据链路。</p>
+            </div>
+          </div>
+        ) : risks.length ? (
           risks.slice(0, 3).map((risk, index) => (
             <div key={`${risk.title}-${index}`} className="war-rail-row">
               <ToneRail tone={risk.tone || (index === 0 ? "sell" : "watch")} />
@@ -729,7 +893,7 @@ function IntelligenceRail({
         {links.map((item) => (
           <Link key={`${item.label}-${item.href}`} href={item.href} className="focus-ring">
             <span>{item.label}</span>
-            <strong>{item.count ?? "-"}</strong>
+            <strong>{decisionLocked ? "-" : item.count ?? "-"}</strong>
           </Link>
         ))}
       </section>
@@ -745,6 +909,7 @@ export default function CommandCenterPage() {
   const hero = data?.command_hero;
   const readiness = data?.readiness;
   const readinessMode: ReadinessMode = readiness?.readiness_mode ?? "blocked";
+  const decisionLocked = Boolean(readiness && !actionStackIsTrustworthy(readiness));
   const displayDate =
     readiness?.expected_trade_date ||
     data?.display_date ||
@@ -775,6 +940,7 @@ export default function CommandCenterPage() {
           },
         ];
   const actionItems = data?.action_queue?.items ?? [];
+  const staleActionItems = data?.action_queue?.stale_items ?? [];
   const counts = data?.action_queue?.counts;
   const riskRows: RiskRow[] =
     data?.risk_rows?.length
@@ -789,36 +955,63 @@ export default function CommandCenterPage() {
             },
           ]
         : [];
-  const actions = hero?.actions?.length ? hero.actions.slice(0, 3) : fallbackHeroActions();
+  const actions = hero?.actions?.length ? hero.actions.slice(0, 3) : fallbackHeroActions(readiness);
   const tradeDateLabel = readiness?.expected_trade_date
     ? `${readiness.expected_trade_date}${readiness.data_trade_date && readiness.data_trade_date !== readiness.expected_trade_date ? ` ←→ ${readiness.data_trade_date}` : ""}`
     : asText(displayDate, "待同步");
-  const tapeItems = [
-    {
-      label: "持仓优先",
-      value: asText(data?.counts?.watchlist_priority ?? metricCards[0]?.value),
-      tone: "sell",
-    },
-    {
-      label: "观察候选",
-      value: asText(data?.counts?.candidate_total ?? metricCards[1]?.value),
-      tone: "watch",
-    },
-    {
-      label: "午盘新增",
-      value: asText(data?.counts?.fresh_candidates ?? metricCards[2]?.value),
-      tone: "positive",
-    },
-    {
-      label: "已确认",
-      value: asText(data?.counts?.confirmed ?? counts?.done),
-      tone: "hold",
-    },
-    {
-      label: "交易日",
-      value: tradeDateLabel,
-    },
-  ];
+  const tapeItems = decisionLocked
+    ? [
+        {
+          label: "可信动作",
+          value: asText(counts?.total ?? actionItems.length),
+          tone: "sell",
+        },
+        {
+          label: "历史线索",
+          value: asText(counts?.stale ?? staleActionItems.length),
+          tone: "watch",
+        },
+        {
+          label: "数据源",
+          value: `${freshSourceCount}/${sourceCards.length || "-"}`,
+          tone: "watch",
+        },
+        {
+          label: "质检",
+          value: qualityTotal ? `${qualityTimely}/${qualityTotal}` : "-",
+          tone: "watch",
+        },
+        {
+          label: "交易日",
+          value: tradeDateLabel,
+        },
+      ]
+    : [
+        {
+          label: "持仓优先",
+          value: asText(data?.counts?.watchlist_priority ?? metricCards[0]?.value),
+          tone: "sell",
+        },
+        {
+          label: "观察候选",
+          value: asText(data?.counts?.candidate_total ?? metricCards[1]?.value),
+          tone: "watch",
+        },
+        {
+          label: "午盘新增",
+          value: asText(data?.counts?.fresh_candidates ?? metricCards[2]?.value),
+          tone: "positive",
+        },
+        {
+          label: "已确认",
+          value: asText(data?.counts?.confirmed ?? counts?.done),
+          tone: "hold",
+        },
+        {
+          label: "交易日",
+          value: tradeDateLabel,
+        },
+      ];
 
   // status copy in the hero card: NEVER show "live" wording when readiness is
   // not green, even if the user has stale data sitting in the brief.
@@ -889,12 +1082,12 @@ export default function CommandCenterPage() {
               <HeroSkeleton />
             ) : (
               <DecisionBrief
-                title={hero?.title || data?.hero?.title || "先把旧仓风险降下来，新仓只等一个确认触发"}
-                summary={hero?.summary || data?.hero?.summary || "今天不是找更多机会，而是按纪律先处理旧仓风险。"}
+                title={decisionLocked ? "今日交易判断已冻结：先恢复数据新鲜度" : hero?.title || data?.hero?.title || "先把旧仓风险降下来，新仓只等一个确认触发"}
+                summary={decisionLocked ? "数据未通过 live_ready 检查，页面不展示旧主线、旧机会和旧仓位建议。" : hero?.summary || data?.hero?.summary || "今天不是找更多机会，而是按纪律先处理旧仓风险。"}
                 status={heroStatus}
-                gateLabel={data?.hero?.gate_label || hero?.source_state || "防守试错"}
-                cap={asText(data?.hero?.position_cap, "0成")}
-                mainTheme={asText(data?.hero?.main_theme, "AI + 机器人")}
+                gateLabel={decisionLocked ? "数据冻结" : data?.hero?.gate_label || hero?.source_state || "防守试错"}
+                cap={decisionLocked ? "-" : asText(data?.hero?.position_cap, "0成")}
+                mainTheme={decisionLocked ? "未展示" : asText(data?.hero?.main_theme, "AI + 机器人")}
                 actions={actions}
                 sourceOk={freshSourceCount}
                 sourceTotal={sourceCards.length}
@@ -909,8 +1102,10 @@ export default function CommandCenterPage() {
 
             <ActionStack
               items={actionItems}
+              staleItems={staleActionItems}
               counts={counts}
               loading={today.isLoading}
+              readiness={readiness}
             />
           </div>
 
@@ -928,6 +1123,7 @@ export default function CommandCenterPage() {
             candidateTotal={data?.counts?.candidate_total}
             freshCandidates={data?.counts?.fresh_candidates}
             confirmed={data?.counts?.confirmed}
+            decisionLocked={decisionLocked}
           />
         </div>
         <details className="war-inline-note">

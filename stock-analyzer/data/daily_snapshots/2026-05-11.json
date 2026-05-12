@@ -1,0 +1,76 @@
+{
+  "date": "2026-05-11",
+  "generated_at": "2026-05-11 22:21:04",
+  "price_basis": "新浪实时行情",
+  "flow_basis": "东方财富资金流",
+  "tech_basis": "240分钟K线",
+  "stocks": {
+    "600690": {
+      "date": "2026-05-11",
+      "code": "600690",
+      "name": "海尔智家",
+      "action": "观望",
+      "position": "0-0.5成",
+      "tech_base": "中性",
+      "flow_base": "偏多",
+      "event_base": "偏多",
+      "score": 25,
+      "score_kind": "技术分",
+      "signal": "中性（评分25）",
+      "hard_flags": [
+        "ROE偏弱"
+      ],
+      "watch_points": [
+        "中期仍受 MA60（23.26）压制"
+      ],
+      "positives": [
+        "股东回报"
+      ],
+      "support": 21.5,
+      "resistance": 21.6,
+      "stop_loss": 21.4,
+      "intraday_triggers": [
+        {
+          "name": "防守线",
+          "condition": "盘中跌破止损位 21.4 元",
+          "action": "先减仓或离场"
+        },
+        {
+          "name": "突破线",
+          "condition": "放量站上压力位 21.6 元",
+          "action": "可从观望升级为轻仓跟踪，但别追高"
+        },
+        {
+          "name": "确认线",
+          "condition": "回踩不破支撑位 21.5 元，且主力净流入维持为正",
+          "action": "可继续持有/观察，等待二次确认"
+        }
+      ],
+      "price_as_of": "2026-05-11 15:00:00",
+      "flow_as_of": "2026-05-11",
+      "flow_unconfirmed": false,
+      "flow_confidence": {
+        "label": "盘中确认",
+        "penalty": 0,
+        "as_of_date": "2026-05-11"
+      },
+      "capital_flow": {
+        "signal": "主力净流入",
+        "main_net_wan": 8098.84,
+        "main_net_yi": 0.81,
+        "today_wan": 8098.84,
+        "today_yi": 0.81,
+        "five_day_total_wan": 4167.16,
+        "five_day_total_yi": 0.42,
+        "unit": "wan_yuan"
+      },
+      "tech_basis": "240分钟K线"
+    }
+  },
+  "data_ingress": {
+    "dataset": "watchlist.snapshot",
+    "manifest_path": "<redacted-path>",
+    "freshness_status": "expired",
+    "live_small_allowed": false
+  }
+}

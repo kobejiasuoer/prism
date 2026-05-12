@@ -2532,11 +2532,9 @@ def find_today_action_match(code: str) -> dict[str, Any] | None:
         today = build_today_view()
     except Exception:
         return None
-    for item in (today.get("action_queue") or {}).get("items") or []:
-        if str(item.get("code") or "").strip() == code:
-            return item
-    for group in today.get("action_groups") or []:
-        for item in group.get("items") or []:
+    action_queue = today.get("action_queue") or {}
+    for collection in (action_queue.get("items") or [], action_queue.get("stale_items") or []):
+        for item in collection:
             if str(item.get("code") or "").strip() == code:
                 return item
     return None
@@ -2562,10 +2560,14 @@ def build_today_action_context(
     no_fill_index = build_no_fill_intent_index(account_book if account_book is not None else load_account_book())
 
     matched_item = None
-    for item in (today.get("action_queue") or {}).get("items") or []:
-        key = str(item.get("key") or "").strip()
-        if key.endswith(normalized_code):
-            matched_item = item
+    action_queue = today.get("action_queue") or {}
+    for collection in (action_queue.get("items") or [], action_queue.get("stale_items") or []):
+        for item in collection:
+            key = str(item.get("key") or "").strip()
+            if key.endswith(normalized_code):
+                matched_item = item
+                break
+        if matched_item:
             break
 
     if not matched_item:
@@ -2598,6 +2600,9 @@ def build_today_action_context(
         "status": str(enriched_item.get("status") or "").strip(),
         "detail": str(enriched_item.get("detail") or "").strip(),
         "group_title": str(enriched_item.get("group_title") or "").strip(),
+        "actionable": bool(enriched_item.get("actionable", True)),
+        "trust": enriched_item.get("trust") or None,
+        "confidence": enriched_item.get("confidence") or None,
         "decision": enriched_item.get("decision") or None,
         "display_state": enriched_item.get("display_state") or None,
     }
@@ -5141,15 +5146,92 @@ def build_today_action_display_state(
     }
 
 
+def action_item_date(value: Any) -> str:
+    text = str(value or "").strip()
+    match = re.search(r"\d{4}-\d{2}-\d{2}", text)
+    return match.group(0) if match else ""
+
+
+def today_action_item_trade_date(item: dict[str, Any]) -> str:
+    freshness = item.get("freshness") or {}
+    display_state = item.get("display_state") or {}
+    for value in (
+        freshness.get("value"),
+        freshness.get("label"),
+        display_state.get("updated_at_raw"),
+        display_state.get("updated_at"),
+    ):
+        trade_date = action_item_date(value)
+        if trade_date:
+            return trade_date
+    return ""
+
+
+def today_action_item_trust(
+    item: dict[str, Any],
+    *,
+    expected_trade_date: str,
+    readiness_mode: str,
+    ready: bool,
+) -> dict[str, Any]:
+    item_trade_date = today_action_item_trade_date(item)
+    stale_reasons: list[str] = []
+
+    if readiness_mode != "live_ready" or not ready:
+        stale_reasons.append("readiness_not_live_ready")
+    if expected_trade_date and item_trade_date and item_trade_date != expected_trade_date:
+        stale_reasons.append("expected_trade_date_mismatch")
+
+    return {
+        "trusted": not stale_reasons,
+        "trade_date": item_trade_date,
+        "expected_trade_date": expected_trade_date,
+        "stale_reasons": stale_reasons,
+    }
+
+
+def mark_today_action_stale(item: dict[str, Any], trust: dict[str, Any]) -> dict[str, Any]:
+    marked = dict(item)
+    confidence = dict(marked.get("confidence") or {})
+    item_trade_date = str(trust.get("trade_date") or "").strip()
+    expected_trade_date = str(trust.get("expected_trade_date") or "").strip()
+    reasons = [str(reason) for reason in trust.get("stale_reasons") or [] if str(reason)]
+    reason_text = "；".join(
+        {
+            "readiness_not_live_ready": "readiness 未就绪，只能复核线索",
+            "expected_trade_date_mismatch": f"旧数据 {item_trade_date or '-'}，不是 {expected_trade_date or '预期交易日'}",
+        }.get(reason, reason)
+        for reason in reasons
+    )
+    confidence.update(
+        {
+            "status": "stale",
+            "label": "过期",
+            "tone": "warning",
+            "note": reason_text or "这条线索不可作为今天动作依据。",
+        }
+    )
+    marked["confidence"] = confidence
+    marked["trust"] = trust
+    marked["stale_reasons"] = reasons
+    marked["actionable"] = False
+    return marked
+
+
 def build_today_action_queue(
     action_groups: list[dict[str, Any]],
     trade_date: str,
     *,
     account_book: dict[str, Any] | None = None,
+    expected_trade_date: str | None = None,
+    readiness_mode: str = "live_ready",
+    readiness_ready: bool = True,
 ) -> dict[str, Any]:
     decision_map = get_today_action_decision_map(trade_date)
     no_fill_index = build_no_fill_intent_index(account_book)
     ranked_items: list[dict[str, Any]] = []
+    stale_items: list[dict[str, Any]] = []
+    expected = str(expected_trade_date or trade_date or "").strip()
 
     for group in action_groups:
         for index, item in enumerate(group.get("items") or [], start=1):
@@ -5163,10 +5245,23 @@ def build_today_action_queue(
                 trade_date=trade_date,
                 no_fill_index=no_fill_index,
             )
-            ranked_items.append(queue_item)
+            trust = today_action_item_trust(
+                queue_item,
+                expected_trade_date=expected,
+                readiness_mode=readiness_mode,
+                ready=readiness_ready,
+            )
+            queue_item["trust"] = trust
+            queue_item["actionable"] = bool(trust.get("trusted"))
+            if trust.get("trusted"):
+                ranked_items.append(queue_item)
+            else:
+                stale_items.append(mark_today_action_stale(queue_item, trust))
 
     ranked_items.sort(key=today_action_queue_priority)
+    stale_items.sort(key=today_action_queue_priority)
     selected_items = ranked_items[:5]
+    selected_stale_items = stale_items[:5]
 
     counts = {
         "total": len(selected_items),
@@ -5176,6 +5271,7 @@ def build_today_action_queue(
         "skip": sum(1 for item in selected_items if (item.get("display_state") or {}).get("value") == "skip"),
         "no_fill": sum(1 for item in selected_items if (item.get("display_state") or {}).get("value") == "no_fill"),
     }
+    counts["stale"] = len(stale_items)
 
     last_updated = max(
         (((item.get("display_state") or {}).get("updated_at_raw") or "") for item in selected_items),
@@ -5188,7 +5284,9 @@ def build_today_action_queue(
         "subtitle": "先把今天真正要确认的动作收成 3-5 条，避免在全页信息里来回切换。",
         "note": "每条卡片都直接带上来源、更新时间和可信度；确认状态会按交易日记在控制台本地状态里。",
         "items": selected_items,
+        "stale_items": selected_stale_items,
         "hidden_count": max(len(ranked_items) - len(selected_items), 0),
+        "stale_hidden_count": max(len(stale_items) - len(selected_stale_items), 0),
         "counts": counts,
     }
 
@@ -5254,6 +5352,16 @@ def build_today_opportunity_rows(action_groups: list[dict[str, Any]]) -> list[di
     return compress_today_actions({"items": items})
 
 
+def build_today_trusted_group_rows(action_queue: dict[str, Any], group_key: str, key_prefixes: tuple[str, ...]) -> list[dict[str, Any]]:
+    items = [
+        item
+        for item in action_queue.get("items") or []
+        if str(item.get("group_key") or "") == group_key
+        and str(item.get("key") or "").startswith(key_prefixes)
+    ]
+    return compress_today_actions({"items": items})
+
+
 def build_today_risk_rows(change_view: dict[str, Any], action_groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
 
@@ -5299,7 +5407,64 @@ def build_today_command_hero(
     hero: dict[str, Any],
     top_rows: list[dict[str, Any]],
     brief_is_live: bool,
+    readiness_mode: str,
 ) -> dict[str, Any]:
+    actions: list[dict[str, Any]] = []
+    if readiness_mode == "blocked":
+        actions = [
+            {
+                "label": ACTION_TIER_LABELS["act_now"],
+                "title": "先恢复数据链路",
+                "detail": "当前没有可信的今天动作；先去 Settings 运行安全刷新。",
+                "tone": "risk",
+                "tier": ACTION_TIER_LABELS["act_now"],
+                "url": "/settings",
+            },
+            {
+                "label": ACTION_TIER_LABELS["wait_trigger"],
+                "title": "只读复核历史线索",
+                "detail": "旧线索可查看来源，但不可作为真钱执行依据。",
+                "tone": "watch",
+                "tier": ACTION_TIER_LABELS["wait_trigger"],
+                "url": "#action-queue",
+            },
+            {
+                "label": ACTION_TIER_LABELS["avoid"],
+                "title": "真钱执行：禁止",
+                "detail": "等 readiness 回到 live_ready 后，再按仓位纪律处理。",
+                "tone": "risk",
+                "tier": ACTION_TIER_LABELS["avoid"],
+                "url": "/settings",
+            },
+        ]
+    elif readiness_mode == "shadow_only":
+        actions = [
+            {
+                "label": ACTION_TIER_LABELS["act_now"],
+                "title": "仅影子盘观察",
+                "detail": "当前可复盘和记录观察，不做真钱执行。",
+                "tone": "watch",
+                "tier": ACTION_TIER_LABELS["act_now"],
+                "url": "#action-queue",
+            },
+            {
+                "label": ACTION_TIER_LABELS["wait_trigger"],
+                "title": "等数据完全就绪",
+                "detail": "若需要真钱执行，先在 Settings 复核 freshness 和推荐刷新任务。",
+                "tone": "watch",
+                "tier": ACTION_TIER_LABELS["wait_trigger"],
+                "url": "/settings",
+            },
+            {
+                "label": ACTION_TIER_LABELS["avoid"],
+                "title": "真钱执行：禁止",
+                "detail": "shadow_only 下只做观察和记录。",
+                "tone": "risk",
+                "tier": ACTION_TIER_LABELS["avoid"],
+                "url": "/settings",
+            },
+        ]
+
     execute_now = next((row for row in top_rows if (row.get("tone") or "") == "positive"), None)
     wait_trigger = next((row for row in top_rows if (row.get("tone") or "") == "watch"), None)
     avoid_row = next((row for row in top_rows if (row.get("tone") or "") == "risk"), None)
@@ -5326,7 +5491,7 @@ def build_today_command_hero(
         "trade_date": trade_date,
         "context_note": str(hero.get("context_note") or ""),
         "source_state": "总控已同步" if brief_is_live else "实时链路判断",
-        "actions": [
+        "actions": actions or [
             hero_row(ACTION_TIER_LABELS["act_now"], "先处理最弱持仓", execute_now, "positive"),
             hero_row(ACTION_TIER_LABELS["wait_trigger"], "只盯最强候选，不抢跑", wait_trigger, "watch"),
             hero_row(ACTION_TIER_LABELS["avoid"], "今天不追高", avoid_row, "risk"),
@@ -6041,7 +6206,7 @@ def build_review_selector_groups(
     return [
         {
             "title": "基准窗口",
-            "subtitle": "默认是修正后的 Q1 rerun，可切到别的时间窗做对照。",
+            "subtitle": "选择一份历史研究报告作为基准，和右侧对比窗口保持同一统计口径。",
             "options": [
                 {
                     "label": review_option_label(path),
@@ -6263,6 +6428,8 @@ def build_review_verdict_cards(
 ) -> list[dict[str, Any]]:
     baseline_summary = (baseline_review or {}).get("summary") or {}
     latest_summary = (latest_review or {}).get("summary") or {}
+    baseline_label = "基准"
+    latest_label = "当前"
 
     weak_base = baseline_summary.get("weak_regime_ai")
     weak_latest = latest_summary.get("weak_regime_ai")
@@ -6309,11 +6476,11 @@ def build_review_verdict_cards(
             "tone": "risk" if weak_is_risk else "watch",
             "copy": (
                 f"{review_window_text(latest_review)} 的弱环境 5日净为 {signed_pct(weak_latest_value)}，"
-                f"相对 Q1 {review_delta_label(weak_delta)}。"
+                f"相对基准 {review_delta_label(weak_delta)}。"
             ),
             "metrics": [
-                f"Q1 {signed_pct(weak_base_value)}",
-                f"当前 {signed_pct(weak_latest_value)}",
+                f"{baseline_label} {signed_pct(weak_base_value)}",
+                f"{latest_label} {signed_pct(weak_latest_value)}",
                 f"变化 {review_delta_label(weak_delta)}",
             ],
             "foot": "只要弱环境没稳定转正，就别把新仓阀门放开。",
@@ -6329,8 +6496,8 @@ def build_review_verdict_cards(
                 f"最新 5日净 {signed_pct(trial_latest_value)}。"
             ),
             "metrics": [
-                f"Q1 {signed_pct(trial_base_value)}",
-                f"当前 {signed_pct(trial_latest_value)}",
+                f"{baseline_label} {signed_pct(trial_base_value)}",
+                f"{latest_label} {signed_pct(trial_latest_value)}",
                 f"变化 {review_delta_label(trial_delta)}",
             ],
             "foot": "先把试错环境当默认试单区，再回到单票执行质量。",
@@ -6347,8 +6514,8 @@ def build_review_verdict_cards(
                 else f"当前进攻环境 5日净为 {signed_pct(attack_latest_value)}，需要先看历史是否真的支持升级动作。"
             ),
             "metrics": [
-                f"Q1 {signed_pct(attack_base_value)}",
-                f"当前 {signed_pct(attack_latest_value)}" if attack_latest is not None else "当前无样本",
+                f"{baseline_label} {signed_pct(attack_base_value)}",
+                f"{latest_label} {signed_pct(attack_latest_value)}" if attack_latest is not None else f"{latest_label}无样本",
                 f"变化 {review_delta_label(attack_delta)}",
             ],
             "foot": "点进去会看到对比窗口这一侧缺行，而不是被误写成 0。",
@@ -6382,8 +6549,8 @@ def build_review_verdict_cards(
                 f"最新 5日净 {signed_pct(best_strategy_latest_value)}。"
             ),
             "metrics": [
-                f"Q1 {signed_pct(best_strategy_base_value)}",
-                f"当前 {signed_pct(best_strategy_latest_value)}",
+                f"{baseline_label} {signed_pct(best_strategy_base_value)}",
+                f"{latest_label} {signed_pct(best_strategy_latest_value)}",
                 f"变化 {review_delta_label(best_strategy_delta)}",
             ],
             "foot": "先按策略做第一轮过滤，再去看具体 setup 和执行质量。",
@@ -7337,9 +7504,9 @@ def build_review_view(baseline_id: str | None = None, window_id: str | None = No
         hero_title = "历史优势要分环境看，不能只看总分"
 
     hero_summary = (
-        f"Q1 校正基准 AI 5日净 {signed_pct(baseline_ai_day5)}，"
+        f"基准窗口 {review_window_text(baseline_review)} AI 5日净 {signed_pct(baseline_ai_day5)}，"
         f"弱环境 {signed_pct(baseline_weak_day5)}；"
-        f"最新切片 {review_window_text(latest_review)} 为 {signed_pct(latest_ai_day5)}。"
+        f"对比窗口 {review_window_text(latest_review)} 为 {signed_pct(latest_ai_day5)}。"
     )
 
     if active_baseline_id and active_window_id and active_baseline_id == active_window_id:
@@ -7352,8 +7519,8 @@ def build_review_view(baseline_id: str | None = None, window_id: str | None = No
     for title, path, key in (
         ("最新变化回放 JSON", (latest_lifecycle or {}).get("path"), "lifecycle_latest"),
         ("最近有动作的变化回放 JSON", (active_lifecycle or {}).get("path"), "lifecycle_active"),
-        ("Q1 基准研究", (baseline_review or {}).get("path"), "review_baseline"),
-        ("最新切片研究", (latest_review or {}).get("path"), "review_latest"),
+        ("基准窗口研究", (baseline_review or {}).get("path"), "review_baseline"),
+        ("对比窗口研究", (latest_review or {}).get("path"), "review_latest"),
     ):
         item = artifact_from_path(title, path, key=key)
         if not item:
@@ -7426,7 +7593,7 @@ def build_review_view(baseline_id: str | None = None, window_id: str | None = No
 
     mini_compare = [
         {
-            "label": "Q1 AI 5日净",
+            "label": "基准 AI 5日净",
             "value": signed_pct(baseline_ai_day5),
             "note": review_window_text(baseline_review),
             "tone": review_value_tone(baseline_ai_day5),
@@ -7456,14 +7623,14 @@ def build_review_view(baseline_id: str | None = None, window_id: str | None = No
         build_review_panel(
             baseline_review,
             eyebrow="基准研究",
-            title="Q1 校正基准",
+            title="基准窗口",
             baseline_id=active_baseline_id,
             window_id=active_window_id,
         ),
         build_review_panel(
             latest_review,
-            eyebrow="最近切片",
-            title="最近切片",
+            eyebrow="对比窗口",
+            title="对比窗口",
             baseline_id=active_baseline_id,
             window_id=active_window_id,
         ),
@@ -7514,7 +7681,7 @@ def build_review_view(baseline_id: str | None = None, window_id: str | None = No
             lifecycle_note=lifecycle_note,
             links=links,
         ),
-        "verdict_note": "把基准窗口与最新切片先翻成当前判断，先看这里，再决定要不要往下拆细节。",
+        "verdict_note": "把基准窗口与对比窗口先翻成当前判断，先看这里，再决定要不要往下拆细节。",
         "verdict_cards": verdict_cards,
         "selector_groups": selector_groups,
         "source_cards": [
@@ -7534,16 +7701,16 @@ def build_review_view(baseline_id: str | None = None, window_id: str | None = No
                 "detail": review_window_text(baseline_review),
             },
             {
-                "label": "最近切片",
+                "label": "对比窗口",
                 "value": (latest_review or {}).get("generated_at") or "-",
                 "detail": review_window_text(latest_review),
             },
         ],
         "summary_cards": [
             {
-                "label": "Q1 AI 5日净",
+                "label": "基准 AI 5日净",
                 "value": signed_pct(baseline_ai_day5),
-                "detail": "以修正后的 Q1 基准为准",
+                "detail": review_window_text(baseline_review),
             },
             {
                 "label": "弱环境 AI 5日净",
@@ -8076,6 +8243,9 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
             action_groups,
             profile_trade_date,
             account_book=account_book,
+            expected_trade_date=str(readiness.get("expected_trade_date") or ""),
+            readiness_mode=str(readiness.get("readiness_mode") or "blocked"),
+            readiness_ready=bool(readiness.get("ready")),
         ),
         "action_groups": action_groups,
     }
@@ -8096,6 +8266,21 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
 
     primary_source = "watchlist" if watchlist_detail else ("opportunity" if opportunity_detail else None)
     primary_detail = watchlist_detail or opportunity_detail
+    catalog_entry = (build_stock_catalog(watchlist, screening_batch, confirmation).get(normalized_code) or {})
+    recent_entry = next(
+        (
+            item
+            for item in reversed(load_ask_recent_store().get("items") or [])
+            if str((item or {}).get("code") or "").strip() == normalized_code
+        ),
+        {},
+    )
+    profile_name = first_text(
+        (primary_detail or {}).get("name"),
+        catalog_entry.get("name") if catalog_entry.get("name") != normalized_code else None,
+        recent_entry.get("name") if recent_entry.get("name") != normalized_code else None,
+        (load_ask_case_cache(normalized_code) or {}).get("name"),
+    )
     today_action = build_today_action_context(normalized_code, today=today_context, account_book=account_book)
     available_sources = [
         key
@@ -8109,6 +8294,7 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
     return {
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "code": normalized_code,
+        "name": profile_name,
         "trade_date": (primary_detail or {}).get("trade_date"),
         "expected_trade_date": readiness.get("expected_trade_date"),
         "data_trade_date": readiness.get("data_trade_date"),
@@ -8285,7 +8471,8 @@ def build_confirmation_view() -> dict[str, Any]:
 
 def build_today_view() -> dict[str, Any]:
     ensure_runtime_dirs()
-    decision_brief = safe_canonical_load(load_decision_brief)
+    trade_date_hint = expected_trade_date()
+    decision_brief = safe_canonical_load(load_decision_brief, trade_date=trade_date_hint)
     watchlist = safe_canonical_load(load_watchlist_snapshot)
     screening_batch = safe_canonical_load(load_screening_batch)
     confirmation = safe_canonical_load(load_confirmation)
@@ -8368,7 +8555,14 @@ def build_today_view() -> dict[str, Any]:
         brief_is_live=brief_is_live,
         gate=gate,
     )
-    action_queue = build_today_action_queue(action_groups, trade_date, account_book=account_book)
+    action_queue = build_today_action_queue(
+        action_groups,
+        trade_date,
+        account_book=account_book,
+        expected_trade_date=expected_date,
+        readiness_mode=str(readiness.get("readiness_mode") or "blocked"),
+        readiness_ready=bool(readiness.get("ready")),
+    )
 
     source_freshness_map = {item["key"]: item for item in readiness["source_freshness"]}
 
@@ -8475,8 +8669,8 @@ def build_today_view() -> dict[str, Any]:
         note=lifecycle_context["lifecycle_note"],
     )
     primary_actions = build_today_primary_actions(top_rows)
-    holdings_rows = build_today_holdings_rows(action_groups)
-    opportunity_rows = build_today_opportunity_rows(action_groups)
+    holdings_rows = build_today_trusted_group_rows(action_queue, "do-now", ("watchlist:",))
+    opportunity_rows = build_today_trusted_group_rows(action_queue, "watch", ("screening:", "confirmation:"))
     risk_rows = build_today_risk_rows(change_view, action_groups)
     evidence_rows = build_today_evidence_rows(source_cards)
     command_hero = build_today_command_hero(
@@ -8488,6 +8682,7 @@ def build_today_view() -> dict[str, Any]:
         },
         top_rows=top_rows,
         brief_is_live=brief_is_live,
+        readiness_mode=str(readiness.get("readiness_mode") or "blocked"),
     )
     radar_cards = build_today_radar_cards(
         position_cap=position_cap,
@@ -8614,17 +8809,34 @@ def build_portfolio_account_view() -> dict[str, Any]:
         today_action_decisions=today_action_decisions,
     )
     account_view = compute_account_view(account_book)
+    cash_balance = float(account_view.get("cash_balance") or 0.0)
 
     # Resolve names for positions where we only stored the code.
     watchlist_index: dict[str, str] = {}
+
+    def _code_aliases(value: Any) -> set[str]:
+        code = str(value or "").strip().lower()
+        if not code:
+            return set()
+        aliases = {code}
+        bare = code[2:] if len(code) == 8 and code[:2].isalpha() else code
+        aliases.add(bare)
+        if len(bare) == 6 and bare.isdigit():
+            aliases.add(f"sh{bare}" if bare.startswith("6") else f"sz{bare}")
+        return aliases
+
     for stock in (watchlist or {}).get("stocks") or []:
         code = str(stock.get("code") or "").lower()
         name = str(stock.get("name") or "").strip()
         if code and name:
-            watchlist_index[code] = name
+            for alias in _code_aliases(code):
+                watchlist_index[alias] = name
 
     def _resolve_name(code: str, fallback: str) -> str:
-        return watchlist_index.get(code) or fallback or code
+        for alias in _code_aliases(code):
+            if alias in watchlist_index:
+                return watchlist_index[alias]
+        return fallback or code
 
     open_positions = []
     for pos in account_view["open_positions"]:
@@ -8636,7 +8848,10 @@ def build_portfolio_account_view() -> dict[str, Any]:
         code = pos["code"]
         closed_positions.append({**pos, "name": _resolve_name(code, pos.get("name") or code)})
 
-    fills = list(account_view["fills"])
+    fills = [
+        {**fill, "name": _resolve_name(str(fill.get("code") or ""), str(fill.get("name") or ""))}
+        for fill in account_view["fills"]
+    ]
     recent_fills = sorted(fills, key=lambda f: f.get("ts", ""), reverse=True)[:25]
 
     summary_cards = [
@@ -8648,9 +8863,9 @@ def build_portfolio_account_view() -> dict[str, Any]:
         },
         {
             "label": "可用现金",
-            "value": f"¥{account_view['cash_balance']:,.2f}",
+            "value": f"¥{cash_balance:,.2f}",
             "detail": f"起始 ¥{account_view['starting_cash']:,.2f}",
-            "tone": "info",
+            "tone": "risk" if cash_balance < 0 else "info",
         },
         {
             "label": "持仓成本",

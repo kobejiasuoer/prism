@@ -71,6 +71,14 @@ DEFAULT_QUALITY_THRESHOLDS: dict[str, int] = {
 }
 
 
+PIPELINE_AGGREGATE_DATASETS = {
+    "watchlist.snapshot",
+    "screening.batch",
+    "screening.confirmation",
+    "decision_brief.snapshot",
+}
+
+
 # ---------------------------------------------------------------------------
 # Timestamp parsing helpers (kept tolerant of mixed formats)
 # ---------------------------------------------------------------------------
@@ -255,7 +263,11 @@ def _build_source(
 
     available = bool(parsed)
     reasons: list[str] = []
+    degradation_reasons: list[str] = []
     stale = False
+    dataset = str((manifest or {}).get("dataset") or "").strip()
+    provider = str((manifest or {}).get("provider") or "").strip()
+    aggregate_pipeline = provider == "pipeline" and dataset in PIPELINE_AGGREGATE_DATASETS
 
     if not manifest:
         stale = True
@@ -267,17 +279,32 @@ def _build_source(
             stale = True
             reasons.append(f"manifest_status_{manifest_status}")
         if manifest_freshness in {"stale", "expired"}:
-            stale = True
-            reasons.append(f"freshness_{manifest_freshness}")
+            if aggregate_pipeline:
+                degradation_reasons.append(f"upstream_freshness_{manifest_freshness}")
+            else:
+                stale = True
+                reasons.append(f"freshness_{manifest_freshness}")
         elif not manifest_freshness:
             stale = True
             reasons.append("freshness_unknown")
         if not bool(manifest.get("live_small_allowed")):
-            stale = True
-            reasons.append("live_small_not_allowed")
+            if aggregate_pipeline:
+                degradation_reasons.append("upstream_live_small_not_allowed")
+            else:
+                stale = True
+                reasons.append("live_small_not_allowed")
         if bool(manifest.get("fallback_used")) and not bool(manifest.get("live_small_allowed")):
-            stale = True
-            reasons.append("fallback_not_allowed")
+            if aggregate_pipeline:
+                degradation_reasons.append("upstream_fallback_not_allowed")
+            else:
+                stale = True
+                reasons.append("fallback_not_allowed")
+
+    authority_flags = list((manifest or {}).get("authority_flags") or [])
+    source_lane = str((manifest or {}).get("source_lane") or "").strip()
+    decision_scope = str((manifest or {}).get("decision_scope") or "").strip()
+    source_authority_ready = bool((manifest or {}).get("source_authority_ready", True)) if manifest else False
+    formal_decision_allowed = bool((manifest or {}).get("formal_decision_allowed")) if manifest else False
 
     if not available:
         stale = True
@@ -291,7 +318,7 @@ def _build_source(
         stale = True
         reasons.append("trade_date_unknown")
 
-    if not manifest and age is not None and age > threshold_seconds:
+    if age is not None and age > threshold_seconds:
         stale = True
         reasons.append("age_exceeded")
 
@@ -313,14 +340,24 @@ def _build_source(
         "age_seconds": age,
         "age_label": _age_label(age),
         "stale": stale,
-        "stale_after_seconds": int((manifest or {}).get("ttl_seconds") or threshold_seconds),
+        "stale_after_seconds": int(threshold_seconds if aggregate_pipeline else ((manifest or {}).get("ttl_seconds") or threshold_seconds)),
         "stale_reasons": reasons,
+        "degraded": bool(degradation_reasons),
+        "degradation_reasons": degradation_reasons,
         "provider": (manifest or {}).get("provider"),
         "provider_role": (manifest or {}).get("provider_role"),
         "freshness_status": (manifest or {}).get("freshness_status"),
         "fallback_used": bool((manifest or {}).get("fallback_used")),
         "live_small_allowed": bool((manifest or {}).get("live_small_allowed")) if manifest else False,
         "manifest_path": (manifest or {}).get("manifest_path"),
+        "source_lane": source_lane,
+        "decision_scope": decision_scope,
+        "authority_provider": (manifest or {}).get("authority_provider"),
+        "target_authority_provider": (manifest or {}).get("target_authority_provider"),
+        "audit_providers": list((manifest or {}).get("audit_providers") or []),
+        "source_authority_ready": source_authority_ready,
+        "formal_decision_allowed": formal_decision_allowed,
+        "authority_flags": authority_flags,
     }
 
 
@@ -563,6 +600,22 @@ def compute_readiness(
         })
         add_recommendation("command_brief")
 
+    for item in sources:
+        if not item.get("degraded") or item.get("stale") or not item.get("available"):
+            continue
+        task = {
+            "watchlist": "watchlist_refresh",
+            "screening": "aggressive",
+            "confirmation": "midday_confirmation",
+            "decision_brief": "command_brief",
+        }.get(str(item.get("key") or ""), "command_brief")
+        warnings.append({
+            "code": f"{item['key']}_degraded",
+            "label": item["label"],
+            "message": _degraded_message(item),
+            "recommended_task": task,
+        })
+
     # Quality rules -------------------------------------------------------
     if not quality_map["watchlist"]["timely"]:
         blockers.append({
@@ -619,6 +672,22 @@ def compute_readiness(
 
     # Mode resolution -----------------------------------------------------
     stale_count = sum(1 for item in sources if item["stale"])
+    source_refresh_tasks = {
+        "watchlist": "watchlist_refresh",
+        "screening": "aggressive",
+        "confirmation": "midday_confirmation",
+        "decision_brief": "command_brief",
+    }
+    formal_blockers = [
+        {
+            "code": f"{item['key']}_formal_not_allowed",
+            "label": item["label"],
+            "message": _formal_authority_message(item),
+            "recommended_task": source_refresh_tasks.get(str(item.get("key") or ""), "command_brief"),
+        }
+        for item in sources
+        if item.get("manifest_path") and not bool(item.get("formal_decision_allowed"))
+    ]
 
     # Account-state evaluation (does NOT alter data-side blockers; only
     # tightens the live-ready gate when the operator has opted into a real-
@@ -659,7 +728,7 @@ def compute_readiness(
     elif blockers:
         readiness_mode = "blocked"
         ready = False
-    elif warnings:
+    elif _readiness_blocking_warnings(warnings):
         readiness_mode = "shadow_only"
         ready = False
     else:
@@ -692,6 +761,8 @@ def compute_readiness(
         "stale_count": stale_count,
         "blockers": blockers,
         "warnings": warnings,
+        "formal_ready": not formal_blockers,
+        "formal_blockers": formal_blockers,
         "source_freshness": sources,
         "quality_freshness": quality_items,
         "recommended_tasks": recommended_tasks,
@@ -778,6 +849,20 @@ def _build_account_state(
         decisions_store=today_action_decisions,
         today_str=now.strftime("%Y-%m-%d"),
     )
+
+    if cash_balance < 0:
+        warnings.append(
+            {
+                "code": "account_cash_negative",
+                "label": "账户现金",
+                "message": (
+                    f"本地账本现金为 {cash_balance:.2f} 元，通常表示已录入买入成交，"
+                    "但尚未补录入金 / 初始现金。请先在现金调整里记录入金，或确认这只是研究 / 影子盘账本。"
+                ),
+                "recommended_task": "portfolio_cash",
+            }
+        )
+        recommended.append("portfolio_cash")
 
     if mode == "live_small":
         if unsafe_bypass_active:
@@ -1051,6 +1136,46 @@ def _quality_message(quality: Mapping[str, Any], expected: str) -> str:
     if quality.get("age_label") and quality["age_label"] != "-":
         return f"{title} 距上次校验 {quality['age_label']}。"
     return f"{title} 校验信息缺失。"
+
+
+def _degraded_message(source: Mapping[str, Any]) -> str:
+    label = str(source.get("label") or "数据源")
+    reasons = [str(item) for item in source.get("degradation_reasons") or []]
+    if any("fallback" in item for item in reasons):
+        return f"{label} 已刷新；部分上游使用降级/回退来源，已在 Formal 闸门中标记。"
+    if any("live_small" in item for item in reasons):
+        return f"{label} 已刷新；上游 live/formal 权限未完全通过，已在 Formal 闸门中标记。"
+    if any("freshness" in item for item in reasons):
+        return f"{label} 已刷新；部分上游 freshness 未完全通过，已在 Formal 闸门中标记。"
+    return f"{label} 已刷新；仍存在上游降级信号，已在 Formal 闸门中标记。"
+
+
+def _readiness_blocking_warnings(warnings: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """Warnings that should keep the operator in shadow mode.
+
+    Pipeline degradation warnings describe source-authority / formal-readiness
+    gaps.  They are displayed and tracked separately, but they should not make
+    fresh, same-day, quality-passing operational data look "not ready".
+    """
+
+    return [
+        item
+        for item in warnings
+        if not str(item.get("code") or "").endswith("_degraded")
+    ]
+
+
+def _formal_authority_message(source: Mapping[str, Any]) -> str:
+    label = str(source.get("label") or "数据源")
+    lane = str(source.get("source_lane") or "unknown")
+    provider = str(source.get("provider") or "-")
+    target = str(source.get("target_authority_provider") or source.get("authority_provider") or "-")
+    flags = [str(flag) for flag in source.get("authority_flags") or []]
+    if "fallback_provider" in flags or "fallback_display_only" in flags:
+        return f"{label} 当前使用回退源 {provider}，只能观察，不能进入 formal 决策。"
+    if any(flag.startswith("target_authority_not_in_use:") for flag in flags):
+        return f"{label} 当前源为 {provider}，目标权威源是 {target}；可用于 {lane} 观察，尚不能进入 formal 决策。"
+    return f"{label} 尚未满足 formal 数据源闸门；当前源 {provider}，目标权威源 {target}。"
 
 
 def _pick_trade_date(values: Iterable[str]) -> str | None:

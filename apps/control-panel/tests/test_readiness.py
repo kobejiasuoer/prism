@@ -38,7 +38,21 @@ from control_panel.dashboard_data import (  # noqa: E402
 )
 
 
-def _manifest(dataset: str, trade_date: str, generated_at: str, *, live_small_allowed: bool = True, freshness_status: str = "fresh") -> dict[str, object]:
+def _manifest(
+    dataset: str,
+    trade_date: str,
+    generated_at: str,
+    *,
+    live_small_allowed: bool = True,
+    freshness_status: str = "fresh",
+    source_lane: str = "pipeline",
+    decision_scope: str = "live_small",
+    authority_provider: str = "pipeline",
+    target_authority_provider: str = "pipeline",
+    source_authority_ready: bool = True,
+    formal_decision_allowed: bool = True,
+    authority_flags: list[str] | None = None,
+) -> dict[str, object]:
     return {
         "dataset": dataset,
         "provider": "pipeline",
@@ -55,6 +69,14 @@ def _manifest(dataset: str, trade_date: str, generated_at: str, *, live_small_al
         "live_small_allowed": live_small_allowed,
         "quality_flags": [],
         "manifest_path": f"/tmp/{dataset}.manifest.json",
+        "source_lane": source_lane,
+        "decision_scope": decision_scope,
+        "authority_provider": authority_provider,
+        "target_authority_provider": target_authority_provider,
+        "audit_providers": [],
+        "source_authority_ready": source_authority_ready,
+        "formal_decision_allowed": formal_decision_allowed,
+        "authority_flags": list(authority_flags or []),
     }
 
 
@@ -220,6 +242,128 @@ class ReadinessModelTest(unittest.TestCase):
         self.assertTrue(watchlist_source["stale"])
         self.assertIn("manifest_missing", watchlist_source["stale_reasons"])
         self.assertFalse(readiness["ready"])
+
+    def test_formal_authority_gap_is_visible_without_blocking_live_ready(self) -> None:
+        source_manifest = _manifest(
+            "watchlist.snapshot",
+            "2026-05-06",
+            "2026-05-06 09:25:00",
+            source_lane="pipeline",
+            decision_scope="live_small",
+            authority_provider="pipeline",
+            target_authority_provider="pipeline",
+            source_authority_ready=False,
+            formal_decision_allowed=False,
+            authority_flags=["upstream_authority_not_ready", "target_authority_not_in_use:tushare"],
+        )
+        watchlist = {
+            "trade_date": "2026-05-06",
+            "generated_at": "2026-05-06 09:25:00",
+            "manifest": source_manifest,
+            "stocks": [],
+            "priority_codes": [],
+        }
+        quality = {
+            "lanes": {
+                "watchlist": {"validation_status": "ok", "checked_at": "2026-05-06 09:25:00"},
+                "aggressive": {"validation_status": "ok", "checked_at": "2026-05-06 09:35:00"},
+                "midday_confirmation": {"validation_status": "ok", "checked_at": "2026-05-06 13:30:00"},
+            }
+        }
+        readiness = compute_readiness(
+            watchlist=watchlist,
+            screening_batch=_source("screening.batch", "2026-05-06", "2026-05-06 09:35:00"),
+            confirmation=_source("screening.confirmation", "2026-05-06", "2026-05-06 13:30:00"),
+            decision_brief=_source("decision_brief.snapshot", "2026-05-06", "2026-05-06 13:40:00"),
+            quality_status=quality,
+            now=datetime(2026, 5, 6, 14, 30, 0),
+            expected_date="2026-05-06",
+        )
+        watchlist_source = next(item for item in readiness["source_freshness"] if item["key"] == "watchlist")
+        self.assertFalse(watchlist_source["stale"])
+        self.assertEqual(watchlist_source["decision_scope"], "live_small")
+        self.assertFalse(watchlist_source["formal_decision_allowed"])
+        self.assertEqual(readiness["readiness_mode"], "live_ready")
+        self.assertTrue(readiness["ready"])
+        self.assertFalse(readiness["formal_ready"])
+        formal_codes = {item["code"] for item in readiness["formal_blockers"]}
+        self.assertIn("watchlist_formal_not_allowed", formal_codes)
+
+    def test_same_day_pipeline_manifest_expiry_is_degraded_not_stale(self) -> None:
+        manifest = _manifest(
+            "watchlist.snapshot",
+            "2026-05-06",
+            "2026-05-06 14:20:00",
+            live_small_allowed=False,
+            freshness_status="expired",
+            source_authority_ready=False,
+            formal_decision_allowed=False,
+            authority_flags=["upstream_not_fresh"],
+        )
+        watchlist = {
+            "trade_date": "2026-05-06",
+            "generated_at": "2026-05-06 14:20:00",
+            "manifest": manifest,
+            "stocks": [],
+            "priority_codes": [],
+        }
+        quality = {
+            "lanes": {
+                "watchlist": {"validation_status": "ok", "checked_at": "2026-05-06 14:20:00"},
+                "aggressive": {"validation_status": "ok", "checked_at": "2026-05-06 09:35:00"},
+                "midday_confirmation": {"validation_status": "ok", "checked_at": "2026-05-06 13:30:00"},
+            }
+        }
+        readiness = compute_readiness(
+            watchlist=watchlist,
+            screening_batch=_source("screening.batch", "2026-05-06", "2026-05-06 09:35:00"),
+            confirmation=_source("screening.confirmation", "2026-05-06", "2026-05-06 13:30:00"),
+            decision_brief=_source("decision_brief.snapshot", "2026-05-06", "2026-05-06 13:40:00"),
+            quality_status=quality,
+            now=datetime(2026, 5, 6, 14, 30, 0),
+            expected_date="2026-05-06",
+        )
+        watchlist_source = next(item for item in readiness["source_freshness"] if item["key"] == "watchlist")
+        self.assertFalse(watchlist_source["stale"])
+        self.assertTrue(watchlist_source["degraded"])
+        self.assertIn("upstream_freshness_expired", watchlist_source["degradation_reasons"])
+        self.assertNotIn("watchlist_stale", {item["code"] for item in readiness["blockers"]})
+        self.assertIn("watchlist_degraded", {item["code"] for item in readiness["warnings"]})
+        self.assertEqual(readiness["readiness_mode"], "live_ready")
+
+    def test_provider_manifest_expiry_remains_stale(self) -> None:
+        manifest = _manifest(
+            "quotes.snapshot",
+            "2026-05-06",
+            "2026-05-06 14:20:00",
+            freshness_status="expired",
+            live_small_allowed=False,
+        )
+        watchlist = {
+            "trade_date": "2026-05-06",
+            "generated_at": "2026-05-06 14:20:00",
+            "manifest": manifest,
+            "stocks": [],
+            "priority_codes": [],
+        }
+        readiness = compute_readiness(
+            watchlist=watchlist,
+            screening_batch=_source("screening.batch", "2026-05-06", "2026-05-06 09:35:00"),
+            confirmation=_source("screening.confirmation", "2026-05-06", "2026-05-06 13:30:00"),
+            decision_brief=_source("decision_brief.snapshot", "2026-05-06", "2026-05-06 13:40:00"),
+            quality_status={
+                "lanes": {
+                    "watchlist": {"validation_status": "ok", "checked_at": "2026-05-06 14:20:00"},
+                    "aggressive": {"validation_status": "ok", "checked_at": "2026-05-06 09:35:00"},
+                    "midday_confirmation": {"validation_status": "ok", "checked_at": "2026-05-06 13:30:00"},
+                }
+            },
+            now=datetime(2026, 5, 6, 14, 30, 0),
+            expected_date="2026-05-06",
+        )
+        watchlist_source = next(item for item in readiness["source_freshness"] if item["key"] == "watchlist")
+        self.assertTrue(watchlist_source["stale"])
+        self.assertIn("freshness_expired", watchlist_source["stale_reasons"])
 
     def test_session_aware_confirmation_warning_in_morning(self) -> None:
         """Morning sessions: missing midday confirmation is a warning, not a block."""

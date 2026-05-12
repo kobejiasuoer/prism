@@ -14,6 +14,7 @@ import type {
   RefreshStatus,
   RefreshTriggerResponse,
   ReviewData,
+  ReviewDetailData,
   RunItem,
   StockProfileData,
   TaskRunResponse,
@@ -163,16 +164,37 @@ export const api = {
   getStockProfile(code: string) {
     return fetchJson<StockProfileData>(`/api/stock/${encodeURIComponent(code)}`);
   },
-  getReview() {
-    return fetchJson<ReviewData>("/api/review");
+  getReview(params: { baseline?: string; window?: string } = {}) {
+    const query = new URLSearchParams();
+    if (params.baseline) {
+      query.set("baseline", params.baseline);
+    }
+    if (params.window) {
+      query.set("window", params.window);
+    }
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return fetchJson<ReviewData>(`/api/review${suffix}`);
+  },
+  getReviewDetail(params: { section: string; label: string; baseline?: string; window?: string }) {
+    const query = new URLSearchParams({
+      section: params.section,
+      label: params.label,
+    });
+    if (params.baseline) {
+      query.set("baseline", params.baseline);
+    }
+    if (params.window) {
+      query.set("window", params.window);
+    }
+    return fetchJson<ReviewDetailData>(`/api/review/detail?${query.toString()}`);
   },
   ask(query: string) {
     const q = query ? `?q=${encodeURIComponent(query)}` : "";
     return fetchJson<AskResponse>(`/api/ask${q}`);
   },
-  askSuggest(query: string) {
+  askSuggest(query: string, init?: RequestInit) {
     const q = query ? `?q=${encodeURIComponent(query)}` : "";
-    return fetchJson<AskSuggestResponse>(`/api/ask/suggest${q}`);
+    return fetchJson<AskSuggestResponse>(`/api/ask/suggest${q}`, init);
   },
   askFollowup(payload: { query: string; question: string; history?: unknown[] }) {
     return fetchJson<AskFollowupResponse>("/api/ask/followup", {
