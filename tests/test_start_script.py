@@ -64,6 +64,8 @@ def test_command_brief_script_writes_artifact_store_with_legacy_copy() -> None:
     assert "PRISM_WRITE_LEGACY_ARTIFACTS" in content
     assert "prism_storage.cli" in content
     assert "register-file" in content
+    assert "--allow-stale-watchlist" in content
+    assert "ALLOW_STALE_WATCHLIST" in content
     assert Path("apps/scripts/generate_command_brief.py").exists()
 
 
@@ -93,6 +95,15 @@ def test_runtime_task_commands_use_repo_local_paths() -> None:
 
 def test_command_brief_script_smoke(tmp_path: Path) -> None:
     run_stamp = "pytest_smoke"
+    snapshot_dir = Path("stock-analyzer/data/daily_snapshots")
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+    snapshot_path = snapshot_dir / "2026-04-21.json"
+    had_snapshot = snapshot_path.exists()
+    previous_snapshot = snapshot_path.read_text(encoding="utf-8") if had_snapshot else ""
+    snapshot_path.write_text(
+        '{"date":"2026-04-21","generated_at":"2026-04-21 09:25:00","stocks":{}}\n',
+        encoding="utf-8",
+    )
     env = {
         "RUN_STAMP": run_stamp,
         "TRADE_DATE": "2026-04-21",
@@ -102,13 +113,19 @@ def test_command_brief_script_smoke(tmp_path: Path) -> None:
         "PRISM_WRITE_LEGACY_ARTIFACTS": "0",
         "SEND_TO_FEISHU": "0",
     }
-    completed = subprocess.run(
-        ["bash", "apps/scripts/run_command_brief.sh"],
-        check=False,
-        text=True,
-        capture_output=True,
-        env={**os.environ, **env},
-    )
+    try:
+        completed = subprocess.run(
+            ["bash", "apps/scripts/run_command_brief.sh"],
+            check=False,
+            text=True,
+            capture_output=True,
+            env={**os.environ, **env},
+        )
+    finally:
+        if had_snapshot:
+            snapshot_path.write_text(previous_snapshot, encoding="utf-8")
+        else:
+            snapshot_path.unlink(missing_ok=True)
 
     assert completed.returncode == 0, completed.stderr
     assert (tmp_path / "brief.txt").exists()

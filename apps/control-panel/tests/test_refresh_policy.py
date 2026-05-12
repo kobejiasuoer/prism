@@ -17,7 +17,7 @@ if str(INVEST_FLOW_ROOT) not in sys.path:
 
 import control_panel.app as app_module  # noqa: E402
 from control_panel.app import app  # noqa: E402
-from refresh_policy import current_market_mode, active_auto_windows, evaluate_auto_refresh, validate_cron_policies  # noqa: E402
+from refresh_policy import current_market_mode, active_auto_windows, evaluate_auto_refresh, task_conflict_is_running, validate_cron_policies  # noqa: E402
 
 
 LEGACY_APP_MODULE = app_module.__dict__.get("_legacy_module", app_module)
@@ -86,6 +86,23 @@ class RefreshPolicyDecisionTests(unittest.TestCase):
             cooldown=_cooldown(),
             force=True,
             now=datetime(2026, 5, 8, 14, 50, 0),
+        )
+        self.assertFalse(decision["should_trigger"])
+        self.assertIn("running", decision["blocked_reasons"])
+
+    def test_watchlist_refresh_blocks_command_brief_overlap(self) -> None:
+        running = [{"task_name": "watchlist_refresh", "status": "running"}]
+
+        self.assertTrue(task_conflict_is_running("command_brief", running))
+        decision = evaluate_auto_refresh(
+            page="today",
+            recommended_task="command_brief",
+            freshness=[_freshness_row(key="decision_brief", reasons=["trade_date_mismatch"])],
+            readiness_payload={"ready": False},
+            running=running,
+            cooldown=_cooldown(),
+            force=True,
+            now=datetime(2026, 5, 8, 10, 0, 0),
         )
         self.assertFalse(decision["should_trigger"])
         self.assertIn("running", decision["blocked_reasons"])

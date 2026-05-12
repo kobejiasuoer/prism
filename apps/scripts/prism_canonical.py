@@ -56,7 +56,13 @@ def load_sidecar_manifest(path: Path | None, raw: dict[str, Any] | None = None) 
     if manifest:
         return manifest
     ingress_path = (((raw or {}).get("data_ingress") or {}).get("manifest_path")) if isinstance(raw, dict) else None
-    return load_manifest_file(ingress_path)
+    manifest = load_manifest_file(ingress_path)
+    if manifest:
+        return manifest
+    if path.parent == COMMAND_BRIEF_DIR:
+        artifact_manifest = BASE_DIR.parent / "data" / "artifacts" / "command_brief" / path.with_suffix(".manifest.json").name
+        return load_manifest_file(artifact_manifest)
+    return None
 
 
 def parse_ts(value: str | None) -> datetime | None:
@@ -188,7 +194,13 @@ def resolve_watchlist_snapshot_path(path: str | None = None, trade_date: str | N
         candidate = WATCHLIST_SNAPSHOT_DIR / f"{trade_date}.json"
         if candidate.exists():
             return candidate
-    return latest_matching(WATCHLIST_SNAPSHOT_DIR / "*.json")
+    candidates = [
+        candidate
+        for candidate in WATCHLIST_SNAPSHOT_DIR.glob("*.json")
+        if re.match(r"^\d{4}-\d{2}-\d{2}\.json$", candidate.name)
+    ]
+    candidates.sort(key=_path_sort_key, reverse=True)
+    return candidates[0] if candidates else None
 
 
 def resolve_screening_batch_path(path: str | None = None) -> Path | None:
@@ -237,8 +249,6 @@ def _decision_brief_rank(path: Path, trade_date: str | None = None) -> tuple[int
             priority = 3
         elif not manifest_trade_date and summary_trade_date == trade_date:
             priority = 2
-        elif summary_trade_date == trade_date:
-            priority = 1
         else:
             priority = 0
     elif manifest_trade_date and summary_trade_date and manifest_trade_date == summary_trade_date:

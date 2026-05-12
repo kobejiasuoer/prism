@@ -36,6 +36,7 @@ from control_panel.dashboard_data import (  # noqa: E402
     compute_readiness,
     expected_trade_date,
 )
+from prism_canonical import load_decision_brief  # noqa: E402
 
 
 def _manifest(
@@ -515,6 +516,64 @@ class TodayViewReadinessTest(unittest.TestCase):
             self.assertNotEqual(readiness["readiness_mode"], "live_ready")
             self.assertFalse(payload["brief_is_live"])
             self.assertGreater(len(readiness["blockers"]), 0)
+
+
+class DecisionBriefSelectionTest(unittest.TestCase):
+    def test_prefers_manifest_aligned_brief_over_newer_summary_only_match(self) -> None:
+        """A concurrent brief can have today's summary date but yesterday's upstream manifest."""
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            brief_dir = Path(tmpdir) / "command_brief"
+            brief_dir.mkdir(parents=True)
+            older_good = brief_dir / "prism_command_brief_2026-05-12_11-04-46.json"
+            newer_bad = brief_dir / "prism_command_brief_2026-05-12_11-04-59.json"
+            base_payload = {
+                "trade_date": "2026-05-12",
+                "generated_at": "2026-05-12 11:04:46",
+                "summary": {
+                    "trade_date": "2026-05-12",
+                    "generated_at": "2026-05-12 11:04:46",
+                },
+                "watchlist": {"snapshot_path": "stock-analyzer/data/daily_snapshots/2026-05-12.json"},
+                "screener": {},
+                "midday": {},
+            }
+            older_good.write_text(json.dumps(base_payload), encoding="utf-8")
+            older_good.with_suffix(".manifest.json").write_text(
+                json.dumps({"trade_date": "2026-05-12", "asof": "2026-05-12 11:04:46"}),
+                encoding="utf-8",
+            )
+            newer_bad.write_text(
+                json.dumps(
+                    {
+                        **base_payload,
+                        "generated_at": "2026-05-12 11:04:59",
+                        "summary": {
+                            "trade_date": "2026-05-12",
+                            "generated_at": "2026-05-12 11:04:59",
+                        },
+                        "watchlist": {"snapshot_path": "stock-analyzer/data/daily_snapshots/2026-05-11.json"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            newer_bad.with_suffix(".manifest.json").write_text(
+                json.dumps({"trade_date": "2026-05-11", "asof": "2026-05-12 11:04:59"}),
+                encoding="utf-8",
+            )
+
+            import prism_canonical
+
+            previous_dir = prism_canonical.COMMAND_BRIEF_DIR
+            try:
+                prism_canonical.COMMAND_BRIEF_DIR = brief_dir
+                brief = load_decision_brief(trade_date="2026-05-12")
+            finally:
+                prism_canonical.COMMAND_BRIEF_DIR = previous_dir
+
+        self.assertEqual(brief["paths"]["source_json"], str(older_good.resolve()))
+        self.assertEqual(brief["trade_date"], "2026-05-12")
+        self.assertEqual(brief["manifest"]["trade_date"], "2026-05-12")
 
 
 class UnsafeApplyParsingTest(unittest.TestCase):

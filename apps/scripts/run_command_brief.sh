@@ -105,9 +105,9 @@ mkdir -p "$(dirname "$BRIEF_OUTPUT_PATH")" "$(dirname "$REPORT_OUTPUT_PATH")" "$
 
 generate_args=(
   "$SCRIPT_DIR/generate_command_brief.py"
-  --date "$TRADE_DATE" \
-  --brief-output "$BRIEF_OUTPUT_PATH" \
-  --report-output "$REPORT_OUTPUT_PATH" \
+  --date "$TRADE_DATE"
+  --brief-output "$BRIEF_OUTPUT_PATH"
+  --report-output "$REPORT_OUTPUT_PATH"
   --json-output "$JSON_OUTPUT_PATH"
 )
 if [[ "$ALLOW_STALE_WATCHLIST" == "1" || "$ALLOW_STALE_WATCHLIST" == "true" ]]; then
