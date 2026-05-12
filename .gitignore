@@ -23,5 +23,10 @@ packages/data/
 packages/reports/
 apps/data/
 apps/reports/
+stock-analyzer/data/daily_snapshots/*.json
+stock-analyzer/data/daily_snapshots/*.manifest.json
+stock-analyzer/data/fund_flow_cache/*.json
+stock-analyzer/data/fundamentals_cache/*.json
+stock-analyzer/data/quality_gate_watchlist_*.json
 !data/history/cron_logs/**/*.log
 !data/history/control_panel_runs/logs/**/*.log
