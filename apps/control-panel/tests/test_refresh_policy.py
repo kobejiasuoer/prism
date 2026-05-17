@@ -17,7 +17,7 @@ if str(INVEST_FLOW_ROOT) not in sys.path:
 
 import control_panel.app as app_module  # noqa: E402
 from control_panel.app import app  # noqa: E402
-from refresh_policy import current_market_mode, active_auto_windows, evaluate_auto_refresh, task_conflict_is_running, validate_cron_policies  # noqa: E402
+from refresh_policy import CRON_POLICIES, current_market_mode, active_auto_windows, evaluate_auto_refresh, task_conflict_is_running, validate_cron_policies  # noqa: E402
 
 
 LEGACY_APP_MODULE = app_module.__dict__.get("_legacy_module", app_module)
@@ -158,6 +158,20 @@ class RefreshPolicyApiTests(unittest.TestCase):
         self.assertIn("last_auto_refresh", payload)
         self.assertIn("policy", payload)
         self.assertIn("policy_catalog", payload)
+        self.assertIn("scheduler_status", payload)
+        self.assertIn("jobs", payload["scheduler_status"])
+
+    def test_scheduler_status_endpoint_exposes_guardrail_fields(self) -> None:
+        response = self.client.get("/api/scheduler/status")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("scheduler", payload)
+        self.assertIn("summary", payload)
+        self.assertIn("jobs", payload)
+        self.assertTrue(any(job.get("task_name") == "morning_warmup" for job in payload["jobs"]))
+        warmup = next(job for job in payload["jobs"] if job.get("task_name") == "morning_warmup")
+        self.assertTrue(warmup.get("catchup_enabled"))
+        self.assertEqual(warmup.get("retry_attempts"), 2)
 
     def test_auto_status_starts_when_policy_allows(self) -> None:
         repository = FakeAppStateRepository()
@@ -254,13 +268,30 @@ class RefreshPolicyApiTests(unittest.TestCase):
             finally:
                 LEGACY_APP_MODULE.REFRESH_STATE_PATH = previous_state_path
 
-    def test_cron_config_contains_preclose_and_postclose(self) -> None:
+    def test_decision_ledger_outcomes_runs_after_postclose_brief(self) -> None:
+        policies = {policy.task_name: policy for policy in CRON_POLICIES}
+        self.assertIn("decision_ledger_outcomes", policies)
+        policy = policies["decision_ledger_outcomes"]
+        self.assertEqual(policy.cron_expr, "35 15 * * 1-5")
+        self.assertEqual(policy.command, ("python3", "apps/scripts/evaluate_decision_ledger.py"))
+        self.assertEqual(policy.depends_on, ("postclose_command_brief",))
+        self.assertTrue(policy.catchup_enabled)
+
+    def test_cron_config_contains_preclose_postclose_and_ledger_outcomes(self) -> None:
         payload = json.loads((Path(__file__).resolve().parents[3] / "config" / "openclaw" / "prism_cron_jobs.json").read_text(encoding="utf-8"))
         result = validate_cron_policies(payload.get("jobs") or [])
         self.assertTrue(result["ok"], result)
         expr_by_name = {job["name"]: job["schedule"]["expr"] for job in payload["jobs"]}
+        self.assertEqual(expr_by_name["晨间数据预热"], "25 9 * * 1-5")
         self.assertEqual(expr_by_name["收盘前风险刷新"], "50 14 * * 1-5")
         self.assertEqual(expr_by_name["收盘后总控简报"], "5 15 * * 1-5")
+        self.assertEqual(expr_by_name["Decision Ledger 结果评估"], "35 15 * * 1-5")
+
+    def test_morning_warmup_resolves_as_safe_manual_task(self) -> None:
+        task = LEGACY_APP_MODULE.resolve_refresh_task("morning_warmup")
+        self.assertEqual(task["task_name"], "morning_warmup")
+        self.assertEqual(task["title"], "晨间数据预热")
+        self.assertEqual(task["command"][-1], "apps/scripts/run_morning_warmup.py")
 
 
 if __name__ == "__main__":

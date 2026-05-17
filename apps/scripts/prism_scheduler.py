@@ -21,6 +21,7 @@ for path in (str(REPO_ROOT), str(PACKAGES_ROOT), str(CONTROL_PANEL_ROOT)):
         sys.path.insert(0, path)
 
 from refresh_policy import CRON_POLICIES  # noqa: E402
+from scheduled_run_state import run_state_for_task  # noqa: E402
 from trading_calendar import calendar_status  # noqa: E402
 
 
@@ -127,6 +128,74 @@ def minute_key(current: datetime) -> str:
     return current.strftime("%Y-%m-%dT%H:%M")
 
 
+def day_key(current: datetime) -> str:
+    return current.strftime("%Y-%m-%d")
+
+
+def clock_minutes(value: str) -> int | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        hour, minute = text.split(":", 1)
+        return int(hour) * 60 + int(minute)
+    except Exception:
+        return None
+
+
+def cron_daily_minute(expr: str) -> int | None:
+    try:
+        minute_s, hour_s, day_s, month_s, weekday_s = expr.split()
+        if day_s != "*" or month_s != "*":
+            return None
+        minutes = parse_cron_field(minute_s, minimum=0, maximum=59)
+        hours = parse_cron_field(hour_s, minimum=0, maximum=23)
+    except Exception:
+        return None
+    if minutes is None or hours is None or len(minutes) != 1 or len(hours) != 1:
+        return None
+    return next(iter(hours)) * 60 + next(iter(minutes))
+
+
+def current_clock_minutes(current: datetime) -> int:
+    return current.hour * 60 + current.minute
+
+
+def catchup_window_open(policy, current: datetime) -> bool:
+    if not getattr(policy, "catchup_enabled", False):
+        return False
+    due = cron_daily_minute(policy.cron_expr)
+    until = clock_minutes(getattr(policy, "catchup_until", ""))
+    if due is None or until is None:
+        return False
+    now_minute = current_clock_minutes(current)
+    return due < now_minute <= until
+
+
+def retry_due(policy, run_state: dict[str, Any], current: datetime, *, scheduler_state: dict[str, Any]) -> bool:
+    attempts = int(getattr(policy, "retry_attempts", 0) or 0)
+    delay = int(getattr(policy, "retry_delay_seconds", 0) or 0)
+    if attempts <= 0 or delay <= 0 or not run_state.get("failed_today"):
+        return False
+    retry_counts = scheduler_state.get("retry_counts") if isinstance(scheduler_state.get("retry_counts"), dict) else {}
+    count_key = f"{day_key(current)}:{policy.task_name}"
+    if int(retry_counts.get(count_key) or 0) >= attempts:
+        return False
+    finished_dt = run_state.get("finished_dt")
+    if not finished_dt:
+        return False
+    return (current - finished_dt).total_seconds() >= delay
+
+
+def dependency_blockers(policy, *, current: datetime) -> list[str]:
+    blockers: list[str] = []
+    for dependency in getattr(policy, "depends_on", ()) or ():
+        dep_state = run_state_for_task(str(dependency), now=current, run_root=RUN_ROOT)
+        if not dep_state.get("today_success"):
+            blockers.append(str(dependency))
+    return blockers
+
+
 def should_send_to_feishu(mode: str) -> bool:
     if mode == "1":
         return True
@@ -198,6 +267,27 @@ def launch_job(policy, *, args: argparse.Namespace, send_to_feishu: bool) -> sub
     return proc
 
 
+def launch_policy(
+    policy,
+    *,
+    args: argparse.Namespace,
+    children: dict[int, subprocess.Popen[str]],
+    send_to_feishu: bool,
+    reason: str,
+) -> bool:
+    proc = launch_job(policy, args=args, send_to_feishu=send_to_feishu)
+    append_event(
+        {
+            "event": f"job_due_{reason}",
+            "task_name": policy.task_name,
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+    )
+    if proc is not None:
+        children[proc.pid] = proc
+    return True
+
+
 def skip_non_trading_day(policy, current: datetime) -> None:
     cal = calendar_status(current)
     append_event(
@@ -223,6 +313,37 @@ def skip_startup_minute(policy, current: datetime) -> None:
     print(f"[prism-scheduler] skipped {policy.task_name}: startup minute guard", flush=True)
 
 
+def skip_dependency(policy, blockers: list[str], reason: str) -> None:
+    append_event(
+        {
+            "event": "job_skipped_dependency",
+            "task_name": policy.task_name,
+            "reason": reason,
+            "blockers": blockers,
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+    )
+    print(f"[prism-scheduler] skipped {policy.task_name}: dependency {', '.join(blockers)}", flush=True)
+
+
+def skip_already_success(policy, reason: str) -> None:
+    append_event(
+        {
+            "event": "job_skipped_already_success",
+            "task_name": policy.task_name,
+            "reason": reason,
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+    )
+
+
+def mark_retry_count(state: dict[str, Any], policy, current: datetime) -> None:
+    retry_counts = state.get("retry_counts") if isinstance(state.get("retry_counts"), dict) else {}
+    key = f"{day_key(current)}:{policy.task_name}"
+    retry_counts[key] = int(retry_counts.get(key) or 0) + 1
+    state["retry_counts"] = retry_counts
+
+
 def tick(*, args: argparse.Namespace, children: dict[int, subprocess.Popen[str]]) -> None:
     current = datetime.now()
     current_minute = minute_key(current)
@@ -230,10 +351,12 @@ def tick(*, args: argparse.Namespace, children: dict[int, subprocess.Popen[str]]
     startup_minute = str(getattr(args, "started_minute", "") or "")
     state = load_json(STATE_PATH)
     last_fired = state.get("last_fired") if isinstance(state.get("last_fired"), dict) else {}
+    catchup_fired = state.get("catchup_fired") if isinstance(state.get("catchup_fired"), dict) else {}
     send_to_feishu = should_send_to_feishu(args.send_to_feishu)
     fired = False
 
     for policy in CRON_POLICIES:
+        run_state = run_state_for_task(policy.task_name, now=current, run_root=RUN_ROOT)
         if not cron_matches(policy.cron_expr, current):
             continue
         if last_fired.get(policy.task_name) == current_minute:
@@ -242,12 +365,77 @@ def tick(*, args: argparse.Namespace, children: dict[int, subprocess.Popen[str]]
             skip_non_trading_day(policy, current)
         elif startup_minute == current_minute and not getattr(args, "fire_on_start", False):
             skip_startup_minute(policy, current)
+        elif run_state.get("running"):
+            append_event({"event": "job_skipped_running", "task_name": policy.task_name, "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+        elif run_state.get("today_success"):
+            skip_already_success(policy, "cron")
+        elif blockers := dependency_blockers(policy, current=current):
+            skip_dependency(policy, blockers, "cron")
         else:
-            proc = launch_job(policy, args=args, send_to_feishu=send_to_feishu)
-            if proc is not None:
-                children[proc.pid] = proc
+            launch_policy(
+                policy,
+                args=args,
+                children=children,
+                send_to_feishu=send_to_feishu and bool(getattr(policy, "delivery_default", True)),
+                reason="cron",
+            )
         last_fired[policy.task_name] = current_minute
         fired = True
+
+    for policy in CRON_POLICIES:
+        if current_calendar.get("status") != "trading" and not args.allow_non_trading_day:
+            continue
+        run_state = run_state_for_task(policy.task_name, now=current, run_root=RUN_ROOT)
+        catchup_key = f"{day_key(current)}:{policy.task_name}"
+        if catchup_window_open(policy, current) and catchup_key not in catchup_fired:
+            if run_state.get("today_success"):
+                skip_already_success(policy, "catchup")
+                catchup_fired[catchup_key] = {
+                    "status": "already_success",
+                    "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                }
+                fired = True
+            elif run_state.get("running"):
+                append_event({"event": "job_skipped_running", "task_name": policy.task_name, "reason": "catchup", "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+                catchup_fired[catchup_key] = {
+                    "status": "already_running",
+                    "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                }
+                fired = True
+            elif blockers := dependency_blockers(policy, current=current):
+                skip_dependency(policy, blockers, "catchup")
+            else:
+                launch_policy(
+                    policy,
+                    args=args,
+                    children=children,
+                    send_to_feishu=send_to_feishu and bool(getattr(policy, "delivery_default", True)),
+                    reason="catchup",
+                )
+                catchup_fired[catchup_key] = {
+                    "status": "launched",
+                    "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                }
+                fired = True
+
+        run_state = run_state_for_task(policy.task_name, now=current, run_root=RUN_ROOT)
+        if retry_due(policy, run_state, current, scheduler_state=state):
+            if run_state.get("running"):
+                continue
+            if blockers := dependency_blockers(policy, current=current):
+                skip_dependency(policy, blockers, "retry")
+                continue
+            launch_policy(
+                policy,
+                args=args,
+                children=children,
+                send_to_feishu=send_to_feishu and bool(getattr(policy, "delivery_default", True)),
+                reason="retry",
+            )
+            mark_retry_count(state, policy, current)
+            fired = True
+
+    state["catchup_fired"] = catchup_fired
 
     if fired or state.get("started_at") is None:
         state.update(

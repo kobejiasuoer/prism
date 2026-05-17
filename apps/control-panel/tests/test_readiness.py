@@ -366,8 +366,33 @@ class ReadinessModelTest(unittest.TestCase):
         self.assertTrue(watchlist_source["stale"])
         self.assertIn("freshness_expired", watchlist_source["stale_reasons"])
 
+    def test_same_day_pipeline_artifacts_do_not_block_after_close_only_due_to_age(self) -> None:
+        quality = {
+            "lanes": {
+                "watchlist": {"validation_status": "ok", "checked_at": "2026-05-06 09:50:00"},
+                "aggressive": {"validation_status": "ok", "checked_at": "2026-05-06 10:30:00"},
+                "midday_confirmation": {"validation_status": "ok", "checked_at": "2026-05-06 13:45:00"},
+            }
+        }
+        readiness = compute_readiness(
+            watchlist=_source("watchlist.snapshot", "2026-05-06", "2026-05-06 09:50:00"),
+            screening_batch=_source("screening.batch", "2026-05-06", "2026-05-06 10:30:00"),
+            confirmation=_source("screening.confirmation", "2026-05-06", "2026-05-06 13:45:00"),
+            decision_brief=_source("decision_brief.snapshot", "2026-05-06", "2026-05-06 15:05:00"),
+            quality_status=quality,
+            now=datetime(2026, 5, 6, 22, 0, 0),
+            expected_date="2026-05-06",
+        )
+        source_by_key = {item["key"]: item for item in readiness["source_freshness"]}
+        self.assertFalse(source_by_key["watchlist"]["stale"])
+        self.assertFalse(source_by_key["screening"]["stale"])
+        self.assertFalse(source_by_key["confirmation"]["stale"])
+        self.assertIn("same_day_post_close_age_exceeded", source_by_key["watchlist"]["degradation_reasons"])
+        self.assertNotIn("watchlist_stale", {item["code"] for item in readiness["blockers"]})
+        self.assertEqual(readiness["readiness_mode"], "live_ready")
+
     def test_session_aware_confirmation_warning_in_morning(self) -> None:
-        """Morning sessions: missing midday confirmation is a warning, not a block."""
+        """Morning sessions: midday confirmation is not due yet."""
 
         watchlist = _source("watchlist.snapshot", "2026-05-06", "2026-05-06 09:25:00")
         screening = _source("screening.batch", "2026-05-06", "2026-05-06 09:35:00")
@@ -389,10 +414,14 @@ class ReadinessModelTest(unittest.TestCase):
             expected_date="2026-05-06",
         )
         warning_codes = {item["code"] for item in readiness["warnings"]}
-        self.assertIn("confirmation_missing", warning_codes)
+        self.assertNotIn("confirmation_missing", warning_codes)
         # Missing confirmation in the morning must be a warning, not a blocker.
         blocker_codes = {item["code"] for item in readiness["blockers"]}
         self.assertNotIn("confirmation_missing", blocker_codes)
+        self.assertEqual(readiness["readiness_mode"], "live_ready")
+        confirmation = next(item for item in readiness["source_freshness"] if item["key"] == "confirmation")
+        self.assertTrue(confirmation["deferred"])
+        self.assertFalse(confirmation["stale"])
 
     def test_session_aware_confirmation_blocker_in_afternoon(self) -> None:
         watchlist = _source("watchlist.snapshot", "2026-05-06", "2026-05-06 09:25:00")
@@ -777,7 +806,7 @@ class ConfirmationRecommendedTaskTest(unittest.TestCase):
         # midday_refresh must NOT be the suggested fix for these blockers
         self.assertNotIn("midday_refresh", readiness["recommended_tasks"])
 
-    def test_morning_warning_still_uses_midday_confirmation(self) -> None:
+    def test_morning_deferred_confirmation_does_not_recommend_manual_refresh(self) -> None:
         watchlist = _source("watchlist.snapshot", "2026-05-06", "2026-05-06 09:25:00")
         screening = _source("screening.batch", "2026-05-06", "2026-05-06 09:35:00")
         brief = _source("decision_brief.snapshot", "2026-05-06", "2026-05-06 09:45:00")
@@ -796,11 +825,10 @@ class ConfirmationRecommendedTaskTest(unittest.TestCase):
             now=datetime(2026, 5, 6, 10, 30, 0),  # morning
             expected_date="2026-05-06",
         )
-        confirmation_warning = next(
-            (w for w in readiness["warnings"] if w["code"] == "confirmation_missing"), None,
-        )
-        self.assertIsNotNone(confirmation_warning)
-        self.assertEqual(confirmation_warning["recommended_task"], "midday_confirmation")
+        self.assertFalse(any(w["code"] == "confirmation_missing" for w in readiness["warnings"]))
+        self.assertNotIn("midday_confirmation", readiness["recommended_tasks"])
+        confirmation = next(item for item in readiness["source_freshness"] if item["key"] == "confirmation")
+        self.assertEqual(confirmation.get("deferred_reason"), "awaiting_midday_confirmation_window")
 
 
 class TodayRefreshConsistencyTest(unittest.TestCase):

@@ -3,6 +3,11 @@ import type {
   AskFollowupResponse,
   AskResponse,
   AskSuggestResponse,
+  DecisionLedgerDetailResponse,
+  DecisionLedgerHealthResponse,
+  DecisionLedgerRecentResponse,
+  DecisionLedgerStockResponse,
+  DecisionLedgerSummaryResponse,
   DecisionValue,
   HealthResponse,
   OpportunitiesData,
@@ -16,6 +21,7 @@ import type {
   ReviewData,
   ReviewDetailData,
   RunItem,
+  SchedulerStatus,
   StockProfileData,
   TaskRunResponse,
   TodayData,
@@ -250,6 +256,9 @@ export const api = {
     const auto = options.auto ? "&auto=1" : "";
     return fetchJson<RefreshStatus>(`/api/refresh/status?page=${encodeURIComponent(page)}${auto}`);
   },
+  getSchedulerStatus() {
+    return fetchJson<SchedulerStatus>("/api/scheduler/status");
+  },
   getReadinessLive() {
     return fetchJson<ReadinessPayload & { generated_at?: string; trade_date?: string }>(
       "/api/readiness/live",
@@ -266,6 +275,11 @@ export const api = {
   },
   getPortfolioAccount() {
     return fetchJson<PortfolioAccountResponse>("/api/portfolio/account");
+  },
+  refreshPortfolioQuotes() {
+    return fetchJson<PortfolioAccountResponse>("/api/portfolio/quotes/refresh", {
+      method: "POST",
+    });
   },
   setPortfolioMode(payload: {
     mode: AccountMode;
@@ -317,5 +331,37 @@ export const api = {
       method: "POST",
       json: payload,
     });
+  },
+  getDecisionLedgerSummary(params: { window?: string; as_of?: string } = {}) {
+    const query = new URLSearchParams();
+    if (params.window) {
+      query.set("window", params.window);
+    }
+    if (params.as_of) {
+      query.set("as_of", params.as_of);
+    }
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return fetchJson<DecisionLedgerSummaryResponse>(`/api/decision-ledger/summary${suffix}`);
+  },
+  getDecisionLedgerRecent(params: { limit?: number } = {}) {
+    const query = new URLSearchParams();
+    if (params.limit !== undefined) {
+      query.set("limit", String(params.limit));
+    }
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return fetchJson<DecisionLedgerRecentResponse>(`/api/decision-ledger/recent${suffix}`);
+  },
+  getDecisionLedgerStock(code: string) {
+    return fetchJson<DecisionLedgerStockResponse>(
+      `/api/decision-ledger/stock/${encodeURIComponent(code)}`,
+    );
+  },
+  getDecisionLedgerDetail(decisionId: string) {
+    return fetchJson<DecisionLedgerDetailResponse>(
+      `/api/decision-ledger/decision/${encodeURIComponent(decisionId)}`,
+    );
+  },
+  getDecisionLedgerHealth() {
+    return fetchJson<DecisionLedgerHealthResponse>("/api/decision-ledger/health");
   },
 };

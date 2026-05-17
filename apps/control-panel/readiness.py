@@ -78,6 +78,13 @@ PIPELINE_AGGREGATE_DATASETS = {
     "decision_brief.snapshot",
 }
 
+SESSION_FINALIZED_DATASETS = {
+    "watchlist.snapshot",
+    "screening.batch",
+    "screening.confirmation",
+    "decision_brief.snapshot",
+}
+
 
 # ---------------------------------------------------------------------------
 # Timestamp parsing helpers (kept tolerant of mixed formats)
@@ -140,6 +147,31 @@ def _age_label(seconds: int | None) -> str:
         return f"{hours} 小时前"
     days = hours // 24
     return f"{days} 天前"
+
+
+def _same_day_pipeline_age_is_soft(
+    *,
+    dataset: str,
+    provider: str,
+    data_trade_date: str | None,
+    expected_date: str,
+    session_key: str,
+) -> bool:
+    """Treat same-day finalized pipeline artifacts as valid after close.
+
+    A watchlist analysis produced in the morning and a confirmation produced
+    after lunch are daily decision artifacts.  Once the market is closed,
+    rerunning them every few hours cannot make the underlying session more
+    "live"; it mostly creates noisy operator prompts.  Trade-date mismatch
+    remains a hard fail, so genuinely old data is still blocked.
+    """
+
+    return (
+        provider == "pipeline"
+        and dataset in SESSION_FINALIZED_DATASETS
+        and data_trade_date == expected_date
+        and session_key == "post_close"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -237,6 +269,7 @@ def _build_source(
     expected_date: str,
     now: datetime,
     threshold_seconds: int,
+    session_key: str,
     trade_date_field: str = "trade_date",
     timestamp_field: str = "generated_at",
     fallback_trade_date_keys: Sequence[str] = (),
@@ -318,9 +351,20 @@ def _build_source(
         stale = True
         reasons.append("trade_date_unknown")
 
+    age_softened = False
     if age is not None and age > threshold_seconds:
-        stale = True
-        reasons.append("age_exceeded")
+        if _same_day_pipeline_age_is_soft(
+            dataset=dataset,
+            provider=provider,
+            data_trade_date=data_trade_date,
+            expected_date=expected_date,
+            session_key=session_key,
+        ):
+            age_softened = True
+            degradation_reasons.append("same_day_post_close_age_exceeded")
+        else:
+            stale = True
+            reasons.append("age_exceeded")
 
     detail = (
         (manifest or {}).get("provider")
@@ -344,6 +388,7 @@ def _build_source(
         "stale_reasons": reasons,
         "degraded": bool(degradation_reasons),
         "degradation_reasons": degradation_reasons,
+        "age_softened": age_softened,
         "provider": (manifest or {}).get("provider"),
         "provider_role": (manifest or {}).get("provider_role"),
         "freshness_status": (manifest or {}).get("freshness_status"),
@@ -428,6 +473,22 @@ def _build_quality(
     }
 
 
+def _defer_source_until_session(source: dict[str, Any], *, reason: str) -> None:
+    """Mark a future-session source as not yet due instead of stale."""
+
+    source["stale"] = False
+    source["deferred"] = True
+    source["deferred_reason"] = reason
+    source["stale_reasons"] = []
+
+
+def _defer_quality_until_session(quality: dict[str, Any], *, reason: str) -> None:
+    quality["timely"] = True
+    quality["deferred"] = True
+    quality["deferred_reason"] = reason
+    quality["stale_reasons"] = []
+
+
 # ---------------------------------------------------------------------------
 # compute_readiness — the main entry point
 # ---------------------------------------------------------------------------
@@ -473,6 +534,7 @@ def compute_readiness(
             expected_date=expected,
             now=current,
             threshold_seconds=thresholds["watchlist"],
+            session_key=str(session.get("key") or ""),
             fallback_trade_date_keys=("date",),
         ),
         _build_source(
@@ -482,6 +544,7 @@ def compute_readiness(
             expected_date=expected,
             now=current,
             threshold_seconds=thresholds["screening"],
+            session_key=str(session.get("key") or ""),
             fallback_trade_date_keys=("trade_date", "source_scan_timestamp"),
         ),
         _build_source(
@@ -491,6 +554,7 @@ def compute_readiness(
             expected_date=expected,
             now=current,
             threshold_seconds=thresholds["confirmation"],
+            session_key=str(session.get("key") or ""),
             fallback_trade_date_keys=("trade_date",),
         ),
         _build_source(
@@ -500,6 +564,7 @@ def compute_readiness(
             expected_date=expected,
             now=current,
             threshold_seconds=thresholds["decision_brief"],
+            session_key=str(session.get("key") or ""),
             fallback_trade_date_keys=("trade_date",),
         ),
     ]
@@ -533,6 +598,14 @@ def compute_readiness(
         ),
     ]
     quality_map = {item["key"]: item for item in quality_items}
+
+    # Morning sessions happen before the midday confirmation producer is due.
+    # Treat that artifact as future work, not missing data, so the command
+    # center does not ask the operator to manually refresh something that the
+    # scheduler is intentionally waiting to run at 13:45.
+    if session.get("key") in {"premarket", "morning"}:
+        _defer_source_until_session(source_map["confirmation"], reason="awaiting_midday_confirmation_window")
+        _defer_quality_until_session(quality_map["midday_confirmation"], reason="awaiting_midday_confirmation_window")
 
     blockers: list[dict[str, str]] = []
     warnings: list[dict[str, str]] = []
@@ -571,7 +644,7 @@ def compute_readiness(
 
     # confirmation: warning in the morning, blocker after midday
     cf = source_map["confirmation"]
-    if cf["stale"] or not cf["available"]:
+    if not cf.get("deferred") and (cf["stale"] or not cf["available"]):
         # The canonical confirmation artifact (midday_verification_result.json)
         # is produced by ``run_midday_confirmation.sh`` — i.e. the
         # ``midday_confirmation`` task.  ``midday_refresh`` writes a different
@@ -635,7 +708,7 @@ def compute_readiness(
         })
         add_recommendation("aggressive")
 
-    if not quality_map["midday_confirmation"]["timely"]:
+    if not quality_map["midday_confirmation"].get("deferred") and not quality_map["midday_confirmation"]["timely"]:
         # The midday_confirmation lane is regenerated by run_midday_confirmation.sh.
         # midday_refresh produces a different lane (midday_refresh_result.json)
         # and would not refresh this quality artifact, so we must recommend

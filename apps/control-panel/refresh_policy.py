@@ -107,13 +107,28 @@ class CronJobPolicy:
     command: tuple[str, ...]
     delivery_default: bool = True
     fixed_window: bool = True
+    catchup_enabled: bool = False
+    catchup_until: str = ""
+    retry_attempts: int = 0
+    retry_delay_seconds: int = 0
+    depends_on: tuple[str, ...] = ()
 
     def as_openclaw_job(self, *, target: str = "") -> dict[str, Any]:
         command = " ".join(self.command)
+        direct_command = (
+            f"SEND_TO_FEISHU=1 FEISHU_TARGET={target} {command}"
+            if self.delivery_default
+            else command
+        )
+        delivery_note = (
+            "发往飞书的消息由 shell runner 自己完成；"
+            if self.delivery_default
+            else "该任务只写本地状态文件；"
+        )
         message = (
-            f"执行 {self.name}。发往飞书的消息由 shell runner 自己完成；"
+            f"执行 {self.name}。{delivery_note}"
             "最终回复只允许写 `DONE` 或 `FAILED: ...`。\n\n"
-            f"直接执行：`SEND_TO_FEISHU=1 FEISHU_TARGET={target} {command}`\n"
+            f"直接执行：`{direct_command}`\n"
             "如果 runner 已在运行或返回 running 状态，禁止重复执行。"
         )
         return {
@@ -152,6 +167,11 @@ class CronJobPolicy:
             "command": list(self.command),
             "delivery_default": self.delivery_default,
             "fixed_window": self.fixed_window,
+            "catchup_enabled": self.catchup_enabled,
+            "catchup_until": self.catchup_until,
+            "retry_attempts": self.retry_attempts,
+            "retry_delay_seconds": self.retry_delay_seconds,
+            "depends_on": list(self.depends_on),
         }
 
 
@@ -182,6 +202,15 @@ TASK_POLICIES: dict[str, TaskPolicy] = {
         cooldown_seconds=360,
         auto_windows=("morning", "midday", "afternoon", "preclose"),
         manifest_dependencies=("capital_flow.batch",),
+        same_family="lightweight_market_data",
+    ),
+    "morning_warmup": TaskPolicy(
+        task_name="morning_warmup",
+        title="晨间数据预热",
+        kind="lightweight",
+        cooldown_seconds=10 * 60,
+        auto_windows=("premarket", "morning"),
+        manifest_dependencies=("quotes.batch", "capital_flow.batch"),
         same_family="lightweight_market_data",
     ),
     "watchlist_refresh": TaskPolicy(
@@ -251,6 +280,16 @@ TASK_POLICIES: dict[str, TaskPolicy] = {
         fixed_cron_only=True,
         same_family="command_brief",
     ),
+    "decision_ledger_outcomes": TaskPolicy(
+        task_name="decision_ledger_outcomes",
+        title="Decision Ledger 结果评估",
+        kind="maintenance",
+        cooldown_seconds=30 * 60,
+        auto_windows=("postclose",),
+        auto_enabled=False,
+        fixed_cron_only=True,
+        same_family="decision_ledger",
+    ),
 }
 
 
@@ -258,6 +297,7 @@ PAGE_POLICIES: dict[str, PagePolicy] = {
     "today": PagePolicy(
         page="today",
         allowed_tasks=(
+            "morning_warmup",
             "quotes_light",
             "capital_flow_light",
             "watchlist_refresh",
@@ -267,6 +307,7 @@ PAGE_POLICIES: dict[str, PagePolicy] = {
             "aggressive",
         ),
         related_tasks=(
+            "morning_warmup",
             "quotes_light",
             "capital_flow_light",
             "watchlist_refresh",
@@ -281,8 +322,8 @@ PAGE_POLICIES: dict[str, PagePolicy] = {
     ),
     "watchlist": PagePolicy(
         page="watchlist",
-        allowed_tasks=("quotes_light", "capital_flow_light", "watchlist_refresh", "watchlist"),
-        related_tasks=("quotes_light", "capital_flow_light", "watchlist_refresh", "watchlist", "command_brief"),
+        allowed_tasks=("morning_warmup", "quotes_light", "capital_flow_light", "watchlist_refresh", "watchlist"),
+        related_tasks=("morning_warmup", "quotes_light", "capital_flow_light", "watchlist_refresh", "watchlist", "command_brief"),
         poll_seconds={"trading": 60, "standby": 90, "off": 300},
         stale_after_seconds={"trading": 3600, "standby": 7200, "off": 14_400},
     ),
@@ -306,10 +347,23 @@ PAGE_POLICIES: dict[str, PagePolicy] = {
 
 CRON_POLICIES: tuple[CronJobPolicy, ...] = (
     CronJobPolicy(
+        task_name="morning_warmup",
+        name="晨间数据预热",
+        cron_expr="25 9 * * 1-5",
+        command=("python3", "apps/scripts/run_morning_warmup.py"),
+        catchup_enabled=True,
+        catchup_until="10:20",
+        retry_attempts=2,
+        retry_delay_seconds=180,
+    ),
+    CronJobPolicy(
         task_name="watchlist_refresh",
         name="自选股早盘分析",
         cron_expr="50 9 * * 1-5",
         command=("bash", "apps/scripts/run_watchlist_refresh.sh"),
+        catchup_enabled=True,
+        catchup_until="11:15",
+        depends_on=("morning_warmup",),
     ),
     CronJobPolicy(
         task_name="aggressive",
@@ -328,31 +382,69 @@ CRON_POLICIES: tuple[CronJobPolicy, ...] = (
             "--handoff-min-consistency",
             "6",
         ),
+        catchup_enabled=True,
+        catchup_until="11:30",
+        depends_on=("morning_warmup",),
     ),
     CronJobPolicy(
         task_name="midday_refresh",
         name="进攻型选股-午盘",
         cron_expr="10 13 * * 1-5",
         command=("bash", "packages/screener/run_midday_refresh_cron.sh", "--pool", "aggressive", "--top", "10"),
+        catchup_enabled=True,
+        catchup_until="13:40",
+        depends_on=("aggressive",),
     ),
     CronJobPolicy(
         task_name="midday_confirmation",
         name="进攻型选股-午盘确认",
         cron_expr="45 13 * * 1-5",
         command=("bash", "packages/screener/run_midday_confirmation_cron.sh", "--pool", "aggressive", "--top", "10"),
+        catchup_enabled=True,
+        catchup_until="14:30",
+        depends_on=("midday_refresh",),
     ),
     CronJobPolicy(
         task_name="preclose_risk_refresh",
         name="收盘前风险刷新",
         cron_expr="50 14 * * 1-5",
         command=("bash", "apps/scripts/run_command_brief.sh"),
+        catchup_enabled=True,
+        catchup_until="15:05",
     ),
     CronJobPolicy(
         task_name="postclose_command_brief",
         name="收盘后总控简报",
         cron_expr="5 15 * * 1-5",
         command=("bash", "apps/scripts/run_command_brief.sh"),
+        catchup_enabled=True,
+        catchup_until="15:30",
     ),
+    CronJobPolicy(
+        task_name="decision_ledger_outcomes",
+        name="Decision Ledger 结果评估",
+        cron_expr="35 15 * * 1-5",
+        command=("python3", "apps/scripts/evaluate_decision_ledger.py"),
+        delivery_default=False,
+        catchup_enabled=True,
+        catchup_until="16:15",
+        retry_attempts=2,
+        retry_delay_seconds=300,
+        depends_on=("postclose_command_brief",),
+    ),
+)
+
+
+# Daily tasks that should trigger an automatic Decision Ledger capture
+# once they finish successfully.  The scheduled-job runner reads this
+# list as a *best-effort* post-hook -- capture failure must never flip
+# the underlying task's exit code, because the recommendation snapshot
+# is metadata about the run, not the run itself.  Add a task here when
+# its successful completion implies the Today action queue is in its
+# canonical state for the day.
+DECISION_LEDGER_CAPTURE_AFTER_TASKS: tuple[str, ...] = (
+    "midday_confirmation",
+    "postclose_command_brief",
 )
 
 
@@ -775,6 +867,7 @@ def _unique(values: Iterable[str]) -> list[str]:
 __all__ = [
     "AUTO_WINDOWS",
     "CRON_POLICIES",
+    "DECISION_LEDGER_CAPTURE_AFTER_TASKS",
     "PAGE_POLICIES",
     "TASK_POLICIES",
     "active_auto_windows",

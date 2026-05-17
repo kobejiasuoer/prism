@@ -18,7 +18,11 @@ for path in (str(REPO_ROOT), str(PACKAGES_ROOT), str(CONTROL_PANEL_ROOT)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from refresh_policy import CRON_POLICIES, TASK_POLICIES  # noqa: E402
+from refresh_policy import (  # noqa: E402
+    CRON_POLICIES,
+    DECISION_LEDGER_CAPTURE_AFTER_TASKS,
+    TASK_POLICIES,
+)
 from trading_calendar import calendar_status  # noqa: E402
 
 if os.name == "nt":
@@ -112,6 +116,74 @@ def build_env(*, send_to_feishu: bool, run_id: str) -> dict[str, str]:
 def update_payload(path: Path, latest_path: Path, payload: dict[str, Any]) -> None:
     write_json(path, payload)
     write_json(latest_path, payload)
+
+
+def run_decision_ledger_capture_hook(task_name: str) -> dict[str, Any]:
+    """Capture Today's action queue into the Decision Ledger.
+
+    This runs as a post-hook after the canonical task command finishes
+    successfully.  Its job is to record what Prism's Today action queue
+    contained at the moment the workflow completed -- not to re-run the
+    workflow.  Every failure mode here is converted to a status dict
+    rather than re-raised: the main task already succeeded, and a
+    metadata capture must never invalidate that.
+
+    Returns a structured status payload that is also persisted to
+    ``apps/data/decision_ledger/status/capture_latest.json`` so the
+    Settings page can surface "last capture worked / failed" without
+    re-running the work.
+    """
+
+    payload: dict[str, Any] = {
+        "task_name": task_name,
+        "status": "success",
+        "trade_date": None,
+        "captured": 0,
+        "already_present": 0,
+        "skipped": 0,
+        "superseded": 0,
+        "decision_ids": [],
+        "error": None,
+    }
+    try:
+        # Imports happen lazily so a fresh checkout that has not yet
+        # exercised the control-panel modules does not pay the import
+        # cost on every scheduled run.  Prefer the loose top-level
+        # ``dashboard_data`` import that ``prism_scheduled_job`` already
+        # has on sys.path (via CONTROL_PANEL_ROOT) -- the
+        # ``control_panel.dashboard_data`` package proxy is not always
+        # importable when uvicorn is not driving the process.
+        import dashboard_data  # type: ignore
+        import decision_ledger  # type: ignore
+    except Exception as exc:  # pragma: no cover - defensive
+        payload.update(status="failed", error=f"import_failed: {exc}")
+        return payload
+
+    try:
+        today_view = dashboard_data.build_today_view()
+        summary = decision_ledger.capture_today_action_queue(today_view)
+    except Exception as exc:
+        payload.update(status="failed", error=f"capture_failed: {exc}")
+        try:
+            decision_ledger.write_status("capture", payload)
+        except Exception:
+            pass
+        return payload
+
+    payload.update(
+        status="success",
+        trade_date=summary.get("trade_date"),
+        captured=int(summary.get("captured") or 0),
+        already_present=int(summary.get("already_present") or 0),
+        skipped=int(summary.get("skipped") or 0),
+        superseded=int(summary.get("superseded") or 0),
+        decision_ids=list(summary.get("decision_ids") or []),
+    )
+    try:
+        decision_ledger.write_status("capture", payload)
+    except Exception as exc:  # pragma: no cover - defensive
+        payload["status_write_error"] = str(exc)
+    return payload
 
 
 def should_skip_for_calendar(*, status: dict[str, Any], allow_non_trading_day: bool) -> bool:
@@ -248,6 +320,23 @@ def main() -> int:
                 "exit_code": exit_code,
             }
         )
+
+        # Decision Ledger capture is a best-effort post-hook for tasks
+        # listed in ``DECISION_LEDGER_CAPTURE_AFTER_TASKS``.  It runs
+        # only on successful exit, never alters ``payload["exit_code"]``,
+        # and stashes its own outcome under
+        # ``payload["decision_ledger_capture"]`` for the runs JSON.
+        if exit_code == 0 and args.task_name in DECISION_LEDGER_CAPTURE_AFTER_TASKS:
+            try:
+                capture_payload = run_decision_ledger_capture_hook(args.task_name)
+            except Exception as exc:  # pragma: no cover - defensive
+                capture_payload = {
+                    "task_name": args.task_name,
+                    "status": "failed",
+                    "error": f"unexpected_hook_error: {exc}",
+                }
+            payload["decision_ledger_capture"] = capture_payload
+
         update_payload(meta_path, latest_path, payload)
         print(f"{run_id}: {payload['status']} exit_code={exit_code}")
         return int(exit_code)

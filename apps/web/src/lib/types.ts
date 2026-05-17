@@ -171,6 +171,15 @@ export interface AccountPosition {
   avg_cost: number;
   cost_basis: number;
   realized_pnl: number;
+  current_price?: number | null;
+  market_value?: number | null;
+  unrealized_pnl?: number | null;
+  unrealized_pnl_pct?: number | null;
+  total_pnl?: number | null;
+  quote_change_pct?: number | null;
+  quote_timestamp?: string;
+  quote_trade_date?: string;
+  quote_provider?: string;
   last_fill_at: string;
   fills: number;
 }
@@ -217,6 +226,9 @@ export interface AccountView {
   equity_at_cost: number;
   book_value: number;
   realized_pnl: number;
+  market_value?: number | null;
+  unrealized_pnl?: number | null;
+  total_pnl?: number | null;
   open_positions: AccountPosition[];
   closed_positions: AccountPosition[];
   fills: AccountFill[];
@@ -235,6 +247,23 @@ export interface PortfolioAccountResponse {
   data_trade_date: string | null;
   readiness: ReadinessPayload;
   account: AccountView;
+  market_quotes?: {
+    enabled: boolean;
+    status: string;
+    message?: string;
+    requested_codes?: string[];
+    updated_at?: string;
+    trade_date?: string;
+    provider?: string;
+    freshness_status?: string;
+    live_small_allowed?: boolean;
+    row_count?: number;
+    priced_count?: number;
+    missing_codes?: string[];
+    data_path?: string;
+    manifest_path?: string;
+    errors?: string[];
+  };
   summary_cards: MetricCardData[];
   recent_fills: AccountFill[];
   unreconciled_intents: AccountReadinessState["unreconciled_intents"];
@@ -1048,13 +1077,78 @@ export interface RefreshStatus {
       command?: string[];
       delivery_default?: boolean;
       fixed_window?: boolean;
+      catchup_enabled?: boolean;
+      catchup_until?: string;
+      retry_attempts?: number;
+      retry_delay_seconds?: number;
+      depends_on?: string[];
     }>;
   };
+  scheduler_status?: SchedulerStatus;
   active_auto_windows?: RefreshWindow[];
   readiness?: ReadinessPayload;
   readiness_mode?: ReadinessMode;
   recommended_tasks?: string[];
   snapshot_signature: string;
+}
+
+export interface ScheduledRunState {
+  task_name?: string;
+  status?: string;
+  same_day?: boolean;
+  today_success?: boolean;
+  running?: boolean;
+  failed_today?: boolean;
+  missing?: boolean;
+  stale_latest?: boolean;
+  trade_date?: string;
+  expected_trade_date?: string;
+  run_id?: string;
+  title?: string;
+  started_at?: string;
+  finished_at?: string;
+  exit_code?: number | null;
+  skip_reason?: string;
+  log_path?: string;
+  meta_path?: string;
+}
+
+export interface SchedulerJobStatus {
+  task_name?: string;
+  name?: string;
+  cron_expr?: string;
+  catchup_enabled?: boolean;
+  catchup_until?: string;
+  catchup_fired?: unknown;
+  retry_attempts?: number;
+  retry_delay_seconds?: number;
+  retry_count_today?: number;
+  depends_on?: string[];
+  health?: string;
+  run?: ScheduledRunState;
+}
+
+export interface SchedulerStatus {
+  server_time?: string;
+  calendar?: Record<string, unknown>;
+  scheduler?: {
+    alive?: boolean;
+    pid?: number | string | null;
+    started_at?: string;
+    last_tick_at?: string;
+    state_path?: string;
+    send_to_feishu?: boolean;
+    fire_on_start?: boolean;
+  };
+  summary?: {
+    total?: number;
+    success?: number;
+    running?: number;
+    failed?: number;
+    stale?: number;
+    missing?: number;
+  };
+  jobs?: SchedulerJobStatus[];
 }
 
 export interface RefreshWindow {
@@ -1232,4 +1326,243 @@ export interface HealthResponse {
       accounts?: string[];
     };
   };
+}
+
+// ===========================================================================
+// Decision Ledger -- read-only views returned by /api/decision-ledger/*.
+//
+// The shapes mirror what ``apps/control-panel/decision_ledger.py`` returns
+// from ``_decision_summary_card``, ``summarize_window``, and
+// ``build_ledger_health``.  Optional fields are typed as such because the
+// backend tolerates missing rows (empty ledger, never-run evaluator) and
+// reports ``null`` rather than synthesising fake values.
+// ===========================================================================
+
+export interface DecisionLedgerLatestExecution {
+  status?: string;
+  trade_date?: string;
+  side?: string | null;
+  price?: number | null;
+  quantity?: number | null;
+  amount?: number | null;
+  note?: string | null;
+}
+
+export interface DecisionLedgerLatestOutcome {
+  window?: string;
+  as_of_trade_date?: string;
+  label?: string;
+  tone?: string;
+  return_pct?: number | null;
+  relative_return_pct?: number | null;
+}
+
+export interface DecisionLedgerCompactRecord {
+  decision_id: string;
+  trade_date: string;
+  code: string;
+  name?: string;
+  action?: string;
+  action_label?: string;
+  lane?: string;
+  surface?: string;
+  status?: string;
+  main_conclusion?: string;
+  execution_events_count: number;
+  outcome_events_count: number;
+  latest_execution?: DecisionLedgerLatestExecution | null;
+  latest_outcome?: DecisionLedgerLatestOutcome | null;
+}
+
+export interface DecisionLedgerScanError {
+  file: string;
+  error: string;
+}
+
+export interface DecisionLedgerStatusError {
+  kind: string;
+  file: string;
+  error: string;
+}
+
+export interface DecisionLedgerRecentResponse {
+  items: DecisionLedgerCompactRecord[];
+  count: number;
+  limit: number;
+  errors: DecisionLedgerScanError[];
+}
+
+export interface DecisionLedgerStockResponse {
+  code: string;
+  items: DecisionLedgerCompactRecord[];
+  count: number;
+  errors: DecisionLedgerScanError[];
+}
+
+export interface DecisionLedgerSummaryResponse {
+  as_of: string;
+  window_days: number;
+  from_date: string;
+  to_date: string;
+  decisions: {
+    total: number;
+    open: number;
+    superseded: number;
+  };
+  outcome_distribution: Record<string, number>;
+  execution_gap_count: number;
+  data_issue_count: number;
+  execution_events_total: number;
+  outcome_events_total: number;
+  errors: DecisionLedgerScanError[];
+}
+
+export interface DecisionLedgerExecutionEvent {
+  event_id?: string;
+  decision_id?: string;
+  created_at?: string;
+  trade_date?: string;
+  status?: string;
+  side?: string | null;
+  price?: number | null;
+  quantity?: number | null;
+  amount?: number | null;
+  note?: string;
+  source?: string;
+  intent_key?: string | null;
+  today_action_key?: string | null;
+}
+
+export interface DecisionLedgerOutcomeEvent {
+  event_id?: string;
+  decision_id?: string;
+  window?: string;
+  evaluated_at?: string;
+  as_of_trade_date?: string;
+  market_data?: {
+    entry_reference_price?: number | null;
+    close_price?: number | null;
+    return_pct?: number | null;
+    benchmark_code?: string | null;
+    benchmark_return_pct?: number | null;
+    relative_return_pct?: number | null;
+    max_favorable_pct?: number | null;
+    max_adverse_pct?: number | null;
+  };
+  classification?: {
+    label?: string;
+    tone?: string;
+    summary?: string;
+    reasons?: string[];
+  };
+  quality?: {
+    usable_for_decision_quality?: boolean;
+    data_issue?: string | null;
+  };
+}
+
+export interface DecisionLedgerDetailResponse {
+  schema_version?: number;
+  decision_id: string;
+  trade_date: string;
+  created_at?: string;
+  source?: {
+    lane?: string;
+    surface?: string;
+    action_key?: string;
+    source_label?: string;
+    artifact_paths?: string[];
+  };
+  stock: {
+    code: string;
+    name?: string;
+  };
+  recommendation?: {
+    action?: string;
+    action_label?: string;
+    action_raw?: string;
+    main_conclusion?: string;
+    position_guidance?: string;
+    trigger_condition?: string;
+    continue_condition?: string;
+    stop_condition?: string;
+    risk_summary?: string;
+  };
+  evidence_snapshot?: {
+    expected_trade_date?: string;
+    data_trade_date?: string;
+    readiness_mode?: string;
+    readiness_ready?: boolean;
+    blockers?: unknown[];
+    warnings?: unknown[];
+    source_cards?: unknown[];
+    metric_cards?: unknown[];
+    capital_summary?: unknown;
+    technical_summary?: unknown;
+    theme_summary?: unknown;
+  };
+  parameter_snapshot?: {
+    path?: string | null;
+    sha256?: string | null;
+    summary?: unknown;
+  };
+  status?: {
+    state?: string;
+    superseded_by?: string | null;
+  };
+  execution_events: DecisionLedgerExecutionEvent[];
+  outcome_events: DecisionLedgerOutcomeEvent[];
+}
+
+export interface DecisionLedgerCaptureStatus {
+  recorded_at?: string;
+  task_name?: string;
+  status?: "success" | "failed" | string;
+  trade_date?: string | null;
+  captured?: number;
+  already_present?: number;
+  skipped?: number;
+  superseded?: number;
+  decision_ids?: string[];
+  error?: string | null;
+  status_write_error?: string;
+}
+
+export interface DecisionLedgerOutcomeStatus {
+  recorded_at?: string;
+  status?: "success" | "failed" | "no_provider" | string;
+  task_name?: string;
+  run_id?: string;
+  scheduled_via?: string;
+  as_of_date?: string;
+  started_at?: string;
+  finished_at?: string;
+  provider?: string;
+  evaluated?: number;
+  already_present?: number;
+  skipped_no_provider?: number;
+  skipped_provider_unavailable?: number;
+  data_issue?: number;
+  errors?: number;
+  events?: Array<{
+    decision_id?: string;
+    window?: string;
+    label?: string;
+    detail?: string;
+  }>;
+  error?: string | null;
+}
+
+export interface DecisionLedgerHealthResponse {
+  generated_at: string;
+  as_of_trade_date: string;
+  decisions_total: number;
+  decisions_open: number;
+  decisions_superseded: number;
+  evaluated_outcomes: number;
+  pending_outcomes: number;
+  last_capture?: DecisionLedgerCaptureStatus | null;
+  last_outcome_evaluation?: DecisionLedgerOutcomeStatus | null;
+  corrupt_files: DecisionLedgerScanError[];
+  status_errors: DecisionLedgerStatusError[];
 }

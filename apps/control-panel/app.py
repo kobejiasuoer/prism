@@ -16,8 +16,10 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGES_ROOT = REPO_ROOT / "packages"
-if str(PACKAGES_ROOT) not in sys.path:
-    sys.path.insert(0, str(PACKAGES_ROOT))
+SCRIPTS_ROOT = REPO_ROOT / "apps" / "scripts"
+for import_path in (str(PACKAGES_ROOT), str(SCRIPTS_ROOT)):
+    if import_path not in sys.path:
+        sys.path.insert(0, import_path)
 
 import stock_parameter_config as parameter_config
 
@@ -61,6 +63,7 @@ from control_panel.dashboard_data import (
 )
 from watchlist_registry import archive_watchlist_stock, restore_watchlist_stock, upsert_watchlist_stock
 from refresh_policy import (
+    CRON_POLICIES,
     PAGE_POLICIES,
     TASK_POLICIES,
     active_auto_windows,
@@ -79,15 +82,25 @@ from refresh_policy import (
     validate_cron_policies,
 )
 from readiness import expected_trade_date as readiness_expected_trade_date
+from scheduled_run_state import (
+    STATE_PATH as SCHEDULER_STATE_PATH,
+    load_scheduler_state,
+    run_state_for_task,
+    scheduler_alive,
+)
+from trading_calendar import calendar_status
 from prism_data.freshness import update_manifest_freshness
 from prism_data.repositories import DatasetRepository
 from prism_data.utils import default_dataset_repository_root
+
+import decision_ledger
 
 
 TASK_RUNNER = INVEST_FLOW_ROOT / "scripts" / "control_panel_task_runner.py"
 PREVIEW_MAX_BYTES = 220_000
 WATCHLIST_REFRESH_COMMAND = ["bash", "apps/scripts/run_watchlist_refresh.sh"]
 LIGHTWEIGHT_REFRESH_COMMAND = [sys.executable, "apps/scripts/refresh_lightweight_data.py"]
+MORNING_WARMUP_COMMAND = [sys.executable, "apps/scripts/run_morning_warmup.py"]
 PARAMETERS_PATH = STOCK_ANALYZER_ROOT / "config" / "stocks.json"
 WEB_ORIGIN = os.environ.get("PRISM_WEB_ORIGIN", "http://127.0.0.1:8000").rstrip("/")
 TASK_NAME_ALIASES = {
@@ -652,6 +665,15 @@ def resolve_refresh_task(task_name: str) -> dict[str, Any]:
             "send_to_feishu": False,
         }
 
+    if normalized == "morning_warmup":
+        return {
+            "task_name": normalized,
+            "title": policy.title if policy else "晨间数据预热",
+            "command": MORNING_WARMUP_COMMAND,
+            "cwd": str(WORKSPACE_ROOT),
+            "send_to_feishu": False,
+        }
+
     if normalized in {"preclose_risk_refresh", "postclose_command_brief"}:
         return {
             "task_name": normalized,
@@ -1024,6 +1046,90 @@ def _build_readiness_recovery_steps(
     return steps
 
 
+def _public_run_state(task_name: str, *, now: datetime) -> dict[str, Any]:
+    state = run_state_for_task(task_name, now=now)
+    return {
+        "task_name": state.get("task_name") or task_name,
+        "status": state.get("status") or "missing",
+        "same_day": bool(state.get("same_day")),
+        "today_success": bool(state.get("today_success")),
+        "running": bool(state.get("running")),
+        "failed_today": bool(state.get("failed_today")),
+        "missing": bool(state.get("missing")),
+        "stale_latest": bool(state.get("stale_latest")),
+        "trade_date": state.get("trade_date") or "",
+        "expected_trade_date": state.get("expected_trade_date") or "",
+        "run_id": state.get("run_id") or "",
+        "title": state.get("title") or task_name,
+        "started_at": state.get("started_at") or "",
+        "finished_at": state.get("finished_at") or "",
+        "exit_code": state.get("exit_code"),
+        "skip_reason": state.get("skip_reason") or "",
+        "log_path": state.get("log_path") or "",
+        "meta_path": state.get("meta_path") or "",
+    }
+
+
+def _job_health(run_state: dict[str, Any]) -> str:
+    if run_state.get("running"):
+        return "running"
+    if run_state.get("today_success"):
+        return "success"
+    if run_state.get("failed_today"):
+        return "failed"
+    if run_state.get("stale_latest"):
+        return "stale"
+    return "missing"
+
+
+def build_scheduler_status_payload(*, now: datetime | None = None) -> dict[str, Any]:
+    current = now or datetime.now()
+    state = load_scheduler_state()
+    alive = scheduler_alive(state, now=current)
+    catchup_fired = state.get("catchup_fired") if isinstance(state.get("catchup_fired"), dict) else {}
+    retry_counts = state.get("retry_counts") if isinstance(state.get("retry_counts"), dict) else {}
+    day = current.strftime("%Y-%m-%d")
+    jobs: list[dict[str, Any]] = []
+    counts = {"total": 0, "success": 0, "running": 0, "failed": 0, "stale": 0, "missing": 0}
+    for policy in CRON_POLICIES:
+        run_state = _public_run_state(policy.task_name, now=current)
+        health = _job_health(run_state)
+        counts["total"] += 1
+        counts[health] = counts.get(health, 0) + 1
+        key = f"{day}:{policy.task_name}"
+        jobs.append(
+            {
+                "task_name": policy.task_name,
+                "name": policy.name,
+                "cron_expr": policy.cron_expr,
+                "catchup_enabled": bool(policy.catchup_enabled),
+                "catchup_until": policy.catchup_until,
+                "catchup_fired": catchup_fired.get(key) or None,
+                "retry_attempts": int(policy.retry_attempts or 0),
+                "retry_delay_seconds": int(policy.retry_delay_seconds or 0),
+                "retry_count_today": int(retry_counts.get(key) or 0),
+                "depends_on": list(policy.depends_on),
+                "health": health,
+                "run": run_state,
+            }
+        )
+    return {
+        "server_time": current.strftime("%Y-%m-%d %H:%M:%S"),
+        "calendar": calendar_status(current),
+        "scheduler": {
+            "alive": alive,
+            "pid": state.get("pid"),
+            "started_at": state.get("started_at") or "",
+            "last_tick_at": state.get("last_tick_at") or "",
+            "state_path": str(SCHEDULER_STATE_PATH),
+            "send_to_feishu": bool(state.get("send_to_feishu")),
+            "fire_on_start": bool(state.get("fire_on_start")),
+        },
+        "summary": counts,
+        "jobs": jobs,
+    }
+
+
 def build_refresh_status_payload(
     page: str,
     *,
@@ -1208,6 +1314,7 @@ def build_refresh_status_payload(
             "task": policy.as_dict() if policy else {},
         },
         "policy_catalog": build_policy_payload(),
+        "scheduler_status": build_scheduler_status_payload(now=current),
         "active_auto_windows": active_auto_windows(current),
         "snapshot_signature": snapshot_signature,
     }
@@ -1429,6 +1536,24 @@ async def api_today_action_decision(request: Request) -> JSONResponse:
         ),
         None,
     )
+
+    # ``watch`` / ``skip`` are real operator decisions that belong in the
+    # ledger.  ``done`` is intentionally NOT translated into a filled
+    # event -- a fill needs price + quantity, which Portfolio writeback
+    # supplies.  ``pending`` is an undo of the local action queue
+    # checklist state, not a decision.
+    if decision in {"watch", "skip"}:
+        parsed_code = key.split(":", 1)[1].strip() if ":" in key else ""
+        ledger_result = decision_ledger.append_execution_event_for_writeback(
+            trade_date=trade_date,
+            code=parsed_code,
+            status=decision,
+            today_action_key=key,
+            source="today_decision_writeback",
+        )
+    else:
+        ledger_result = {"attached": False, "reason": "ineligible"}
+
     return JSONResponse(
         {
             "ok": True,
@@ -1442,6 +1567,7 @@ async def api_today_action_decision(request: Request) -> JSONResponse:
                 "updated_at": "",
             },
             "counts": ((today_view.get("action_queue") or {}).get("counts") or {}),
+            "ledger": ledger_result,
         }
     )
 
@@ -1605,6 +1731,11 @@ async def api_refresh_status(page: str, auto: bool = False) -> JSONResponse:
 @app.get("/api/refresh/policy")
 async def api_refresh_policy() -> JSONResponse:
     return JSONResponse(build_policy_payload())
+
+
+@app.get("/api/scheduler/status")
+async def api_scheduler_status() -> JSONResponse:
+    return JSONResponse(build_scheduler_status_payload())
 
 
 @app.get("/api/cron/validate")
@@ -2050,6 +2181,13 @@ async def api_portfolio_account() -> JSONResponse:
     return JSONResponse(build_portfolio_account_view())
 
 
+@app.post("/api/portfolio/quotes/refresh")
+async def api_portfolio_quotes_refresh() -> JSONResponse:
+    """Refresh market quotes for current open positions and recompute P/L."""
+
+    return JSONResponse(build_portfolio_account_view(refresh_quotes=True))
+
+
 @app.post("/api/portfolio/mode")
 async def api_portfolio_mode(request: Request) -> JSONResponse:
     try:
@@ -2116,7 +2254,30 @@ async def api_portfolio_fill(request: Request) -> JSONResponse:
     except AccountBookError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    return JSONResponse(build_portfolio_account_view())
+    qty_val = payload.get("qty")
+    price_val = payload.get("price")
+    amount_val: float | None = None
+    try:
+        if qty_val is not None and price_val is not None:
+            amount_val = round(float(qty_val) * float(price_val), 2)
+    except (TypeError, ValueError):
+        amount_val = None
+
+    ledger_result = decision_ledger.append_execution_event_for_writeback(
+        trade_date=payload.get("trade_date"),
+        code=payload.get("code"),
+        status="filled",
+        side=str(payload.get("side") or "").lower() or None,
+        price=payload.get("price"),
+        quantity=payload.get("qty"),
+        amount=amount_val,
+        note=str(payload.get("note") or ""),
+        intent_key=payload.get("intent_key"),
+        source="portfolio_writeback",
+    )
+    view = build_portfolio_account_view()
+    view["ledger"] = ledger_result
+    return JSONResponse(view)
 
 
 @app.post("/api/portfolio/intent/no_fill")
@@ -2135,7 +2296,19 @@ async def api_portfolio_intent_no_fill(request: Request) -> JSONResponse:
     except AccountBookError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    return JSONResponse(build_portfolio_account_view())
+    # The intent payload does not carry an explicit ``code``; we rely on
+    # ``intent_key`` matching the captured decision's ``source.action_key``.
+    ledger_result = decision_ledger.append_execution_event_for_writeback(
+        trade_date=payload.get("trade_date"),
+        code=None,
+        status="no_fill",
+        note=str(payload.get("reason") or ""),
+        intent_key=payload.get("intent_key"),
+        source="portfolio_writeback",
+    )
+    view = build_portfolio_account_view()
+    view["ledger"] = ledger_result
+    return JSONResponse(view)
 
 
 @app.post("/api/portfolio/reconcile")
@@ -2156,3 +2329,204 @@ async def api_portfolio_reconcile(request: Request) -> JSONResponse:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return JSONResponse(build_portfolio_account_view())
+
+
+# ---------------------------------------------------------------- decision ledger
+
+
+@app.post("/api/decision-ledger/capture")
+async def api_decision_ledger_capture(request: Request) -> JSONResponse:
+    """Capture today's action queue into the ledger.
+
+    Callers may post a ``today_view`` body to capture an exact snapshot
+    (used by tests and by tasks that already assembled the view).  When
+    the body omits ``today_view``, we rebuild via ``build_today_view``
+    so an operator can hit the endpoint directly without coordinating
+    with the dashboard route.
+    """
+
+    try:
+        payload: dict[str, Any] = await request.json()
+    except Exception:
+        payload = {}
+
+    today_view = payload.get("today_view")
+    if today_view is None:
+        today_view = build_today_view()
+
+    try:
+        summary = decision_ledger.capture_today_action_queue(today_view)
+    except decision_ledger.DecisionLedgerError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return JSONResponse(summary)
+
+
+# ----------------------------------------------- decision ledger read-only API
+#
+# These endpoints are pure queries -- they never mutate the ledger, never
+# trigger capture, never hit the network.  Corrupt files surface either
+# in an ``errors`` field (for the scan-style endpoints) or as a 5xx
+# response (for the targeted detail endpoint) so an operator notices.
+
+
+import re as _re  # local alias to avoid clashing with anything below
+
+_DECISION_ID_PREFIX_RE = _re.compile(r"^\d{4}-\d{2}-\d{2}:")
+
+
+def _parse_window_days(value: Any) -> int:
+    """Parse ``?window=7d`` / ``?window=7`` / int into a positive int.
+
+    Defaults to 7 on missing / unparseable input rather than raising:
+    the API stays usable without forcing the caller to hand-craft the
+    parameter.
+    """
+
+    if value is None:
+        return 7
+    text = str(value).strip().lower()
+    if text.endswith("d"):
+        text = text[:-1]
+    try:
+        n = int(text)
+    except (TypeError, ValueError):
+        return 7
+    return max(1, n)
+
+
+def _parse_limit(value: Any, *, default: int = 20) -> int:
+    if value is None:
+        return default
+    try:
+        n = int(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+    return max(1, n)
+
+
+@app.get("/api/decision-ledger/summary")
+async def api_decision_ledger_summary(request: Request) -> JSONResponse:
+    """Aggregate ledger counts over a trailing ``window`` (default 7d).
+
+    Query params:
+
+    * ``window`` -- ``7d`` / ``14d`` / integer days (default ``7``).
+    * ``as_of`` -- end date in ``YYYY-MM-DD`` (default today).
+
+    The response shape is stable; an empty ledger yields zeroed
+    counters.  Corrupt files surface under ``errors`` so the dashboard
+    can show a banner without losing the rest of the data.
+    """
+
+    window_days = _parse_window_days(request.query_params.get("window"))
+    as_of = request.query_params.get("as_of") or None
+
+    summary = decision_ledger.summarize_window(
+        window_days=window_days,
+        as_of=as_of,
+    )
+    return JSONResponse(summary)
+
+
+@app.get("/api/decision-ledger/recent")
+async def api_decision_ledger_recent(request: Request) -> JSONResponse:
+    """Most-recent decisions plus their latest execution / outcome events.
+
+    Query params:
+
+    * ``limit`` -- 1..500 (default 20).  Invalid input is clamped, not
+      rejected -- a dashboard should not break because a URL got
+      hand-edited.
+    """
+
+    limit = _parse_limit(request.query_params.get("limit"), default=20)
+    payload = decision_ledger.list_recent_decisions(limit=limit)
+    return JSONResponse(payload)
+
+
+@app.get("/api/decision-ledger/stock/{code}")
+async def api_decision_ledger_stock(code: str) -> JSONResponse:
+    """Decision history for one stock code.
+
+    Accepts ``600690`` / ``sh600690`` / ``sz000001`` forms; returns the
+    canonical prefixed form in the response so downstream caches can
+    key off it.  Garbage codes get a 400 (not silently empty) so a
+    client typo is loud.
+    """
+
+    canonical = decision_ledger.normalize_stock_code(code)
+    if not canonical:
+        raise HTTPException(status_code=400, detail=f"invalid stock code: {code!r}")
+
+    records, errors = decision_ledger.scan_all_decisions()
+    matched = [
+        r for r in records
+        if (r.get("stock") or {}).get("code") == canonical
+    ]
+    matched.sort(
+        key=lambda r: (
+            str(r.get("trade_date") or ""),
+            str(r.get("decision_id") or ""),
+        ),
+        reverse=True,
+    )
+    items = [decision_ledger._decision_summary_card(r) for r in matched]
+    return JSONResponse(
+        {
+            "code": canonical,
+            "items": items,
+            "count": len(items),
+            "errors": errors,
+        }
+    )
+
+
+@app.get("/api/decision-ledger/decision/{decision_id}")
+async def api_decision_ledger_detail(decision_id: str) -> JSONResponse:
+    """Raw DecisionRecord for one decision_id.
+
+    * 400 -- id doesn't start with ``YYYY-MM-DD:`` (malformed).
+    * 404 -- id is well-formed but no record matches.
+    * 500 -- the file that should host the record is corrupt; the
+      detail message points at the ledger error so the operator can
+      fix the file.
+    """
+
+    if not _DECISION_ID_PREFIX_RE.match(decision_id):
+        raise HTTPException(
+            status_code=400,
+            detail=f"malformed decision_id: {decision_id!r}",
+        )
+
+    try:
+        record = decision_ledger.load_decision(decision_id)
+    except decision_ledger.DecisionLedgerError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"ledger error reading {decision_id!r}: {exc}",
+        ) from exc
+
+    if record is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"decision not found: {decision_id!r}",
+        )
+
+    return JSONResponse(record)
+
+
+@app.get("/api/decision-ledger/health")
+async def api_decision_ledger_health() -> JSONResponse:
+    """Surface Decision Ledger capture + evaluation health for Settings.
+
+    Combines the last capture status, the last outcome-evaluation
+    status, any corrupt decisions/status files, and a coarse pending
+    outcome counter into a single payload.  Always returns 200 -- the
+    shape is stable, missing sections degrade to ``null`` so the UI can
+    show "never run yet" without distinguishing it from "endpoint
+    failed".
+    """
+
+    payload = decision_ledger.build_ledger_health()
+    return JSONResponse(payload)

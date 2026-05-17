@@ -11,7 +11,9 @@ import { PageTitle } from "@/components/page-title";
 import { StockCard } from "@/components/stock-card";
 import { WatchlistManagerPanel } from "@/components/watchlist-manager-panel";
 import {
+  useDecisionLedgerRecent,
   usePortfolioAccount,
+  useRefreshPortfolioQuotes,
   useRecordPortfolioCash,
   useRecordPortfolioFill,
   useRecordPortfolioNoFill,
@@ -21,7 +23,14 @@ import {
   useUpdateTodayActionDecision,
   useWatchlist,
 } from "@/lib/hooks";
-import type { AccountMode, AccountReadinessState, DecisionValue, PortfolioAccountResponse } from "@/lib/types";
+import type {
+  AccountMode,
+  AccountReadinessState,
+  DecisionLedgerCompactRecord,
+  DecisionValue,
+  PortfolioAccountResponse,
+  Tone,
+} from "@/lib/types";
 import { ApiError } from "@/lib/api";
 
 const MODE_OPTIONS: Array<{ value: AccountMode; label: string; hint: string }> = [
@@ -75,6 +84,16 @@ const WRITEBACK_ACTIONS: Array<{ value: WritebackMode; label: string }> = [
 function formatMoney(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "-";
   return `¥${Number(value).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatPercent(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "-";
+  return `${Number(value).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+}
+
+function pnlTone(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "text-[var(--text-tertiary)]";
+  return value >= 0 ? "text-[var(--tone-positive)]" : "text-[var(--tone-risk)]";
 }
 
 function todayStr(): string {
@@ -276,6 +295,118 @@ function AccountWorkflowCard({ data }: { data: PortfolioAccountResponse }) {
   );
 }
 
+function PositionLatestDecisionPanel({
+  positions,
+}: {
+  positions: PortfolioAccountResponse["account"]["open_positions"];
+}) {
+  // Fetch the latest decisions (limit 60 covers a healthy book of
+  // positions plus their next-day duplicates).  We then cross-reference
+  // each open position with the freshest decision for that code.
+  const ledger = useDecisionLedgerRecent(60);
+  const items = (ledger.data?.items || []) as DecisionLedgerCompactRecord[];
+
+  const latestByCode = useMemo(() => {
+    const map = new Map<string, DecisionLedgerCompactRecord>();
+    for (const item of items) {
+      const key = String(item.code || "").toLowerCase();
+      if (!key) continue;
+      if (!map.has(key)) {
+        map.set(key, item);
+      }
+    }
+    return map;
+  }, [items]);
+
+  if (!positions.length) {
+    return null;
+  }
+
+  return (
+    <Panel
+      title="持仓最近 Prism 决策"
+      eyebrow="Decision Ledger"
+      className="surface-card p-4"
+      action={
+        <button
+          type="button"
+          className="focus-ring inline-flex items-center gap-1.5 rounded-md border border-[var(--border-subtle)] px-2 py-1 text-[11px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+          onClick={() => void ledger.refetch()}
+        >
+          <RefreshCw size={12} className={ledger.isFetching ? "animate-spin" : ""} />
+          刷新
+        </button>
+      }
+    >
+      {ledger.isError ? (
+        <ErrorState message="Decision Ledger 暂不可用" onRetry={() => void ledger.refetch()} />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-[12px]">
+            <thead className="text-[var(--text-tertiary)]">
+              <tr>
+                <th className="px-2 py-1 text-left">代码</th>
+                <th className="px-2 py-1 text-left">名称</th>
+                <th className="px-2 py-1 text-left">决策日期</th>
+                <th className="px-2 py-1 text-left">动作</th>
+                <th className="px-2 py-1 text-left">执行</th>
+                <th className="px-2 py-1 text-left">结果</th>
+                <th className="px-2 py-1 text-left">状态</th>
+              </tr>
+            </thead>
+            <tbody>
+              {positions.map((pos) => {
+                const decision = latestByCode.get(String(pos.code || "").toLowerCase());
+                return (
+                  <tr key={pos.code} className="border-t border-[var(--border-subtle)]">
+                    <td className="px-2 py-1 font-mono">{pos.code}</td>
+                    <td className="px-2 py-1">{pos.name}</td>
+                    <td className="px-2 py-1">{decision?.trade_date || "-"}</td>
+                    <td className="px-2 py-1">
+                      {decision ? (
+                        <Badge tone="watch">{decision.action_label || decision.action || "-"}</Badge>
+                      ) : (
+                        <span className="text-[var(--text-tertiary)]">未记录</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1">
+                      {decision ? (
+                        <Badge tone={decision.latest_execution?.status ? "info" : "stale"}>
+                          {decision.latest_execution?.status || "未记录"}
+                        </Badge>
+                      ) : (
+                        <span className="text-[var(--text-tertiary)]">-</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1">
+                      {decision?.latest_outcome?.label ? (
+                        <Badge tone={(decision.latest_outcome.tone as Tone) || "info"}>
+                          {decision.latest_outcome.window || ""} {decision.latest_outcome.label}
+                        </Badge>
+                      ) : (
+                        <span className="text-[var(--text-tertiary)]">待评估</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1">
+                      {decision ? (
+                        <Badge tone={decision.status === "superseded" ? "warning" : "good"}>
+                          {decision.status === "superseded" ? "已被替代" : decision.status || "open"}
+                        </Badge>
+                      ) : (
+                        <span className="text-[var(--text-tertiary)]">-</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 function PositionsTable({ positions }: { positions: PortfolioAccountResponse["account"]["open_positions"] }) {
   if (!positions.length) {
     return <EmptyState>当前没有真持仓。研究态下可继续观察自选股，但不要把它当作真账户。</EmptyState>;
@@ -290,7 +421,11 @@ function PositionsTable({ positions }: { positions: PortfolioAccountResponse["ac
             <th className="px-2 py-1 text-right">持仓</th>
             <th className="px-2 py-1 text-right">均价</th>
             <th className="px-2 py-1 text-right">成本</th>
+            <th className="px-2 py-1 text-right">现价</th>
+            <th className="px-2 py-1 text-right">市值</th>
+            <th className="px-2 py-1 text-right">浮盈亏</th>
             <th className="px-2 py-1 text-right">已实现</th>
+            <th className="px-2 py-1 text-right">总盈亏</th>
             <th className="px-2 py-1 text-left">最近成交</th>
           </tr>
         </thead>
@@ -302,9 +437,21 @@ function PositionsTable({ positions }: { positions: PortfolioAccountResponse["ac
               <td className="px-2 py-1 text-right">{pos.qty}</td>
               <td className="px-2 py-1 text-right">{formatMoney(pos.avg_cost)}</td>
               <td className="px-2 py-1 text-right">{formatMoney(pos.cost_basis)}</td>
-              <td className={`px-2 py-1 text-right ${pos.realized_pnl >= 0 ? "text-[var(--tone-positive)]" : "text-[var(--tone-risk)]"}`}>
+              <td className="px-2 py-1 text-right">
+                <div>{formatMoney(pos.current_price)}</div>
+                {pos.quote_change_pct !== null && pos.quote_change_pct !== undefined ? (
+                  <div className={`text-[10px] ${pnlTone(pos.quote_change_pct)}`}>{formatPercent(pos.quote_change_pct)}</div>
+                ) : null}
+              </td>
+              <td className="px-2 py-1 text-right">{formatMoney(pos.market_value)}</td>
+              <td className={`px-2 py-1 text-right ${pnlTone(pos.unrealized_pnl)}`}>
+                <div>{formatMoney(pos.unrealized_pnl)}</div>
+                <div className="text-[10px]">{formatPercent(pos.unrealized_pnl_pct)}</div>
+              </td>
+              <td className={`px-2 py-1 text-right ${pnlTone(pos.realized_pnl)}`}>
                 {formatMoney(pos.realized_pnl)}
               </td>
+              <td className={`px-2 py-1 text-right ${pnlTone(pos.total_pnl)}`}>{formatMoney(pos.total_pnl)}</td>
               <td className="px-2 py-1 text-[var(--text-tertiary)]">{pos.last_fill_at || "-"}</td>
             </tr>
           ))}
@@ -1429,6 +1576,7 @@ function LedgerForms({
 
 function PortfolioPageContent() {
   const portfolio = usePortfolioAccount();
+  const refreshQuotes = useRefreshPortfolioQuotes();
   const today = useTodayData();
   const watchlist = useWatchlist();
   const searchParams = useSearchParams();
@@ -1436,6 +1584,7 @@ function PortfolioPageContent() {
   const [optimisticNoFill, setOptimisticNoFill] = useState<NoFillItem | null>(null);
   const [optimisticOutcome, setOptimisticOutcome] = useState<WritebackOutcome | null>(null);
   const [storedOutcome, setStoredOutcome] = useState<WritebackOutcome | null>(null);
+  const [autoQuoteRefreshRequested, setAutoQuoteRefreshRequested] = useState(false);
   const defaultTradeDate = useMemo(
     () => data?.expected_trade_date || data?.trade_date || todayStr(),
     [data?.expected_trade_date, data?.trade_date],
@@ -1455,6 +1604,26 @@ function PortfolioPageContent() {
     );
     return exists ? serverItems : [...serverItems, optimisticNoFill];
   }, [data?.account.no_fill_intents, optimisticNoFill]);
+  const quoteStatus = data?.market_quotes;
+  const refreshQuotesMutate = refreshQuotes.mutate;
+  const refreshQuotesPending = refreshQuotes.isPending;
+
+  useEffect(() => {
+    if (!data?.account.open_positions.length) {
+      return;
+    }
+    if (quoteStatus?.enabled || refreshQuotesPending || autoQuoteRefreshRequested) {
+      return;
+    }
+    setAutoQuoteRefreshRequested(true);
+    refreshQuotesMutate();
+  }, [
+    autoQuoteRefreshRequested,
+    data?.account.open_positions.length,
+    quoteStatus?.enabled,
+    refreshQuotesMutate,
+    refreshQuotesPending,
+  ]);
 
   useEffect(() => {
     if (!optimisticNoFill || !data?.account.no_fill_intents?.length) {
@@ -1600,16 +1769,45 @@ function PortfolioPageContent() {
           icon={WalletCards}
           badge={data?.account.mode_label || "研究态"}
           actions={
-            <button
-              type="button"
-              className="focus-ring inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] px-3 py-2 text-[12px] text-[var(--text-secondary)]"
-              onClick={() => void portfolio.refetch()}
-            >
-              <RefreshCw size={14} className={portfolio.isFetching ? "animate-spin" : ""} />
-              刷新
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="focus-ring inline-flex items-center gap-2 rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-2 text-[12px] text-[var(--accent)]"
+                onClick={() => refreshQuotes.mutate()}
+                disabled={refreshQuotes.isPending}
+              >
+                <RefreshCw size={14} className={refreshQuotes.isPending ? "animate-spin" : ""} />
+                刷新行情
+              </button>
+              <button
+                type="button"
+                className="focus-ring inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] px-3 py-2 text-[12px] text-[var(--text-secondary)]"
+                onClick={() => void portfolio.refetch()}
+              >
+                <RefreshCw size={14} className={portfolio.isFetching ? "animate-spin" : ""} />
+                刷新账本
+              </button>
+            </div>
           }
         />
+
+        {quoteStatus?.enabled ? (
+          <div className="mb-4 flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-tertiary)]">
+            <Badge tone={quoteStatus.status === "ok" ? "buy" : quoteStatus.status === "partial" ? "watch" : "risk"}>
+              {quoteStatus.status === "ok" ? "行情已更新" : quoteStatus.status === "partial" ? "行情部分更新" : "行情未更新"}
+            </Badge>
+            <span>
+              {quoteStatus.message ? `${quoteStatus.message} ｜ ` : ""}
+              {quoteStatus.provider || "-"} ｜ {quoteStatus.updated_at || "-"}
+              {quoteStatus.missing_codes?.length ? ` ｜缺 ${quoteStatus.missing_codes.join("、")}` : ""}
+            </span>
+          </div>
+        ) : null}
+        {refreshQuotes.isError ? (
+          <div className="mb-4 text-[12px] text-[var(--tone-risk)]">
+            {refreshQuotes.error instanceof Error ? refreshQuotes.error.message : "行情刷新失败"}
+          </div>
+        ) : null}
 
         {portfolio.isError ? (
           <ErrorState message="账户数据暂不可用" onRetry={() => void portfolio.refetch()} />
@@ -1638,6 +1836,10 @@ function PortfolioPageContent() {
           <Panel title="未对账动作" eyebrow="Unreconciled intents" className="surface-card p-4">
             {data ? <UnreconciledList items={data.unreconciled_intents} /> : <SkeletonBlock className="h-16 w-full" />}
           </Panel>
+        </section>
+
+        <section className="mb-7">
+          <PositionLatestDecisionPanel positions={data?.account.open_positions || []} />
         </section>
 
         <section className="mb-7">

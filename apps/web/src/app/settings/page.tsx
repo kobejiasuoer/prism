@@ -25,7 +25,17 @@ import { MetricCard } from "@/components/metric-card";
 import { PageTitle } from "@/components/page-title";
 import { PreviewDrawer, type PreviewDrawerState } from "@/components/preview-drawer";
 import { api, ApiError } from "@/lib/api";
-import { useHealth, useOverview, useParameters, useRefreshStatus, useRunTask, useRuns, useSaveParameters, useTriggerRefresh } from "@/lib/hooks";
+import {
+  useDecisionLedgerHealth,
+  useHealth,
+  useOverview,
+  useParameters,
+  useRefreshStatus,
+  useRunTask,
+  useRuns,
+  useSaveParameters,
+  useTriggerRefresh,
+} from "@/lib/hooks";
 import {
   formatCooldown,
   normalizeTaskName,
@@ -35,7 +45,13 @@ import {
   refreshReasonLabel,
   refreshTaskCopy,
 } from "@/lib/readiness-copy";
-import type { ParametersResponse, RefreshStatus, RunItem, TaskDefinition } from "@/lib/types";
+import type {
+  DecisionLedgerHealthResponse,
+  ParametersResponse,
+  RefreshStatus,
+  RunItem,
+  TaskDefinition,
+} from "@/lib/types";
 
 function runIdOf(run?: RunItem) {
   return String(run?.run_id || run?.task_id || "").trim();
@@ -589,6 +605,112 @@ function SafeRefreshPanel({
   );
 }
 
+function schedulerHealthTone(health?: string) {
+  if (health === "success") {
+    return "positive";
+  }
+  if (health === "running") {
+    return "watch";
+  }
+  if (health === "failed") {
+    return "risk";
+  }
+  if (health === "stale") {
+    return "warning";
+  }
+  return "info";
+}
+
+function schedulerHealthLabel(health?: string) {
+  const labels: Record<string, string> = {
+    success: "今日成功",
+    running: "运行中",
+    failed: "今日失败",
+    stale: "旧数据",
+    missing: "未运行",
+  };
+  return labels[String(health || "")] || "待检查";
+}
+
+function SchedulerStatusPanel({ status }: { status?: RefreshStatus }) {
+  const scheduler = status?.scheduler_status;
+  const service = scheduler?.scheduler;
+  const summary = scheduler?.summary;
+  const jobs = scheduler?.jobs || [];
+  const visibleJobs = jobs.filter((job) => job.health !== "success").concat(jobs.filter((job) => job.health === "success")).slice(0, 7);
+  const hasIssues = Boolean((summary?.failed || 0) + (summary?.stale || 0) + (summary?.missing || 0));
+
+  return (
+    <Panel title="后台刷新守护" eyebrow="Scheduler">
+      <div className="surface-card p-4">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)]">
+              <RefreshCw size={18} className={service?.alive ? "text-[var(--positive)]" : "text-[var(--warning)]"} />
+            </div>
+            <div className="min-w-0">
+              <div className="font-medium text-[var(--text-primary)]">{service?.alive ? "Scheduler 正在心跳" : "Scheduler 未确认在线"}</div>
+              <div className="mt-1 truncate text-[12px] text-[var(--text-tertiary)]">
+                last tick {service?.last_tick_at || "-"} · pid {service?.pid || "-"}
+              </div>
+            </div>
+          </div>
+          <Badge tone={service?.alive && !hasIssues ? "positive" : hasIssues ? "warning" : "info"}>
+            {service?.alive && !hasIssues ? "守护正常" : hasIssues ? "需要留意" : "等待状态"}
+          </Badge>
+        </div>
+
+        <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+            <div className="text-[11px] text-[var(--text-tertiary)]">今日成功</div>
+            <div className="mt-1 text-[16px] font-semibold text-[var(--text-primary)]">{summary?.success ?? 0}</div>
+          </div>
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+            <div className="text-[11px] text-[var(--text-tertiary)]">运行中</div>
+            <div className="mt-1 text-[16px] font-semibold text-[var(--text-primary)]">{summary?.running ?? 0}</div>
+          </div>
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+            <div className="text-[11px] text-[var(--text-tertiary)]">失败</div>
+            <div className="mt-1 text-[16px] font-semibold text-[var(--text-primary)]">{summary?.failed ?? 0}</div>
+          </div>
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+            <div className="text-[11px] text-[var(--text-tertiary)]">旧/缺失</div>
+            <div className="mt-1 text-[16px] font-semibold text-[var(--text-primary)]">{(summary?.stale || 0) + (summary?.missing || 0)}</div>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          {visibleJobs.map((job) => {
+            const run = job.run || {};
+            return (
+              <div key={job.task_name || job.name} className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-medium text-[var(--text-primary)]">{job.name || run.title || job.task_name}</div>
+                    <div className="mono mt-1 text-[11px] text-[var(--text-tertiary)]">
+                      {job.cron_expr || "-"}{job.catchup_enabled ? ` · catch-up 至 ${job.catchup_until || "-"}` : ""}
+                    </div>
+                  </div>
+                  <Badge tone={schedulerHealthTone(job.health)}>{schedulerHealthLabel(job.health)}</Badge>
+                </div>
+                <div className="mt-2 text-[12px] leading-5 text-[var(--text-secondary)]">
+                  {run.finished_at || run.started_at || "今日暂无运行记录"}
+                  {run.trade_date ? ` · 数据日 ${run.trade_date}` : ""}
+                  {run.skip_reason ? ` · ${run.skip_reason}` : ""}
+                </div>
+                {job.depends_on?.length ? (
+                  <div className="mt-1 text-[11px] text-[var(--text-tertiary)]">依赖：{job.depends_on.join(" / ")}</div>
+                ) : null}
+              </div>
+            );
+          })}
+          {!visibleJobs.length ? <EmptyState>等待 scheduler 状态。</EmptyState> : null}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 function TaskRunnerPanel({
   tasks,
   feishuAvailable,
@@ -1011,6 +1133,121 @@ function RefreshPolicyPanel({ status }: { status?: RefreshStatus }) {
   );
 }
 
+function captureStatusTone(status?: string) {
+  if (status === "success") {
+    return "positive" as const;
+  }
+  if (status === "failed") {
+    return "risk" as const;
+  }
+  return "info" as const;
+}
+
+function DecisionLedgerHealthPanel() {
+  const ledger = useDecisionLedgerHealth();
+  const data = ledger.data as DecisionLedgerHealthResponse | undefined;
+
+  const capture = data?.last_capture;
+  const outcome = data?.last_outcome_evaluation;
+  const corrupt = data?.corrupt_files || [];
+  const statusErrors = data?.status_errors || [];
+
+  return (
+    <Panel
+      title="Decision Ledger 健康"
+      eyebrow="Ledger"
+      action={
+        <button
+          type="button"
+          className="focus-ring inline-flex items-center gap-1.5 rounded-md border border-[var(--border-subtle)] px-2 py-1 text-[11px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+          onClick={() => void ledger.refetch()}
+        >
+          <RefreshCw size={12} className={ledger.isFetching ? "animate-spin" : ""} />
+          刷新
+        </button>
+      }
+    >
+      <div className="surface-card p-4">
+        {ledger.isError ? (
+          <ErrorState message="Decision Ledger 健康暂不可用" onRetry={() => void ledger.refetch()} />
+        ) : !data ? (
+          <EmptyState>等待 Decision Ledger 健康数据。</EmptyState>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <MetricCard label="决策总数" value={data.decisions_total} tone="info" />
+              <MetricCard label="进行中" value={data.decisions_open} tone="info" />
+              <MetricCard label="已替代" value={data.decisions_superseded} tone="warning" />
+              <MetricCard label="待评估" value={data.pending_outcomes} tone={data.pending_outcomes > 0 ? "warning" : "info"} />
+            </div>
+
+            <div className="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-[12px] font-medium text-[var(--text-primary)]">最近一次 capture</div>
+                <Badge tone={captureStatusTone(capture?.status)}>{capture?.status || "未运行"}</Badge>
+              </div>
+              <div className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">
+                {capture
+                  ? `${capture.recorded_at || "-"} · 任务 ${capture.task_name || "-"} · 新增 ${capture.captured ?? 0} · 已存在 ${capture.already_present ?? 0} · 已替代 ${capture.superseded ?? 0}`
+                  : "scheduler 尚未执行 Decision Ledger capture 任务。"}
+              </div>
+              {capture?.status === "failed" && capture.error ? (
+                <div className="mt-1 text-[11px] text-[var(--text-warn)]">{capture.error}</div>
+              ) : null}
+            </div>
+
+            <div className="mt-3 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-[12px] font-medium text-[var(--text-primary)]">最近一次 outcome 评估</div>
+                <Badge tone={captureStatusTone(outcome?.status)}>{outcome?.status || "未运行"}</Badge>
+              </div>
+              <div className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">
+                {outcome
+                  ? `${outcome.recorded_at || "-"} · provider ${outcome.provider || "-"} · 新增 ${outcome.evaluated ?? 0} · 复用 ${outcome.already_present ?? 0} · 数据缺失 ${outcome.data_issue ?? 0}`
+                  : "尚未运行 evaluate_decision_ledger.py。"}
+              </div>
+              {outcome?.status === "failed" && outcome.error ? (
+                <div className="mt-1 text-[11px] text-[var(--text-warn)]">{outcome.error}</div>
+              ) : null}
+              {outcome && (outcome.skipped_no_provider ?? 0) > 0 ? (
+                <div className="mt-1 text-[11px] text-[var(--text-tertiary)]">
+                  缺少 price provider 时跳过 {outcome.skipped_no_provider} 项；下次接入 provider 后会重新评估。
+                </div>
+              ) : null}
+            </div>
+
+            {corrupt.length ? (
+              <div className="mt-3 rounded-md border border-[var(--border-warn)] bg-[var(--surface-warn)] px-3 py-2 text-[11px] text-[var(--text-warn)]">
+                <div className="font-medium">Decisions 文件损坏 ({corrupt.length})</div>
+                <ul className="mt-1 space-y-0.5">
+                  {corrupt.slice(0, 3).map((err, index) => (
+                    <li key={index} className="truncate">
+                      {err.file}: {err.error}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {statusErrors.length ? (
+              <div className="mt-3 rounded-md border border-[var(--border-warn)] bg-[var(--surface-warn)] px-3 py-2 text-[11px] text-[var(--text-warn)]">
+                <div className="font-medium">Status 文件解析失败 ({statusErrors.length})</div>
+                <ul className="mt-1 space-y-0.5">
+                  {statusErrors.slice(0, 3).map((err, index) => (
+                    <li key={index} className="truncate">
+                      {err.kind}: {err.error}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
 export default function SettingsPage() {
   const overview = useOverview();
   const health = useHealth();
@@ -1070,6 +1307,7 @@ export default function SettingsPage() {
             <div className="flex flex-col gap-6">
               <ReadinessStatusPanel status={refreshStatus.data} />
               <SafeRefreshPanel status={refreshStatus.data} tasks={safeTasks} />
+              <SchedulerStatusPanel status={refreshStatus.data} />
               <RefreshPolicyPanel status={refreshStatus.data} />
               <RecentRunsPanel runs={runRows} onPreview={setPreview} />
             </div>
@@ -1102,6 +1340,8 @@ export default function SettingsPage() {
                 feishuDetail={feishuDetail}
                 onPreview={setPreview}
               />
+
+              <DecisionLedgerHealthPanel />
 
               <ParametersEditor />
 

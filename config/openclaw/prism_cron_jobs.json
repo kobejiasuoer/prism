@@ -2,6 +2,36 @@
   "version": 1,
   "jobs": [
     {
+      "id": "prism-morning_warmup",
+      "agentId": "invest",
+      "sessionKey": "agent:invest:main",
+      "name": "晨间数据预热",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "25 9 * * 1-5",
+        "tz": "Asia/Shanghai"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "执行 晨间数据预热。发往飞书的消息由 shell runner 自己完成；最终回复只允许写 `DONE` 或 `FAILED: ...`。\n\n直接执行：`SEND_TO_FEISHU=1 FEISHU_TARGET= python3 apps/scripts/run_morning_warmup.py`\n如果 runner 已在运行或返回 running 状态，禁止重复执行。",
+        "timeoutSeconds": 600,
+        "toolsAllow": [
+          "exec"
+        ],
+        "thinking": "off",
+        "lightContext": true
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "feishu",
+        "to": ""
+      },
+      "state": {}
+    },
+    {
       "id": "prism-watchlist_refresh",
       "agentId": "invest",
       "sessionKey": "agent:invest:main",
@@ -167,6 +197,36 @@
       "payload": {
         "kind": "agentTurn",
         "message": "执行 收盘后总控简报。发往飞书的消息由 shell runner 自己完成；最终回复只允许写 `DONE` 或 `FAILED: ...`。\n\n直接执行：`SEND_TO_FEISHU=1 FEISHU_TARGET= bash apps/scripts/run_command_brief.sh`\n如果 runner 已在运行或返回 running 状态，禁止重复执行。",
+        "timeoutSeconds": 600,
+        "toolsAllow": [
+          "exec"
+        ],
+        "thinking": "off",
+        "lightContext": true
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "feishu",
+        "to": ""
+      },
+      "state": {}
+    },
+    {
+      "id": "prism-decision_ledger_outcomes",
+      "agentId": "invest",
+      "sessionKey": "agent:invest:main",
+      "name": "Decision Ledger 结果评估",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "35 15 * * 1-5",
+        "tz": "Asia/Shanghai"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "执行 Decision Ledger 结果评估。该任务只写本地状态文件；最终回复只允许写 `DONE` 或 `FAILED: ...`。\n\n直接执行：`python3 apps/scripts/evaluate_decision_ledger.py`\n如果 runner 已在运行或返回 running 状态，禁止重复执行。",
         "timeoutSeconds": 600,
         "toolsAllow": [
           "exec"

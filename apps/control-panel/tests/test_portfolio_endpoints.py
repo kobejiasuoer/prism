@@ -22,8 +22,13 @@ from fastapi.testclient import TestClient
 
 
 INVEST_FLOW_ROOT = Path(__file__).resolve().parents[2]
+PACKAGES_ROOT = INVEST_FLOW_ROOT.parent / "packages"
 if str(INVEST_FLOW_ROOT) not in sys.path:
     sys.path.insert(0, str(INVEST_FLOW_ROOT))
+if str(PACKAGES_ROOT) not in sys.path:
+    sys.path.insert(0, str(PACKAGES_ROOT))
+
+from prism_data.contracts import DatasetStatus, ProviderResult, ProviderRole  # noqa: E402
 
 
 class PortfolioEndpointsTests(unittest.TestCase):
@@ -73,6 +78,26 @@ class PortfolioEndpointsTests(unittest.TestCase):
         from control_panel.app import app  # type: ignore  # noqa: E402
 
         self.client = TestClient(app)
+
+    def _seed_two_positions(self) -> None:
+        self.client.post("/api/portfolio/cash", json={"delta": 10000.0, "reason": "seed"})
+        for code, name, price in (
+            ("sh600690", "海尔智家", 27.34),
+            ("sz000001", "平安银行", 10.0),
+        ):
+            response = self.client.post(
+                "/api/portfolio/fills",
+                json={
+                    "trade_date": "2026-05-06",
+                    "code": code,
+                    "side": "buy",
+                    "qty": 100,
+                    "price": price,
+                    "fees": 0.0,
+                    "name": name,
+                },
+            )
+            self.assertEqual(response.status_code, 200)
 
     def test_account_endpoint_returns_research_defaults(self) -> None:
         response = self.client.get("/api/portfolio/account")
@@ -186,6 +211,79 @@ class PortfolioEndpointsTests(unittest.TestCase):
         warning_codes = {item["code"] for item in (body["readiness"].get("warnings") or [])}
         self.assertIn("account_unsafe_bypass_active", warning_codes)
         self.assertNotEqual(body["readiness"]["readiness_mode"], "live_ready")
+
+    def test_quote_refresh_allows_partial_market_data(self) -> None:
+        self._seed_two_positions()
+        test_case = self
+
+        class PartialGateway:
+            def fetch_quotes_batch(self, codes, **kwargs):  # type: ignore[no-untyped-def]
+                test_case.assertIn("sh600690", codes)
+                test_case.assertIn("sz000001", codes)
+                from datetime import datetime
+
+                provider_result = ProviderResult(
+                    status=DatasetStatus.PARTIAL,
+                    data=[{"code": "sh600690", "price": 30.0, "change_pct": 1.23}],
+                    provider="fake",
+                    provider_role=ProviderRole.PRIMARY,
+                    dataset="quotes.batch",
+                    trade_date="2026-05-06",
+                    fetched_at=datetime(2026, 5, 6, 10, 0, 0),
+                    asof=datetime(2026, 5, 6, 10, 0, 0),
+                    error="sz000001 missing",
+                    row_count=1,
+                )
+                return type(
+                    "GatewayResult",
+                    (),
+                    {
+                        "data": provider_result.data,
+                        "manifest": {
+                            "provider": "fake",
+                            "trade_date": "2026-05-06",
+                            "fetched_at": "2026-05-06 10:00:00",
+                            "freshness_status": "fresh",
+                            "live_small_allowed": True,
+                        },
+                        "data_path": "/tmp/quotes.json",
+                        "manifest_path": "/tmp/quotes.manifest.json",
+                        "provider_result": provider_result,
+                    },
+                )()
+
+        with mock.patch("control_panel.dashboard_data.get_data_gateway", return_value=PartialGateway()):
+            response = self.client.post("/api/portfolio/quotes/refresh")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["market_quotes"]["status"], "partial")
+        self.assertEqual(body["market_quotes"]["missing_codes"], ["sz000001"])
+        by_code = {item["code"]: item for item in body["account"]["open_positions"]}
+        self.assertEqual(by_code["sh600690"]["current_price"], 30.0)
+        self.assertAlmostEqual(by_code["sh600690"]["market_value"], 3000.0, places=2)
+        self.assertIsNone(by_code["sz000001"]["current_price"])
+        self.assertIsNone(by_code["sz000001"]["total_pnl"])
+        self.assertIn("部分行情估值，缺 1 只", {card["label"]: card["detail"] for card in body["summary_cards"]}["持仓市值"])
+
+    def test_quote_refresh_failure_returns_portfolio_payload(self) -> None:
+        self._seed_two_positions()
+
+        class FailingGateway:
+            def fetch_quotes_batch(self, codes, **kwargs):  # type: ignore[no-untyped-def]
+                raise RuntimeError("provider unavailable")
+
+        with mock.patch("control_panel.dashboard_data.get_data_gateway", return_value=FailingGateway()):
+            response = self.client.post("/api/portfolio/quotes/refresh")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["market_quotes"]["status"], "failed")
+        self.assertIn("provider unavailable", body["market_quotes"]["message"])
+        self.assertIn("provider unavailable", body["market_quotes"]["errors"])
+        self.assertIsNone(body["account"]["market_value"])
+        self.assertIsNone(body["account"]["unrealized_pnl"])
+        self.assertEqual(body["summary_cards"][2]["value"], f"¥{body['account']['equity_at_cost']:,.2f}")
 
 
 if __name__ == "__main__":  # pragma: no cover

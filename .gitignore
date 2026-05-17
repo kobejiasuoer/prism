@@ -19,12 +19,15 @@ data/prism_data/
 data/scheduled_runs/
 data/config/*.local.json
 data/quant/reports/
+data/history/reports/command_brief/feishu-quality-dashboard.md
 packages/data/
 packages/reports/
 apps/data/
 apps/reports/
+apps/data/control_panel_state/
 stock-analyzer/data/daily_snapshots/*.json
 stock-analyzer/data/daily_snapshots/*.manifest.json
+stock-analyzer/data/*cache*/
 stock-analyzer/data/fund_flow_cache/*.json
 stock-analyzer/data/fundamentals_cache/*.json
 stock-analyzer/data/quality_gate_watchlist_*.json

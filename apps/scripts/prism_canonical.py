@@ -241,33 +241,68 @@ def resolve_watchlist_snapshot_path(path: str | None = None, trade_date: str | N
     return candidates[0] if candidates else None
 
 
-def resolve_screening_batch_path(path: str | None = None) -> Path | None:
-    if path:
-        candidate = Path(path).expanduser()
-        return candidate if candidate.exists() else None
-    for data_dir in SCREENER_DATA_DIRS:
-        current = data_dir / "ai_screening_result.json"
-        if current.exists():
-            return current
-    for data_dir in SCREENER_DATA_DIRS:
-        history = latest_matching(data_dir / "ai_history" / "ai_screening_*.json")
-        if history:
-            return history
+def _payload_trade_date(path: Path) -> str | None:
+    raw = load_json(path)
+    manifest = load_sidecar_manifest(path, raw)
+    candidates = [
+        (manifest or {}).get("trade_date"),
+        raw.get("trade_date"),
+        raw.get("source_scan_timestamp"),
+        raw.get("verified_against_scan_timestamp"),
+        raw.get("scan_timestamp"),
+        raw.get("timestamp"),
+        raw.get("generated_at"),
+    ]
+    for value in candidates:
+        text = str(value or "").strip()
+        if len(text) >= 10 and re.match(r"^\d{4}-\d{2}-\d{2}", text):
+            return text[:10]
     return None
 
 
-def resolve_confirmation_path(path: str | None = None) -> Path | None:
+def _matches_trade_date(path: Path, trade_date: str | None) -> bool:
+    if not trade_date:
+        return True
+    return _payload_trade_date(path) == trade_date
+
+
+def resolve_screening_batch_path(path: str | None = None, trade_date: str | None = None) -> Path | None:
     if path:
         candidate = Path(path).expanduser()
-        return candidate if candidate.exists() else None
+        return candidate if candidate.exists() and _matches_trade_date(candidate, trade_date) else None
     for data_dir in SCREENER_DATA_DIRS:
-        current = data_dir / "midday_verification_result.json"
-        if current.exists():
+        current = data_dir / "ai_screening_result.json"
+        if current.exists() and _matches_trade_date(current, trade_date):
             return current
     for data_dir in SCREENER_DATA_DIRS:
-        history = latest_matching(data_dir / "midday_verification_*.json")
+        history = [
+            candidate
+            for candidate in (data_dir / "ai_history").glob("ai_screening_*.json")
+            if _matches_trade_date(candidate, trade_date)
+        ]
+        history.sort(key=_path_sort_key, reverse=True)
         if history:
-            return history
+            return history[0]
+    return None
+
+
+def resolve_confirmation_path(path: str | None = None, trade_date: str | None = None) -> Path | None:
+    if path:
+        candidate = Path(path).expanduser()
+        return candidate if candidate.exists() and _matches_trade_date(candidate, trade_date) else None
+    for data_dir in SCREENER_DATA_DIRS:
+        current = data_dir / "midday_verification_result.json"
+        if current.exists() and _matches_trade_date(current, trade_date):
+            return current
+    for data_dir in SCREENER_DATA_DIRS:
+        history = [
+            candidate
+            for candidate in data_dir.glob("midday_verification_*.json")
+            if _matches_trade_date(candidate, trade_date)
+        ]
+        history.sort(key=_path_sort_key, reverse=True)
+        if history:
+            return history[0]
     return None
 
 
@@ -649,8 +684,8 @@ def normalize_candidate(raw: dict[str, Any], batch_id: str) -> dict[str, Any]:
     }
 
 
-def load_screening_batch(path: str | None = None) -> dict[str, Any]:
-    batch_path = resolve_screening_batch_path(path=path)
+def load_screening_batch(path: str | None = None, trade_date: str | None = None) -> dict[str, Any]:
+    batch_path = resolve_screening_batch_path(path=path, trade_date=trade_date)
     if not batch_path:
         raise FileNotFoundError("screening batch not found")
 
@@ -720,8 +755,8 @@ def normalize_confirmation_item(
     }
 
 
-def load_confirmation(path: str | None = None) -> dict[str, Any]:
-    confirm_path = resolve_confirmation_path(path=path)
+def load_confirmation(path: str | None = None, trade_date: str | None = None) -> dict[str, Any]:
+    confirm_path = resolve_confirmation_path(path=path, trade_date=trade_date)
     if not confirm_path:
         raise FileNotFoundError("confirmation result not found")
 
@@ -850,14 +885,18 @@ def load_decision_brief(path: str | None = None, trade_date: str | None = None) 
     }
 
 
-def find_candidate_detail(code: str, path: str | None = None) -> dict[str, Any]:
+def find_candidate_detail(code: str, path: str | None = None, trade_date: str | None = None) -> dict[str, Any]:
     target = code.strip()
-    batch = load_screening_batch(path=path)
+    batch = (
+        load_screening_batch(path=path, trade_date=trade_date)
+        if trade_date is not None
+        else load_screening_batch(path=path)
+    )
     for candidate in batch.get("candidates", []):
         if candidate.get("code") == target:
             return candidate
 
-    confirmation = load_confirmation()
+    confirmation = load_confirmation(trade_date=trade_date) if trade_date is not None else load_confirmation()
     for group in ("confirmed", "downgraded", "fresh_candidates"):
         for item in confirmation.get(group, []):
             if item.get("code") != target:

@@ -11,9 +11,11 @@ import { EvidencePanel } from "@/components/evidence-panel";
 import { MetricCard, MetricSkeleton } from "@/components/metric-card";
 import { PageTitle } from "@/components/page-title";
 import { RiskAlert } from "@/components/risk-alert";
-import { useReview, useReviewDetail } from "@/lib/hooks";
+import { useDecisionLedgerRecent, useReview, useReviewDetail } from "@/lib/hooks";
 import type {
   BasicCard,
+  DecisionLedgerCompactRecord,
+  DecisionLedgerRecentResponse,
   MetricCardData,
   ReviewComparisonPanel,
   ReviewData,
@@ -529,6 +531,105 @@ function ChangeLogPanel({ data }: { data?: ReviewData }) {
   );
 }
 
+function DecisionLedgerRecentPanel() {
+  const ledger = useDecisionLedgerRecent(10);
+  const data = ledger.data as DecisionLedgerRecentResponse | undefined;
+  const items = data?.items || [];
+  const errors = data?.errors || [];
+
+  return (
+    <Panel
+      title="Decision Ledger 最近记录"
+      eyebrow="Decision Ledger"
+      action={
+        <button
+          type="button"
+          className="focus-ring inline-flex items-center gap-1.5 rounded-md border border-[var(--border-subtle)] px-2 py-1 text-[11px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+          onClick={() => void ledger.refetch()}
+        >
+          <RefreshCw size={12} className={ledger.isFetching ? "animate-spin" : ""} />
+          刷新
+        </button>
+      }
+    >
+      <div className="surface-card p-4">
+        {ledger.isLoading && !data ? (
+          <div className="flex flex-col gap-2">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <SkeletonBlock key={index} className="h-14 w-full" />
+            ))}
+          </div>
+        ) : ledger.isError ? (
+          <ErrorState message="Decision Ledger 暂不可用" onRetry={() => void ledger.refetch()} />
+        ) : !items.length ? (
+          <EmptyState>暂无捕获的决策记录。</EmptyState>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {items.map((item) => (
+              <DecisionLedgerRow key={item.decision_id} item={item} />
+            ))}
+          </div>
+        )}
+        {errors.length ? (
+          <div className="mt-3 rounded-md border border-[var(--border-warn)] bg-[var(--surface-warn)] px-3 py-2 text-[11px] text-[var(--text-warn)]">
+            <div className="font-medium">部分 ledger 文件解析失败 ({errors.length})</div>
+            <ul className="mt-1 space-y-0.5">
+              {errors.slice(0, 3).map((err, index) => (
+                <li key={index} className="truncate">
+                  {err.file}: {err.error}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
+    </Panel>
+  );
+}
+
+function DecisionLedgerRow({ item }: { item: DecisionLedgerCompactRecord }) {
+  const executionTone = item.latest_execution?.status ? "info" : "stale";
+  const outcomeLabel = item.latest_outcome?.label;
+  const outcomeTone = (item.latest_outcome?.tone as Tone) || (outcomeLabel ? "info" : "stale");
+  const statusTone: Tone = item.status === "superseded" ? "warning" : "good";
+
+  const stockHref = item.code ? `/stock/${encodeURIComponent(item.code)}` : "";
+  const row = (
+    <div className="flex min-h-[64px] flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2 transition-colors hover:border-[var(--border-default)]">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 text-[12px] text-[var(--text-primary)]">
+          <span className="font-medium">{item.name || item.code}</span>
+          <span className="text-[11px] text-[var(--text-tertiary)]">{item.code}</span>
+          <span className="text-[11px] text-[var(--text-tertiary)]">{item.trade_date}</span>
+        </div>
+        {item.main_conclusion ? (
+          <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-[var(--text-tertiary)]">{item.main_conclusion}</div>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {item.lane ? <Badge tone="info">{item.lane}</Badge> : null}
+        {item.action_label || item.action ? (
+          <Badge tone="watch">{item.action_label || item.action}</Badge>
+        ) : null}
+        <Badge tone={executionTone}>
+          执行 {item.latest_execution?.status || "未记录"}
+        </Badge>
+        <Badge tone={outcomeTone}>
+          结果 {outcomeLabel ? `${item.latest_outcome?.window || ""} ${outcomeLabel}` : "待评估"}
+        </Badge>
+        <Badge tone={statusTone}>{item.status === "superseded" ? "已被替代" : "open"}</Badge>
+      </div>
+    </div>
+  );
+  return stockHref ? (
+    <Link href={stockHref} className="focus-ring block">
+      {row}
+    </Link>
+  ) : (
+    row
+  );
+}
+
 function ReviewPageContent() {
   const searchParams = useSearchParams();
   const baseline = cleanParam(searchParams.get("baseline"));
@@ -688,6 +789,12 @@ function ReviewPageContent() {
               </div>
             </Panel>
             <LifecycleGroups data={data} />
+          </section>
+        ) : null}
+
+        {!showingDetail ? (
+          <section className="mb-7">
+            <DecisionLedgerRecentPanel />
           </section>
         ) : null}
 

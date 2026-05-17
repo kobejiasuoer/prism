@@ -73,6 +73,8 @@ from watchlist_registry import (
 from prism_storage import AppStateRepository, ArtifactRepository, TaskRunRepository
 from prism_storage.paths import RUNTIME_ROOT, ensure_data_dirs, resolve_workspace_path
 from prism_data.providers.common import request_json_http
+from prism_data.service import get_data_gateway
+from prism_data.utils import normalize_code
 
 RESEARCH_REPORTS_DIR = STOCK_SCREENER_ROOT / "data" / "research_backfill" / "reports"
 ARTIFACTS_ROOT = SKILLS_ROOT / "data" / "artifacts"
@@ -86,7 +88,11 @@ CONTROL_PANEL_LOG_DIRS = (CONTROL_PANEL_LOGS_DIR, LEGACY_CONTROL_PANEL_LOGS_DIR)
 CONTROL_PANEL_STATE_DIR = INVEST_FLOW_ROOT / "data" / "control_panel_state"
 TODAY_ACTION_STATE_PATH = CONTROL_PANEL_STATE_DIR / "today_action_decisions.json"
 ASK_RECENT_STATE_PATH = CONTROL_PANEL_STATE_DIR / "ask_recent_queries.json"
-QUALITY_DASHBOARD_PATH = INVEST_FLOW_ROOT / "reports" / "feishu-quality-dashboard.md"
+QUALITY_DASHBOARD_PATH = RUNTIME_ROOT / "reports" / "command_brief" / "feishu-quality-dashboard.md"
+LEGACY_QUALITY_DASHBOARD_PATHS = (
+    INVEST_FLOW_ROOT / "reports" / "feishu-quality-dashboard.md",
+    WORKSPACE_ROOT / "data" / "history" / "reports" / "command_brief" / "feishu-quality-dashboard.md",
+)
 WATCHLIST_REFRESH_TASK_NAME = "watchlist_refresh"
 TASK_NAME_ALIASES = {
     "watchlist": WATCHLIST_REFRESH_TASK_NAME,
@@ -812,7 +818,16 @@ def latest_ai_history_info() -> dict[str, Any]:
 
 
 def latest_midday_info() -> dict[str, Any]:
-    path = next((candidate for data_dir in SCREENER_DATA_DIRS if (candidate := data_dir / "midday_verification_result.json").exists()), None)
+    expected = expected_trade_date()
+    path = next(
+        (
+            candidate
+            for data_dir in SCREENER_DATA_DIRS
+            if (candidate := data_dir / "midday_verification_result.json").exists()
+            and (load_json(candidate) or {}).get("timestamp", "")[:10] == expected
+        ),
+        None,
+    )
     if path is None:
         return {"label": "午盘确认", "value": "-", "detail": "暂无午盘结果"}
     data = load_json(path) or {}
@@ -824,7 +839,20 @@ def latest_midday_info() -> dict[str, Any]:
 
 
 def latest_midday_refresh_info() -> dict[str, Any]:
-    path = next((candidate for data_dir in SCREENER_DATA_DIRS if (candidate := data_dir / "midday_refresh_result.json").exists()), None)
+    expected = expected_trade_date()
+    path = next(
+        (
+            candidate
+            for data_dir in SCREENER_DATA_DIRS
+            if (candidate := data_dir / "midday_refresh_result.json").exists()
+            and (
+                (load_json(candidate) or {}).get("scan_timestamp", "")[:10] == expected
+                or (load_json(candidate) or {}).get("source_scan_timestamp", "")[:10] == expected
+                or (load_json(candidate) or {}).get("timestamp", "")[:10] == expected
+            )
+        ),
+        None,
+    )
     if path is None:
         return {"label": "午盘刷新", "value": "-", "detail": "暂无刷新结果"}
     data = load_json(path) or {}
@@ -836,17 +864,31 @@ def latest_midday_refresh_info() -> dict[str, Any]:
 
 
 def latest_dashboard_info() -> dict[str, Any]:
-    if not QUALITY_DASHBOARD_PATH.exists():
+    path = next((candidate for candidate in (QUALITY_DASHBOARD_PATH, *LEGACY_QUALITY_DASHBOARD_PATHS) if candidate.exists()), None)
+    if path is None:
         return {"label": "质检总览", "value": "-", "detail": "尚未生成"}
     return {
         "label": "质检总览",
-        "value": fmt_mtime_full(QUALITY_DASHBOARD_PATH),
-        "detail": QUALITY_DASHBOARD_PATH.name,
+        "value": fmt_mtime_full(path),
+        "detail": path.name,
     }
 
 
 def latest_midday_refresh_status() -> dict[str, Any] | None:
-    path = next((candidate for data_dir in SCREENER_DATA_DIRS if (candidate := data_dir / "midday_refresh_result.json").exists()), None)
+    expected = expected_trade_date()
+    path = next(
+        (
+            candidate
+            for data_dir in SCREENER_DATA_DIRS
+            if (candidate := data_dir / "midday_refresh_result.json").exists()
+            and (
+                (load_json(candidate) or {}).get("scan_timestamp", "")[:10] == expected
+                or (load_json(candidate) or {}).get("source_scan_timestamp", "")[:10] == expected
+                or (load_json(candidate) or {}).get("timestamp", "")[:10] == expected
+            )
+        ),
+        None,
+    )
     if path is None:
         return None
     data = load_json(path) or {}
@@ -1703,6 +1745,20 @@ def detail_value(value: Any, fallback: str = "-") -> Any:
     if value in (None, "", [], {}):
         return fallback
     return value
+
+
+def round_money(value: Any) -> float:
+    try:
+        return round(float(value), 2)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def optional_round_money(value: Any) -> float | None:
+    try:
+        return round(float(value), 2)
+    except (TypeError, ValueError):
+        return None
 
 
 def text_items(values: list[Any] | None) -> list[str]:
@@ -3582,9 +3638,10 @@ def build_ask_followup_view(question: str, query: str, history: list[dict[str, A
     if cached_case:
         case = cached_case
     else:
-        watchlist = safe_canonical_load(load_watchlist_snapshot)
-        screening_batch = safe_canonical_load(load_screening_batch)
-        confirmation = safe_canonical_load(load_confirmation)
+        trade_date_hint = expected_trade_date()
+        watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
+        screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint)
+        confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
         case = build_ask_case_view(query_text, watchlist, screening_batch, confirmation)
         remember_ask_case_cache(case)
 
@@ -3882,9 +3939,10 @@ def build_ask_recent_queries(
     limit: int = 8,
 ) -> list[dict[str, Any]]:
     if watchlist is None and screening_batch is None and confirmation is None:
-        watchlist = safe_canonical_load(load_watchlist_snapshot)
-        screening_batch = safe_canonical_load(load_screening_batch)
-        confirmation = safe_canonical_load(load_confirmation)
+        trade_date_hint = expected_trade_date()
+        watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
+        screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint)
+        confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
 
     catalog = build_stock_catalog(watchlist, screening_batch, confirmation)
     items: list[dict[str, Any]] = []
@@ -3931,9 +3989,10 @@ def build_ask_suggestions(
     limit: int = 8,
 ) -> list[dict[str, Any]]:
     if watchlist is None and screening_batch is None and confirmation is None:
-        watchlist = safe_canonical_load(load_watchlist_snapshot)
-        screening_batch = safe_canonical_load(load_screening_batch)
-        confirmation = safe_canonical_load(load_confirmation)
+        trade_date_hint = expected_trade_date()
+        watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
+        screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint)
+        confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
 
     query_text = str(query or "").strip()
     recent_queries = build_ask_recent_queries(watchlist, screening_batch, confirmation, limit=limit)
@@ -4070,9 +4129,10 @@ def build_ask_suggestions(
 
 
 def build_ask_page_view(query: str | None = None, error: str | None = None) -> dict[str, Any]:
-    watchlist = safe_canonical_load(load_watchlist_snapshot)
-    screening_batch = safe_canonical_load(load_screening_batch)
-    confirmation = safe_canonical_load(load_confirmation)
+    trade_date_hint = expected_trade_date()
+    watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
+    screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint)
+    confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
     query_text = str(query or "").strip()
     ask_case = None
     ask_error = error
@@ -6964,10 +7024,11 @@ def build_watchlist_day_over_day_diff(today: dict[str, Any] | None) -> dict[str,
 
 
 def build_watchlist_page_view() -> dict[str, Any]:
-    decision_brief = safe_canonical_load(load_decision_brief)
-    watchlist = load_watchlist_snapshot()
-    screening_batch = safe_canonical_load(load_screening_batch)
-    confirmation = safe_canonical_load(load_confirmation)
+    trade_date_hint = expected_trade_date()
+    decision_brief = safe_canonical_load(load_decision_brief, trade_date=trade_date_hint)
+    watchlist = load_watchlist_snapshot(trade_date=trade_date_hint)
+    screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint)
+    confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
     quality = safe_canonical_load(load_quality_status, lane="watchlist")
 
     readiness_for_page = compute_readiness(
@@ -7193,10 +7254,11 @@ def build_watchlist_page_view() -> dict[str, Any]:
 
 
 def build_opportunities_view() -> dict[str, Any]:
-    decision_brief = safe_canonical_load(load_decision_brief)
-    watchlist = safe_canonical_load(load_watchlist_snapshot)
-    screening_batch = load_screening_batch()
-    confirmation = safe_canonical_load(load_confirmation)
+    trade_date_hint = expected_trade_date()
+    decision_brief = safe_canonical_load(load_decision_brief, trade_date=trade_date_hint)
+    watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
+    screening_batch = load_screening_batch(trade_date=trade_date_hint)
+    confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
     aggressive_quality = safe_canonical_load(load_quality_status, lane="aggressive")
     midday_quality = safe_canonical_load(load_quality_status, lane="midday_confirmation")
 
@@ -7798,7 +7860,8 @@ def build_review_view(baseline_id: str | None = None, window_id: str | None = No
 
 
 def build_watchlist_detail_view(code: str) -> dict[str, Any]:
-    snapshot = load_watchlist_snapshot(code=code)
+    trade_date_hint = expected_trade_date()
+    snapshot = load_watchlist_snapshot(code=code, trade_date=trade_date_hint)
     stocks = snapshot.get("stocks") or []
     if not stocks:
         raise KeyError(f"watchlist stock not found: {code}")
@@ -7814,9 +7877,9 @@ def build_watchlist_detail_view(code: str) -> dict[str, Any]:
         or "等待更多确认"
     )
 
-    screening_batch = safe_canonical_load(load_screening_batch)
-    confirmation = safe_canonical_load(load_confirmation)
-    candidate = safe_canonical_load(find_candidate_detail, code=stock.get("code"))
+    screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint)
+    confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
+    candidate = safe_canonical_load(find_candidate_detail, code=stock.get("code"), trade_date=trade_date_hint)
     confirmation_match = find_confirmation_match(confirmation, stock.get("code") or "")
 
     related_status = [
@@ -7982,10 +8045,11 @@ def build_watchlist_detail_view(code: str) -> dict[str, Any]:
 
 
 def build_candidate_detail_view(code: str) -> dict[str, Any]:
-    candidate = find_candidate_detail(code=code)
-    screening_batch = safe_canonical_load(load_screening_batch)
-    confirmation = safe_canonical_load(load_confirmation)
-    watchlist = safe_canonical_load(load_watchlist_snapshot)
+    trade_date_hint = expected_trade_date()
+    candidate = find_candidate_detail(code=code, trade_date=trade_date_hint)
+    screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint)
+    confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
+    watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
 
     watchlist_stock = find_watchlist_stock(watchlist, candidate.get("code") or "")
     confirmation_match = find_confirmation_match(confirmation, candidate.get("code") or "")
@@ -8210,10 +8274,11 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
     if not normalized_code:
         raise KeyError("stock code missing")
 
-    decision_brief = safe_canonical_load(load_decision_brief)
-    watchlist = safe_canonical_load(load_watchlist_snapshot)
-    screening_batch = safe_canonical_load(load_screening_batch)
-    confirmation = safe_canonical_load(load_confirmation)
+    trade_date_hint = expected_trade_date()
+    decision_brief = safe_canonical_load(load_decision_brief, trade_date=trade_date_hint)
+    watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
+    screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint)
+    confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
     quality_status = safe_canonical_load(load_quality_status, lane="all")
     account_book = load_account_book()
     today_action_decisions = load_today_action_decision_store()
@@ -8321,7 +8386,7 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
 
 
 def build_screening_batch_view() -> dict[str, Any]:
-    screening_batch = load_screening_batch()
+    screening_batch = load_screening_batch(trade_date=expected_trade_date())
     quality = safe_canonical_load(load_quality_status, lane="aggressive")
     gate = ((screening_batch.get("market_regime") or {}).get("execution_gate") or {})
     themes = ((screening_batch.get("market_themes") or {}).get("themes") or [])[:5]
@@ -8395,7 +8460,7 @@ def build_screening_batch_view() -> dict[str, Any]:
 
 
 def build_confirmation_view() -> dict[str, Any]:
-    confirmation = load_confirmation()
+    confirmation = load_confirmation(trade_date=expected_trade_date())
     quality = safe_canonical_load(load_quality_status, lane="midday_confirmation")
 
     artifacts = [
@@ -8474,8 +8539,8 @@ def build_today_view() -> dict[str, Any]:
     trade_date_hint = expected_trade_date()
     decision_brief = safe_canonical_load(load_decision_brief, trade_date=trade_date_hint)
     watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
-    screening_batch = safe_canonical_load(load_screening_batch)
-    confirmation = safe_canonical_load(load_confirmation)
+    screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint)
+    confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
     quality_status = safe_canonical_load(load_quality_status, lane="all")
     lifecycle_context = resolve_lifecycle_context()
     account_book = load_account_book()
@@ -8779,7 +8844,142 @@ def build_today_view() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def build_portfolio_account_view() -> dict[str, Any]:
+def _portfolio_quote_index(
+    codes: list[str],
+    *,
+    trade_date: str,
+    refresh_quotes: bool,
+) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
+    normalized_codes: list[str] = []
+    for code in codes:
+        try:
+            normalized = normalize_code(code)
+        except ValueError:
+            continue
+        if normalized not in normalized_codes:
+            normalized_codes.append(normalized)
+
+    empty_status = {
+        "enabled": bool(refresh_quotes),
+        "status": "not_requested" if not refresh_quotes else "no_positions",
+        "message": "未刷新行情。" if not refresh_quotes else "当前没有持仓代码可刷新。",
+        "requested_codes": normalized_codes,
+        "updated_at": "",
+        "trade_date": trade_date,
+        "provider": "",
+        "freshness_status": "",
+        "live_small_allowed": False,
+        "data_path": "",
+        "manifest_path": "",
+        "errors": [],
+    }
+    if not refresh_quotes or not normalized_codes:
+        return {}, empty_status
+
+    try:
+        result = get_data_gateway().fetch_quotes_batch(
+            normalized_codes,
+            trade_date=trade_date,
+            key="portfolio-quotes",
+            allow_fallback=True,
+        )
+    except Exception as exc:
+        return {}, {
+            **empty_status,
+            "status": "failed",
+            "message": f"行情刷新失败：{exc}",
+            "errors": [str(exc)],
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+    manifest = dict(result.manifest or {})
+    rows = result.data if isinstance(result.data, list) else []
+    quote_index: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        aliases: set[str] = set()
+        for raw in (row.get("symbol"), row.get("code")):
+            try:
+                aliases.add(normalize_code(raw))
+            except ValueError:
+                continue
+        price = round_money(row.get("price"))
+        if price <= 0:
+            continue
+        quote = {
+            "code": next(iter(aliases), str(row.get("code") or "")),
+            "name": str(row.get("name") or ""),
+            "price": price,
+            "change": optional_round_money(row.get("change")),
+            "change_pct": optional_round_money(row.get("change_pct")),
+            "trade_date": str(row.get("trade_date") or manifest.get("trade_date") or trade_date),
+            "timestamp": str(row.get("timestamp") or manifest.get("asof") or manifest.get("fetched_at") or ""),
+            "provider": str(manifest.get("provider") or ""),
+        }
+        for alias in aliases:
+            quote_index[alias] = quote
+
+    errors = []
+    provider_error = result.provider_result.error
+    if provider_error:
+        errors.append(str(provider_error))
+    missing = [code for code in normalized_codes if code not in quote_index]
+    status = "ok" if quote_index and not missing else "partial" if quote_index else "failed"
+    return quote_index, {
+        **empty_status,
+        "status": status,
+        "message": "行情已刷新。" if status == "ok" else "部分持仓未取到行情。" if status == "partial" else "未取到可用行情。",
+        "updated_at": str(manifest.get("fetched_at") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+        "trade_date": str(manifest.get("trade_date") or trade_date),
+        "provider": str(manifest.get("provider") or ""),
+        "freshness_status": str(manifest.get("freshness_status") or ""),
+        "live_small_allowed": bool(manifest.get("live_small_allowed")),
+        "row_count": len(rows),
+        "priced_count": len({quote["code"] for quote in quote_index.values()}),
+        "missing_codes": missing,
+        "data_path": str(result.data_path or ""),
+        "manifest_path": str(result.manifest_path or ""),
+        "errors": errors,
+    }
+
+
+def _attach_portfolio_market_values(
+    positions: list[dict[str, Any]],
+    quote_index: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    enriched: list[dict[str, Any]] = []
+    for pos in positions:
+        try:
+            normalized = normalize_code(pos.get("code"))
+        except ValueError:
+            normalized = str(pos.get("code") or "")
+        quote = quote_index.get(normalized)
+        qty = int(pos.get("qty") or 0)
+        cost_basis = round_money(pos.get("cost_basis"))
+        realized = round_money(pos.get("realized_pnl"))
+        current_price = round_money((quote or {}).get("price")) if quote else None
+        market_value = round_money(qty * current_price) if current_price is not None else None
+        unrealized = round_money((market_value or 0.0) - cost_basis) if market_value is not None else None
+        total_pnl = round_money(realized + unrealized) if unrealized is not None else None
+        enriched.append(
+            {
+                **pos,
+                "current_price": current_price,
+                "market_value": market_value,
+                "unrealized_pnl": unrealized,
+                "unrealized_pnl_pct": round_money((unrealized / cost_basis) * 100) if unrealized is not None and cost_basis else None,
+                "total_pnl": total_pnl,
+                "quote_change_pct": (quote or {}).get("change_pct") if quote else None,
+                "quote_timestamp": (quote or {}).get("timestamp", "") if quote else "",
+                "quote_trade_date": (quote or {}).get("trade_date", "") if quote else "",
+                "quote_provider": (quote or {}).get("provider", "") if quote else "",
+            }
+        )
+    return enriched
+
+
+def build_portfolio_account_view(*, refresh_quotes: bool = False) -> dict[str, Any]:
     """Build the canonical account-state view for the Portfolio page.
 
     Combines:
@@ -8791,10 +8991,11 @@ def build_portfolio_account_view() -> dict[str, Any]:
     """
 
     ensure_runtime_dirs()
-    decision_brief = safe_canonical_load(load_decision_brief)
-    watchlist = safe_canonical_load(load_watchlist_snapshot)
-    screening_batch = safe_canonical_load(load_screening_batch)
-    confirmation = safe_canonical_load(load_confirmation)
+    trade_date_hint = expected_trade_date()
+    decision_brief = safe_canonical_load(load_decision_brief, trade_date=trade_date_hint)
+    watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
+    screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint)
+    confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
     quality_status = safe_canonical_load(load_quality_status, lane="all")
     account_book = load_account_book()
     today_action_decisions = load_today_action_decision_store()
@@ -8854,6 +9055,23 @@ def build_portfolio_account_view() -> dict[str, Any]:
     ]
     recent_fills = sorted(fills, key=lambda f: f.get("ts", ""), reverse=True)[:25]
 
+    quote_index, market_status = _portfolio_quote_index(
+        [str(pos.get("code") or "") for pos in open_positions],
+        trade_date=str(readiness.get("expected_trade_date") or expected_trade_date()),
+        refresh_quotes=refresh_quotes,
+    )
+    open_positions = _attach_portfolio_market_values(open_positions, quote_index)
+    market_value = round_money(sum(float(p.get("market_value") or 0.0) for p in open_positions if p.get("market_value") is not None))
+    unrealized_pnl = round_money(sum(float(p.get("unrealized_pnl") or 0.0) for p in open_positions if p.get("unrealized_pnl") is not None))
+    total_pnl = round_money(float(account_view["realized_pnl"]) + unrealized_pnl)
+    missing_quote_count = len(market_status.get("missing_codes") or [])
+    quote_value_detail = f"{len(open_positions)} 只持仓，未刷新行情"
+    if market_status["status"] == "ok":
+        quote_value_detail = f"{len(open_positions)} 只持仓，已按行情估值"
+    elif market_status["status"] == "partial":
+        quote_value_detail = f"{len(open_positions)} 只持仓，部分行情估值，缺 {missing_quote_count} 只"
+    book_value = round_money(cash_balance + (market_value if market_status["status"] in {"ok", "partial"} else float(account_view["equity_at_cost"])))
+
     summary_cards = [
         {
             "label": "运行模式",
@@ -8868,16 +9086,16 @@ def build_portfolio_account_view() -> dict[str, Any]:
             "tone": "risk" if cash_balance < 0 else "info",
         },
         {
-            "label": "持仓成本",
-            "value": f"¥{account_view['equity_at_cost']:,.2f}",
-            "detail": f"{len(open_positions)} 只持仓",
+            "label": "持仓市值",
+            "value": f"¥{market_value:,.2f}" if market_status["status"] in {"ok", "partial"} else f"¥{account_view['equity_at_cost']:,.2f}",
+            "detail": quote_value_detail,
             "tone": "watch" if open_positions else "info",
         },
         {
-            "label": "已实现盈亏",
-            "value": f"¥{account_view['realized_pnl']:,.2f}",
-            "detail": f"{len(closed_positions)} 只已平",
-            "tone": "positive" if account_view["realized_pnl"] >= 0 else "risk",
+            "label": "总盈亏",
+            "value": f"¥{total_pnl:,.2f}",
+            "detail": f"浮盈亏 ¥{unrealized_pnl:,.2f} / 已实现 ¥{account_view['realized_pnl']:,.2f}",
+            "tone": "positive" if total_pnl >= 0 else "risk",
         },
     ]
 
@@ -8890,10 +9108,15 @@ def build_portfolio_account_view() -> dict[str, Any]:
         "readiness": readiness,
         "account": {
             **account_view,
+            "book_value": book_value,
+            "market_value": market_value if market_status["status"] in {"ok", "partial"} else None,
+            "unrealized_pnl": unrealized_pnl if market_status["status"] in {"ok", "partial"} else None,
+            "total_pnl": total_pnl,
             "open_positions": open_positions,
             "closed_positions": closed_positions,
             "available_modes": list(ACCOUNT_MODES),
         },
+        "market_quotes": market_status,
         "summary_cards": summary_cards,
         "recent_fills": recent_fills,
         "unreconciled_intents": account_state.get("unreconciled_intents", []),
