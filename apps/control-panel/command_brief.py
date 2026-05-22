@@ -211,6 +211,14 @@ def derive_position_cap(
     return {"value": value, "raw": raw, "tone": tone, "note": note}
 
 
+def _action_item_state(item: dict[str, Any] | None) -> str:
+    safe = item or {}
+    state = (safe.get("display_state") or {}).get("value")
+    if not state:
+        state = (safe.get("decision") or {}).get("value")
+    return str(state or "pending")
+
+
 def derive_first_action(
     *,
     mode_value: str,
@@ -229,10 +237,7 @@ def derive_first_action(
         }
 
     items = (action_queue or {}).get("items") or []
-    pending = [
-        item for item in items
-        if str(((item or {}).get("display_state") or {}).get("value") or item.get("decision", {}).get("value") or "pending") == "pending"
-    ]
+    pending = [item for item in items if item and _action_item_state(item) == "pending"]
     if pending:
         first = pending[0]
         return {
@@ -464,7 +469,8 @@ def _new_quality_dimension(confirmation: dict[str, Any] | None) -> dict[str, Any
     return {"dim": "new_quality", "title": "新机会质量", "verdict": verdict, "tone": tone, "evidence": evidence, "impact": impact}
 
 
-_STOCK_CODE_PATTERN = re.compile(r"(?<!\d)(\d{6})(?!\d)")
+# Match A-share 6-digit codes: 60xxxx (SH), 0xxxxx/30xxxx (SZ), 688xxx (STAR), 8xxxxx (BJ).
+_STOCK_CODE_PATTERN = re.compile(r"(?<!\d)((?:60|00|30|68|83|87|43|8[02])\d{4})(?!\d)")
 
 _LANE_DEFS = [
     {"key": "must",        "title": "必须处理", "tone": "sell",  "subtitle": "今天闭环这几条，不漂移"},
@@ -722,57 +728,96 @@ def build_today_command_brief(
     action_queue: dict[str, Any],
     refresh_status: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    mode = derive_mode(
-        readiness=readiness,
-        gate=gate,
-        confirmation=confirmation,
-        decision_brief=decision_brief,
+    errors: dict[str, str] = {}
+
+    def _section(name: str, builder, fallback):
+        try:
+            return builder()
+        except Exception as exc:  # fail-soft per section
+            errors[name] = str(exc)
+            return fallback
+
+    mode = _section(
+        "mode",
+        lambda: derive_mode(readiness=readiness, gate=gate, confirmation=confirmation, decision_brief=decision_brief),
+        {"value": "defense", "label": "防守", "tone": "risk", "summary": "派生失败，回退到默认防守模式。", "reasons": ["error"]},
     )
-    permits = derive_permits(
-        readiness=readiness,
-        gate=gate,
-        confirmation=confirmation,
-        screening_batch=screening_batch,
+    mode_value = str(mode.get("value") or "defense")
+
+    permits = _section(
+        "permits",
+        lambda: derive_permits(readiness=readiness, gate=gate, confirmation=confirmation, screening_batch=screening_batch),
+        {
+            "data":        {"value": "off", "label": "未就绪", "tone": "risk", "why": "派生失败"},
+            "market":      {"value": "off", "label": "进攻阀门关闭", "tone": "risk", "why": "派生失败"},
+            "opportunity": {"value": "none", "label": "今天不输出机会判断", "tone": "risk", "why": "派生失败"},
+        },
     )
-    position_cap = derive_position_cap(
-        mode_value=mode["value"],
-        gate=gate,
-        decision_brief=decision_brief,
+    position_cap = _section(
+        "position_cap",
+        lambda: derive_position_cap(mode_value=mode_value, gate=gate, decision_brief=decision_brief),
+        {"value": "0成", "raw": "0成", "tone": "risk", "note": "派生失败，默认不开新仓。"},
     )
-    first_action = derive_first_action(
-        mode_value=mode["value"],
-        action_queue=action_queue,
-        readiness=readiness,
+    first_action = _section(
+        "first_action",
+        lambda: derive_first_action(mode_value=mode_value, action_queue=action_queue, readiness=readiness),
+        {"title": "先恢复数据链路", "reason": "派生失败", "url": "/settings", "action_key": None, "tone": "risk", "kind": "recover_data"},
     )
-    forbid = derive_forbid_today(
-        mode_value=mode["value"],
-        decision_brief=decision_brief,
-        action_groups=action_groups,
+    forbid = _section(
+        "forbid_today",
+        lambda: derive_forbid_today(mode_value=mode_value, decision_brief=decision_brief, action_groups=action_groups),
+        [{"title": "派生失败，今天不动", "reason": "command_brief 派生异常", "tone": "risk", "source": "fallback"}],
     )
-    reclassify = derive_reclassify_when(
-        mode_value=mode["value"],
-        readiness=readiness,
-        gate=gate,
+    reclassify = _section(
+        "reclassify_when",
+        lambda: derive_reclassify_when(mode_value=mode_value, readiness=readiness, gate=gate),
+        [],
     )
-    chain = derive_judgement_chain(
-        readiness=readiness,
-        gate=gate,
-        watchlist=watchlist,
-        screening_batch=screening_batch,
-        confirmation=confirmation,
+    chain = _section(
+        "judgement_chain",
+        lambda: derive_judgement_chain(readiness=readiness, gate=gate, watchlist=watchlist, screening_batch=screening_batch, confirmation=confirmation),
+        [
+            {"dim": "market", "title": "市场环境", "verdict": "派生失败", "tone": "risk", "evidence": ["command_brief 派生异常"], "impact": "暂不展示判断"},
+            {"dim": "main_theme", "title": "主线强度", "verdict": "派生失败", "tone": "risk", "evidence": ["command_brief 派生异常"], "impact": "暂不展示判断"},
+            {"dim": "holdings_pressure", "title": "持仓压力", "verdict": "派生失败", "tone": "risk", "evidence": ["command_brief 派生异常"], "impact": "暂不展示判断"},
+            {"dim": "new_quality", "title": "新机会质量", "verdict": "派生失败", "tone": "risk", "evidence": ["command_brief 派生异常"], "impact": "暂不展示判断"},
+        ],
     )
-    lanes = derive_action_lanes(
-        mode_value=mode["value"],
-        action_groups=action_groups,
-        decision_brief=decision_brief,
+    lanes = _section(
+        "action_lanes",
+        lambda: derive_action_lanes(mode_value=mode_value, action_groups=action_groups, decision_brief=decision_brief),
+        [
+            {"key": "must",        "title": "必须处理", "tone": "sell",  "subtitle": "派生失败", "items": []},
+            {"key": "conditional", "title": "条件触发", "tone": "watch", "subtitle": "派生失败", "items": []},
+            {"key": "observe",     "title": "只观察",   "tone": "hold",  "subtitle": "派生失败", "items": []},
+            {"key": "forbid",      "title": "禁止事项", "tone": "risk",  "subtitle": "派生失败", "items": []},
+        ],
     )
-    midday = derive_midday_verify(
-        confirmation=confirmation,
-        screening_batch=screening_batch,
-        decision_brief=decision_brief,
-        mode_value=mode["value"],
+    midday = _section(
+        "midday_verify",
+        lambda: derive_midday_verify(confirmation=confirmation, screening_batch=screening_batch, decision_brief=decision_brief, mode_value=mode_value),
+        {
+            "available": False,
+            "morning_takeaway": "派生失败",
+            "midday_status": "command_brief 派生异常，午盘改判暂不可用",
+            "fresh_candidates": [],
+            "downgraded": [],
+            "next_day_condition": "",
+            "verified_at": "",
+        },
     )
-    trust = derive_trust(readiness=readiness, refresh_status=refresh_status)
+    trust = _section(
+        "trust",
+        lambda: derive_trust(readiness=readiness, refresh_status=refresh_status),
+        {
+            "readiness_mode": str(readiness.get("readiness_mode") or "blocked"),
+            "source_summary": "-",
+            "quality_summary": "-",
+            "blockers_count": 0,
+            "warnings_count": 0,
+            "auto_refresh_summary": "",
+        },
+    )
 
     return {
         "trade_date": trade_date,
@@ -787,4 +832,5 @@ def build_today_command_brief(
         "action_lanes": lanes,
         "midday_verify": midday,
         "trust": trust,
+        "errors": errors,
     }

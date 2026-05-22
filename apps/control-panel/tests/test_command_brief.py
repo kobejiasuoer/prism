@@ -700,5 +700,42 @@ class BuildTodayViewIntegrationTest(unittest.TestCase):
             self.assertIn(legacy_key, payload)
 
 
+class FirstActionRobustnessTest(unittest.TestCase):
+    def test_none_item_in_queue_does_not_crash(self) -> None:
+        action = derive_first_action(
+            mode_value="probe",
+            action_queue={"items": [None, {"key": "watchlist:600519", "title": "600519 茅台", "tone": "sell", "url": "/stock/600519", "decision": {"value": "pending"}, "display_state": {"value": "pending"}}]},
+            readiness=_readiness("live_ready"),
+        )
+        self.assertEqual(action["kind"], "stock")
+        self.assertEqual(action["url"], "/stock/600519")
+
+
+class BuildBriefRobustnessTest(unittest.TestCase):
+    def test_per_section_isolation_when_inputs_are_broken(self) -> None:
+        # Force derive_judgement_chain to be called with a structurally bad input.
+        # ``screening_batch`` set to a string would normally raise inside the deriver.
+        brief = build_today_command_brief(
+            trade_date="2026-05-22",
+            readiness=_readiness("live_ready"),
+            gate=_gate(allow=True, label="放开"),
+            decision_brief=None,
+            watchlist=_watchlist(),
+            screening_batch="not-a-dict",  # type: ignore[arg-type]
+            confirmation=_confirmation(),
+            action_groups=_groups(),
+            action_queue={"items": []},
+            refresh_status=None,
+        )
+        # Brief must still be returned with all 12 keys.
+        for key in (
+            "mode", "permits", "position_cap", "first_action", "forbid_today",
+            "reclassify_when", "judgement_chain", "action_lanes", "midday_verify", "trust", "errors",
+        ):
+            self.assertIn(key, brief)
+        # At least one section captured an error.
+        self.assertTrue(len(brief["errors"]) >= 1)
+
+
 if __name__ == "__main__":
     unittest.main()
