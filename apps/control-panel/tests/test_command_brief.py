@@ -381,6 +381,83 @@ class JudgementChainTest(unittest.TestCase):
         nq = next(item for item in chain if item["dim"] == "new_quality")
         self.assertEqual(nq["verdict"], "好")
 
+    def test_holdings_pressure_high_via_downgraded_only(self) -> None:
+        chain = derive_judgement_chain(
+            readiness=_readiness("live_ready"),
+            gate=_gate(allow=True, label="放开"),
+            watchlist=_watchlist(priority=0),
+            screening_batch=_screening(),
+            confirmation=_confirmation(downgraded=2),
+        )
+        hp = next(item for item in chain if item["dim"] == "holdings_pressure")
+        self.assertEqual(hp["verdict"], "高")
+
+    def test_holdings_pressure_low_when_nothing_pressing(self) -> None:
+        chain = derive_judgement_chain(
+            readiness=_readiness("live_ready"),
+            gate=_gate(allow=True, label="放开"),
+            watchlist=_watchlist(priority=0),
+            screening_batch=_screening(),
+            confirmation=_confirmation(),
+        )
+        hp = next(item for item in chain if item["dim"] == "holdings_pressure")
+        self.assertEqual(hp["verdict"], "低")
+
+    def test_main_theme_a_when_approved_sufficient(self) -> None:
+        chain = derive_judgement_chain(
+            readiness=_readiness("live_ready"),
+            gate=_gate(allow=True, label="放开"),
+            watchlist=_watchlist(),
+            screening_batch=_screening("AI 算力", approved=5, total=20),
+            confirmation=_confirmation(),
+        )
+        theme = next(item for item in chain if item["dim"] == "main_theme")
+        self.assertEqual(theme["verdict"], "A")
+
+    def test_main_theme_none_when_top_theme_missing(self) -> None:
+        chain = derive_judgement_chain(
+            readiness=_readiness("live_ready"),
+            gate=_gate(allow=True, label="放开"),
+            watchlist=_watchlist(),
+            screening_batch=_screening(top_theme=None),
+            confirmation=_confirmation(),
+        )
+        theme = next(item for item in chain if item["dim"] == "main_theme")
+        self.assertEqual(theme["verdict"], "无")
+
+    def test_new_quality_mid_with_fresh_only(self) -> None:
+        chain = derive_judgement_chain(
+            readiness=_readiness("live_ready"),
+            gate=_gate(allow=True, label="放开"),
+            watchlist=_watchlist(),
+            screening_batch=_screening(),
+            confirmation=_confirmation(fresh=2),
+        )
+        nq = next(item for item in chain if item["dim"] == "new_quality")
+        self.assertEqual(nq["verdict"], "中")
+
+    def test_new_quality_bad_when_empty(self) -> None:
+        chain = derive_judgement_chain(
+            readiness=_readiness("live_ready"),
+            gate=_gate(allow=True, label="放开"),
+            watchlist=_watchlist(),
+            screening_batch=_screening(),
+            confirmation=_confirmation(),
+        )
+        nq = next(item for item in chain if item["dim"] == "new_quality")
+        self.assertEqual(nq["verdict"], "差")
+
+    def test_new_quality_mid_when_confirmed_and_downgraded(self) -> None:
+        chain = derive_judgement_chain(
+            readiness=_readiness("live_ready"),
+            gate=_gate(allow=True, label="放开"),
+            watchlist=_watchlist(),
+            screening_batch=_screening(),
+            confirmation=_confirmation(confirmed=1, downgraded=1),
+        )
+        nq = next(item for item in chain if item["dim"] == "new_quality")
+        self.assertEqual(nq["verdict"], "中")
+
 
 if __name__ == "__main__":
     unittest.main()
