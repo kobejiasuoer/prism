@@ -8785,6 +8785,7 @@ def build_today_view() -> dict[str, Any]:
 
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    command_brief_error: str | None = None
     try:
         command_brief = build_today_command_brief(
             trade_date=trade_date,
@@ -8798,8 +8799,9 @@ def build_today_view() -> dict[str, Any]:
             action_queue=action_queue,
             refresh_status=None,
         )
-    except Exception:  # noqa: BLE001 — fail-soft for downstream rendering
+    except Exception as exc:  # fail-soft so downstream rendering can degrade
         command_brief = None
+        command_brief_error = str(exc)
 
     return {
         "generated_at": generated_at,
@@ -8819,6 +8821,7 @@ def build_today_view() -> dict[str, Any]:
         },
         "command_hero": command_hero,
         "command_brief": command_brief,
+        "command_brief_error": command_brief_error,
         "radar_cards": radar_cards,
         "evidence_hint": evidence_hint,
         "action_groups": action_groups,

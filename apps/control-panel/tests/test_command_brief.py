@@ -689,6 +689,7 @@ class BuildTodayViewIntegrationTest(unittest.TestCase):
         # 新字段
         self.assertIn("command_brief", payload)
         brief = payload["command_brief"]
+        self.assertIsNotNone(brief, "command_brief unexpectedly None — fail-soft may have triggered")
         for key in ("mode", "permits", "position_cap", "first_action", "judgement_chain", "action_lanes", "midday_verify", "trust"):
             self.assertIn(key, brief)
         # mode.value 必须落到合法枚举
