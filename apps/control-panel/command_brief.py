@@ -463,7 +463,7 @@ def _new_quality_dimension(confirmation: dict[str, Any] | None) -> dict[str, Any
     return {"dim": "new_quality", "title": "新机会质量", "verdict": verdict, "tone": tone, "evidence": evidence, "impact": impact}
 
 
-_STOCK_CODE_PATTERN = re.compile(r"\b(\d{6})\b")
+_STOCK_CODE_PATTERN = re.compile(r"(?<!\d)(\d{6})(?!\d)")
 
 _LANE_DEFS = [
     {"key": "must",        "title": "必须处理", "tone": "sell",  "subtitle": "今天闭环这几条，不漂移"},
@@ -492,6 +492,9 @@ def _extract_name(item: dict[str, Any]) -> str | None:
     return name or None
 
 
+# Workflow state labels that may appear in ``decision.label`` (e.g.
+# "pending", "approved") but are NOT trade-action verbs. Filter them out
+# in ``_infer_action_type`` so we fall through to keyword/tone inference.
 _WORKFLOW_STATE_LABELS = {"pending", "approved", "rejected", "snoozed", "done", "skipped"}
 
 
@@ -588,7 +591,7 @@ def derive_action_lanes(
         action_groups=[{"key": "avoid", "items": avoid}],
     )
 
-    if not (must_items or conditional_items or forbid_items):
+    if not (must_items or conditional_items):
         must_items.append({
             "key": "system:review-holdings-first",
             "code": None,

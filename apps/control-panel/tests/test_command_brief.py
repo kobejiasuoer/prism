@@ -575,6 +575,17 @@ class ActionLanesTest(unittest.TestCase):
         total = sum(len(lane["items"]) for lane in lanes if lane["key"] in {"must", "conditional", "forbid"})
         self.assertGreaterEqual(total, 1)
 
+    def test_minimum_must_sentinel_fires_when_no_actionable(self) -> None:
+        lanes = derive_action_lanes(
+            mode_value="observe",
+            action_groups=_groups(),
+            decision_brief=None,
+        )
+        must = next(lane for lane in lanes if lane["key"] == "must")
+        self.assertEqual(len(must["items"]), 1)
+        self.assertEqual(must["items"][0]["key"], "system:review-holdings-first")
+        self.assertEqual(must["items"][0]["url"], "/portfolio")
+
 
 if __name__ == "__main__":
     unittest.main()
