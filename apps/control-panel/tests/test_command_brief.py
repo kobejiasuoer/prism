@@ -15,7 +15,7 @@ INVEST_FLOW_ROOT = Path(__file__).resolve().parents[2]
 if str(INVEST_FLOW_ROOT) not in sys.path:
     sys.path.insert(0, str(INVEST_FLOW_ROOT))
 
-from control_panel.command_brief import derive_mode  # noqa: E402
+from control_panel.command_brief import derive_mode, derive_permits  # noqa: E402
 
 
 def _readiness(mode: str = "live_ready", **extra) -> dict[str, object]:
@@ -123,6 +123,61 @@ class ModeDerivationTest(unittest.TestCase):
         )
         self.assertEqual(mode["value"], "offense")
         self.assertIn("brief_override", mode["reasons"])
+
+
+class PermitsTest(unittest.TestCase):
+    def test_blocked_readiness_yields_off_off_none(self) -> None:
+        permits = derive_permits(
+            readiness=_readiness("blocked", blockers=[{"message": "watchlist 数据偏旧"}]),
+            gate=_gate(allow=True, label="进攻"),
+            confirmation=_confirmation(confirmed=3),
+            screening_batch=None,
+        )
+        self.assertEqual(permits["data"]["value"], "off")
+        self.assertEqual(permits["market"]["value"], "off")
+        self.assertEqual(permits["opportunity"]["value"], "none")
+        self.assertIn("watchlist 数据偏旧", permits["data"]["why"])
+
+    def test_shadow_only_yields_shadow_off_observe(self) -> None:
+        permits = derive_permits(
+            readiness=_readiness("shadow_only"),
+            gate=_gate(allow=True, label="放开"),
+            confirmation=_confirmation(confirmed=2),
+            screening_batch=None,
+        )
+        self.assertEqual(permits["data"]["value"], "shadow")
+        self.assertEqual(permits["market"]["value"], "off")
+        self.assertEqual(permits["opportunity"]["value"], "observe")
+
+    def test_live_ready_limited_label_with_candidates_is_conditional(self) -> None:
+        permits = derive_permits(
+            readiness=_readiness("live_ready"),
+            gate=_gate(allow=True, label="限制试错"),
+            confirmation=_confirmation(confirmed=1, fresh=2),
+            screening_batch=None,
+        )
+        self.assertEqual(permits["market"]["value"], "limited")
+        self.assertEqual(permits["opportunity"]["value"], "conditional")
+        self.assertIn("新增", permits["opportunity"]["why"])
+
+    def test_live_ready_offense_label_without_candidates_is_observe(self) -> None:
+        permits = derive_permits(
+            readiness=_readiness("live_ready"),
+            gate=_gate(allow=True, label="进攻放开"),
+            confirmation=_confirmation(),
+            screening_batch=None,
+        )
+        self.assertEqual(permits["market"]["value"], "on")
+        self.assertEqual(permits["opportunity"]["value"], "observe")
+
+    def test_live_ready_offense_with_candidates_is_actionable(self) -> None:
+        permits = derive_permits(
+            readiness=_readiness("live_ready"),
+            gate=_gate(allow=True, label="放开"),
+            confirmation=_confirmation(confirmed=2),
+            screening_batch=None,
+        )
+        self.assertEqual(permits["opportunity"]["value"], "actionable")
 
 
 if __name__ == "__main__":
