@@ -718,6 +718,7 @@ export interface TodayCommandBrief {
   action_lanes: CommandBriefLane[];
   midday_verify: CommandBriefMiddayVerify;
   trust: CommandBriefTrust;
+  errors?: Record<string, string>;
 }
 
 export interface TodayData {
