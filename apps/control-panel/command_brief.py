@@ -149,9 +149,9 @@ def derive_permits(
     opp_why = f"午盘新增 {fresh}，确认 {confirmed_count}，候选 {approved}"
 
     return {
-        "data":        {"value": data_value, "label": data_label, "tone": _permit_tone(data_value, "data"), "why": data_why},
-        "market":      {"value": market_value, "label": market_label, "tone": _permit_tone(market_value, "market"), "why": market_why},
-        "opportunity": {"value": opp_value, "label": opp_label, "tone": _permit_tone(opp_value, "opportunity"), "why": opp_why},
+        "data":        {"value": data_value, "label": data_label, "tone": _permit_tone(data_value), "why": data_why},
+        "market":      {"value": market_value, "label": market_label, "tone": _permit_tone(market_value), "why": market_why},
+        "opportunity": {"value": opp_value, "label": opp_label, "tone": _permit_tone(opp_value), "why": opp_why},
     }
 
 
@@ -165,7 +165,7 @@ def _readiness_why(readiness: dict[str, Any]) -> str:
     return "数据已对齐当日"
 
 
-def _permit_tone(value: str, kind: str) -> str:
+def _permit_tone(value: str) -> str:
     if value in {"off", "none"}:
         return "risk"
     if value in {"shadow", "limited", "observe", "conditional"}:
