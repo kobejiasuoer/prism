@@ -228,6 +228,16 @@ class FirstActionTest(unittest.TestCase):
         self.assertEqual(action["kind"], "system")
         self.assertEqual(action["url"], "/portfolio")
 
+    def test_probe_with_no_pending_falls_back_to_judgement_chain(self) -> None:
+        action = derive_first_action(
+            mode_value="probe",
+            action_queue={"items": []},
+            readiness=_readiness("live_ready"),
+        )
+        self.assertEqual(action["kind"], "system")
+        self.assertEqual(action["url"], "#judgement-chain")
+        self.assertIsNone(action["action_key"])
+
 
 class PositionCapTest(unittest.TestCase):
     def test_takes_gate_position_cap(self) -> None:

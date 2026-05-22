@@ -237,7 +237,7 @@ def derive_first_action(
             "title": str(first.get("title") or "处理下一条动作"),
             "reason": str(first.get("detail") or first.get("foot") or first.get("source") or "持仓优先处理"),
             "url": str(first.get("url") or "#action-lanes"),
-            "action_key": str(first.get("key") or ""),
+            "action_key": str(first.get("key")) if first.get("key") else None,
             "tone": str(first.get("tone") or "sell"),
             "kind": "stock",
         }
