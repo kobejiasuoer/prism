@@ -12,6 +12,7 @@ All functions in this module are side-effect free and accept plain dicts.
 from __future__ import annotations
 
 import re
+from datetime import datetime as _dt
 from typing import Any
 
 
@@ -615,3 +616,176 @@ def derive_action_lanes(
     for definition in _LANE_DEFS:
         lanes.append({**definition, "items": payload[definition["key"]]})
     return lanes
+
+
+def _confirmation_card(item: dict[str, Any]) -> dict[str, Any]:
+    title = str(item.get("title") or item.get("name") or "")
+    code = _extract_code(item) or str(item.get("code") or "")
+    name = _extract_name(item) or str(item.get("name") or title)
+    return {
+        "name": name,
+        "code": code,
+        "reason": str(item.get("reason") or item.get("detail") or item.get("status") or ""),
+        "url": str(item.get("detail_url") or item.get("url") or ""),
+        "tone": str(item.get("tone") or "watch"),
+    }
+
+
+def derive_midday_verify(
+    *,
+    confirmation: dict[str, Any] | None,
+    screening_batch: dict[str, Any] | None,
+    decision_brief: dict[str, Any] | None,
+    mode_value: str,
+) -> dict[str, Any]:
+    if not confirmation:
+        return {
+            "available": False,
+            "morning_takeaway": "早盘结论暂未生成",
+            "midday_status": "午盘验证尚未到位，当前不输出改判结论",
+            "fresh_candidates": [],
+            "downgraded": [],
+            "next_day_condition": "",
+            "verified_at": "",
+        }
+
+    counts = confirmation.get("counts") or {}
+    confirmed = int(counts.get("confirmed") or 0)
+    fresh = int(counts.get("fresh_candidates") or 0)
+    downgraded = int(counts.get("downgraded") or 0)
+    validation = str(confirmation.get("validation_status") or "ok")
+    midday_status = f"{validation}：确认 {confirmed} · 新增 {fresh} · 降级 {downgraded}"
+
+    morning = (
+        ((decision_brief or {}).get("summary") or {}).get("gate_summary")
+        or ((screening_batch or {}).get("screening_summary") or {}).get("execution_gate_status")
+        or "早盘结论暂未生成"
+    )
+
+    fresh_cards = [_confirmation_card(item) for item in (confirmation.get("fresh_candidates") or [])[:3]]
+    down_cards = [_confirmation_card(item) for item in (confirmation.get("downgraded") or [])[:3]]
+
+    next_day = str(confirmation.get("next_day_focus") or "").strip()
+    if not next_day:
+        if mode_value == "probe":
+            next_day = "若 fresh_candidates 隔日仍站住主线，明日可进观察"
+        elif mode_value == "offense":
+            next_day = "若 confirmed 持续两日，明日扩展到必须处理"
+        elif mode_value == "observe":
+            next_day = "若主线强度回到 B 以上，明日转试探"
+        else:
+            next_day = "等数据回到 live_ready 再讨论"
+
+    return {
+        "available": True,
+        "morning_takeaway": str(morning),
+        "midday_status": midday_status,
+        "fresh_candidates": fresh_cards,
+        "downgraded": down_cards,
+        "next_day_condition": next_day,
+        "verified_at": str(confirmation.get("generated_at") or ""),
+    }
+
+
+def derive_trust(
+    *,
+    readiness: dict[str, Any],
+    refresh_status: dict[str, Any] | None,
+) -> dict[str, Any]:
+    src = readiness.get("source_freshness") or []
+    src_ok = sum(1 for item in src if item.get("timely"))
+    quality = readiness.get("quality_freshness") or []
+    q_ok = sum(1 for item in quality if item.get("timely"))
+    auto_summary = ""
+    if refresh_status and isinstance(refresh_status, dict):
+        decision = refresh_status.get("auto_refresh") or {}
+        auto_summary = str(decision.get("summary") or "")
+    return {
+        "readiness_mode": str(readiness.get("readiness_mode") or "blocked"),
+        "source_summary": f"{src_ok}/{len(src) or 0} timely",
+        "quality_summary": f"{q_ok}/{len(quality) or 0} ok",
+        "blockers_count": len(readiness.get("blockers") or []),
+        "warnings_count": len(readiness.get("warnings") or []),
+        "auto_refresh_summary": auto_summary,
+    }
+
+
+def build_today_command_brief(
+    *,
+    trade_date: str,
+    readiness: dict[str, Any],
+    gate: dict[str, Any],
+    decision_brief: dict[str, Any] | None,
+    watchlist: dict[str, Any] | None,
+    screening_batch: dict[str, Any] | None,
+    confirmation: dict[str, Any] | None,
+    action_groups: list[dict[str, Any]],
+    action_queue: dict[str, Any],
+    refresh_status: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    mode = derive_mode(
+        readiness=readiness,
+        gate=gate,
+        confirmation=confirmation,
+        decision_brief=decision_brief,
+    )
+    permits = derive_permits(
+        readiness=readiness,
+        gate=gate,
+        confirmation=confirmation,
+        screening_batch=screening_batch,
+    )
+    position_cap = derive_position_cap(
+        mode_value=mode["value"],
+        gate=gate,
+        decision_brief=decision_brief,
+    )
+    first_action = derive_first_action(
+        mode_value=mode["value"],
+        action_queue=action_queue,
+        readiness=readiness,
+    )
+    forbid = derive_forbid_today(
+        mode_value=mode["value"],
+        decision_brief=decision_brief,
+        action_groups=action_groups,
+    )
+    reclassify = derive_reclassify_when(
+        mode_value=mode["value"],
+        readiness=readiness,
+        gate=gate,
+    )
+    chain = derive_judgement_chain(
+        readiness=readiness,
+        gate=gate,
+        watchlist=watchlist,
+        screening_batch=screening_batch,
+        confirmation=confirmation,
+    )
+    lanes = derive_action_lanes(
+        mode_value=mode["value"],
+        action_groups=action_groups,
+        decision_brief=decision_brief,
+    )
+    midday = derive_midday_verify(
+        confirmation=confirmation,
+        screening_batch=screening_batch,
+        decision_brief=decision_brief,
+        mode_value=mode["value"],
+    )
+    trust = derive_trust(readiness=readiness, refresh_status=refresh_status)
+
+    return {
+        "trade_date": trade_date,
+        "generated_at": _dt.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "mode": mode,
+        "permits": permits,
+        "position_cap": position_cap,
+        "first_action": first_action,
+        "forbid_today": forbid,
+        "reclassify_when": reclassify,
+        "judgement_chain": chain,
+        "action_lanes": lanes,
+        "midday_verify": midday,
+        "trust": trust,
+    }

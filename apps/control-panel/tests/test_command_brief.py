@@ -24,6 +24,9 @@ from control_panel.command_brief import (  # noqa: E402
     derive_reclassify_when,
     derive_judgement_chain,
     derive_action_lanes,
+    derive_midday_verify,
+    derive_trust,
+    build_today_command_brief,
 )
 
 
@@ -585,6 +588,72 @@ class ActionLanesTest(unittest.TestCase):
         self.assertEqual(len(must["items"]), 1)
         self.assertEqual(must["items"][0]["key"], "system:review-holdings-first")
         self.assertEqual(must["items"][0]["url"], "/portfolio")
+
+
+class MiddayVerifyTest(unittest.TestCase):
+    def test_unavailable_when_confirmation_missing(self) -> None:
+        verify = derive_midday_verify(
+            confirmation=None,
+            screening_batch=None,
+            decision_brief=None,
+            mode_value="observe",
+        )
+        self.assertFalse(verify["available"])
+        self.assertIn("午盘验证尚未到位", verify["midday_status"])
+
+    def test_lists_fresh_and_downgraded(self) -> None:
+        verify = derive_midday_verify(
+            confirmation=_confirmation(confirmed=1, fresh=2, downgraded=1),
+            screening_batch={"screening_summary": {"execution_gate_status": "弱环境"}},
+            decision_brief=None,
+            mode_value="probe",
+        )
+        self.assertTrue(verify["available"])
+        self.assertEqual(len(verify["fresh_candidates"]), 2)
+        self.assertEqual(len(verify["downgraded"]), 1)
+        self.assertIn("弱环境", verify["morning_takeaway"])
+
+
+class TrustTest(unittest.TestCase):
+    def test_summarises_readiness(self) -> None:
+        trust = derive_trust(
+            readiness={
+                **_readiness("live_ready"),
+                "source_freshness": [{"timely": True}, {"timely": True}],
+                "quality_freshness": [{"timely": True}, {"timely": False}],
+                "blockers": [],
+                "warnings": [{"message": "w1"}],
+            },
+            refresh_status=None,
+        )
+        self.assertEqual(trust["readiness_mode"], "live_ready")
+        self.assertEqual(trust["source_summary"], "2/2 timely")
+        self.assertEqual(trust["quality_summary"], "1/2 ok")
+        self.assertEqual(trust["warnings_count"], 1)
+
+
+class BuildBriefTest(unittest.TestCase):
+    def test_returns_complete_shape(self) -> None:
+        brief = build_today_command_brief(
+            trade_date="2026-05-22",
+            readiness=_readiness("live_ready"),
+            gate=_gate(allow=True, label="限制试错"),
+            decision_brief=None,
+            watchlist=_watchlist(priority=1),
+            screening_batch=_screening("AI 算力", approved=2, total=8),
+            confirmation=_confirmation(confirmed=1, fresh=1),
+            action_groups=_groups(do_now=[_action_item(key="watchlist:600519", title="600519 茅台", tone="sell")]),
+            action_queue={"items": [_action_item(key="watchlist:600519", title="600519 茅台", tone="sell")]},
+            refresh_status=None,
+        )
+        for key in (
+            "trade_date", "generated_at", "mode", "permits", "position_cap", "first_action",
+            "forbid_today", "reclassify_when", "judgement_chain", "action_lanes",
+            "midday_verify", "trust",
+        ):
+            self.assertIn(key, brief)
+        self.assertEqual(brief["mode"]["value"], "probe")
+        self.assertEqual(brief["first_action"]["kind"], "stock")
 
 
 if __name__ == "__main__":
