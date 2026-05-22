@@ -160,10 +160,9 @@ command_brief = {
 按优先级取第一条：
 
 1. mode=defense → `kind=recover_data`，title="先恢复数据链路"，url=`/settings`
-2. `action_queue.items` 中 pending、tone∈{sell, positive, risk} 的第一条 → `kind=stock`
-3. `action_queue.items` 中任意 pending 的第一条 → `kind=stock`
-4. mode=observe → `kind=system`，title="先复核优先持仓"，url=`/portfolio`
-5. 都没有 → `kind=system`，title="今天先观望"，url=`#judgement-chain`
+2. `action_queue.items` 中 pending 的第一条 → `kind=stock`（队列由 `today_action_queue_priority` 预排序，已按 tone 高优先级在前，所以"第一条 pending"等价于"最高优先级 pending"）
+3. mode=observe → `kind=system`，title="先复核优先持仓"，url=`/portfolio`
+4. 都没有 → `kind=system`，title="今天先观望"，url=`#judgement-chain`
 
 ### 5.4 改判条件规则表
 
