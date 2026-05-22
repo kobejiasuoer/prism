@@ -153,7 +153,7 @@ command_brief = {
   - market=limited 且 (confirmed+fresh)≥1 → conditional
   - market=on 且 (confirmed+fresh)=0 → observe
   - market=on 且 (confirmed+fresh)≥1 → actionable
-  - `why` 模板："午盘新增 N，早盘候选 M"
+  - `why` 模板："午盘新增 N，确认 M，候选 K"
 
 ### 5.3 第一动作派生
 
