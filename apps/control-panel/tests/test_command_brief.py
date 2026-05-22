@@ -631,6 +631,22 @@ class TrustTest(unittest.TestCase):
         self.assertEqual(trust["quality_summary"], "1/2 ok")
         self.assertEqual(trust["warnings_count"], 1)
 
+    def test_summarises_empty_readiness(self) -> None:
+        trust = derive_trust(
+            readiness={
+                **_readiness("blocked"),
+                "source_freshness": [],
+                "quality_freshness": [],
+                "blockers": [],
+                "warnings": [],
+            },
+            refresh_status=None,
+        )
+        self.assertEqual(trust["source_summary"], "0/0 timely")
+        self.assertEqual(trust["quality_summary"], "0/0 ok")
+        self.assertEqual(trust["blockers_count"], 0)
+        self.assertEqual(trust["warnings_count"], 0)
+
 
 class BuildBriefTest(unittest.TestCase):
     def test_returns_complete_shape(self) -> None:

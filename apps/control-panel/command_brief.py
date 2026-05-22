@@ -619,9 +619,8 @@ def derive_action_lanes(
 
 
 def _confirmation_card(item: dict[str, Any]) -> dict[str, Any]:
-    title = str(item.get("title") or item.get("name") or "")
     code = _extract_code(item) or str(item.get("code") or "")
-    name = _extract_name(item) or str(item.get("name") or title)
+    name = _extract_name(item) or str(item.get("name") or item.get("title") or "")
     return {
         "name": name,
         "code": code,
@@ -702,8 +701,8 @@ def derive_trust(
         auto_summary = str(decision.get("summary") or "")
     return {
         "readiness_mode": str(readiness.get("readiness_mode") or "blocked"),
-        "source_summary": f"{src_ok}/{len(src) or 0} timely",
-        "quality_summary": f"{q_ok}/{len(quality) or 0} ok",
+        "source_summary": f"{src_ok}/{len(src)} timely",
+        "quality_summary": f"{q_ok}/{len(quality)} ok",
         "blockers_count": len(readiness.get("blockers") or []),
         "warnings_count": len(readiness.get("warnings") or []),
         "auto_refresh_summary": auto_summary,
