@@ -173,3 +173,183 @@ def _permit_tone(value: str) -> str:
     if value in {"on", "actionable"}:
         return "positive"
     return "watch"
+
+
+_DEFENSE_POSITION_CAP = "0成"
+_DEFAULT_POSITION_CAPS = {
+    "defense": _DEFENSE_POSITION_CAP,
+    "observe": "0-0.3成",
+    "probe":   "0.3-0.5成",
+    "offense": "0.5-0.8成",
+}
+
+_POSITION_CAP_NOTES = {
+    "defense": "今天不开新仓；只处理旧仓与禁令。",
+    "observe": "今天最多 0-0.3 成新仓；单笔 ≤ 0.5%。",
+    "probe":   "试探仓位 0.3-0.5 成；单笔 ≤ 1%。",
+    "offense": "可分批至 0.5-0.8 成；单笔 ≤ 1.5%。",
+}
+
+
+def derive_position_cap(
+    *,
+    mode_value: str,
+    gate: dict[str, Any],
+    decision_brief: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if mode_value == "defense":
+        raw, value = _DEFENSE_POSITION_CAP, _DEFENSE_POSITION_CAP
+    else:
+        brief_cap = ((decision_brief or {}).get("summary") or {}).get("position_cap")
+        gate_cap = gate.get("position_cap")
+        raw = str(brief_cap or gate_cap or _DEFAULT_POSITION_CAPS[mode_value])
+        value = raw
+    note = _POSITION_CAP_NOTES.get(mode_value, "按仓位纪律执行。")
+    tone = "risk" if mode_value == "defense" else "watch" if mode_value in {"observe", "probe"} else "positive"
+    return {"value": value, "raw": raw, "tone": tone, "note": note}
+
+
+def derive_first_action(
+    *,
+    mode_value: str,
+    action_queue: dict[str, Any],
+    readiness: dict[str, Any],
+) -> dict[str, Any]:
+    if mode_value == "defense":
+        msg = _readiness_why(readiness)
+        return {
+            "title": "先恢复数据链路",
+            "reason": msg,
+            "url": "/settings",
+            "action_key": None,
+            "tone": "risk",
+            "kind": "recover_data",
+        }
+
+    items = (action_queue or {}).get("items") or []
+    pending = [
+        item for item in items
+        if str(((item or {}).get("display_state") or {}).get("value") or item.get("decision", {}).get("value") or "pending") == "pending"
+    ]
+    if pending:
+        first = pending[0]
+        return {
+            "title": str(first.get("title") or "处理下一条动作"),
+            "reason": str(first.get("detail") or first.get("foot") or first.get("source") or "持仓优先处理"),
+            "url": str(first.get("url") or "#action-lanes"),
+            "action_key": str(first.get("key") or ""),
+            "tone": str(first.get("tone") or "sell"),
+            "kind": "stock",
+        }
+
+    if mode_value == "observe":
+        return {
+            "title": "先复核优先持仓",
+            "reason": "今天没有强动作票，先把持仓边界过一遍。",
+            "url": "/portfolio",
+            "action_key": None,
+            "tone": "watch",
+            "kind": "system",
+        }
+
+    return {
+        "title": "今天先观望",
+        "reason": "没有 pending 动作；保留观察名单。",
+        "url": "#judgement-chain",
+        "action_key": None,
+        "tone": "hold",
+        "kind": "system",
+    }
+
+
+def derive_forbid_today(
+    *,
+    mode_value: str,
+    decision_brief: dict[str, Any] | None,
+    action_groups: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+
+    if mode_value == "defense":
+        items.append({
+            "title": "今天不开新仓",
+            "reason": "进攻阀门关闭，等数据回到 live_ready 再说。",
+            "tone": "risk",
+            "source": "command_brief",
+        })
+
+    avoid_group = next((g for g in action_groups if str(g.get("key")) == "avoid"), {}) or {}
+    for entry in (avoid_group.get("items") or []):
+        items.append({
+            "title": str(entry.get("title") or entry.get("status") or "明确回避"),
+            "reason": str(entry.get("detail") or entry.get("foot") or "按 avoid 组规则执行。"),
+            "tone": str(entry.get("tone") or "risk"),
+            "source": str(entry.get("source") or "avoid"),
+        })
+
+    for point in (((decision_brief or {}).get("focus") or {}).get("avoid_points") or [])[:3]:
+        text = str(point or "").strip()
+        if not text:
+            continue
+        items.append({
+            "title": text,
+            "reason": "来自总控简报 avoid_points",
+            "tone": "risk",
+            "source": "decision_brief",
+        })
+
+    if not items:
+        items.append({
+            "title": "不追高、不补亏",
+            "reason": "默认禁令；保持纪律。",
+            "tone": "risk",
+            "source": "default",
+        })
+
+    return items[:4]
+
+
+_RECLASSIFY_RULES = {
+    "defense": [
+        {"label": "→ 观察", "condition": "数据回到 live_ready", "evidence": "在 Settings 跑安全刷新", "url": "/settings"},
+        {"label": "→ 试探", "condition": "数据就绪 + 进攻阀门为 limited", "evidence": "等阀门切换", "url": "/settings"},
+    ],
+    "observe": [
+        {"label": "→ 试探", "condition": "主线强度 ≥ B 且 confirmed ≥ 1", "evidence": "看主线与午盘确认", "url": "/discovery"},
+    ],
+    "probe": [
+        {"label": "→ 进攻", "condition": "confirmed ≥ 2 持续两日", "evidence": "看连续午盘确认", "url": "/discovery"},
+        {"label": "→ 观察", "condition": "downgraded ≥ 2 或主线降级", "evidence": "看降级流", "url": "/discovery"},
+    ],
+    "offense": [
+        {"label": "→ 试探", "condition": "fresh_candidates 连续 2 日为 0", "evidence": "看午盘新增", "url": "/discovery"},
+    ],
+}
+
+
+def derive_reclassify_when(
+    *,
+    mode_value: str,
+    readiness: dict[str, Any],
+    gate: dict[str, Any],
+) -> list[dict[str, Any]]:
+    rules = list(_RECLASSIFY_RULES.get(mode_value) or [])
+    if not rules:
+        return []
+
+    gate_summary = str(gate.get("summary") or "").strip()
+    recommended = (readiness.get("recommended_tasks") or [None])[0]
+    output: list[dict[str, Any]] = []
+    for rule in rules:
+        cond = rule["condition"]
+        if gate_summary and gate_summary not in cond:
+            cond = f"{cond}（参考：{gate_summary}）"
+        if recommended and rule["url"] == "/settings":
+            cond = f"{cond}；推荐先跑 {recommended}"
+        output.append({
+            "label": rule["label"],
+            "condition": cond,
+            "evidence": rule["evidence"],
+            "url": rule["url"],
+        })
+    return output

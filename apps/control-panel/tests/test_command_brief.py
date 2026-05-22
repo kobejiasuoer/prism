@@ -15,7 +15,14 @@ INVEST_FLOW_ROOT = Path(__file__).resolve().parents[2]
 if str(INVEST_FLOW_ROOT) not in sys.path:
     sys.path.insert(0, str(INVEST_FLOW_ROOT))
 
-from control_panel.command_brief import derive_mode, derive_permits  # noqa: E402
+from control_panel.command_brief import (  # noqa: E402
+    derive_mode,
+    derive_permits,
+    derive_position_cap,
+    derive_first_action,
+    derive_forbid_today,
+    derive_reclassify_when,
+)
 
 
 def _readiness(mode: str = "live_ready", **extra) -> dict[str, object]:
@@ -178,6 +185,111 @@ class PermitsTest(unittest.TestCase):
             screening_batch=None,
         )
         self.assertEqual(permits["opportunity"]["value"], "actionable")
+
+
+class FirstActionTest(unittest.TestCase):
+    def test_defense_returns_recover_data_action(self) -> None:
+        action = derive_first_action(
+            mode_value="defense",
+            action_queue={"items": []},
+            readiness=_readiness("blocked"),
+        )
+        self.assertEqual(action["kind"], "recover_data")
+        self.assertEqual(action["url"], "/settings")
+
+    def test_takes_first_pending_stock_action(self) -> None:
+        action = derive_first_action(
+            mode_value="probe",
+            action_queue={
+                "items": [
+                    {
+                        "key": "watchlist:600519",
+                        "title": "600519 茅台",
+                        "detail": "止损 1620 已破",
+                        "tone": "sell",
+                        "url": "/stock/600519",
+                        "decision": {"value": "pending", "label": "待处理", "tone": "sell"},
+                        "display_state": {"value": "pending", "label": "待处理", "tone": "sell"},
+                    }
+                ]
+            },
+            readiness=_readiness("live_ready"),
+        )
+        self.assertEqual(action["kind"], "stock")
+        self.assertEqual(action["url"], "/stock/600519")
+        self.assertIn("600519", action["title"])
+
+    def test_observe_with_no_pending_falls_back_to_portfolio(self) -> None:
+        action = derive_first_action(
+            mode_value="observe",
+            action_queue={"items": []},
+            readiness=_readiness("live_ready"),
+        )
+        self.assertEqual(action["kind"], "system")
+        self.assertEqual(action["url"], "/portfolio")
+
+
+class PositionCapTest(unittest.TestCase):
+    def test_takes_gate_position_cap(self) -> None:
+        cap = derive_position_cap(
+            mode_value="probe",
+            gate=_gate(allow=True, label="试错"),
+            decision_brief={"summary": {"position_cap": "0-0.3成"}},
+        )
+        self.assertEqual(cap["value"], "0-0.3成")
+        self.assertEqual(cap["raw"], "0-0.3成")
+
+    def test_defense_forces_zero_cap(self) -> None:
+        cap = derive_position_cap(
+            mode_value="defense",
+            gate=_gate(allow=True, label="进攻"),
+            decision_brief=None,
+        )
+        self.assertEqual(cap["value"], "0成")
+        self.assertEqual(cap["tone"], "risk")
+
+
+class ForbidTodayTest(unittest.TestCase):
+    def test_defense_injects_no_new_positions(self) -> None:
+        forbid = derive_forbid_today(
+            mode_value="defense",
+            decision_brief=None,
+            action_groups=[],
+        )
+        titles = [item["title"] for item in forbid]
+        self.assertTrue(any("不开新仓" in title for title in titles))
+
+    def test_brief_avoid_points_are_included(self) -> None:
+        forbid = derive_forbid_today(
+            mode_value="probe",
+            decision_brief={"focus": {"avoid_points": ["不追涨停板", "不打满仓"]}},
+            action_groups=[],
+        )
+        titles = [item["title"] for item in forbid]
+        self.assertIn("不追涨停板", titles)
+        self.assertIn("不打满仓", titles)
+
+
+class ReclassifyWhenTest(unittest.TestCase):
+    def test_defense_has_two_paths(self) -> None:
+        rules = derive_reclassify_when(
+            mode_value="defense",
+            readiness=_readiness("blocked"),
+            gate=_gate(),
+        )
+        labels = [item["label"] for item in rules]
+        self.assertIn("→ 观察", labels)
+        self.assertIn("→ 试探", labels)
+
+    def test_probe_has_progress_and_regression(self) -> None:
+        rules = derive_reclassify_when(
+            mode_value="probe",
+            readiness=_readiness("live_ready"),
+            gate=_gate(allow=True),
+        )
+        labels = [item["label"] for item in rules]
+        self.assertIn("→ 进攻", labels)
+        self.assertIn("→ 观察", labels)
 
 
 if __name__ == "__main__":
