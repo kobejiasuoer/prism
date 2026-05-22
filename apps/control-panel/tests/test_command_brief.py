@@ -22,6 +22,7 @@ from control_panel.command_brief import (  # noqa: E402
     derive_first_action,
     derive_forbid_today,
     derive_reclassify_when,
+    derive_judgement_chain,
 )
 
 
@@ -300,6 +301,85 @@ class ReclassifyWhenTest(unittest.TestCase):
         labels = [item["label"] for item in rules]
         self.assertIn("→ 进攻", labels)
         self.assertIn("→ 观察", labels)
+
+
+def _watchlist(priority: int = 0, observe: int = 0) -> dict[str, object]:
+    return {
+        "priority_codes": [f"60000{i}" for i in range(priority)],
+        "observe_codes":  [f"60010{i}" for i in range(observe)],
+        "stocks": [],
+    }
+
+
+def _screening(top_theme: str | None = "AI 算力", approved: int = 0, total: int = 0) -> dict[str, object]:
+    themes = []
+    if top_theme:
+        themes = [{"theme": top_theme, "score": 3}]
+    return {
+        "market_themes": {"top_theme": top_theme, "themes": themes},
+        "screening_summary": {
+            "approved_count": approved,
+            "candidate_total": total,
+        },
+    }
+
+
+class JudgementChainTest(unittest.TestCase):
+    def test_four_dimensions_present(self) -> None:
+        chain = derive_judgement_chain(
+            readiness=_readiness("live_ready"),
+            gate=_gate(allow=True, label="放开"),
+            watchlist=_watchlist(priority=2),
+            screening_batch=_screening("AI 算力", approved=4, total=12),
+            confirmation=_confirmation(confirmed=1),
+        )
+        dims = [item["dim"] for item in chain]
+        self.assertEqual(dims, ["market", "main_theme", "holdings_pressure", "new_quality"])
+
+    def test_blocked_freezes_all_verdicts(self) -> None:
+        chain = derive_judgement_chain(
+            readiness=_readiness("blocked"),
+            gate=_gate(allow=True, label="放开"),
+            watchlist=_watchlist(priority=3),
+            screening_batch=_screening("AI 算力", approved=4, total=12),
+            confirmation=_confirmation(confirmed=2),
+        )
+        for item in chain:
+            self.assertEqual(item["verdict"], "未对齐当日")
+            self.assertIn("数据未对齐当日", item["evidence"])
+
+    def test_market_verdict_strong_for_offense_label(self) -> None:
+        chain = derive_judgement_chain(
+            readiness=_readiness("live_ready"),
+            gate=_gate(allow=True, label="进攻放开"),
+            watchlist=_watchlist(),
+            screening_batch=_screening(),
+            confirmation=_confirmation(),
+        )
+        market = next(item for item in chain if item["dim"] == "market")
+        self.assertEqual(market["verdict"], "强")
+
+    def test_holdings_pressure_high_when_priority_or_downgraded(self) -> None:
+        chain = derive_judgement_chain(
+            readiness=_readiness("live_ready"),
+            gate=_gate(allow=True, label="放开"),
+            watchlist=_watchlist(priority=3),
+            screening_batch=_screening(),
+            confirmation=_confirmation(downgraded=2),
+        )
+        hp = next(item for item in chain if item["dim"] == "holdings_pressure")
+        self.assertEqual(hp["verdict"], "高")
+
+    def test_new_quality_good(self) -> None:
+        chain = derive_judgement_chain(
+            readiness=_readiness("live_ready"),
+            gate=_gate(allow=True, label="放开"),
+            watchlist=_watchlist(),
+            screening_batch=_screening(),
+            confirmation=_confirmation(confirmed=2),
+        )
+        nq = next(item for item in chain if item["dim"] == "new_quality")
+        self.assertEqual(nq["verdict"], "好")
 
 
 if __name__ == "__main__":

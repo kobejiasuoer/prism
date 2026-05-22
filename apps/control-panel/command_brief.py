@@ -353,3 +353,110 @@ def derive_reclassify_when(
             "url": rule["url"],
         })
     return output
+
+
+_FROZEN_EVIDENCE = ["数据未对齐当日"]
+_FROZEN_IMPACT = "不展示旧主线 / 旧仓位 / 旧机会"
+
+
+def derive_judgement_chain(
+    *,
+    readiness: dict[str, Any],
+    gate: dict[str, Any],
+    watchlist: dict[str, Any] | None,
+    screening_batch: dict[str, Any] | None,
+    confirmation: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    frozen = str(readiness.get("readiness_mode") or "blocked") == "blocked"
+
+    def frozen_row(dim: str, title: str) -> dict[str, Any]:
+        return {
+            "dim": dim,
+            "title": title,
+            "verdict": "未对齐当日",
+            "tone": "risk",
+            "evidence": list(_FROZEN_EVIDENCE),
+            "impact": _FROZEN_IMPACT,
+        }
+
+    if frozen:
+        return [
+            frozen_row("market", "市场环境"),
+            frozen_row("main_theme", "主线强度"),
+            frozen_row("holdings_pressure", "持仓压力"),
+            frozen_row("new_quality", "新机会质量"),
+        ]
+
+    return [
+        _market_dimension(gate),
+        _main_theme_dimension(screening_batch),
+        _holdings_pressure_dimension(watchlist, confirmation),
+        _new_quality_dimension(confirmation),
+    ]
+
+
+def _market_dimension(gate: dict[str, Any]) -> dict[str, Any]:
+    allow_new = bool(gate.get("allow_new_positions"))
+    kind = _label_kind(str(gate.get("label") or ""))
+    if not allow_new:
+        verdict, tone, impact = "弱", "risk", "今天不允许开新仓"
+    elif kind == "offense":
+        verdict, tone, impact = "强", "positive", "今天允许分批开新仓，仍按单笔上限"
+    else:
+        verdict, tone, impact = "中", "watch", "今天可试探，单笔小、持有短"
+    evidence = [str(gate.get("label") or "实时阀门"), str(gate.get("summary") or "").strip() or "无额外摘要"]
+    return {"dim": "market", "title": "市场环境", "verdict": verdict, "tone": tone, "evidence": evidence, "impact": impact}
+
+
+def _main_theme_dimension(screening_batch: dict[str, Any] | None) -> dict[str, Any]:
+    themes = (screening_batch or {}).get("market_themes") or {}
+    top = str(themes.get("top_theme") or "").strip()
+    summary = (screening_batch or {}).get("screening_summary") or {}
+    approved = int(summary.get("approved_count") or 0)
+    if not top:
+        verdict, tone, impact = "无", "risk", "今天没有可对齐的主线，不发散"
+    elif approved >= 3:
+        verdict, tone, impact = "A", "positive", f"围绕 {top} 行动，不发散"
+    elif approved >= 1:
+        verdict, tone, impact = "B", "watch", f"主线 {top} 还偏弱，验证后再加注"
+    else:
+        verdict, tone, impact = "C", "watch", f"主线 {top} 候选不足，仅作观察方向"
+    evidence = [f"top_theme={top or '-'}", f"approved={approved}"]
+    return {"dim": "main_theme", "title": "主线强度", "verdict": verdict, "tone": tone, "evidence": evidence, "impact": impact}
+
+
+def _holdings_pressure_dimension(
+    watchlist: dict[str, Any] | None,
+    confirmation: dict[str, Any] | None,
+) -> dict[str, Any]:
+    priority = len((watchlist or {}).get("priority_codes") or [])
+    counts = (confirmation or {}).get("counts") or {}
+    downgraded = int(counts.get("downgraded") or 0)
+    if priority >= 3 or downgraded >= 2:
+        verdict, tone = "高", "risk"
+    elif priority >= 1:
+        verdict, tone = "中", "watch"
+    else:
+        verdict, tone = "低", "positive"
+    impact = f"今天先处理 {priority} 个优先持仓" if priority else "持仓压力低，重点看新机会"
+    evidence = [f"priority={priority}", f"downgraded={downgraded}"]
+    return {"dim": "holdings_pressure", "title": "持仓压力", "verdict": verdict, "tone": tone, "evidence": evidence, "impact": impact}
+
+
+def _new_quality_dimension(confirmation: dict[str, Any] | None) -> dict[str, Any]:
+    counts = (confirmation or {}).get("counts") or {}
+    confirmed = int(counts.get("confirmed") or 0)
+    fresh = int(counts.get("fresh_candidates") or 0)
+    downgraded = int(counts.get("downgraded") or 0)
+
+    if confirmed >= 1 and downgraded == 0:
+        verdict, tone = "好", "positive"
+    elif confirmed == 0 and fresh > 0:
+        verdict, tone = "中", "watch"
+    elif confirmed >= 1 and downgraded >= 1:
+        verdict, tone = "中", "watch"
+    else:
+        verdict, tone = "差", "risk"
+    impact = "今天 / 明天再决定是否升级到必须处理"
+    evidence = [f"confirmed={confirmed}", f"fresh={fresh}", f"downgraded={downgraded}"]
+    return {"dim": "new_quality", "title": "新机会质量", "verdict": verdict, "tone": tone, "evidence": evidence, "impact": impact}
