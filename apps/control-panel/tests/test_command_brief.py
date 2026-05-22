@@ -23,6 +23,7 @@ from control_panel.command_brief import (  # noqa: E402
     derive_forbid_today,
     derive_reclassify_when,
     derive_judgement_chain,
+    derive_action_lanes,
 )
 
 
@@ -457,6 +458,122 @@ class JudgementChainTest(unittest.TestCase):
         )
         nq = next(item for item in chain if item["dim"] == "new_quality")
         self.assertEqual(nq["verdict"], "中")
+
+
+def _action_item(
+    *,
+    key: str,
+    title: str,
+    tone: str = "watch",
+    detail: str = "",
+    setup_label: str | None = None,
+    stop_loss: str | None = None,
+    url: str = "",
+    state: str = "pending",
+) -> dict[str, object]:
+    return {
+        "key": key,
+        "title": title,
+        "tone": tone,
+        "detail": detail,
+        "setup_label": setup_label,
+        "stop_loss": stop_loss,
+        "url": url,
+        "source": "test",
+        "decision": {"value": state, "label": state, "tone": tone},
+        "display_state": {"value": state, "label": state, "tone": tone},
+    }
+
+
+def _groups(do_now=None, watch=None, avoid=None) -> list[dict[str, object]]:
+    return [
+        {"key": "do-now", "items": do_now or []},
+        {"key": "watch",  "items": watch  or []},
+        {"key": "avoid",  "items": avoid  or []},
+    ]
+
+
+class ActionLanesTest(unittest.TestCase):
+    def test_four_lanes_always_returned(self) -> None:
+        lanes = derive_action_lanes(
+            mode_value="probe",
+            action_groups=_groups(),
+            decision_brief=None,
+        )
+        self.assertEqual([lane["key"] for lane in lanes], ["must", "conditional", "observe", "forbid"])
+
+    def test_sell_item_goes_to_must(self) -> None:
+        item = _action_item(key="watchlist:600519", title="600519 茅台", tone="sell", detail="止损 1620 已破")
+        lanes = derive_action_lanes(
+            mode_value="probe",
+            action_groups=_groups(do_now=[item]),
+            decision_brief=None,
+        )
+        must = next(lane for lane in lanes if lane["key"] == "must")
+        self.assertEqual(must["items"][0]["code"], "600519")
+        self.assertEqual(must["items"][0]["action_type"], "减仓")
+
+    def test_watch_item_with_setup_label_goes_to_conditional(self) -> None:
+        item = _action_item(
+            key="screening:300750",
+            title="300750 宁德",
+            tone="watch",
+            setup_label="突破 220",
+            stop_loss="215",
+        )
+        lanes = derive_action_lanes(
+            mode_value="probe",
+            action_groups=_groups(watch=[item]),
+            decision_brief=None,
+        )
+        conditional = next(lane for lane in lanes if lane["key"] == "conditional")
+        self.assertEqual(conditional["items"][0]["trigger"], "突破 220")
+        self.assertEqual(conditional["items"][0]["invalidate_when"], "215")
+
+    def test_watch_item_without_trigger_goes_to_observe(self) -> None:
+        item = _action_item(key="confirmation:600000", title="600000 浦发", tone="watch", detail="午盘新增观察")
+        lanes = derive_action_lanes(
+            mode_value="probe",
+            action_groups=_groups(watch=[item]),
+            decision_brief=None,
+        )
+        observe = next(lane for lane in lanes if lane["key"] == "observe")
+        self.assertEqual(observe["items"][0]["code"], "600000")
+        self.assertEqual(observe["items"][0]["action_type"], "仅观察")
+
+    def test_dedup_keeps_higher_priority(self) -> None:
+        same = _action_item(key="watchlist:600519", title="600519 茅台", tone="sell")
+        same_watch = _action_item(key="watchlist:600519", title="600519 茅台", tone="watch")
+        lanes = derive_action_lanes(
+            mode_value="probe",
+            action_groups=_groups(do_now=[same], watch=[same_watch]),
+            decision_brief=None,
+        )
+        must = next(lane for lane in lanes if lane["key"] == "must")
+        observe = next(lane for lane in lanes if lane["key"] == "observe")
+        conditional = next(lane for lane in lanes if lane["key"] == "conditional")
+        self.assertEqual(len(must["items"]), 1)
+        self.assertFalse(any(it["code"] == "600519" for it in observe["items"]))
+        self.assertFalse(any(it["code"] == "600519" for it in conditional["items"]))
+
+    def test_defense_injects_no_new_positions_into_forbid(self) -> None:
+        lanes = derive_action_lanes(
+            mode_value="defense",
+            action_groups=_groups(),
+            decision_brief=None,
+        )
+        forbid = next(lane for lane in lanes if lane["key"] == "forbid")
+        titles = [item["title"] for item in forbid["items"]]
+        self.assertTrue(any("不开新仓" in t for t in titles))
+
+    def test_minimum_output_when_everything_empty(self) -> None:
+        lanes = derive_action_lanes(
+            mode_value="observe",
+            action_groups=_groups(),
+            decision_brief=None,
+        )
+        total = sum(len(lane["items"]) for lane in lanes if lane["key"] in {"must", "conditional", "forbid"})
+        self.assertGreaterEqual(total, 1)
 
 
 if __name__ == "__main__":

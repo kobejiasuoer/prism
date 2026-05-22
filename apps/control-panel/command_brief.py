@@ -11,6 +11,7 @@ All functions in this module are side-effect free and accept plain dicts.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 
@@ -460,3 +461,154 @@ def _new_quality_dimension(confirmation: dict[str, Any] | None) -> dict[str, Any
     impact = "今天 / 明天再决定是否升级到必须处理"
     evidence = [f"confirmed={confirmed}", f"fresh={fresh}", f"downgraded={downgraded}"]
     return {"dim": "new_quality", "title": "新机会质量", "verdict": verdict, "tone": tone, "evidence": evidence, "impact": impact}
+
+
+_STOCK_CODE_PATTERN = re.compile(r"\b(\d{6})\b")
+
+_LANE_DEFS = [
+    {"key": "must",        "title": "必须处理", "tone": "sell",  "subtitle": "今天闭环这几条，不漂移"},
+    {"key": "conditional", "title": "条件触发", "tone": "watch", "subtitle": "有明确触发与失效，达到才动"},
+    {"key": "observe",     "title": "只观察",   "tone": "hold",  "subtitle": "今天只看，不动"},
+    {"key": "forbid",      "title": "禁止事项", "tone": "risk",  "subtitle": "明确禁线，今天不允许"},
+]
+
+
+def _extract_code(item: dict[str, Any]) -> str | None:
+    for source in (item.get("title"), item.get("key"), item.get("code")):
+        if not source:
+            continue
+        match = _STOCK_CODE_PATTERN.search(str(source))
+        if match:
+            return match.group(1)
+    return None
+
+
+def _extract_name(item: dict[str, Any]) -> str | None:
+    title = str(item.get("title") or "")
+    name = title
+    code = _extract_code(item)
+    if code:
+        name = title.replace(code, "").strip(" -·")
+    return name or None
+
+
+_WORKFLOW_STATE_LABELS = {"pending", "approved", "rejected", "snoozed", "done", "skipped"}
+
+
+def _infer_action_type(item: dict[str, Any]) -> str:
+    explicit = item.get("action_type")
+    if not explicit:
+        decision_label = (item.get("decision") or {}).get("label")
+        if decision_label and str(decision_label).strip().lower() not in _WORKFLOW_STATE_LABELS:
+            explicit = decision_label
+    if explicit:
+        return str(explicit)
+    text = str(item.get("title") or "") + " " + str(item.get("detail") or "")
+    if any(token in text for token in ("减仓", "止损", "清仓", "卖", "降")):
+        return "减仓"
+    if item.get("setup_label") or any(token in text for token in ("突破", "触发", "加观察")):
+        return "等触发"
+    tone = str(item.get("tone") or "")
+    if tone == "sell":
+        return "减仓"
+    if tone == "positive":
+        return "等突破"
+    return "仅观察"
+
+
+def _normalize_action_item(item: dict[str, Any]) -> dict[str, Any]:
+    code = _extract_code(item)
+    name = _extract_name(item)
+    trigger = (
+        item.get("trigger")
+        or item.get("setup_label")
+        or item.get("support")
+        or item.get("resistance")
+    )
+    invalidate = item.get("invalidate_when") or item.get("stop_loss") or item.get("failure_condition")
+    return {
+        "key": str(item.get("key") or ""),
+        "code": code,
+        "name": name,
+        "action_type": _infer_action_type(item),
+        "reason": str(item.get("detail") or item.get("foot") or item.get("source") or ""),
+        "trigger": str(trigger or "无明确触发"),
+        "invalidate_when": str(invalidate or "-"),
+        "source": str(item.get("source") or item.get("group_title") or ""),
+        "url": item.get("url") or None,
+        "tone": str(item.get("tone") or "watch"),
+    }
+
+
+def _has_explicit_trigger(item: dict[str, Any]) -> bool:
+    return bool(item.get("setup_label") or item.get("breakout_price") or item.get("stop_loss"))
+
+
+def derive_action_lanes(
+    *,
+    mode_value: str,
+    action_groups: list[dict[str, Any]],
+    decision_brief: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    grouped = {str(g.get("key") or ""): (g.get("items") or []) for g in (action_groups or [])}
+    do_now = grouped.get("do-now") or []
+    watch = grouped.get("watch") or []
+    avoid = grouped.get("avoid") or []
+
+    must_items: list[dict[str, Any]] = []
+    conditional_items: list[dict[str, Any]] = []
+    observe_items: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+
+    def add(items: list[dict[str, Any]], raw: dict[str, Any]) -> None:
+        key = str(raw.get("key") or "")
+        if key and key in seen_keys:
+            return
+        seen_keys.add(key)
+        items.append(_normalize_action_item(raw))
+
+    for raw in do_now:
+        tone = str(raw.get("tone") or "")
+        if tone in {"sell", "positive"}:
+            add(must_items, raw)
+        elif _has_explicit_trigger(raw):
+            add(conditional_items, raw)
+        else:
+            add(must_items, raw)
+
+    for raw in watch:
+        if _has_explicit_trigger(raw):
+            add(conditional_items, raw)
+        else:
+            add(observe_items, raw)
+
+    forbid_items = derive_forbid_today(
+        mode_value=mode_value,
+        decision_brief=decision_brief,
+        action_groups=[{"key": "avoid", "items": avoid}],
+    )
+
+    if not (must_items or conditional_items or forbid_items):
+        must_items.append({
+            "key": "system:review-holdings-first",
+            "code": None,
+            "name": "先复核优先持仓",
+            "action_type": "复核",
+            "reason": "当前没有强动作票，先把持仓边界过一遍。",
+            "trigger": "无明确触发",
+            "invalidate_when": "-",
+            "source": "command_brief",
+            "url": "/portfolio",
+            "tone": "watch",
+        })
+
+    lanes = []
+    payload = {
+        "must": must_items[:5],
+        "conditional": conditional_items[:5],
+        "observe": observe_items[:5],
+        "forbid": forbid_items[:4],
+    }
+    for definition in _LANE_DEFS:
+        lanes.append({**definition, "items": payload[definition["key"]]})
+    return lanes
