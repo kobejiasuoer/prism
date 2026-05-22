@@ -595,6 +595,131 @@ export interface TodayCounts {
   fresh_candidates: number;
 }
 
+export type CommandBriefModeValue = "defense" | "observe" | "probe" | "offense";
+export type CommandBriefPermitValue =
+  | "on" | "off" | "shadow" | "limited" | "none" | "observe" | "conditional" | "actionable";
+
+export interface CommandBriefPermit {
+  value: CommandBriefPermitValue;
+  label: string;
+  tone: string;
+  why: string;
+}
+
+export interface CommandBriefMode {
+  value: CommandBriefModeValue;
+  label: string;
+  tone: string;
+  summary: string;
+  reasons: string[];
+}
+
+export interface CommandBriefPositionCap {
+  value: string;
+  raw: string;
+  tone: string;
+  note: string;
+}
+
+export interface CommandBriefFirstAction {
+  title: string;
+  reason: string;
+  url: string;
+  action_key?: string | null;
+  tone: string;
+  kind: "stock" | "system" | "recover_data";
+}
+
+export interface CommandBriefForbidItem {
+  title: string;
+  reason: string;
+  tone: string;
+  source: string;
+}
+
+export interface CommandBriefReclassifyRule {
+  label: string;
+  condition: string;
+  evidence: string;
+  url?: string | null;
+}
+
+export interface CommandBriefJudgement {
+  dim: "market" | "main_theme" | "holdings_pressure" | "new_quality";
+  title: string;
+  verdict: string;
+  tone: string;
+  evidence: string[];
+  impact: string;
+}
+
+export interface CommandBriefLaneItem {
+  key: string;
+  code: string | null;
+  name: string | null;
+  action_type: string;
+  reason: string;
+  trigger: string;
+  invalidate_when: string;
+  source: string;
+  url?: string | null;
+  tone: string;
+}
+
+export interface CommandBriefLane {
+  key: "must" | "conditional" | "observe" | "forbid";
+  title: string;
+  tone: string;
+  subtitle: string;
+  items: CommandBriefLaneItem[] | CommandBriefForbidItem[];
+}
+
+export interface CommandBriefMiddayCard {
+  name: string;
+  code: string;
+  reason: string;
+  url: string;
+  tone: string;
+}
+
+export interface CommandBriefMiddayVerify {
+  available: boolean;
+  morning_takeaway: string;
+  midday_status: string;
+  fresh_candidates: CommandBriefMiddayCard[];
+  downgraded: CommandBriefMiddayCard[];
+  next_day_condition: string;
+  verified_at: string;
+}
+
+export interface CommandBriefTrust {
+  readiness_mode: string;
+  source_summary: string;
+  quality_summary: string;
+  blockers_count: number;
+  warnings_count: number;
+  auto_refresh_summary: string;
+}
+
+export interface TodayCommandBrief {
+  trade_date: string;
+  generated_at: string;
+  mode: CommandBriefMode;
+  permits: {
+    data: CommandBriefPermit;
+    market: CommandBriefPermit;
+    opportunity: CommandBriefPermit;
+  };
+  position_cap: CommandBriefPositionCap;
+  first_action: CommandBriefFirstAction;
+  forbid_today: CommandBriefForbidItem[];
+  reclassify_when: CommandBriefReclassifyRule[];
+  judgement_chain: CommandBriefJudgement[];
+  action_lanes: CommandBriefLane[];
+  midday_verify: CommandBriefMiddayVerify;
+  trust: CommandBriefTrust;
+}
+
 export interface TodayData {
   generated_at: string;
   display_date?: string;
@@ -611,6 +736,8 @@ export interface TodayData {
   source_cards: SourceCardData[];
   summary_cards: MetricCardData[];
   quality_cards?: QualityCardData[];
+  command_brief?: TodayCommandBrief;
+  command_brief_error?: string | null;
   links: LinkMap;
   counts: TodayCounts;
 }
