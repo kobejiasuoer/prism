@@ -29,6 +29,10 @@ from control_panel.command_brief import (  # noqa: E402
     build_today_command_brief,
 )
 
+from fastapi.testclient import TestClient  # noqa: E402
+
+from control_panel.app import app  # noqa: E402
+
 
 def _readiness(mode: str = "live_ready", **extra) -> dict[str, object]:
     base = {
@@ -670,6 +674,29 @@ class BuildBriefTest(unittest.TestCase):
             self.assertIn(key, brief)
         self.assertEqual(brief["mode"]["value"], "probe")
         self.assertEqual(brief["first_action"]["kind"], "stock")
+
+
+class BuildTodayViewIntegrationTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.client = TestClient(app)
+
+    def test_api_today_includes_command_brief(self) -> None:
+        response = self.client.get("/api/today")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        # 新字段
+        self.assertIn("command_brief", payload)
+        brief = payload["command_brief"]
+        for key in ("mode", "permits", "position_cap", "first_action", "judgement_chain", "action_lanes", "midday_verify", "trust"):
+            self.assertIn(key, brief)
+        # mode.value 必须落到合法枚举
+        self.assertIn(brief["mode"]["value"], {"defense", "observe", "probe", "offense"})
+
+        # 旧字段必须保留
+        for legacy_key in ("command_hero", "action_queue", "radar_cards", "risk_rows", "source_cards", "quality_cards", "hero", "counts"):
+            self.assertIn(legacy_key, payload)
 
 
 if __name__ == "__main__":

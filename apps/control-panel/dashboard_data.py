@@ -75,6 +75,7 @@ from prism_storage.paths import RUNTIME_ROOT, ensure_data_dirs, resolve_workspac
 from prism_data.providers.common import request_json_http
 from prism_data.service import get_data_gateway
 from prism_data.utils import normalize_code
+from command_brief import build_today_command_brief  # type: ignore  # local module under apps/control-panel
 
 RESEARCH_REPORTS_DIR = STOCK_SCREENER_ROOT / "data" / "research_backfill" / "reports"
 ARTIFACTS_ROOT = SKILLS_ROOT / "data" / "artifacts"
@@ -8784,6 +8785,22 @@ def build_today_view() -> dict[str, Any]:
 
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    try:
+        command_brief = build_today_command_brief(
+            trade_date=trade_date,
+            readiness=readiness,
+            gate=gate,
+            decision_brief=decision_brief,
+            watchlist=watchlist,
+            screening_batch=screening_batch,
+            confirmation=confirmation,
+            action_groups=action_groups,
+            action_queue=action_queue,
+            refresh_status=None,
+        )
+    except Exception:  # noqa: BLE001 — fail-soft for downstream rendering
+        command_brief = None
+
     return {
         "generated_at": generated_at,
         "display_date": current_display_date(),
@@ -8801,6 +8818,7 @@ def build_today_view() -> dict[str, Any]:
             "context_note": context_note,
         },
         "command_hero": command_hero,
+        "command_brief": command_brief,
         "radar_cards": radar_cards,
         "evidence_hint": evidence_hint,
         "action_groups": action_groups,
