@@ -59,9 +59,16 @@ from control_panel.dashboard_data import (
     record_reconciliation,
     set_account_mode,
     TASK_RUN_REPOSITORY,
+    amend_holding_identity,
     update_today_action_decision,
 )
-from watchlist_registry import archive_watchlist_stock, restore_watchlist_stock, upsert_watchlist_stock
+from watchlist_registry import archive_watchlist_stock, fetch_stock_name, lookup_stock_name_local, restore_watchlist_stock, upsert_watchlist_stock
+from stock_name_backfill import (
+    needs_backfill as _stock_name_needs_backfill,
+    request_name_backfill as _request_stock_name_backfill,
+    start_worker as _start_stock_name_backfill_worker,
+    stop_worker as _stop_stock_name_backfill_worker,
+)
 from source_budget import build_source_budget_payload
 from refresh_policy import (
     CRON_POLICIES,
@@ -109,6 +116,29 @@ TASK_NAME_ALIASES = {
 }
 
 app = FastAPI(title="Prism Control", version="0.1.0")
+
+
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def _prism_lifespan(_app: FastAPI):
+    # Best-effort background worker that backfills friendly stock names
+    # asynchronously so account-write paths stay non-blocking.
+    try:
+        _start_stock_name_backfill_worker()
+    except Exception:
+        pass
+    try:
+        yield
+    finally:
+        try:
+            _stop_stock_name_backfill_worker()
+        except Exception:
+            pass
+
+
+app.router.lifespan_context = _prism_lifespan
 
 
 def allowed_cors_origins() -> list[str]:
@@ -597,6 +627,40 @@ def parse_bool_value(value: Any, default: bool = False) -> bool:
     if text in {"1", "true", "yes", "on"}:
         return True
     return default
+
+
+def resolve_stock_display_name(code: Any, name: Any = None) -> str:
+    raw_code = str(code or "").strip().lower()
+    provided_name = str(name or "").strip()
+    code_like_names = {raw_code}
+    if len(raw_code) == 8 and raw_code[:2].isalpha():
+        code_like_names.add(raw_code[2:])
+
+    if provided_name and provided_name.lower() not in code_like_names:
+        return provided_name
+
+    bare_code = raw_code[2:] if len(raw_code) == 8 and raw_code[:2].isalpha() else raw_code
+    if len(bare_code) == 6 and bare_code.isdigit():
+        # Local-only lookup. The account-write request path must NOT block
+        # on a synchronous external quote roundtrip just to attach a
+        # friendlier display name; if local sources can't resolve it, fall
+        # through to the bare code and let an async backfill upgrade later.
+        try:
+            local_book = load_account_book()
+        except Exception:
+            local_book = None
+        local = lookup_stock_name_local(bare_code, account_book=local_book)
+        if local:
+            return local
+        # Fell through — enqueue an async backfill so the friendly name
+        # eventually lands in account_book/watchlist without blocking the
+        # current request.
+        try:
+            _request_stock_name_backfill(bare_code)
+        except Exception:
+            pass
+
+    return provided_name or bare_code or raw_code
 
 
 REFRESH_STATE_PATH = CONTROL_PANEL_STATE_DIR / "refresh_state.json"
@@ -2270,6 +2334,7 @@ async def api_portfolio_fill(request: Request) -> JSONResponse:
     except Exception:
         payload = {}
 
+    resolved_name = resolve_stock_display_name(payload.get("code"), payload.get("name"))
     try:
         record_fill(
             trade_date=payload.get("trade_date"),
@@ -2278,7 +2343,7 @@ async def api_portfolio_fill(request: Request) -> JSONResponse:
             qty=payload.get("qty"),
             price=payload.get("price"),
             fees=payload.get("fees"),
-            name=payload.get("name"),
+            name=resolved_name,
             broker_ref=payload.get("broker_ref"),
             intent_key=payload.get("intent_key"),
             note=payload.get("note"),
@@ -2310,6 +2375,33 @@ async def api_portfolio_fill(request: Request) -> JSONResponse:
     view = build_portfolio_account_view()
     view["ledger"] = ledger_result
     return JSONResponse(view)
+
+
+@app.post("/api/portfolio/holding/identity")
+async def api_portfolio_holding_identity(request: Request) -> JSONResponse:
+    try:
+        payload: dict[str, Any] = await request.json()
+    except Exception:
+        payload = {}
+
+    from_code = str(payload.get("from_code") or "").strip()
+    to_code = str(payload.get("to_code") or "").strip()
+    reason = str(payload.get("reason") or "").strip()
+    if not from_code or not to_code:
+        raise HTTPException(status_code=400, detail="缺少原代码或新代码")
+
+    resolved_name = resolve_stock_display_name(to_code, payload.get("name"))
+    try:
+        amend_holding_identity(
+            from_code=from_code,
+            to_code=to_code,
+            name=resolved_name,
+            reason=reason,
+        )
+    except AccountBookError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return JSONResponse(build_portfolio_account_view())
 
 
 @app.post("/api/portfolio/intent/no_fill")
