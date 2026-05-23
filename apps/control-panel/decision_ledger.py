@@ -107,6 +107,7 @@ __all__ = [
     "list_review_cases",
     "save_review_case",
     "build_review_case_patterns",
+    "read_review_cases_revision",
     "list_recent_decisions",
     "scan_all_decisions",
     "status_path",
@@ -2422,6 +2423,70 @@ def _write_review_cases_file(cases: list[dict[str, Any]]) -> None:
     atomic_write_json(_review_cases_path(), cases)
 
 
+_EMPTY_REVIEW_CASES_REVISION = "sha256:empty"
+
+
+def _compute_review_cases_revision(cases: Iterable[Mapping[str, Any]]) -> str:
+    """Content-based revision for the saved review cases.
+
+    The revision is a sha256 over the canonical JSON encoding of the
+    cases list. It is stable across processes, independent of file
+    mtime, and changes only when the persisted content changes.
+
+    Callers that need to invalidate caches without paying the full
+    ``list_review_cases`` decoration cost should prefer
+    :func:`read_review_cases_revision` — it hashes the same bytes that
+    were written to disk.
+    """
+    materialized: list[Mapping[str, Any]] = [
+        dict(case) for case in cases if isinstance(case, Mapping)
+    ]
+    if not materialized:
+        return _EMPTY_REVIEW_CASES_REVISION
+    blob = json.dumps(
+        materialized,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(blob).hexdigest()
+
+
+def read_review_cases_revision() -> str:
+    """Cheap content-based revision for the on-disk review case file.
+
+    Reads + parses the file, then canonical-hashes the case list — that
+    keeps the revision identical to the one returned by
+    :func:`list_review_cases`, so callers can compare them across calls
+    without going through the full ``_case_labelled`` projection.
+
+    Returns the empty-revision sentinel when the file is missing,
+    unreadable, or empty.
+    """
+    path = _review_cases_path()
+    try:
+        raw = path.read_bytes()
+    except FileNotFoundError:
+        return _EMPTY_REVIEW_CASES_REVISION
+    except OSError:
+        # Mirror the silent-empty behaviour for missing files; a transient
+        # permission error should not poison a cache key.
+        return _EMPTY_REVIEW_CASES_REVISION
+    if not raw:
+        return _EMPTY_REVIEW_CASES_REVISION
+    try:
+        decoded = json.loads(raw)
+    except json.JSONDecodeError:
+        # A corrupt file is loud through :func:`list_review_cases`; here
+        # we just return a sentinel so the cache treats it as "unknown"
+        # and forces a refresh on the next real call.
+        return "sha256:invalid"
+    if not isinstance(decoded, list):
+        return "sha256:invalid"
+    return _compute_review_cases_revision(decoded)
+
+
 def _review_case_id(decision_id: str) -> str:
     digest = hashlib.sha256(str(decision_id).encode("utf-8")).hexdigest()[:12]
     return f"review_case:{digest}"
@@ -3732,13 +3797,21 @@ def list_review_cases() -> dict[str, Any]:
     attribution per decision, stored separately from the immutable
     DecisionRecord.  A corrupt case file is intentionally loud because a
     bad attribution store would make the learning queue lie.
+
+    The ``revision`` field is a content-based sha256 of the underlying
+    case list. It is stable across processes and changes only when the
+    persisted attribution content changes — callers can use it as a
+    cache key instead of relying on file mtime.
     """
 
-    cases = [_case_labelled(case) for case in _read_review_cases_file()]
+    raw_cases = _read_review_cases_file()
+    revision = _compute_review_cases_revision(raw_cases)
+    cases = [_case_labelled(case) for case in raw_cases]
     return {
         "items": cases,
         "count": len(cases),
         "patterns": build_review_case_patterns(cases=cases).get("patterns", []),
+        "revision": revision,
     }
 
 
