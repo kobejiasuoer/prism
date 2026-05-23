@@ -95,6 +95,24 @@ class ReadinessLiveExtensionTests(unittest.TestCase):
         self.assertIsInstance(body["source_states"], dict)
         self.assertIsInstance(body["capabilities"], dict)
 
+    def test_data_capability_summary_embedded(self) -> None:
+        body = self.client.get("/api/readiness/live").json()
+        self.assertIn("data_capability_summary", body)
+        summary = body["data_capability_summary"]
+        for key in (
+            "total",
+            "formal_ready",
+            "display_only",
+            "pending_target_authority",
+            "pipeline_datasets",
+            "required_for_live_small",
+            "formal_lane_not_ready",
+            "registry_issues",
+        ):
+            self.assertIn(key, summary, f"missing {key} in data_capability_summary")
+        self.assertGreaterEqual(summary["total"], 15)
+        self.assertEqual(summary["registry_issues"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1718,6 +1718,21 @@ async def api_source_budget() -> JSONResponse:
     return JSONResponse(build_source_budget_payload())
 
 
+@app.get("/api/data-capability-matrix")
+async def api_data_capability_matrix() -> JSONResponse:
+    """Static data capability matrix derived from prism_data DATASET_REGISTRY.
+
+    Read-only. Reports each dataset's configured source authority semantics
+    (primary / fallback / authority / target_authority / audit providers,
+    source_lane, decision_scope, required_for_live_small, the static
+    source_authority_ready and formal_decision_allowed values reachable
+    given the configuration, and risk_flags such as display_only,
+    target_authority_not_in_use, fallback_default_not_live, pipeline_dataset).
+    Does not perform any fetch or trigger any task.
+    """
+    return JSONResponse(data_capability_matrix_as_dict())
+
+
 @app.get("/api/capabilities")
 async def api_capabilities() -> JSONResponse:
     """Read-only capability matrix for the current readiness payload.
@@ -1748,6 +1763,7 @@ async def api_readiness_live() -> JSONResponse:
 
     today_view = build_today_view()
     readiness = today_view.get("readiness") or {}
+    matrix_payload = data_capability_matrix_as_dict()
     return JSONResponse(
         {
             "generated_at": today_view.get("generated_at"),
@@ -1766,6 +1782,10 @@ async def api_readiness_live() -> JSONResponse:
             "recommended_tasks": readiness.get("recommended_tasks", []),
             "source_states": readiness.get("source_states", {}),
             "capabilities": readiness.get("capabilities", {}),
+            "data_capability_summary": {
+                **matrix_payload["summary"],
+                "registry_issues": matrix_payload["registry_issues"],
+            },
         }
     )
 
