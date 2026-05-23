@@ -40,5 +40,37 @@ class SourceBudgetEndpointTests(unittest.TestCase):
             self.assertIn(key, sample, f"missing {key} in /api/source-budget payload")
 
 
+class CapabilitiesEndpointTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.client = TestClient(app)
+
+    def test_returns_200(self) -> None:
+        response = self.client.get("/api/capabilities")
+        self.assertEqual(response.status_code, 200)
+
+    def test_returns_six_capabilities(self) -> None:
+        body = self.client.get("/api/capabilities").json()
+        self.assertIn("capabilities", body)
+        caps = body["capabilities"]
+        for name in ("observe", "review", "approve", "trade", "notify", "ledger_capture"):
+            self.assertIn(name, caps, f"missing capability {name}")
+
+    def test_each_capability_has_required_fields(self) -> None:
+        body = self.client.get("/api/capabilities").json()
+        for name, report in body["capabilities"].items():
+            with self.subTest(capability=name):
+                for field in (
+                    "capability", "status", "granted",
+                    "why_not", "degraded_path", "next_actions",
+                    "blocking_sources", "last_checked_at",
+                ):
+                    self.assertIn(field, report, f"{name} missing {field}")
+
+    def test_includes_top_level_metadata(self) -> None:
+        body = self.client.get("/api/capabilities").json()
+        self.assertIn("checked_at", body)
+        self.assertIn("session", body)
+
+
 if __name__ == "__main__":
     unittest.main()

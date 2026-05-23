@@ -1754,6 +1754,25 @@ async def api_source_budget() -> JSONResponse:
     return JSONResponse(build_source_budget_payload())
 
 
+@app.get("/api/capabilities")
+async def api_capabilities() -> JSONResponse:
+    """Read-only capability matrix for the current readiness payload.
+
+    Returns 6 investment capabilities (observe/review/approve/trade/notify/
+    ledger_capture) translated from the engineering-language readiness into
+    operator-facing status, why_not and degraded_path. Strictly read-only.
+    """
+    today_view = build_today_view()
+    readiness = today_view.get("readiness") or {}
+    return JSONResponse(
+        {
+            "checked_at": readiness.get("checked_at"),
+            "session": readiness.get("session"),
+            "capabilities": readiness.get("capabilities", {}),
+        }
+    )
+
+
 @app.get("/api/readiness/live")
 async def api_readiness_live() -> JSONResponse:
     """Operator-facing readiness summary.
