@@ -56,6 +56,7 @@ from prism_storage import AppStateRepository  # type: ignore
 __all__ = [
     "ACCOUNT_MODES",
     "AccountBookError",
+    "apply_name_backfill",
     "compute_account_view",
     "default_state_path",
     "load_account_book",
@@ -456,6 +457,58 @@ def record_fill(
     state["fills"].append(fill_entry)
     state["cash_balance"] = new_balance
     return _persist(state)
+
+
+def _is_code_like_name(name: Any, code: str) -> bool:
+    text = str(name or "").strip()
+    if not text or text == code:
+        return True
+    lowered = text.lower()
+    return lowered.startswith(("sh", "sz")) and lowered[2:] == code
+
+
+def apply_name_backfill(code: Any, name: Any) -> bool:
+    """Patch fills/positions where the current name is still code-like.
+
+    Used by the async stock-name backfill worker: the money-write path stays
+    non-blocking, then a background fetch upgrades the friendly name. Returns
+    True if anything actually changed (and was persisted).
+    """
+
+    try:
+        normalized_code = _normalize_code(code)
+    except AccountBookError:
+        return False
+    clean_name = str(name or "").strip()
+    if not clean_name or _is_code_like_name(clean_name, normalized_code):
+        return False
+
+    state = load_account_book()
+    changed = False
+
+    for fill in state.get("fills") or []:
+        if not isinstance(fill, dict):
+            continue
+        if str(fill.get("code") or "").strip() != normalized_code:
+            continue
+        if _is_code_like_name(fill.get("name"), normalized_code):
+            fill["name"] = clean_name
+            changed = True
+
+    plans = state.get("position_plans")
+    if isinstance(plans, list):
+        for plan in plans:
+            if not isinstance(plan, dict):
+                continue
+            if str(plan.get("code") or "").strip() != normalized_code:
+                continue
+            if _is_code_like_name(plan.get("name"), normalized_code):
+                plan["name"] = clean_name
+                changed = True
+
+    if changed:
+        _persist(state)
+    return changed
 
 
 def record_no_fill_intent(
