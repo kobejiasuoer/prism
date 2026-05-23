@@ -62,6 +62,7 @@ from control_panel.dashboard_data import (
     update_today_action_decision,
 )
 from watchlist_registry import archive_watchlist_stock, restore_watchlist_stock, upsert_watchlist_stock
+from source_budget import build_source_budget_payload
 from refresh_policy import (
     CRON_POLICIES,
     PAGE_POLICIES,
@@ -1741,6 +1742,16 @@ async def api_scheduler_status() -> JSONResponse:
 @app.get("/api/cron/validate")
 async def api_cron_validate() -> JSONResponse:
     return JSONResponse(validate_cron_policies())
+
+
+@app.get("/api/source-budget")
+async def api_source_budget() -> JSONResponse:
+    """Static business profile registry for all Prism data sources.
+
+    Read-only. Does not trigger any task or fetch. Useful for capability
+    diagnostics and future UI panels.
+    """
+    return JSONResponse(build_source_budget_payload())
 
 
 @app.get("/api/readiness/live")
