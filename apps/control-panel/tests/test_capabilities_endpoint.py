@@ -72,5 +72,27 @@ class CapabilitiesEndpointTests(unittest.TestCase):
         self.assertIn("session", body)
 
 
+class ReadinessLiveExtensionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.client = TestClient(app)
+
+    def test_existing_keys_still_present(self) -> None:
+        body = self.client.get("/api/readiness/live").json()
+        for key in (
+            "generated_at", "expected_trade_date", "data_trade_date",
+            "display_date", "trade_date", "readiness_mode", "ready", "session",
+            "stale_count", "blockers", "warnings", "source_freshness",
+            "quality_freshness", "recommended_tasks",
+        ):
+            self.assertIn(key, body, f"/api/readiness/live regression: {key} missing")
+
+    def test_new_keys_added(self) -> None:
+        body = self.client.get("/api/readiness/live").json()
+        self.assertIn("source_states", body)
+        self.assertIn("capabilities", body)
+        self.assertIsInstance(body["source_states"], dict)
+        self.assertIsInstance(body["capabilities"], dict)
+
+
 if __name__ == "__main__":
     unittest.main()

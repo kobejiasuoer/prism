@@ -1800,6 +1800,8 @@ async def api_readiness_live() -> JSONResponse:
             "source_freshness": readiness.get("source_freshness", []),
             "quality_freshness": readiness.get("quality_freshness", []),
             "recommended_tasks": readiness.get("recommended_tasks", []),
+            "source_states": readiness.get("source_states", {}),
+            "capabilities": readiness.get("capabilities", {}),
         }
     )
 
