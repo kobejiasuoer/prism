@@ -336,8 +336,8 @@ PAGE_POLICIES: dict[str, PagePolicy] = {
     ),
     "review": PagePolicy(
         page="review",
-        allowed_tasks=("command_brief",),
-        related_tasks=("command_brief",),
+        allowed_tasks=("command_brief", "decision_ledger_outcomes"),
+        related_tasks=("command_brief", "decision_ledger_outcomes"),
         poll_seconds={"trading": 120, "standby": 180, "off": 600},
         stale_after_seconds={"trading": 7200, "standby": 14_400, "off": 86_400},
         auto_on_open=False,
@@ -381,6 +381,7 @@ CRON_POLICIES: tuple[CronJobPolicy, ...] = (
             "3",
             "--handoff-min-consistency",
             "6",
+            "--lifecycle",
         ),
         catchup_enabled=True,
         catchup_until="11:30",

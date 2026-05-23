@@ -43,6 +43,50 @@ class PrismCanonicalTradeDateGuardTests(unittest.TestCase):
             finally:
                 prism_canonical.SCREENER_DATA_DIRS = original_dirs
 
+    def test_lifecycle_resolver_prefers_current_packages_data(self) -> None:
+        original_dirs = prism_canonical.SCREENER_DATA_DIRS
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            current = root / "packages-data"
+            legacy = root / "stock-screener-data"
+            write_json(
+                legacy / "lifecycle_2026-04-13_16-13.json",
+                {"metadata": {"generated_at": "2026-04-13 16:13:00"}, "summary": {"entered_count": 1}},
+            )
+            write_json(
+                current / "lifecycle_2026-05-19_12-20.json",
+                {"metadata": {"generated_at": "2026-05-19 12:20:00"}, "summary": {"entered_count": 0}},
+            )
+
+            prism_canonical.SCREENER_DATA_DIRS = (current, legacy)
+            try:
+                resolved = prism_canonical.resolve_lifecycle_path()
+                self.assertEqual(resolved, current / "lifecycle_2026-05-19_12-20.json")
+            finally:
+                prism_canonical.SCREENER_DATA_DIRS = original_dirs
+
+    def test_lifecycle_activity_fallback_can_use_legacy_when_current_is_empty(self) -> None:
+        original_dirs = prism_canonical.SCREENER_DATA_DIRS
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            current = root / "packages-data"
+            legacy = root / "stock-screener-data"
+            write_json(
+                legacy / "lifecycle_2026-04-13_16-13.json",
+                {"metadata": {"generated_at": "2026-04-13 16:13:00"}, "summary": {"entered_count": 1}},
+            )
+            write_json(
+                current / "lifecycle_2026-05-19_12-20.json",
+                {"metadata": {"generated_at": "2026-05-19 12:20:00"}, "summary": {"entered_count": 0}},
+            )
+
+            prism_canonical.SCREENER_DATA_DIRS = (current, legacy)
+            try:
+                resolved = prism_canonical.resolve_lifecycle_path(require_activity=True)
+                self.assertEqual(resolved, legacy / "lifecycle_2026-04-13_16-13.json")
+            finally:
+                prism_canonical.SCREENER_DATA_DIRS = original_dirs
+
 
 if __name__ == "__main__":
     unittest.main()

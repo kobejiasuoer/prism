@@ -55,6 +55,10 @@ def _cooldown(remaining: int = 0) -> dict[str, object]:
 
 
 class RefreshPolicyDecisionTests(unittest.TestCase):
+    def test_aggressive_cron_generates_lifecycle_snapshot(self) -> None:
+        aggressive = next(item for item in CRON_POLICIES if item.task_name == "aggressive")
+        self.assertIn("--lifecycle", aggressive.command)
+
     def test_stale_manifest_recommends_watchlist_refresh(self) -> None:
         payload = LEGACY_APP_MODULE.build_refresh_status_payload("today", now=datetime(2026, 5, 8, 10, 0, 0))
         self.assertIn("recommended_task", payload)

@@ -981,7 +981,15 @@ def resolve_lifecycle_path(path: str | None = None, require_activity: bool = Fal
         candidate = Path(path).expanduser()
         return candidate if candidate.exists() else None
 
-    files = sorted(SCREENER_DATA_DIR.glob("lifecycle_*.json"), key=lambda item: item.stat().st_mtime, reverse=True)
+    files = sorted(
+        [
+            candidate
+            for data_dir in SCREENER_DATA_DIRS
+            for candidate in data_dir.glob("lifecycle_*.json")
+        ],
+        key=lambda item: item.stat().st_mtime,
+        reverse=True,
+    )
     if not require_activity:
         return files[0] if files else None
 

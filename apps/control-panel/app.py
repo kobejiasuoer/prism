@@ -2569,6 +2569,84 @@ async def api_decision_ledger_recent(request: Request) -> JSONResponse:
     return JSONResponse(payload)
 
 
+@app.get("/api/decision-ledger/calibration")
+async def api_decision_ledger_calibration(request: Request) -> JSONResponse:
+    """Review-oriented ledger projection for calibration work.
+
+    This endpoint does not mutate the ledger.  It groups decisions by
+    lane/action, highlights failed or questionable outcomes, and returns
+    small suggestion cards so Review can guide the operator toward the
+    next useful inspection instead of dumping another raw list.
+    """
+
+    window_days = _parse_window_days(request.query_params.get("window") or "20d")
+    as_of = request.query_params.get("as_of") or None
+    limit = _parse_limit(request.query_params.get("limit"), default=12)
+    payload = decision_ledger.build_calibration_review(
+        window_days=window_days,
+        as_of=as_of,
+        limit=limit,
+    )
+    return JSONResponse(payload)
+
+
+@app.get("/api/decision-ledger/review-cases")
+async def api_decision_ledger_review_cases() -> JSONResponse:
+    """Saved Review Cases plus same-pattern learning clusters."""
+
+    try:
+        payload = decision_ledger.list_review_cases()
+    except decision_ledger.DecisionLedgerError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return JSONResponse(payload)
+
+
+@app.get("/api/decision-ledger/review-case/{decision_id}")
+async def api_decision_ledger_review_case(decision_id: str) -> JSONResponse:
+    """Single-decision Review Case workbench.
+
+    The payload combines the immutable DecisionRecord, the current
+    learning-card projection, any saved Review Case, and same-pattern
+    cases so the frontend can render a complete attribution workspace.
+    """
+
+    try:
+        payload = decision_ledger.build_review_case_workbench(decision_id)
+    except decision_ledger.DecisionLedgerError as exc:
+        message = str(exc)
+        status = 404 if "decision not found" in message else 400
+        raise HTTPException(status_code=status, detail=message) from exc
+    return JSONResponse(payload)
+
+
+@app.post("/api/decision-ledger/review-case/{decision_id}/attribution-draft")
+async def api_decision_ledger_attribution_draft(decision_id: str) -> JSONResponse:
+    """Generate an AI attribution draft without saving final attribution."""
+
+    try:
+        draft = decision_ledger.build_attribution_draft(decision_id)
+    except decision_ledger.DecisionLedgerError as exc:
+        message = str(exc)
+        status = 404 if "decision not found" in message else 400
+        raise HTTPException(status_code=status, detail=message) from exc
+    return JSONResponse({"ok": True, "draft": draft})
+
+
+@app.post("/api/decision-ledger/review-case/{decision_id}")
+async def api_decision_ledger_save_review_case(decision_id: str, request: Request) -> JSONResponse:
+    """Save structured attribution for one Decision Ledger record."""
+
+    payload = await request.json()
+    try:
+        review_case = decision_ledger.save_review_case(decision_id, payload)
+        workbench = decision_ledger.build_review_case_workbench(decision_id)
+    except decision_ledger.DecisionLedgerError as exc:
+        message = str(exc)
+        status = 404 if "decision not found" in message else 400
+        raise HTTPException(status_code=status, detail=message) from exc
+    return JSONResponse({"ok": True, "review_case": review_case, "workbench": workbench})
+
+
 @app.get("/api/decision-ledger/stock/{code}")
 async def api_decision_ledger_stock(code: str) -> JSONResponse:
     """Decision history for one stock code.

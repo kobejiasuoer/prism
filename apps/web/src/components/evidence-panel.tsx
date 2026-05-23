@@ -38,6 +38,7 @@ export function EvidencePanel({
   artifacts,
   title = "证据与刷新",
   eyebrow = "Evidence",
+  compact = false,
 }: {
   page?: EvidenceRefreshPage;
   mode?: EvidenceMode;
@@ -46,6 +47,7 @@ export function EvidencePanel({
   artifacts?: BasicCard[];
   title?: string;
   eyebrow?: string;
+  compact?: boolean;
 }) {
   const refreshPage = mode === "standard" ? page || "" : "";
   const refresh = useRefreshStatus(refreshPage, Boolean(refreshPage), { auto: true });
@@ -68,6 +70,24 @@ export function EvidencePanel({
   const readinessCopy = readinessModeCopy(refresh.data?.readiness_mode);
   const firstReason = (blockedReasons.length ? blockedReasons : autoReasons)[0];
   const firstReasonDetail = firstReason ? refreshReasonCopy(firstReason).detail : "";
+  const staleCount =
+    refresh.data?.stale_count ??
+    mergedSources.filter((source) => source.stale || source.available === false).length;
+  const healthTitle = staleCount ? "数据有降级" : "数据可用";
+  const healthDetail = refresh.data
+    ? [
+        refresh.data.market_label,
+        refresh.data.recommended_task?.title ? `建议 ${refresh.data.recommended_task.title}` : "",
+        runningCount ? `运行中 ${runningCount}` : "",
+        isCooling ? `冷却 ${refresh.data.cooldown?.remaining_seconds ?? 0}s` : "",
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : mode === "ask"
+      ? "Ask 临时证据，仅展示页内来源。"
+      : mode === "readonly"
+        ? "只读证据，不触发刷新。"
+        : "页内证据状态。";
 
   async function openArtifact(card: BasicCard) {
     const path = artifactPath(card);
@@ -146,6 +166,165 @@ export function EvidencePanel({
           setMessage(error instanceof Error ? error.message : "刷新启动失败");
         },
       },
+    );
+  }
+
+  if (compact) {
+    return (
+      <>
+        <Panel
+          title={title}
+          eyebrow={eyebrow}
+          action={
+            canRefresh ? (
+              <button
+                type="button"
+                className="focus-ring inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => startRefresh(false)}
+                disabled={trigger.isPending || runningCount > 0 || isCooling}
+              >
+                {trigger.isPending ? <LoaderCircle size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                刷新
+              </button>
+            ) : null
+          }
+        >
+          <div className="surface-card p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <Badge tone={staleCount ? "warning" : "positive"}>{healthTitle}</Badge>
+                  {refresh.data?.readiness_mode ? <Badge tone={readinessCopy.tone}>{readinessCopy.title}</Badge> : null}
+                  {staleCount ? <Badge tone="warning">降级源 {staleCount}</Badge> : null}
+                  {autoDecision?.triggered ? <Badge tone="positive">已自动补刷</Badge> : null}
+                </div>
+                <p className="text-[12px] leading-5 text-[var(--text-secondary)]">
+                  {healthDetail || "来源状态可用，必要时展开看明细。"}
+                </p>
+                {message ? <p className="mt-2 text-[12px] text-[var(--text-tertiary)]">{message}</p> : null}
+              </div>
+              {isCooling ? (
+                <button
+                  type="button"
+                  className="focus-ring shrink-0 rounded-md border border-[var(--border-subtle)] px-2.5 py-1.5 text-[12px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                  onClick={() => startRefresh(true)}
+                  disabled={trigger.isPending}
+                >
+                  强制刷新
+                </button>
+              ) : null}
+            </div>
+
+            <details className="mt-3 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+              <summary className="cursor-pointer text-[12px] font-medium text-[var(--text-secondary)]">
+                展开来源、刷新策略和原始入口
+              </summary>
+              {refreshPage && refresh.data ? (
+                <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-2">
+                  <div className="rounded-md border border-[var(--border-subtle)] px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-secondary)]">
+                      <span className="font-medium text-[var(--text-primary)]">自动刷新</span>
+                      <Badge tone={autoDecision?.allowed ? "positive" : "watch"}>
+                        {autoDecision?.allowed ? "允许自动补刷" : "未自动补刷"}
+                      </Badge>
+                      <span>冷却 {formatCooldown(refresh.data.cooldown?.remaining_seconds)}</span>
+                    </div>
+                    <div className="mt-1 text-[12px] leading-5 text-[var(--text-tertiary)]">
+                      {autoDecision?.summary || "等待刷新策略判断。"}
+                    </div>
+                    {firstReasonDetail ? (
+                      <div className="mt-1 text-[12px] leading-5 text-[var(--text-tertiary)]">
+                        {firstReasonDetail}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-md border border-[var(--border-subtle)] px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-secondary)]">
+                      <span className="font-medium text-[var(--text-primary)]">最近自动刷新</span>
+                      {lastAuto?.task_name ? <Badge tone="info">{lastAuto.task_name}</Badge> : <Badge tone="watch">暂无</Badge>}
+                    </div>
+                    <div className="mt-1 text-[12px] leading-5 text-[var(--text-tertiary)]">
+                      {lastAuto ? `${lastAuto.ts || "-"} · ${lastAuto.reason || "-"}` : "还没有自动刷新审计事件。"}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="mt-3 grid grid-cols-1 gap-4 xl:grid-cols-2">
+                <div>
+                  <div className="mb-2 text-[12px] font-medium text-[var(--text-primary)]">新鲜度</div>
+                  <div className="flex flex-col gap-2">
+                    {mergedSources.map((source, index) => (
+                      <SourceCard key={`${source.label}-${index}`} source={source} />
+                    ))}
+                    {!mergedSources.length ? <EmptyState>暂无新鲜度状态。</EmptyState> : null}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-2 text-[12px] font-medium text-[var(--text-primary)]">回源入口</div>
+                  <div className="flex flex-col gap-2">
+                    {artifactCards.map((card, index) => (
+                      <div
+                        key={`${artifactTitle(card)}-${index}`}
+                        className="flex items-center gap-3 rounded-md border border-[var(--border-subtle)] px-3 py-2"
+                      >
+                        <FileText size={14} className="shrink-0 text-[var(--text-tertiary)]" />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[12px] text-[var(--text-primary)]">{artifactTitle(card)}</div>
+                          <div className="mono truncate text-[11px] text-[var(--text-tertiary)]">
+                            {artifactPath(card) || card.url}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="focus-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]"
+                          onClick={() => void openArtifact(card)}
+                          aria-label="页内预览"
+                        >
+                          <Eye size={14} />
+                        </button>
+                        {card.url ? (
+                          <a
+                            href={card.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="focus-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]"
+                            aria-label="打开原始文件"
+                          >
+                            <ExternalLink size={14} />
+                          </a>
+                        ) : null}
+                      </div>
+                    ))}
+                    {refresh.data?.cooldown?.last_run_id ? (
+                      <button
+                        type="button"
+                        className="focus-ring flex items-center gap-3 rounded-md border border-[var(--border-subtle)] px-3 py-2 text-left hover:border-[var(--border-default)]"
+                        onClick={() => void openRunLog(String(refresh.data?.cooldown?.last_run_id))}
+                      >
+                        <FileText size={14} className="shrink-0 text-[var(--text-tertiary)]" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-[12px] text-[var(--text-primary)]">最近刷新日志</span>
+                          <span className="mono block truncate text-[11px] text-[var(--text-tertiary)]">
+                            {refresh.data.cooldown.last_run_id}
+                          </span>
+                        </span>
+                        <Eye size={14} className="text-[var(--text-tertiary)]" />
+                      </button>
+                    ) : null}
+                    {!artifactCards.length && !refresh.data?.cooldown?.last_run_id ? (
+                      <EmptyState>暂无 artifacts 或日志入口。</EmptyState>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </details>
+          </div>
+        </Panel>
+        <PreviewDrawer state={preview} onClose={() => setPreview((current) => ({ ...current, open: false }))} />
+      </>
     );
   }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ChevronDown,
   Circle,
   Command,
   Monitor,
@@ -10,6 +11,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
 import { useTheme, type ThemeMode } from "@/components/theme-provider";
 import { useOverview, useTodayData } from "@/lib/hooks";
@@ -22,34 +24,91 @@ export const navItems = [
   { href: "/review", label: "复盘", mark: "04" },
 ] as const;
 
-const nextThemeMode: Record<ThemeMode, ThemeMode> = {
-  system: "dark",
-  dark: "light",
-  light: "system",
+const themeOptions: Array<{ mode: ThemeMode; label: string; icon: typeof Sun }> = [
+  { mode: "system", label: "跟随系统", icon: Monitor },
+  { mode: "light", label: "白天", icon: Sun },
+  { mode: "dark", label: "黑夜", icon: Moon },
+];
+
+const themeCopy: Record<ThemeMode, { label: string; icon: typeof Sun }> = {
+  system: { label: "跟随系统", icon: Monitor },
+  dark: { label: "黑夜", icon: Moon },
+  light: { label: "白天", icon: Sun },
 };
 
-const themeCopy: Record<ThemeMode, { label: string; next: string; icon: typeof Sun }> = {
-  system: { label: "跟随系统", next: "黑夜", icon: Monitor },
-  dark: { label: "黑夜", next: "白天", icon: Moon },
-  light: { label: "白天", next: "跟随系统", icon: Sun },
-};
-
-function ThemeCycleButton() {
+function ThemeSelectButton() {
   const { mode, resolvedTheme, setMode } = useTheme();
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const Icon = themeCopy[mode].icon;
   const resolvedCopy = mode === "system" ? (resolvedTheme === "dark" ? "系统黑夜" : "系统白天") : themeCopy[mode].label;
 
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
   return (
-    <button
-      type="button"
-      className="focus-ring prism-theme-cycle"
-      data-mode={mode}
-      title={`当前：${resolvedCopy}。切换到${themeCopy[mode].next}`}
-      aria-label={`切换主题，当前是${resolvedCopy}`}
-      onClick={() => setMode(nextThemeMode[mode])}
-    >
-      <Icon size={14} aria-hidden="true" />
-    </button>
+    <div className="prism-theme-select" ref={menuRef}>
+      <button
+        type="button"
+        className="focus-ring prism-theme-cycle"
+        data-mode={mode}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={`主题：${resolvedCopy}`}
+        aria-label={`选择主题，当前是${resolvedCopy}`}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <Icon size={14} aria-hidden="true" />
+        <ChevronDown size={12} aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="prism-theme-menu" role="menu" aria-label="主题选择">
+          {themeOptions.map((option) => {
+            const OptionIcon = option.icon;
+            const active = option.mode === mode;
+            return (
+              <button
+                key={option.mode}
+                type="button"
+                className="focus-ring prism-theme-menu-item"
+                data-active={active}
+                role="menuitemradio"
+                aria-checked={active}
+                onClick={() => {
+                  setMode(option.mode);
+                  setOpen(false);
+                }}
+              >
+                <OptionIcon size={14} aria-hidden="true" />
+                <span>{option.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -159,7 +218,7 @@ export function Sidebar({
               {overview.data?.generated_at ? ` · ${overview.data.generated_at.slice(11, 16)}` : ""}
             </span>
           </span>
-          <ThemeCycleButton />
+          <ThemeSelectButton />
         </div>
       </div>
     </aside>

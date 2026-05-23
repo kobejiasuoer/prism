@@ -100,6 +100,13 @@ __all__ = [
     "evaluate_due_outcomes",
     "normalize_stock_code",
     "summarize_window",
+    "build_calibration_review",
+    "build_shadow_calibration_summary",
+    "build_review_case_workbench",
+    "build_attribution_draft",
+    "list_review_cases",
+    "save_review_case",
+    "build_review_case_patterns",
     "list_recent_decisions",
     "scan_all_decisions",
     "status_path",
@@ -153,11 +160,118 @@ _GROUP_KEY_FALLBACK = {
 
 CONTROL_PANEL_ROOT = Path(__file__).resolve().parent
 INVEST_FLOW_ROOT = CONTROL_PANEL_ROOT.parent
+WORKSPACE_ROOT = CONTROL_PANEL_ROOT.parents[1]
 DEFAULT_LEDGER_DIR = INVEST_FLOW_ROOT / "data" / "decision_ledger"
+SHADOW_REPLAY_ROOT = WORKSPACE_ROOT / "data" / "quant" / "shadow_replay"
 
 
 class DecisionLedgerError(ValueError):
     """Raised for user-facing validation failures in the ledger layer."""
+
+
+@dataclass(frozen=True)
+class AttributionProviderConfig:
+    """Runtime config for an OpenAI-compatible attribution draft provider."""
+
+    provider: str
+    api_key: str
+    model: str
+    base_url: str
+    timeout_seconds: float
+    configured: bool
+
+
+PRIMARY_REVIEW_CAUSES = (
+    "too_strict",
+    "too_loose",
+    "signal_distortion",
+    "execution_gap",
+    "data_unavailable",
+    "insufficient_sample",
+    "rule_valid_noise",
+)
+SECONDARY_REVIEW_CAUSES = (
+    "volume_too_conservative",
+    "capital_flow_filter_strict",
+    "market_regime_gate_strict",
+    "fundamental_weight_low",
+    "open_behavior_misread",
+    "risk_condition_not_triggered",
+    "followup_event_driven",
+    "liquidity_insufficient",
+    "data_delay",
+)
+CONCLUSION_ACTIONS = (
+    "keep_rule",
+    "loosen_filter",
+    "tighten_filter",
+    "add_guardrail",
+    "wait_more_samples",
+    "fix_data_pipeline",
+    "fix_execution_pipeline",
+)
+FOLLOW_UP_STATUSES = (
+    "observing",
+    "sample_insufficient",
+    "preliminary_effective",
+    "invalid",
+    "adopted",
+    "rolled_back",
+)
+ATTRIBUTION_CONFIDENCE_LEVELS = ("low", "medium", "high")
+
+_DIRECT_RULE_ACTIONS = {"loosen_filter", "tighten_filter", "add_guardrail"}
+_FOLLOW_UP_STATUS_LABELS = {
+    "observing": "观察中",
+    "sample_insufficient": "样本不足",
+    "preliminary_effective": "初步有效",
+    "invalid": "无效",
+    "adopted": "已采纳",
+    "rolled_back": "已回滚",
+}
+_CONCLUSION_ACTION_LABELS = {
+    "keep_rule": "保持规则",
+    "loosen_filter": "调宽过滤条件",
+    "tighten_filter": "收紧过滤条件",
+    "add_guardrail": "增加护栏",
+    "wait_more_samples": "等更多样本",
+    "fix_data_pipeline": "修复数据链路",
+    "fix_execution_pipeline": "修复执行链路",
+}
+_PRIMARY_REVIEW_CAUSE_LABELS = {
+    "too_strict": "判断过严",
+    "too_loose": "判断过松",
+    "signal_distortion": "信号失真",
+    "execution_gap": "执行未跟上",
+    "data_unavailable": "数据不可用",
+    "insufficient_sample": "样本不足，暂不改规则",
+    "rule_valid_noise": "规则有效，个例噪音",
+}
+_SECONDARY_REVIEW_CAUSE_LABELS = {
+    "volume_too_conservative": "量能判断偏保守",
+    "capital_flow_filter_strict": "主力资金过滤过严",
+    "market_regime_gate_strict": "环境阀门过严",
+    "fundamental_weight_low": "个股基本面权重不足",
+    "open_behavior_misread": "开盘行为误判",
+    "risk_condition_not_triggered": "风险条件未发生",
+    "followup_event_driven": "后续事件驱动",
+    "liquidity_insufficient": "流动性不足",
+    "data_delay": "数据延迟",
+}
+_REVIEW_CASE_STATUS_LABELS = {
+    "pending_attribution": "待归因",
+    "attributed": "已归因",
+    "observing": "观察中",
+    "pattern_formed": "已形成模式",
+    "rule_suggestion": "已生成规则建议",
+    "closed": "已关闭",
+}
+_SAMPLE_STAGE_LABELS = {
+    "observation_hypothesis": "观察假设",
+    "validating_pattern": "待验证模式",
+    "rule_adjustment_suggestion": "规则调整建议",
+    "strategy_calibration_suggestion": "策略级校准建议",
+}
 
 
 # --------------------------------------------------------------------------- paths
@@ -178,6 +292,10 @@ def default_ledger_root() -> Path:
 
 def _decisions_path(trade_date: str) -> Path:
     return default_ledger_root() / "decisions" / f"{_normalize_trade_date(trade_date)}.json"
+
+
+def _review_cases_path() -> Path:
+    return default_ledger_root() / "review_cases.json"
 
 
 # ----------------------------------------------------------------- normalization
@@ -2104,6 +2222,2858 @@ def summarize_window(
         "data_issue_count": data_issue_count,
         "execution_events_total": execution_events_total,
         "outcome_events_total": outcome_events_total,
+        "errors": errors,
+    }
+
+
+_REVIEW_LABELS = {
+    "invalidated",
+    "data_issue",
+    "execution_gap",
+    "missed_opportunity",
+}
+_REVIEW_STATUS_STATES = {"superseded"}
+_REVIEW_REASON_PRIORITY = {
+    "invalidated": 0,
+    "execution_gap": 1,
+    "missed_opportunity": 2,
+    "data_issue": 3,
+    "superseded": 4,
+}
+_REVIEW_REASON_LABELS = {
+    "invalidated": "判断失效",
+    "execution_gap": "执行落差",
+    "missed_opportunity": "错过机会",
+    "data_issue": "数据问题",
+    "superseded": "判断被替代",
+}
+_READY_REVIEW_STATUSES = {"ready_review", "blocked_data"}
+_PENDING_REVIEW_STATUSES = {"pending_outcome", "pending_execution"}
+_EXECUTION_REQUIRED_ACTIONS = {"trial_buy", "reduce"}
+_PRIORITY_LABELS = (
+    (75, "critical"),
+    (55, "high"),
+    (35, "medium"),
+)
+_CALIBRATION_ACTION_LABELS = {
+    "keep_rule": "保留规则",
+    "tighten_rule": "收紧规则",
+    "loosen_rule": "放宽规则",
+    "add_guardrail": "增加护栏",
+    "wait_for_sample": "等待样本",
+    "run_outcome_evaluator": "补跑结果评估",
+    "fix_execution": "修复执行",
+    "fix_data": "修复数据",
+    "investigate_pattern": "排查模式",
+}
+
+
+def _empty_group(label: str) -> dict[str, Any]:
+    return {
+        "key": label or "unknown",
+        "label": label or "unknown",
+        "total": 0,
+        "evaluated": 0,
+        "validated": 0,
+        "invalidated": 0,
+        "data_issue": 0,
+        "execution_gap": 0,
+        "missed_opportunity": 0,
+        "superseded": 0,
+        "pending": 0,
+        "review_needed": 0,
+    }
+
+
+def _bump_group(
+    group: dict[str, Any],
+    *,
+    latest_label: str | None,
+    has_outcome: bool,
+    status_state: str | None = None,
+) -> None:
+    group["total"] += 1
+    if status_state in _REVIEW_STATUS_STATES:
+        group["superseded"] += 1
+    if latest_label in _REVIEW_LABELS or status_state in _REVIEW_STATUS_STATES:
+        group["review_needed"] += 1
+    if has_outcome:
+        group["evaluated"] += 1
+    else:
+        group["pending"] += 1
+        return
+    if latest_label in {"validated", "avoided_loss"}:
+        group["validated"] += 1
+    elif latest_label == "invalidated":
+        group["invalidated"] += 1
+    elif latest_label == "data_issue":
+        group["data_issue"] += 1
+    elif latest_label == "execution_gap":
+        group["execution_gap"] += 1
+    elif latest_label == "missed_opportunity":
+        group["missed_opportunity"] += 1
+
+
+def _group_rates(group: Mapping[str, Any]) -> dict[str, Any]:
+    total = int(group.get("total") or 0)
+    evaluated = int(group.get("evaluated") or 0)
+    review_needed = int(group.get("review_needed") or 0)
+    validated = int(group.get("validated") or 0)
+    invalidated = int(group.get("invalidated") or 0)
+    data_issue = int(group.get("data_issue") or 0)
+    return {
+        **dict(group),
+        "validated_rate": round(validated / evaluated * 100, 1) if evaluated else 0.0,
+        "invalidated_rate": round(invalidated / evaluated * 100, 1) if evaluated else 0.0,
+        "data_issue_rate": round(data_issue / total * 100, 1) if total else 0.0,
+        "review_rate": round(review_needed / total * 100, 1) if total else 0.0,
+    }
+
+
+def _review_reason(record: Mapping[str, Any], latest_label: str | None) -> tuple[str, str]:
+    if latest_label == "invalidated":
+        return "invalidated", "判断被后续行情否定"
+    if latest_label == "data_issue":
+        return "data_issue", "数据缺口使结果不可评价"
+    if latest_label == "execution_gap":
+        return "execution_gap", "建议有效但执行没有跟上"
+    if latest_label == "missed_opportunity":
+        return "missed_opportunity", "谨慎动作后出现明显机会"
+    if str((record.get("status") or {}).get("state") or "") == "superseded":
+        return "superseded", "同源判断被后续建议替代"
+    return "attention", "需要人工复盘"
+
+
+def _axis(label: str, score: int, tone: str, reason: str) -> dict[str, Any]:
+    return {
+        "label": label,
+        "score": max(0, min(int(score), 100)),
+        "tone": tone,
+        "reason": reason,
+    }
+
+
+def _evidence_strength(sample_size: int) -> str:
+    if sample_size >= 10:
+        return "high"
+    if sample_size >= 5:
+        return "medium"
+    if sample_size >= 2:
+        return "low"
+    return "anecdotal"
+
+
+def _priority_label(score: int) -> str:
+    for threshold, label in _PRIORITY_LABELS:
+        if score >= threshold:
+            return label
+    return "low"
+
+
+def _action_requires_execution(action: str | None) -> bool:
+    return str(action or "").strip().lower() in _EXECUTION_REQUIRED_ACTIONS
+
+
+def _latest_outcome_label(latest_outcome: Mapping[str, Any] | None) -> str:
+    if not latest_outcome:
+        return ""
+    return str((latest_outcome.get("classification") or {}).get("label") or "")
+
+
+def _latest_outcome_tone(latest_outcome: Mapping[str, Any] | None) -> str:
+    if not latest_outcome:
+        return "watch"
+    return str((latest_outcome.get("classification") or {}).get("tone") or "watch")
+
+
+def _read_review_cases_file() -> list[dict[str, Any]]:
+    path = _review_cases_path()
+    if not path.exists():
+        return []
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise DecisionLedgerError(
+            f"corrupt review case file {path}: {exc.msg}"
+        ) from exc
+    if not isinstance(raw, list):
+        raise DecisionLedgerError(
+            f"corrupt review case file {path}: expected list payload"
+        )
+    cases: list[dict[str, Any]] = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, Mapping):
+            raise DecisionLedgerError(
+                f"corrupt review case file {path}: record at index {index} "
+                f"is not an object (got {type(item).__name__})"
+            )
+        cases.append(dict(item))
+    return cases
+
+
+def _write_review_cases_file(cases: list[dict[str, Any]]) -> None:
+    cases.sort(
+        key=lambda item: (
+            str(item.get("reviewed_at") or ""),
+            str(item.get("review_case_id") or ""),
+        ),
+        reverse=True,
+    )
+    atomic_write_json(_review_cases_path(), cases)
+
+
+def _review_case_id(decision_id: str) -> str:
+    digest = hashlib.sha256(str(decision_id).encode("utf-8")).hexdigest()[:12]
+    return f"review_case:{digest}"
+
+
+def _normalize_review_choice(value: Any, allowed: Iterable[str], field: str) -> str:
+    text = str(value or "").strip()
+    allowed_set = set(allowed)
+    if text not in allowed_set:
+        raise DecisionLedgerError(
+            f"invalid {field}: {value!r}; expected one of {sorted(allowed_set)}"
+        )
+    return text
+
+
+def _normalize_secondary_causes(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise DecisionLedgerError("secondary_causes must be a list")
+    out: list[str] = []
+    for raw in value:
+        text = str(raw or "").strip()
+        if not text:
+            continue
+        if text not in SECONDARY_REVIEW_CAUSES:
+            raise DecisionLedgerError(
+                f"invalid secondary_causes item: {raw!r}; expected one of "
+                f"{list(SECONDARY_REVIEW_CAUSES)}"
+            )
+        if text not in out:
+            out.append(text)
+    return out
+
+
+def _sample_stage(sample_count: int) -> str:
+    count = max(0, int(sample_count or 0))
+    if count >= 10:
+        return "strategy_calibration_suggestion"
+    if count >= 5:
+        return "rule_adjustment_suggestion"
+    if count >= 2:
+        return "validating_pattern"
+    return "observation_hypothesis"
+
+
+def _sample_stage_detail(sample_count: int) -> str:
+    count = max(0, int(sample_count or 0))
+    if count >= 10:
+        return "10 条及以上，可进入策略级校准建议；仍需后续验证状态闭环。"
+    if count >= 5:
+        return "5-9 条同类样本，可形成规则调整建议，但必须保留验证状态。"
+    if count >= 2:
+        return "2-4 条同类样本，只能视为待验证模式，继续收集后续样本。"
+    return "1 条样本只能形成观察假设，不能直接修改交易规则。"
+
+
+def _short_text(value: Any, *, fallback: str = "", limit: int = 160) -> str:
+    if value is None:
+        return fallback
+    if isinstance(value, str):
+        text = value
+    else:
+        try:
+            text = json.dumps(value, ensure_ascii=False, sort_keys=True)
+        except TypeError:
+            text = str(value)
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) <= limit:
+        return text
+    return f"{text[: max(0, limit - 1)]}…"
+
+
+def _dominant_value(values: Iterable[Any], *, fallback: str = "") -> str:
+    counts: dict[str, int] = {}
+    for value in values:
+        text = _short_text(value, fallback="", limit=120)
+        if not text:
+            continue
+        counts[text] = counts.get(text, 0) + 1
+    if not counts:
+        return fallback
+    return max(counts, key=lambda item: (counts[item], item))
+
+
+def _clean_json_list(value: Any, *, limit: int = 12) -> list[Any]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        return []
+    out: list[Any] = []
+    for item in value[: max(0, limit)]:
+        if isinstance(item, (str, int, float, bool)) or item is None:
+            out.append(item)
+        elif isinstance(item, Mapping):
+            out.append({
+                str(key): val
+                for key, val in item.items()
+                if isinstance(val, (str, int, float, bool)) or val is None
+            })
+        else:
+            out.append(_short_text(item, limit=240))
+    return out
+
+
+def _clean_string_list(value: Any, *, limit: int = 12) -> list[str]:
+    out: list[str] = []
+    for item in _clean_json_list(value, limit=limit):
+        text = _short_text(item, limit=260)
+        if text:
+            out.append(text)
+    return out
+
+
+def _choice_or_default(value: Any, allowed: Iterable[str], default: str) -> str:
+    text = str(value or "").strip()
+    return text if text in set(allowed) else default
+
+
+def _confidence_or_default(value: Any, default: str = "medium") -> str:
+    return _choice_or_default(value, ATTRIBUTION_CONFIDENCE_LEVELS, default)
+
+
+def _secondary_causes_or_default(value: Any, default: Any = None) -> list[str]:
+    try:
+        return _normalize_secondary_causes(value)
+    except DecisionLedgerError:
+        return _normalize_secondary_causes(default or [])
+
+
+def _format_return_pct(value: Any) -> str:
+    try:
+        return f"{float(value):+.2f}%"
+    except (TypeError, ValueError):
+        return "-"
+
+
+_SHADOW_BUCKET_LABELS = {
+    "top_observe": "重点观察",
+    "near_miss": "接近入池",
+    "risk_reject": "风险剔除",
+}
+_SHADOW_SETUP_LABELS = {
+    "trend_follow": "趋势延续",
+    "pullback_support": "回踩支撑",
+    "volume_rebound": "放量反弹",
+    "mixed_observation": "混合观察",
+    "overheated_reject": "过热剔除",
+}
+_SHADOW_CLASSIFICATION_LABELS = {
+    "validated": "验证有效",
+    "invalidated": "判断失效",
+    "inconclusive": "未定",
+    "avoided_loss": "避开亏损",
+    "missed_opportunity": "错过机会",
+}
+_SHADOW_ACTION_LABELS = {
+    "observe": "观察",
+    "skip": "跳过",
+}
+
+
+def _load_shadow_json(path: Path) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return dict(payload) if isinstance(payload, Mapping) else None
+
+
+def _latest_shadow_signal_manifest() -> Path | None:
+    try:
+        manifests = sorted(
+            SHADOW_REPLAY_ROOT.glob("*/shadow_signal_manifest.json"),
+            key=lambda path: (path.parent.name, path.stat().st_mtime if path.exists() else 0),
+            reverse=True,
+        )
+    except Exception:
+        return None
+    return manifests[0] if manifests else None
+
+
+def _shadow_output_path(value: Any, *, base: Path) -> Path | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    candidate = Path(text).expanduser()
+    if candidate.is_absolute():
+        return candidate
+    workspace_candidate = WORKSPACE_ROOT / candidate
+    if workspace_candidate.exists():
+        return workspace_candidate
+    return base / candidate
+
+
+def _shadow_empty_stats() -> dict[str, Any]:
+    return {
+        "total": 0,
+        "return_sum_pct": 0.0,
+        "classifications": {},
+    }
+
+
+def _shadow_bump(stats: dict[str, Any], row: Mapping[str, Any]) -> None:
+    stats["total"] = int(stats.get("total") or 0) + 1
+    try:
+        stats["return_sum_pct"] = float(stats.get("return_sum_pct") or 0.0) + float(row.get("raw_return") or 0.0) * 100
+    except (TypeError, ValueError):
+        pass
+    classifications = stats.setdefault("classifications", {})
+    classification = str(row.get("classification") or "unknown")
+    classifications[classification] = int(classifications.get(classification) or 0) + 1
+
+
+def _shadow_rate(count: int, total: int) -> float:
+    return round(count / total * 100, 1) if total else 0.0
+
+
+def _shadow_axis_label(axis: str, key: str) -> str:
+    if axis == "bucket":
+        return _SHADOW_BUCKET_LABELS.get(key, key)
+    if axis == "setup_type":
+        return _SHADOW_SETUP_LABELS.get(key, key)
+    if axis == "action":
+        return _SHADOW_ACTION_LABELS.get(key, key)
+    if axis == "window":
+        return key
+    return key
+
+
+def _shadow_stats_row(axis: str, key: str, stats: Mapping[str, Any], *, window: str | None = None) -> dict[str, Any]:
+    total = int(stats.get("total") or 0)
+    classifications = stats.get("classifications") if isinstance(stats.get("classifications"), Mapping) else {}
+    validated = int(classifications.get("validated") or 0)
+    invalidated = int(classifications.get("invalidated") or 0)
+    inconclusive = int(classifications.get("inconclusive") or 0)
+    avoided_loss = int(classifications.get("avoided_loss") or 0)
+    missed_opportunity = int(classifications.get("missed_opportunity") or 0)
+    return {
+        "axis": axis,
+        "key": key,
+        "label": _shadow_axis_label(axis, key),
+        "window": window,
+        "total": total,
+        "validated": validated,
+        "invalidated": invalidated,
+        "inconclusive": inconclusive,
+        "avoided_loss": avoided_loss,
+        "missed_opportunity": missed_opportunity,
+        "validated_rate": _shadow_rate(validated, total),
+        "invalidated_rate": _shadow_rate(invalidated, total),
+        "avoided_loss_rate": _shadow_rate(avoided_loss, total),
+        "missed_opportunity_rate": _shadow_rate(missed_opportunity, total),
+        "avg_return_pct": round(float(stats.get("return_sum_pct") or 0.0) / total, 2) if total else 0.0,
+    }
+
+
+def _shadow_card(
+    *,
+    kind: str,
+    tone: str,
+    title: str,
+    summary: str,
+    action_reason: str,
+    sample_size: int,
+    calibration_action: str = "investigate_pattern",
+) -> dict[str, Any]:
+    return {
+        "kind": kind,
+        "tone": tone,
+        "title": title,
+        "summary": summary,
+        "calibration_action": calibration_action,
+        "action_label": _CALIBRATION_ACTION_LABELS.get(calibration_action, calibration_action),
+        "action_reason": action_reason,
+        "evidence_strength": _evidence_strength(sample_size),
+        "sample_size": sample_size,
+        "insufficient_sample": False,
+        "shadow_only": True,
+        "sample_origin": "historical_shadow",
+        "source_lane": "shadow_price_signal_baseline",
+    }
+
+
+def _shadow_ref_text(row: Mapping[str, Any]) -> str:
+    label = row.get("label") or row.get("key") or "影子样本"
+    window = row.get("window") or "T+5"
+    total = int(row.get("total") or 0)
+    parts = [
+        f"{window} {label}",
+        f"样本 {total}",
+        f"验证 {row.get('validated_rate', 0)}%",
+        f"失效 {row.get('invalidated_rate', 0)}%",
+    ]
+    if int(row.get("avoided_loss") or 0) or int(row.get("missed_opportunity") or 0):
+        parts.extend([
+            f"避亏 {row.get('avoided_loss_rate', 0)}%",
+            f"错过 {row.get('missed_opportunity_rate', 0)}%",
+        ])
+    parts.append(f"均值 {_format_return_pct(row.get('avg_return_pct'))}")
+    return "，".join(parts)
+
+
+def build_shadow_calibration_summary() -> dict[str, Any]:
+    """Research-only calibration hints from generated historical shadow samples.
+
+    The returned data is deliberately separated from Decision Ledger
+    review-case counts.  It can guide questions, but cannot increase
+    sample_count or unlock automatic rule changes.
+    """
+
+    manifest_path = _latest_shadow_signal_manifest()
+    if not manifest_path:
+        return {
+            "status": "missing",
+            "title": "历史影子样本未生成",
+            "summary": "暂无 shadow replay 统计；真实 Review Case 仍按 Decision Ledger 样本判断。",
+            "warning": "研究样本缺失不会影响真实归因队列。",
+            "cards": [],
+            "bucket_rows": [],
+            "setup_rows": [],
+            "window_rows": [],
+            "action_rows": [],
+        }
+
+    manifest = _load_shadow_json(manifest_path) or {}
+    summary = manifest.get("summary") if isinstance(manifest.get("summary"), Mapping) else {}
+    args = manifest.get("args") if isinstance(manifest.get("args"), Mapping) else {}
+    outputs = manifest.get("outputs") if isinstance(manifest.get("outputs"), Mapping) else {}
+    labels_path = _shadow_output_path(outputs.get("labels"), base=manifest_path.parent)
+    if not labels_path or not labels_path.exists():
+        return {
+            "status": "partial",
+            "title": "历史影子样本缺 outcome",
+            "summary": "已找到 shadow manifest，但缺少 forward labels。",
+            "warning": "这组数据暂不能用于校准提示。",
+            "cards": [],
+            "bucket_rows": [],
+            "setup_rows": [],
+            "window_rows": [],
+            "action_rows": [],
+        }
+
+    axis_stats: dict[str, dict[str, dict[str, Any]]] = {
+        "bucket": {},
+        "setup_type": {},
+        "action": {},
+        "window": {},
+    }
+    t5_stats: dict[str, dict[str, dict[str, Any]]] = {
+        "bucket": {},
+        "setup_type": {},
+        "action": {},
+    }
+    label_rows = 0
+    available_rows = 0
+    try:
+        with labels_path.open(encoding="utf-8") as handle:
+            for raw in handle:
+                raw = raw.strip()
+                if not raw:
+                    continue
+                label_rows += 1
+                try:
+                    row = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(row, Mapping) or row.get("label_status") != "available_research_only":
+                    continue
+                available_rows += 1
+                window = str(row.get("window") or "unknown")
+                for axis in axis_stats:
+                    key = str(row.get(axis) or "unknown")
+                    stats = axis_stats[axis].setdefault(key, _shadow_empty_stats())
+                    _shadow_bump(stats, row)
+                if window == "T+5":
+                    for axis in t5_stats:
+                        key = str(row.get(axis) or "unknown")
+                        stats = t5_stats[axis].setdefault(key, _shadow_empty_stats())
+                        _shadow_bump(stats, row)
+    except Exception as exc:
+        return {
+            "status": "partial",
+            "title": "历史影子样本读取失败",
+            "summary": f"forward labels 无法读取：{exc}",
+            "warning": "这组数据暂不能用于校准提示。",
+            "cards": [],
+            "bucket_rows": [],
+            "setup_rows": [],
+            "window_rows": [],
+            "action_rows": [],
+        }
+
+    def rows_for(axis: str, *, t5: bool = True) -> list[dict[str, Any]]:
+        source = t5_stats.get(axis, {}) if t5 else axis_stats.get(axis, {})
+        rows = [_shadow_stats_row(axis, key, stats, window="T+5" if t5 else None) for key, stats in source.items()]
+        rows.sort(key=lambda item: (int(item.get("total") or 0), str(item.get("key") or "")), reverse=True)
+        return rows
+
+    bucket_rows = rows_for("bucket", t5=True)
+    setup_rows = rows_for("setup_type", t5=True)
+    action_rows = rows_for("action", t5=True)
+    window_rows = rows_for("window", t5=False)
+    bucket_by_key = {str(row.get("key") or ""): row for row in bucket_rows}
+    top = bucket_by_key.get("top_observe", {})
+    near = bucket_by_key.get("near_miss", {})
+    reject = bucket_by_key.get("risk_reject", {})
+
+    cards: list[dict[str, Any]] = []
+    if top:
+        invalidated_rate = float(top.get("invalidated_rate") or 0.0)
+        validated_rate = float(top.get("validated_rate") or 0.0)
+        tone = "warning" if invalidated_rate >= validated_rate else "info"
+        cards.append(
+            _shadow_card(
+                kind="shadow_top_observe",
+                tone=tone,
+                title="Top 观察不是自动买点",
+                summary=(
+                    f"T+5 重点观察 {top['total']} 条，验证 {validated_rate}%、"
+                    f"失效 {invalidated_rate}%、中性 {top.get('inconclusive', 0)} 条。"
+                ),
+                action_reason="影子样本提示 Top 观察仍需要承接确认，不能只凭入池分数升级。",
+                sample_size=int(top.get("total") or 0),
+            )
+        )
+    if near:
+        cards.append(
+            _shadow_card(
+                kind="shadow_near_miss",
+                tone="watch" if float(near.get("validated_rate") or 0.0) < 30 else "warning",
+                title="接近入池样本有漏掉机会",
+                summary=(
+                    f"T+5 接近入池 {near['total']} 条，验证 {near.get('validated_rate', 0)}%、"
+                    f"失效 {near.get('invalidated_rate', 0)}%。"
+                ),
+                action_reason="若真实复盘也集中出现 missed_opportunity，再检查过滤条件是否过严。",
+                sample_size=int(near.get("total") or 0),
+            )
+        )
+    if reject:
+        avoided = float(reject.get("avoided_loss_rate") or 0.0)
+        missed = float(reject.get("missed_opportunity_rate") or 0.0)
+        tone = "positive" if avoided > missed else "warning"
+        cards.append(
+            _shadow_card(
+                kind="shadow_risk_reject",
+                tone=tone,
+                title="风险剔除有效但不干净",
+                summary=(
+                    f"T+5 风险剔除 {reject['total']} 条，避开亏损 {avoided}%、"
+                    f"错过机会 {missed}%。"
+                ),
+                action_reason="风险剔除有价值，但错过机会比例不低，真实归因时要确认风险条件是否真的发生。",
+                sample_size=int(reject.get("total") or 0),
+            )
+        )
+    if setup_rows:
+        weakest = max(
+            setup_rows,
+            key=lambda item: (
+                float(item.get("invalidated_rate") or 0.0),
+                int(item.get("total") or 0),
+            ),
+        )
+        cards.append(
+            _shadow_card(
+                kind="shadow_setup_pressure",
+                tone="warning",
+                title=f"{weakest.get('label')} 需要重点复核",
+                summary=(
+                    f"T+5 {weakest.get('label')} {weakest.get('total')} 条，"
+                    f"失效 {weakest.get('invalidated_rate')}%、验证 {weakest.get('validated_rate')}%。"
+                ),
+                action_reason="把形态分布当作复核优先级，不把它当作自动调参结论。",
+                sample_size=int(weakest.get("total") or 0),
+            )
+        )
+
+    start_date = str(args.get("start_date") or summary.get("start_date") or "")[:10]
+    end_date = str(args.get("end_date") or summary.get("end_date") or "")[:10]
+    panel_rows = int(summary.get("panel_rows") or 0)
+    available_labels = int(summary.get("available_labels") or available_rows)
+    return {
+        "status": "ready" if available_rows else "partial",
+        "title": "历史影子校准提示",
+        "summary": (
+            f"{start_date or '-'} 至 {end_date or '-'}："
+            f"{panel_rows or int(summary.get('sample_codes') or 0)} 条 price-signal 样本，"
+            f"{available_labels} 条 outcome label。"
+        ),
+        "warning": "研究专用：shadow_price_signal_baseline + current_constituents_approx；只辅助提问，不提升真实样本强度。",
+        "sample_origin": "historical_shadow",
+        "source_lane": "shadow_price_signal_baseline",
+        "universe_policy": "current_constituents_approx",
+        "start_date": start_date,
+        "end_date": end_date,
+        "panel_rows": panel_rows,
+        "label_rows": label_rows,
+        "available_labels": available_labels,
+        "trade_dates": int(summary.get("trade_dates_with_samples") or 0),
+        "generated_at": manifest.get("generated_at"),
+        "manifest_path": str(manifest_path),
+        "labels_path": str(labels_path),
+        "cards": cards[:4],
+        "bucket_rows": bucket_rows,
+        "setup_rows": setup_rows,
+        "window_rows": window_rows,
+        "action_rows": action_rows,
+    }
+
+
+def _shadow_calibration_refs_for_record(
+    record: Mapping[str, Any],
+    *,
+    review_reason_key: str,
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    shadow = build_shadow_calibration_summary()
+    if shadow.get("status") != "ready":
+        return []
+    bucket_rows = list(shadow.get("bucket_rows") or [])
+    setup_rows = list(shadow.get("setup_rows") or [])
+    selected: list[dict[str, Any]] = []
+    wanted_buckets = {
+        "missed_opportunity": {"near_miss", "risk_reject"},
+        "invalidated": {"top_observe"},
+        "execution_gap": {"top_observe"},
+    }.get(review_reason_key, {"top_observe", "risk_reject"})
+    for row in bucket_rows:
+        if str(row.get("key") or "") in wanted_buckets:
+            item = dict(row)
+            item["title"] = _shadow_ref_text(item)
+            item["summary"] = "历史影子样本参考；不计入真实 Review Case 样本数。"
+            selected.append(item)
+    if review_reason_key in {"invalidated", "missed_opportunity"} and setup_rows:
+        if review_reason_key == "missed_opportunity":
+            setup = max(
+                setup_rows,
+                key=lambda item: (
+                    float(item.get("missed_opportunity_rate") or 0.0),
+                    int(item.get("total") or 0),
+                ),
+            )
+        else:
+            setup = max(
+                setup_rows,
+                key=lambda item: (
+                    float(item.get("invalidated_rate") or 0.0),
+                    int(item.get("total") or 0),
+                ),
+            )
+        item = dict(setup)
+        item["title"] = _shadow_ref_text(item)
+        item["summary"] = "同形态影子分布参考；需要用真实样本确认后才可改规则。"
+        selected.append(item)
+    deduped: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in selected:
+        key = (str(item.get("axis") or ""), str(item.get("key") or ""))
+        if key in seen:
+            continue
+        item["sample_origin"] = "historical_shadow"
+        item["source_lane"] = "shadow_price_signal_baseline"
+        item["universe_policy"] = "current_constituents_approx"
+        deduped.append(item)
+        seen.add(key)
+    return deduped[: max(0, limit)]
+
+
+def _record_text_blob(record: Mapping[str, Any]) -> str:
+    recommendation = record.get("recommendation") or {}
+    evidence = record.get("evidence_snapshot") or {}
+    parts = [
+        recommendation.get("main_conclusion"),
+        recommendation.get("position_guidance"),
+        recommendation.get("trigger_condition"),
+        recommendation.get("continue_condition"),
+        recommendation.get("stop_condition"),
+        recommendation.get("risk_summary"),
+        evidence.get("readiness_mode"),
+        evidence.get("theme_summary"),
+    ]
+    for metric in evidence.get("metric_cards") or []:
+        if isinstance(metric, Mapping):
+            parts.append(metric.get("text"))
+    return " ".join(_short_text(part, limit=260) for part in parts if part)
+
+
+def _same_pattern_count_for_primary(
+    *,
+    cases: Iterable[Mapping[str, Any]],
+    record: Mapping[str, Any],
+    review_reason_key: str,
+    primary_cause: str,
+    decision_id: str,
+) -> int:
+    source = record.get("source") or {}
+    recommendation = record.get("recommendation") or {}
+    pattern_key = _review_pattern_key_from_values(
+        lane=source.get("lane"),
+        action=recommendation.get("action"),
+        review_reason_key=review_reason_key,
+        primary_cause=primary_cause,
+    )
+    return sum(
+        1
+        for case in cases
+        if case.get("decision_id") != decision_id
+        and _review_pattern_key(case) == pattern_key
+    ) + 1
+
+
+def _review_case_ref(case: Mapping[str, Any]) -> dict[str, Any]:
+    labelled = _case_labelled(case)
+    return {
+        "review_case_id": labelled.get("review_case_id"),
+        "decision_id": labelled.get("decision_id"),
+        "stock_code": labelled.get("stock_code"),
+        "stock_name": labelled.get("stock_name"),
+        "trade_date": labelled.get("trade_date"),
+        "lane": labelled.get("lane"),
+        "action": labelled.get("action"),
+        "review_reason_key": labelled.get("review_reason_key"),
+        "primary_cause": labelled.get("primary_cause"),
+        "primary_cause_label": labelled.get("primary_cause_label"),
+        "conclusion_action": labelled.get("conclusion_action"),
+        "conclusion_action_label": labelled.get("conclusion_action_label"),
+        "evidence_strength": labelled.get("evidence_strength"),
+        "evidence_strength_label": labelled.get("evidence_strength_label"),
+        "sample_count": labelled.get("sample_count"),
+        "review_note": labelled.get("review_note"),
+    }
+
+
+def _pattern_ref(pattern: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "pattern_id": pattern.get("pattern_id"),
+        "lane": pattern.get("lane"),
+        "action": pattern.get("action"),
+        "review_reason_key": pattern.get("review_reason_key"),
+        "primary_cause": pattern.get("primary_cause"),
+        "sample_count": pattern.get("sample_count"),
+        "evidence_strength": pattern.get("evidence_strength"),
+        "rule_action_allowed": pattern.get("rule_action_allowed"),
+        "dominant_conclusion_action": pattern.get("dominant_conclusion_action"),
+        "dominant_secondary_causes": pattern.get("dominant_secondary_causes"),
+        "learning_hint": pattern.get("learning_hint"),
+    }
+
+
+def _similar_review_memory(
+    *,
+    record: Mapping[str, Any],
+    review_reason_key: str,
+    cases: list[Mapping[str, Any]],
+    limit: int = 5,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    source = record.get("source") or {}
+    recommendation = record.get("recommendation") or {}
+    lane = str(source.get("lane") or "")
+    action = str(recommendation.get("action") or "")
+    stock_code = str((record.get("stock") or {}).get("code") or "")
+
+    def case_rank(case: Mapping[str, Any]) -> tuple[int, str]:
+        score = 0
+        if str(case.get("lane") or "") == lane:
+            score += 4
+        if str(case.get("action") or "") == action:
+            score += 3
+        if str(case.get("review_reason_key") or "") == review_reason_key:
+            score += 3
+        if stock_code and str(case.get("stock_code") or "") == stock_code:
+            score += 1
+        return score, str(case.get("reviewed_at") or "")
+
+    ranked = [
+        case for case in cases
+        if case_rank(case)[0] >= 6
+    ]
+    ranked.sort(key=case_rank, reverse=True)
+    similar_cases = [_review_case_ref(case) for case in ranked[:limit]]
+
+    patterns = build_review_case_patterns(cases=cases, limit=100).get("patterns", [])
+    matched_patterns: list[dict[str, Any]] = []
+    for pattern in patterns:
+        score = 0
+        if str(pattern.get("lane") or "") == lane:
+            score += 4
+        if str(pattern.get("action") or "") == action:
+            score += 3
+        if str(pattern.get("review_reason_key") or "") == review_reason_key:
+            score += 3
+        if score >= 6:
+            item = dict(pattern)
+            item["_rank_score"] = score
+            matched_patterns.append(item)
+    matched_patterns.sort(
+        key=lambda item: (int(item.get("_rank_score") or 0), int(item.get("sample_count") or 0)),
+        reverse=True,
+    )
+    return similar_cases, [_pattern_ref(pattern) for pattern in matched_patterns[:limit]]
+
+
+def _provider_config() -> AttributionProviderConfig:
+    provider = (
+        os.environ.get("PRISM_AI_PROVIDER")
+        or ("openai" if os.environ.get("OPENAI_API_KEY") else "compatible")
+    ).strip().lower()
+    api_key = (os.environ.get("PRISM_AI_API_KEY") or os.environ.get("OPENAI_API_KEY") or "").strip()
+    model = (os.environ.get("PRISM_AI_MODEL") or os.environ.get("OPENAI_MODEL") or "").strip()
+    base_url = (os.environ.get("PRISM_AI_BASE_URL") or os.environ.get("OPENAI_BASE_URL") or "").strip()
+    if not base_url and provider == "deepseek":
+        base_url = "https://api.deepseek.com"
+    elif not base_url and provider == "openai":
+        base_url = "https://api.openai.com"
+    if not model and provider == "deepseek":
+        model = "deepseek-v4-flash"
+    timeout_raw = os.environ.get("PRISM_AI_TIMEOUT_SECONDS", "").strip()
+    try:
+        timeout_seconds = max(1.0, min(float(timeout_raw), 60.0)) if timeout_raw else 12.0
+    except ValueError:
+        timeout_seconds = 12.0
+    configured = bool(api_key and model and base_url)
+    return AttributionProviderConfig(
+        provider=provider or "compatible",
+        api_key=api_key,
+        model=model,
+        base_url=base_url.rstrip("/"),
+        timeout_seconds=timeout_seconds,
+        configured=configured,
+    )
+
+
+def _chat_completions_url(config: AttributionProviderConfig) -> str:
+    if config.provider == "deepseek":
+        return f"{config.base_url}/chat/completions"
+    return f"{config.base_url}/v1/chat/completions"
+
+
+def _extract_json_object(text: str) -> dict[str, Any]:
+    candidate = str(text or "").strip()
+    if not candidate:
+        raise DecisionLedgerError("empty provider response")
+    try:
+        parsed = json.loads(candidate)
+    except json.JSONDecodeError:
+        start = candidate.find("{")
+        end = candidate.rfind("}")
+        if start < 0 or end <= start:
+            raise DecisionLedgerError("provider response did not contain a JSON object")
+        parsed = json.loads(candidate[start : end + 1])
+    if not isinstance(parsed, Mapping):
+        raise DecisionLedgerError("provider response JSON must be an object")
+    return dict(parsed)
+
+
+def _attribution_context_payload(
+    *,
+    workbench: Mapping[str, Any],
+    similar_case_refs: list[dict[str, Any]],
+    pattern_refs: list[dict[str, Any]],
+    shadow_refs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    record = workbench.get("decision") or {}
+    learning = workbench.get("learning_record") or {}
+    latest_outcome = _latest_outcome_event(record.get("outcome_events") or [])
+    latest_classification = latest_outcome.get("classification") if latest_outcome else {}
+    latest_market = latest_outcome.get("market_data") if latest_outcome else {}
+    return {
+        "decision_id": record.get("decision_id"),
+        "trade_date": record.get("trade_date"),
+        "stock": record.get("stock"),
+        "source": record.get("source"),
+        "recommendation": record.get("recommendation"),
+        "evidence_snapshot": {
+            "expected_trade_date": (record.get("evidence_snapshot") or {}).get("expected_trade_date"),
+            "data_trade_date": (record.get("evidence_snapshot") or {}).get("data_trade_date"),
+            "readiness_mode": (record.get("evidence_snapshot") or {}).get("readiness_mode"),
+            "readiness_ready": (record.get("evidence_snapshot") or {}).get("readiness_ready"),
+            "blockers": (record.get("evidence_snapshot") or {}).get("blockers") or [],
+            "warnings": (record.get("evidence_snapshot") or {}).get("warnings") or [],
+            "metric_cards": (record.get("evidence_snapshot") or {}).get("metric_cards") or [],
+            "theme_summary": (record.get("evidence_snapshot") or {}).get("theme_summary"),
+        },
+        "latest_outcome": {
+            "window": latest_outcome.get("window") if latest_outcome else None,
+            "as_of_trade_date": latest_outcome.get("as_of_trade_date") if latest_outcome else None,
+            "classification": latest_classification,
+            "market_data": latest_market,
+            "quality": latest_outcome.get("quality") if latest_outcome else None,
+            "boundary_checks": latest_outcome.get("boundary_checks") if latest_outcome else None,
+        },
+        "execution_events_count": len(record.get("execution_events") or []),
+        "learning_record": {
+            "review_status": learning.get("review_status"),
+            "review_reason_key": learning.get("review_reason_key"),
+            "review_reason": learning.get("review_reason"),
+            "execution_status": learning.get("execution_status"),
+            "priority_reasons": learning.get("priority_reasons") or [],
+        },
+        "similar_case_refs": similar_case_refs,
+        "pattern_memory_refs": pattern_refs,
+        "shadow_sample_refs": shadow_refs,
+        "shadow_sample_boundary": (
+            "shadow_sample_refs are research-only price-signal baseline samples; "
+            "never count them as real Decision Ledger samples or executable rule-change authority."
+        ),
+        "enum_constraints": {
+            "primary_cause": list(PRIMARY_REVIEW_CAUSES),
+            "secondary_causes": list(SECONDARY_REVIEW_CAUSES),
+            "conclusion_action": list(CONCLUSION_ACTIONS),
+            "follow_up_status": list(FOLLOW_UP_STATUSES),
+            "confidence": list(ATTRIBUTION_CONFIDENCE_LEVELS),
+        },
+        "sample_guardrails": {
+            "1": "observation_hypothesis only; no executable rule change",
+            "2-4": "validating_pattern only",
+            "5-9": "rule_adjustment_suggestion; still needs validation",
+            "10+": "strategy_calibration_suggestion",
+        },
+    }
+
+
+def _provider_attribution_draft(
+    *,
+    workbench: Mapping[str, Any],
+    similar_case_refs: list[dict[str, Any]],
+    pattern_refs: list[dict[str, Any]],
+    shadow_refs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    config = _provider_config()
+    if not config.configured:
+        raise DecisionLedgerError("AI provider not configured")
+
+    system_prompt = (
+        "你是 Prism 的 AI Attribution Copilot。只生成 Review Case 结构化归因草稿，"
+        "不能把样本标记为已归因，不能直接保存，不能绕过人工确认。"
+        "输出必须是单个 JSON object，字段只能使用给定枚举。"
+        "样本少于 5 条时不得给出可执行 loosen/tighten/add_guardrail 规则修改。"
+        "数据缺失优先 data_unavailable；需要执行但缺执行记录优先 execution_gap。"
+        "shadow_sample_refs 只能作为研究侧背景，不得计入真实样本数或规则修改权限。"
+    )
+    example_json = {
+        "primary_cause": "too_strict",
+        "secondary_causes": ["volume_too_conservative"],
+        "review_note": "示例备注",
+        "conclusion_action": "wait_more_samples",
+        "rule_hypothesis": "示例假设",
+        "follow_up_status": "sample_insufficient",
+        "confidence": "medium",
+        "evidence": ["示例证据 1", "示例证据 2"],
+        "human_check_required": ["示例人工确认项 1"],
+        "similar_case_refs": [],
+        "shadow_sample_refs": [],
+    }
+    user_payload = _attribution_context_payload(
+        workbench=workbench,
+        similar_case_refs=similar_case_refs,
+        pattern_refs=pattern_refs,
+        shadow_refs=shadow_refs,
+    )
+    user_prompt = (
+        "请基于以下 JSON 生成 AI 预归因草稿。返回字段至少包括："
+        "primary_cause, secondary_causes, review_note, conclusion_action, "
+        "rule_hypothesis, follow_up_status, confidence, evidence, "
+        "human_check_required, similar_case_refs, shadow_sample_refs。"
+        "只返回一个 json object，不要输出额外说明。"
+        "输出格式示例：\n"
+        f"{json.dumps(example_json, ensure_ascii=False, sort_keys=True)}\n"
+        "输入 JSON：\n"
+        f"{json.dumps(user_payload, ensure_ascii=False, sort_keys=True)}"
+    )
+
+    try:
+        import httpx  # type: ignore
+
+        body = {
+            "model": config.model,
+            "temperature": 0.1,
+            "max_tokens": 1200,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        if config.provider == "deepseek":
+            body["response_format"] = {"type": "json_object"}
+            body["thinking"] = {"type": "disabled"}
+
+        with httpx.Client(timeout=config.timeout_seconds, trust_env=False) as client:
+            response = client.post(
+                _chat_completions_url(config),
+                headers={
+                    "Authorization": f"Bearer {config.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=body,
+            )
+        response.raise_for_status()
+        payload = response.json()
+        content = (((payload.get("choices") or [{}])[0].get("message") or {}).get("content") or "")
+        draft = _extract_json_object(content)
+    except Exception as exc:  # Provider failures must never block review.
+        raise DecisionLedgerError(f"AI provider unavailable: {exc}") from exc
+
+    draft["_provider_meta"] = {
+        "provider": config.provider,
+        "model": config.model,
+        "base_url": config.base_url,
+    }
+    return draft
+
+
+def _hard_priority_draft(
+    *,
+    record: Mapping[str, Any],
+    learning: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    latest_outcome = _latest_outcome_event(record.get("outcome_events") or [])
+    latest_label = _latest_outcome_label(latest_outcome)
+    latest_quality = latest_outcome.get("quality") if latest_outcome else {}
+    action = str((record.get("recommendation") or {}).get("action") or "")
+    execution_events = list(record.get("execution_events") or [])
+    if (
+        latest_label == "data_issue"
+        or latest_quality.get("data_issue")
+        or str(learning.get("review_status") or "") == "blocked_data"
+    ):
+        return {
+            "primary_cause": "data_unavailable",
+            "secondary_causes": ["data_delay"],
+            "review_note": "当前样本优先视为数据不可用，先确认行情、来源新鲜度与 outcome 质量。",
+            "conclusion_action": "fix_data_pipeline",
+            "rule_hypothesis": "该样本不能用于规则松紧判断；需要先修复或确认数据链路后再复盘。",
+            "follow_up_status": "observing",
+            "confidence": "high",
+            "human_check_required": ["确认行情数据源与 data_trade_date", "确认 outcome 是否可用于决策质量评价"],
+        }
+    if _action_requires_execution(action) and not execution_events:
+        return {
+            "primary_cause": "execution_gap",
+            "secondary_causes": [],
+            "review_note": "原始动作需要执行，但当前缺少执行记录，优先归因为执行链路落差。",
+            "conclusion_action": "fix_execution_pipeline",
+            "rule_hypothesis": "先补齐成交、未成交或跳过记录；没有执行闭环前不评价交易规则本身。",
+            "follow_up_status": "observing",
+            "confidence": "high",
+            "human_check_required": ["确认是否实际下单", "确认成交/未成交/跳过记录为何缺失"],
+        }
+    return None
+
+
+def _heuristic_attribution_draft(
+    *,
+    workbench: Mapping[str, Any],
+    similar_case_refs: list[dict[str, Any]],
+    pattern_refs: list[dict[str, Any]],
+    shadow_refs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    record = workbench.get("decision") or {}
+    learning = workbench.get("learning_record") or {}
+    hard = _hard_priority_draft(record=record, learning=learning)
+    stock = record.get("stock") or {}
+    recommendation = record.get("recommendation") or {}
+    source = record.get("source") or {}
+    latest_outcome = _latest_outcome_event(record.get("outcome_events") or [])
+    latest_label = _latest_outcome_label(latest_outcome)
+    latest_classification = latest_outcome.get("classification") if latest_outcome else {}
+    latest_market = latest_outcome.get("market_data") if latest_outcome else {}
+    review_reason_key = str(learning.get("review_reason_key") or latest_label or "attention")
+    action = str(recommendation.get("action") or "unknown")
+    action_label = str(recommendation.get("action_label") or action)
+    name = str(stock.get("name") or stock.get("code") or "该样本")
+
+    if hard is not None:
+        draft = dict(hard)
+    elif latest_label == "missed_opportunity":
+        blob = _record_text_blob(record)
+        secondary: list[str] = []
+        if any(token in blob for token in ("量", "成交", "放量", "萎缩", "爆量")):
+            secondary.append("volume_too_conservative")
+        if any(token in blob for token in ("主力", "资金", "流入", "转负")):
+            secondary.append("capital_flow_filter_strict")
+        if any(token in blob for token in ("环境", "readiness", "shadow", "弱修复")):
+            secondary.append("market_regime_gate_strict")
+        if any(token in blob for token in ("高开低走", "冲高回落", "开盘")):
+            secondary.append("open_behavior_misread")
+        if any(token in blob for token in ("风险", "止损", "别")):
+            secondary.append("risk_condition_not_triggered")
+        if not secondary:
+            secondary.append("risk_condition_not_triggered")
+        draft = {
+            "primary_cause": "too_strict",
+            "secondary_causes": secondary[:3],
+            "review_note": f"{name} 原始动作为 {action_label}，后续出现明显机会，当前更像风险过滤偏保守。",
+            "conclusion_action": "wait_more_samples",
+            "rule_hypothesis": "类似样本可作为观察假设：若后续承接未破坏，应增加承接确认，而不是仅因单一风险项直接降级。",
+            "follow_up_status": "sample_insufficient",
+            "confidence": "medium",
+            "human_check_required": ["确认次日是否真的放量承接", "确认原始风险条件是否发生"],
+        }
+    elif latest_label == "invalidated":
+        draft = {
+            "primary_cause": "too_loose",
+            "secondary_causes": ["risk_condition_not_triggered"],
+            "review_note": f"{name} 后续结果否定了原始判断，先检查触发条件是否过松或风险条件是否被低估。",
+            "conclusion_action": "add_guardrail",
+            "rule_hypothesis": "若同类样本继续出现，应考虑加入额外风险护栏；样本不足时只保留为假设。",
+            "follow_up_status": "sample_insufficient",
+            "confidence": "medium",
+            "human_check_required": ["确认触发信号是否失真", "确认是否存在后续事件驱动"],
+        }
+    elif latest_label == "execution_gap":
+        draft = {
+            "primary_cause": "execution_gap",
+            "secondary_causes": [],
+            "review_note": "建议和执行之间出现落差，优先确认执行记录与操作原因。",
+            "conclusion_action": "fix_execution_pipeline",
+            "rule_hypothesis": "先修复执行闭环，再判断规则是否需要校准。",
+            "follow_up_status": "observing",
+            "confidence": "high",
+            "human_check_required": ["确认实际执行状态", "确认未执行是否由流动性或人工选择导致"],
+        }
+    elif latest_label in {"validated", "avoided_loss"}:
+        draft = {
+            "primary_cause": "rule_valid_noise",
+            "secondary_causes": [],
+            "review_note": "后续结果没有否定原始规则，当前更像规则有效或个例噪音。",
+            "conclusion_action": "keep_rule",
+            "rule_hypothesis": "保持规则，继续观察同链路样本。",
+            "follow_up_status": "observing",
+            "confidence": "medium",
+            "human_check_required": ["确认 outcome 分类是否准确"],
+        }
+    else:
+        draft = {
+            "primary_cause": "insufficient_sample",
+            "secondary_causes": [],
+            "review_note": "当前 outcome 信号不足，暂不形成规则判断。",
+            "conclusion_action": "wait_more_samples",
+            "rule_hypothesis": "先等待更多同类样本与更成熟 outcome。",
+            "follow_up_status": "sample_insufficient",
+            "confidence": "low",
+            "human_check_required": ["确认样本是否已成熟", "确认是否需要补跑 outcome evaluator"],
+        }
+
+    evidence = [
+        f"原始动作为 {action_label}",
+        f"所处链路 {source.get('lane') or 'unknown'}",
+    ]
+    if latest_outcome:
+        evidence.append(
+            f"{latest_outcome.get('window') or 'Outcome'} 收益 "
+            f"{_format_return_pct(latest_market.get('return_pct'))}，分类为 "
+            f"{latest_classification.get('label') or latest_label or 'unknown'}"
+        )
+    if similar_case_refs:
+        evidence.append(f"找到 {len(similar_case_refs)} 条相似历史 Review Case")
+    if pattern_refs:
+        evidence.append(f"找到 {len(pattern_refs)} 个相似 Pattern Memory")
+    if shadow_refs:
+        evidence.append(f"影子样本参考：{_shadow_ref_text(shadow_refs[0])}")
+        checks = draft.get("human_check_required") if isinstance(draft.get("human_check_required"), list) else []
+        checks.append("影子样本是研究口径，只能辅助提问，不能替代真实 Review Case 样本数")
+        draft["human_check_required"] = checks
+    draft["evidence"] = evidence
+    draft["similar_case_refs"] = similar_case_refs
+    draft["pattern_memory_refs"] = pattern_refs
+    draft["shadow_sample_refs"] = shadow_refs
+    return draft
+
+
+def _sanitize_attribution_draft(
+    *,
+    decision_id: str,
+    workbench: Mapping[str, Any],
+    raw_draft: Mapping[str, Any],
+    cases: list[Mapping[str, Any]],
+    similar_case_refs: list[dict[str, Any]],
+    pattern_refs: list[dict[str, Any]],
+    shadow_refs: list[dict[str, Any]],
+    fallback_reason: str = "",
+) -> dict[str, Any]:
+    record = workbench.get("decision") or {}
+    learning = workbench.get("learning_record") or {}
+    hard = _hard_priority_draft(record=record, learning=learning)
+    default_primary = str((hard or {}).get("primary_cause") or "insufficient_sample")
+    primary_cause = _choice_or_default(raw_draft.get("primary_cause"), PRIMARY_REVIEW_CAUSES, default_primary)
+    if hard is not None:
+        primary_cause = str(hard.get("primary_cause") or primary_cause)
+    secondary_causes = _secondary_causes_or_default(raw_draft.get("secondary_causes"))
+    if hard is not None:
+        secondary_causes = _secondary_causes_or_default(hard.get("secondary_causes"))
+
+    review_reason_key = str(learning.get("review_reason_key") or "attention")
+    sample_count = _same_pattern_count_for_primary(
+        cases=cases,
+        record=record,
+        review_reason_key=review_reason_key,
+        primary_cause=primary_cause,
+        decision_id=decision_id,
+    )
+    evidence_strength = _sample_stage(sample_count)
+
+    conclusion_default = str((hard or {}).get("conclusion_action") or "wait_more_samples")
+    conclusion_action = _choice_or_default(
+        raw_draft.get("conclusion_action"),
+        CONCLUSION_ACTIONS,
+        conclusion_default,
+    )
+    if hard is not None:
+        conclusion_action = str(hard.get("conclusion_action") or conclusion_action)
+    rule_hypothesis = _short_text(raw_draft.get("rule_hypothesis"), limit=600)
+    if hard is not None:
+        rule_hypothesis = _short_text(hard.get("rule_hypothesis"), limit=600)
+    if not rule_hypothesis:
+        rule_hypothesis = _default_rule_hypothesis(
+            record=record,
+            primary_cause=primary_cause,
+            conclusion_action=conclusion_action,
+            sample_count=sample_count,
+            review_reason_key=review_reason_key,
+        )
+    if sample_count < 5 and conclusion_action in _DIRECT_RULE_ACTIONS:
+        conclusion_action = "wait_more_samples"
+        rule_hypothesis = (
+            f"{rule_hypothesis} 当前同类样本未达到 5 条，AI 预归因不生成可执行规则修改。"
+        )
+
+    follow_default = str((hard or {}).get("follow_up_status") or _default_follow_up_status(sample_count))
+    follow_up_status = _choice_or_default(
+        raw_draft.get("follow_up_status"),
+        FOLLOW_UP_STATUSES,
+        follow_default,
+    )
+    if sample_count < 2 and follow_up_status not in {"sample_insufficient", "observing"}:
+        follow_up_status = "sample_insufficient"
+
+    note = _short_text(raw_draft.get("review_note"), limit=600)
+    if hard is not None:
+        note = _short_text(hard.get("review_note"), limit=600)
+    if not note:
+        note = "AI 预归因仅作为草稿，需要人工确认后保存。"
+
+    provider_meta = raw_draft.get("_provider_meta") if isinstance(raw_draft.get("_provider_meta"), Mapping) else {}
+    shadow_sample_refs = _clean_json_list(raw_draft.get("shadow_sample_refs"), limit=6) or shadow_refs
+    sanitized = {
+        "schema_version": 1,
+        "draft_id": f"attribution_draft:{hashlib.sha256((decision_id + _now()).encode('utf-8')).hexdigest()[:12]}",
+        "decision_id": decision_id,
+        "generated_at": _now(),
+        "draft_source": "heuristic" if fallback_reason else "provider",
+        "provider": provider_meta.get("provider") or ("heuristic" if fallback_reason else _provider_config().provider),
+        "model": provider_meta.get("model"),
+        "fallback_reason": fallback_reason,
+        "primary_cause": primary_cause,
+        "secondary_causes": secondary_causes,
+        "review_note": note,
+        "conclusion_action": conclusion_action,
+        "rule_hypothesis": rule_hypothesis,
+        "follow_up_status": follow_up_status,
+        "confidence": _confidence_or_default(raw_draft.get("confidence"), str((hard or {}).get("confidence") or "medium")),
+        "evidence": _clean_string_list(raw_draft.get("evidence"), limit=12),
+        "human_check_required": _clean_string_list(raw_draft.get("human_check_required"), limit=8),
+        "similar_case_refs": _clean_json_list(raw_draft.get("similar_case_refs"), limit=8) or similar_case_refs,
+        "pattern_memory_refs": _clean_json_list(raw_draft.get("pattern_memory_refs"), limit=8) or pattern_refs,
+        "shadow_sample_refs": shadow_sample_refs,
+        "sample_count": sample_count,
+        "evidence_strength": evidence_strength,
+        "evidence_strength_label": _SAMPLE_STAGE_LABELS.get(evidence_strength, evidence_strength),
+        "evidence_strength_detail": _sample_stage_detail(sample_count),
+        "rule_action_allowed": sample_count >= 5,
+    }
+    if not sanitized["evidence"]:
+        sanitized["evidence"] = _clean_string_list(
+            _heuristic_attribution_draft(
+                workbench=workbench,
+                similar_case_refs=similar_case_refs,
+                pattern_refs=pattern_refs,
+                shadow_refs=shadow_refs,
+            ).get("evidence"),
+            limit=12,
+        )
+    if shadow_sample_refs and not any("影子样本" in item for item in sanitized["evidence"]):
+        sanitized["evidence"].append(f"影子样本参考：{_shadow_ref_text(shadow_sample_refs[0])}")
+    if not sanitized["human_check_required"]:
+        sanitized["human_check_required"] = _clean_string_list(
+            (hard or raw_draft).get("human_check_required"),
+            limit=8,
+        ) or ["人工确认原始风险条件和后续 outcome 分类是否准确"]
+    return sanitized
+
+
+def build_attribution_draft(decision_id: str) -> dict[str, Any]:
+    """Generate a structured AI attribution draft without saving a Review Case."""
+
+    workbench = build_review_case_workbench(decision_id)
+    cases = _read_review_cases_file()
+    learning = workbench.get("learning_record") or {}
+    review_reason_key = str(learning.get("review_reason_key") or "attention")
+    similar_case_refs, pattern_refs = _similar_review_memory(
+        record=workbench.get("decision") or {},
+        review_reason_key=review_reason_key,
+        cases=cases,
+    )
+    shadow_refs = _shadow_calibration_refs_for_record(
+        workbench.get("decision") or {},
+        review_reason_key=review_reason_key,
+    )
+
+    fallback_reason = ""
+    try:
+        raw_draft = _provider_attribution_draft(
+            workbench=workbench,
+            similar_case_refs=similar_case_refs,
+            pattern_refs=pattern_refs,
+            shadow_refs=shadow_refs,
+        )
+    except DecisionLedgerError as exc:
+        fallback_reason = str(exc)
+        raw_draft = _heuristic_attribution_draft(
+            workbench=workbench,
+            similar_case_refs=similar_case_refs,
+            pattern_refs=pattern_refs,
+            shadow_refs=shadow_refs,
+        )
+
+    return _sanitize_attribution_draft(
+        decision_id=decision_id,
+        workbench=workbench,
+        raw_draft=raw_draft,
+        cases=cases,
+        similar_case_refs=similar_case_refs,
+        pattern_refs=pattern_refs,
+        shadow_refs=shadow_refs,
+        fallback_reason=fallback_reason,
+    )
+
+
+def _review_case_status_for_sample(sample_count: int) -> str:
+    stage = _sample_stage(sample_count)
+    if stage in {"rule_adjustment_suggestion", "strategy_calibration_suggestion"}:
+        return "rule_suggestion"
+    if stage == "validating_pattern":
+        return "pattern_formed"
+    return "attributed"
+
+
+def _default_follow_up_status(sample_count: int) -> str:
+    return "observing" if int(sample_count or 0) >= 2 else "sample_insufficient"
+
+
+def _default_follow_up_due_at() -> str:
+    return (datetime.now().date() + timedelta(days=14)).strftime("%Y-%m-%d")
+
+
+def _review_pattern_key_from_values(
+    *,
+    lane: Any,
+    action: Any,
+    review_reason_key: Any,
+    primary_cause: Any,
+) -> str:
+    parts = [
+        str(lane or "unknown").strip() or "unknown",
+        str(action or "unknown").strip() or "unknown",
+        str(review_reason_key or "attention").strip() or "attention",
+        str(primary_cause or "unknown").strip() or "unknown",
+    ]
+    return "|".join(parts)
+
+
+def _review_pattern_key(case: Mapping[str, Any]) -> str:
+    return _review_pattern_key_from_values(
+        lane=case.get("lane"),
+        action=case.get("action"),
+        review_reason_key=case.get("review_reason_key"),
+        primary_cause=case.get("primary_cause"),
+    )
+
+
+def _case_labelled(case: Mapping[str, Any]) -> dict[str, Any]:
+    out = dict(case)
+    primary = str(out.get("primary_cause") or "")
+    conclusion = str(out.get("conclusion_action") or "")
+    follow_up = str(out.get("follow_up_status") or "")
+    status = str(out.get("review_status") or "")
+    stage = str(out.get("evidence_strength") or _sample_stage(int(out.get("sample_count") or 1)))
+    out["primary_cause_label"] = _PRIMARY_REVIEW_CAUSE_LABELS.get(primary, primary)
+    out["secondary_cause_labels"] = [
+        _SECONDARY_REVIEW_CAUSE_LABELS.get(str(item), str(item))
+        for item in (out.get("secondary_causes") or [])
+    ]
+    out["conclusion_action_label"] = _CONCLUSION_ACTION_LABELS.get(conclusion, conclusion)
+    out["follow_up_status_label"] = _FOLLOW_UP_STATUS_LABELS.get(follow_up, follow_up)
+    out["review_status_label"] = _REVIEW_CASE_STATUS_LABELS.get(status, status)
+    out["evidence_strength_label"] = _SAMPLE_STAGE_LABELS.get(stage, stage)
+    out["evidence_strength_detail"] = _sample_stage_detail(int(out.get("sample_count") or 1))
+    out["rule_action_allowed"] = int(out.get("sample_count") or 0) >= 5
+    return out
+
+
+def list_review_cases() -> dict[str, Any]:
+    """Return all saved Review Cases with display labels.
+
+    Review cases are the write-side of the Review page: one structured
+    attribution per decision, stored separately from the immutable
+    DecisionRecord.  A corrupt case file is intentionally loud because a
+    bad attribution store would make the learning queue lie.
+    """
+
+    cases = [_case_labelled(case) for case in _read_review_cases_file()]
+    return {
+        "items": cases,
+        "count": len(cases),
+        "patterns": build_review_case_patterns(cases=cases).get("patterns", []),
+    }
+
+
+def _review_case_for_decision(
+    cases: Iterable[Mapping[str, Any]],
+    decision_id: str,
+) -> dict[str, Any] | None:
+    for case in cases:
+        if case.get("decision_id") == decision_id:
+            return dict(case)
+    return None
+
+
+def _review_cases_by_decision(cases: Iterable[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    for case in cases:
+        decision_id = str(case.get("decision_id") or "")
+        if decision_id:
+            out[decision_id] = dict(case)
+    return out
+
+
+def _default_rule_hypothesis(
+    *,
+    record: Mapping[str, Any],
+    primary_cause: str,
+    conclusion_action: str,
+    sample_count: int,
+    review_reason_key: str,
+) -> str:
+    stock = record.get("stock") or {}
+    source = record.get("source") or {}
+    cause_label = _PRIMARY_REVIEW_CAUSE_LABELS.get(primary_cause, primary_cause)
+    action_label = _CONCLUSION_ACTION_LABELS.get(conclusion_action, conclusion_action)
+    stage_label = _SAMPLE_STAGE_LABELS[_sample_stage(sample_count)]
+    reason_label = _REVIEW_REASON_LABELS.get(review_reason_key, review_reason_key)
+    name = str(stock.get("name") or stock.get("code") or "该样本")
+    lane = str(source.get("lane") or "unknown")
+    guardrail = "；当前样本不足，不能作为直接规则修改。"
+    if sample_count >= 5:
+        guardrail = "；样本数达到规则建议门槛，后续仍需验证状态追踪。"
+    elif sample_count >= 2:
+        guardrail = "；先作为待验证模式继续观察。"
+    return (
+        f"{stage_label}：{lane} 中 {name} 触发 {reason_label}，主归因为{cause_label}，"
+        f"结论动作为{action_label}{guardrail}"
+    )
+
+
+def _final_attribution_payload(
+    *,
+    primary_cause: str,
+    secondary_causes: list[str],
+    review_note: str,
+    conclusion_action: str,
+    rule_hypothesis: str,
+    follow_up_status: str,
+    follow_up_due_at: str,
+    evidence_strength: str,
+    sample_count: int,
+) -> dict[str, Any]:
+    return {
+        "primary_cause": primary_cause,
+        "secondary_causes": secondary_causes,
+        "review_note": review_note,
+        "conclusion_action": conclusion_action,
+        "rule_hypothesis": rule_hypothesis,
+        "follow_up_status": follow_up_status,
+        "follow_up_due_at": follow_up_due_at,
+        "evidence_strength": evidence_strength,
+        "sample_count": sample_count,
+        "rule_action_allowed": sample_count >= 5,
+    }
+
+
+def _human_overrides_from_draft(
+    ai_draft: Mapping[str, Any] | None,
+    human_final: Mapping[str, Any],
+) -> dict[str, dict[str, Any]]:
+    if not ai_draft:
+        return {}
+    tracked_fields = (
+        "primary_cause",
+        "secondary_causes",
+        "review_note",
+        "conclusion_action",
+        "rule_hypothesis",
+        "follow_up_status",
+    )
+    overrides: dict[str, dict[str, Any]] = {}
+    for field in tracked_fields:
+        draft_value = ai_draft.get(field)
+        final_value = human_final.get(field)
+        if field == "secondary_causes":
+            draft_compare = sorted(str(item) for item in (draft_value or []))
+            final_compare = sorted(str(item) for item in (final_value or []))
+            changed = draft_compare != final_compare
+        else:
+            changed = _short_text(draft_value, limit=1000) != _short_text(final_value, limit=1000)
+        if changed:
+            overrides[field] = {"from": draft_value, "to": final_value}
+    return overrides
+
+
+def _clean_optional_mapping(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    try:
+        return json.loads(json.dumps(value, ensure_ascii=False, default=str))
+    except TypeError:
+        return {str(key): _short_text(val, limit=500) for key, val in value.items()}
+
+
+def _refresh_pattern_sample_counts(cases: list[dict[str, Any]], pattern_key: str) -> None:
+    matched = [case for case in cases if _review_pattern_key(case) == pattern_key]
+    sample_count = len(matched)
+    stage = _sample_stage(sample_count)
+    status = _review_case_status_for_sample(sample_count)
+    for case in matched:
+        case["sample_count"] = sample_count
+        case["evidence_strength"] = stage
+        case["review_status"] = status
+        if not case.get("follow_up_status") or case.get("follow_up_status") == "sample_insufficient":
+            case["follow_up_status"] = _default_follow_up_status(sample_count)
+
+
+def save_review_case(decision_id: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Create or update the Review Case for one DecisionRecord.
+
+    The DecisionRecord stays immutable.  This function writes a separate
+    structured attribution, computes the same-pattern sample count, and
+    downgrades direct rule actions below the 5-sample threshold into an
+    observation or validation hypothesis.
+    """
+
+    if not isinstance(payload, Mapping):
+        raise DecisionLedgerError("review case payload must be a mapping")
+    record = load_decision(decision_id)
+    if record is None:
+        raise DecisionLedgerError(f"decision not found: {decision_id!r}")
+
+    primary_cause = _normalize_review_choice(
+        payload.get("primary_cause"),
+        PRIMARY_REVIEW_CAUSES,
+        "primary_cause",
+    )
+    conclusion_action = _normalize_review_choice(
+        payload.get("conclusion_action"),
+        CONCLUSION_ACTIONS,
+        "conclusion_action",
+    )
+    secondary_causes = _normalize_secondary_causes(payload.get("secondary_causes"))
+    follow_up_status_raw = str(payload.get("follow_up_status") or "").strip()
+    follow_up_status = (
+        _normalize_review_choice(follow_up_status_raw, FOLLOW_UP_STATUSES, "follow_up_status")
+        if follow_up_status_raw
+        else ""
+    )
+
+    note = str(payload.get("review_note") or "").strip()
+    rule_hypothesis_input = str(payload.get("rule_hypothesis") or "").strip()
+    follow_up_due_at = str(payload.get("follow_up_due_at") or "").strip() or _default_follow_up_due_at()
+    if follow_up_due_at:
+        _normalize_trade_date(follow_up_due_at)
+
+    cases = _read_review_cases_file()
+    existing = _review_case_for_decision(cases, decision_id)
+    source = record.get("source") or {}
+    recommendation = record.get("recommendation") or {}
+    stock = record.get("stock") or {}
+    card = _decision_learning_card(record, as_of=_resolve_as_of(None), pattern_counts={})
+    review_reason_key = str(card.get("review_reason_key") or "")
+    pattern_key = _review_pattern_key_from_values(
+        lane=source.get("lane"),
+        action=recommendation.get("action"),
+        review_reason_key=review_reason_key,
+        primary_cause=primary_cause,
+    )
+    same_pattern_count = sum(
+        1
+        for case in cases
+        if case.get("decision_id") != decision_id
+        and _review_pattern_key(case) == pattern_key
+    ) + 1
+    evidence_strength = _sample_stage(same_pattern_count)
+    rule_hypothesis = rule_hypothesis_input or _default_rule_hypothesis(
+        record=record,
+        primary_cause=primary_cause,
+        conclusion_action=conclusion_action,
+        sample_count=same_pattern_count,
+        review_reason_key=review_reason_key,
+    )
+    if same_pattern_count < 5 and conclusion_action in _DIRECT_RULE_ACTIONS:
+        rule_hypothesis = (
+            f"{_SAMPLE_STAGE_LABELS[evidence_strength]}：{rule_hypothesis} "
+            "当前同类样本未达到 5 条，记录为假设，不生成可执行规则修改。"
+        )
+    final_follow_up_status = follow_up_status or _default_follow_up_status(same_pattern_count)
+    ai_draft = _clean_optional_mapping(payload.get("ai_draft"))
+    human_final = _final_attribution_payload(
+        primary_cause=primary_cause,
+        secondary_causes=secondary_causes,
+        review_note=note,
+        conclusion_action=conclusion_action,
+        rule_hypothesis=rule_hypothesis,
+        follow_up_status=final_follow_up_status,
+        follow_up_due_at=follow_up_due_at,
+        evidence_strength=evidence_strength,
+        sample_count=same_pattern_count,
+    )
+    human_overrides = _human_overrides_from_draft(ai_draft, human_final)
+    attribution_confidence = _confidence_or_default(
+        payload.get("attribution_confidence"),
+        _confidence_or_default((ai_draft or {}).get("confidence"), "medium"),
+    )
+    evidence_refs = _clean_json_list(
+        payload.get("evidence_refs") if "evidence_refs" in payload else (ai_draft or {}).get("evidence"),
+        limit=20,
+    )
+    human_check_required = _clean_json_list(
+        payload.get("human_check_required")
+        if "human_check_required" in payload
+        else (ai_draft or {}).get("human_check_required"),
+        limit=20,
+    )
+    similar_case_refs = _clean_json_list(
+        payload.get("similar_case_refs")
+        if "similar_case_refs" in payload
+        else (ai_draft or {}).get("similar_case_refs"),
+        limit=20,
+    )
+    shadow_sample_refs = _clean_json_list(
+        payload.get("shadow_sample_refs")
+        if "shadow_sample_refs" in payload
+        else (ai_draft or {}).get("shadow_sample_refs"),
+        limit=20,
+    )
+
+    case = {
+        "schema_version": 1,
+        "review_case_id": (existing or {}).get("review_case_id") or _review_case_id(decision_id),
+        "decision_id": decision_id,
+        "stock_code": stock.get("code"),
+        "stock_name": stock.get("name"),
+        "trade_date": record.get("trade_date"),
+        "reviewed_at": _now(),
+        "created_at": (existing or {}).get("created_at") or _now(),
+        "review_status": _review_case_status_for_sample(same_pattern_count),
+        "primary_cause": primary_cause,
+        "secondary_causes": secondary_causes,
+        "review_note": note,
+        "conclusion_action": conclusion_action,
+        "evidence_strength": evidence_strength,
+        "sample_count": same_pattern_count,
+        "rule_hypothesis": rule_hypothesis,
+        "follow_up_status": final_follow_up_status,
+        "follow_up_due_at": follow_up_due_at,
+        "ai_draft": ai_draft,
+        "human_final": human_final,
+        "human_overrides": human_overrides,
+        "attribution_confidence": attribution_confidence,
+        "evidence_refs": evidence_refs,
+        "human_check_required": human_check_required,
+        "similar_case_refs": similar_case_refs,
+        "shadow_sample_refs": shadow_sample_refs,
+        "lane": source.get("lane"),
+        "action": recommendation.get("action"),
+        "action_label": recommendation.get("action_label"),
+        "review_reason_key": review_reason_key,
+        "review_reason": card.get("review_reason"),
+        "market_regime": (record.get("evidence_snapshot") or {}).get("readiness_mode"),
+        "stock_theme": (record.get("evidence_snapshot") or {}).get("theme_summary"),
+        "evidence_source": source.get("source_label") or source.get("surface"),
+        "latest_outcome": card.get("latest_outcome"),
+        "latest_execution": card.get("latest_execution"),
+    }
+
+    next_cases: list[dict[str, Any]] = []
+    replaced = False
+    for prior in cases:
+        if prior.get("decision_id") == decision_id:
+            next_cases.append(case)
+            replaced = True
+        else:
+            next_cases.append(dict(prior))
+    if not replaced:
+        next_cases.append(case)
+    _refresh_pattern_sample_counts(next_cases, pattern_key)
+    _write_review_cases_file(next_cases)
+    saved = _review_case_for_decision(next_cases, decision_id) or case
+    return _case_labelled(saved)
+
+
+def _apply_review_case_to_card(
+    card: dict[str, Any],
+    review_case: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    if not review_case:
+        return card
+    labelled = _case_labelled(review_case)
+    sample_count = int(labelled.get("sample_count") or 1)
+    conclusion_action = str(labelled.get("conclusion_action") or "")
+    if conclusion_action == "keep_rule":
+        calibration_action = "keep_rule"
+    elif conclusion_action == "wait_more_samples":
+        calibration_action = "wait_for_sample"
+    elif conclusion_action == "fix_data_pipeline":
+        calibration_action = "fix_data"
+    elif conclusion_action == "fix_execution_pipeline":
+        calibration_action = "fix_execution"
+    elif sample_count >= 5 and conclusion_action == "loosen_filter":
+        calibration_action = "loosen_rule"
+    elif sample_count >= 5 and conclusion_action == "tighten_filter":
+        calibration_action = "tighten_rule"
+    elif sample_count >= 5 and conclusion_action == "add_guardrail":
+        calibration_action = "add_guardrail"
+    else:
+        calibration_action = "investigate_pattern"
+
+    card.update(
+        {
+            "review_status": "reviewed",
+            "review_reason": "已完成人工归因",
+            "review_reason_key": "reviewed",
+            "next_action_label": labelled.get("conclusion_action_label") or "已归因",
+            "next_action_reason": labelled.get("rule_hypothesis") or "已保存结构化 Review Case。",
+            "calibration_action": calibration_action,
+            "calibration_action_label": _CALIBRATION_ACTION_LABELS.get(calibration_action, calibration_action),
+            "calibration_action_reason": labelled.get("evidence_strength_detail"),
+            "review_case": labelled,
+        }
+    )
+    axes = dict(card.get("quality_axes") or {})
+    axes["learning_quality"] = _axis(
+        "attributed",
+        84,
+        "positive",
+        f"已保存 Review Case：{labelled.get('primary_cause_label')}。",
+    )
+    card["quality_axes"] = axes
+    return card
+
+
+def _pattern_summary_from_cases(pattern_cases: list[Mapping[str, Any]]) -> dict[str, Any]:
+    first = pattern_cases[0]
+    sample_count = len(pattern_cases)
+    stage = _sample_stage(sample_count)
+    follow_up_rank = {
+        "rolled_back": 6,
+        "adopted": 5,
+        "invalid": 4,
+        "preliminary_effective": 3,
+        "observing": 2,
+        "sample_insufficient": 1,
+    }
+    follow_up_status = max(
+        (str(case.get("follow_up_status") or _default_follow_up_status(sample_count)) for case in pattern_cases),
+        key=lambda item: follow_up_rank.get(item, 0),
+    )
+    latest = max(pattern_cases, key=lambda case: str(case.get("reviewed_at") or ""))
+    reason_key = str(first.get("review_reason_key") or "")
+    primary = str(first.get("primary_cause") or "")
+    conclusion_counts: dict[str, int] = {}
+    secondary_counts: dict[str, int] = {}
+    for case in pattern_cases:
+        action = str(case.get("conclusion_action") or "unknown")
+        conclusion_counts[action] = conclusion_counts.get(action, 0) + 1
+        for item in case.get("secondary_causes") or []:
+            secondary = str(item or "").strip()
+            if secondary:
+                secondary_counts[secondary] = secondary_counts.get(secondary, 0) + 1
+    dominant_action = max(conclusion_counts, key=conclusion_counts.get)
+    dominant_secondary = [
+        item for item, _count in sorted(
+            secondary_counts.items(),
+            key=lambda pair: (pair[1], pair[0]),
+            reverse=True,
+        )[:3]
+    ]
+    stock_codes = {
+        str(case.get("stock_code") or "")
+        for case in pattern_cases
+        if case.get("stock_code")
+    }
+    stock_count = len(stock_codes)
+    dominant_market_regime = _dominant_value(case.get("market_regime") for case in pattern_cases)
+    dominant_stock_theme = _dominant_value(case.get("stock_theme") for case in pattern_cases)
+    dominant_evidence_source = _dominant_value(case.get("evidence_source") for case in pattern_cases)
+    lane = first.get("lane")
+    action = first.get("action")
+    action_label = first.get("action_label")
+    primary_label = _PRIMARY_REVIEW_CAUSE_LABELS.get(primary, primary)
+    reason_label = _REVIEW_REASON_LABELS.get(reason_key, reason_key)
+    secondary_label = "、".join(
+        _SECONDARY_REVIEW_CAUSE_LABELS.get(item, item) for item in dominant_secondary
+    )
+    theme_hint = f"{dominant_stock_theme} 主题中，" if dominant_stock_theme else ""
+    learning_hint = (
+        f"{theme_hint}{lane or 'unknown'} / {action_label or action or 'unknown'} "
+        f"曾积累 {sample_count} 条 {reason_label} 复盘样本，主偏差为{primary_label}"
+        f"{f'，常见辅助归因为{secondary_label}' if secondary_label else ''}。"
+        "早盘/午盘分析可把它作为历史经验提醒与复盘优先级信号，不能自动修改交易规则。"
+    )
+    return {
+        "pattern_id": _review_pattern_key(first),
+        "lane": lane,
+        "action": action,
+        "action_label": action_label,
+        "review_reason_key": reason_key,
+        "review_reason_label": reason_label,
+        "primary_cause": primary,
+        "primary_cause_label": primary_label,
+        "sample_count": sample_count,
+        "stock_count": stock_count,
+        "dominant_primary_cause": primary,
+        "dominant_primary_cause_label": primary_label,
+        "dominant_secondary_causes": dominant_secondary,
+        "dominant_secondary_cause_labels": [
+            _SECONDARY_REVIEW_CAUSE_LABELS.get(item, item)
+            for item in dominant_secondary
+        ],
+        "evidence_strength": stage,
+        "evidence_strength_label": _SAMPLE_STAGE_LABELS.get(stage, stage),
+        "evidence_strength_detail": _sample_stage_detail(sample_count),
+        "rule_action_allowed": sample_count >= 5,
+        "stock_theme": dominant_stock_theme,
+        "market_regime": dominant_market_regime,
+        "evidence_source": dominant_evidence_source,
+        "rule_hypothesis": latest.get("rule_hypothesis"),
+        "follow_up_status": follow_up_status,
+        "follow_up_status_label": _FOLLOW_UP_STATUS_LABELS.get(follow_up_status, follow_up_status),
+        "dominant_conclusion_action": dominant_action,
+        "dominant_conclusion_action_label": _CONCLUSION_ACTION_LABELS.get(dominant_action, dominant_action),
+        "learning_hint": learning_hint,
+        "learning_memory_scope": "pattern",
+        "rule_candidate_allowed": sample_count >= 5 and follow_up_status in {"preliminary_effective", "adopted"},
+        "cases": [_case_labelled(case) for case in sorted(
+            pattern_cases,
+            key=lambda item: str(item.get("reviewed_at") or ""),
+            reverse=True,
+        )],
+    }
+
+
+def build_review_case_patterns(
+    *,
+    cases: list[Mapping[str, Any]] | None = None,
+    limit: int = 10,
+) -> dict[str, Any]:
+    raw_cases = list(cases) if cases is not None else _read_review_cases_file()
+    groups: dict[str, list[Mapping[str, Any]]] = {}
+    for case in raw_cases:
+        groups.setdefault(_review_pattern_key(case), []).append(case)
+    patterns = [_pattern_summary_from_cases(items) for items in groups.values() if items]
+    patterns.sort(
+        key=lambda item: (
+            int(item.get("sample_count") or 0),
+            str((item.get("cases") or [{}])[0].get("reviewed_at") or ""),
+        ),
+        reverse=True,
+    )
+    visible = patterns[: max(1, min(int(limit or 10), 100))]
+    return {
+        "patterns": visible,
+        "count": len(patterns),
+        "total_cases": len(raw_cases),
+    }
+
+
+def build_review_case_workbench(decision_id: str) -> dict[str, Any]:
+    record = load_decision(decision_id)
+    if record is None:
+        raise DecisionLedgerError(f"decision not found: {decision_id!r}")
+    cases = _read_review_cases_file()
+    review_case = _review_case_for_decision(cases, decision_id)
+    card = _decision_learning_card(record, as_of=_resolve_as_of(None), pattern_counts={})
+    card = _apply_review_case_to_card(card, review_case)
+    pattern_key = ""
+    similar_cases: list[dict[str, Any]] = []
+    pattern: dict[str, Any] | None = None
+    if review_case:
+        pattern_key = _review_pattern_key(review_case)
+        similar_cases = [_case_labelled(case) for case in cases if _review_pattern_key(case) == pattern_key]
+        if similar_cases:
+            pattern = _pattern_summary_from_cases(similar_cases)
+
+    return {
+        "decision": record,
+        "learning_record": card,
+        "review_case": _case_labelled(review_case) if review_case else None,
+        "similar_cases": similar_cases,
+        "pattern": pattern,
+        "options": {
+            "primary_causes": [
+                {"value": key, "label": _PRIMARY_REVIEW_CAUSE_LABELS[key]}
+                for key in PRIMARY_REVIEW_CAUSES
+            ],
+            "secondary_causes": [
+                {"value": key, "label": _SECONDARY_REVIEW_CAUSE_LABELS[key]}
+                for key in SECONDARY_REVIEW_CAUSES
+            ],
+            "conclusion_actions": [
+                {"value": key, "label": _CONCLUSION_ACTION_LABELS[key]}
+                for key in CONCLUSION_ACTIONS
+            ],
+            "follow_up_statuses": [
+                {"value": key, "label": _FOLLOW_UP_STATUS_LABELS[key]}
+                for key in FOLLOW_UP_STATUSES
+            ],
+        },
+        "guardrail": {
+            "sample_count": int((review_case or {}).get("sample_count") or 1),
+            "evidence_strength": str((review_case or {}).get("evidence_strength") or "observation_hypothesis"),
+            "detail": _sample_stage_detail(int((review_case or {}).get("sample_count") or 1)),
+        },
+    }
+
+
+def _record_has_real_position_context(
+    record: Mapping[str, Any],
+    execution_events: Iterable[Mapping[str, Any]],
+) -> bool:
+    recommendation = record.get("recommendation") or {}
+    evidence = record.get("evidence_snapshot") or {}
+    capital = evidence.get("capital_summary")
+    position_guidance = str(recommendation.get("position_guidance") or "").strip()
+    if isinstance(capital, Mapping) and capital:
+        return True
+    if position_guidance:
+        return True
+    return any(str(event.get("status") or "").strip().lower() == "filled" for event in execution_events)
+
+
+def _next_maturity(
+    record: Mapping[str, Any],
+    *,
+    as_of: str,
+) -> dict[str, Any]:
+    """Explain what outcome window the decision is waiting for next."""
+
+    trade_date = str(record.get("trade_date") or "")
+    outcome_events = list(record.get("outcome_events") or [])
+    evaluated_windows = {
+        str(event.get("window") or "").strip().upper()
+        for event in outcome_events
+    }
+    as_of_date: date | None = None
+    try:
+        as_of_date = datetime.strptime(as_of, "%Y-%m-%d").date()
+    except ValueError:
+        as_of_date = None
+
+    for window in OUTCOME_WINDOWS:
+        if window in evaluated_windows:
+            continue
+        due_at = nth_trading_day_after(trade_date, _OUTCOME_WINDOW_STEPS[window])
+        if not due_at:
+            return {
+                "maturity_due_at": None,
+                "maturity_window": window,
+                "maturity_label": f"无法计算 {window} 成熟日",
+                "is_overdue": False,
+                "is_due": False,
+                "missing_due_date": True,
+            }
+        due_date = datetime.strptime(due_at, "%Y-%m-%d").date()
+        is_due = bool(as_of_date and due_date <= as_of_date)
+        is_overdue = bool(as_of_date and due_date < as_of_date)
+        if is_overdue:
+            label = f"{window} 已成熟，等待 outcome 落盘"
+        elif is_due:
+            label = f"{window} 今天成熟"
+        else:
+            label = f"等待 {window} 成熟"
+        return {
+            "maturity_due_at": due_at,
+            "maturity_window": window,
+            "maturity_label": label,
+            "is_overdue": is_overdue,
+            "is_due": is_due,
+            "missing_due_date": False,
+        }
+
+    latest_outcome = _latest_outcome_event(outcome_events)
+    due_at = str((latest_outcome or {}).get("as_of_trade_date") or trade_date or "")
+    latest_window = str((latest_outcome or {}).get("window") or "T+5")
+    return {
+        "maturity_due_at": due_at or None,
+        "maturity_window": latest_window,
+        "maturity_label": "T+5 已完成，样本可纳入规则学习",
+        "is_overdue": False,
+        "is_due": True,
+        "missing_due_date": False,
+    }
+
+
+def _review_status_for_record(
+    *,
+    record: Mapping[str, Any],
+    latest_label: str,
+    action: str,
+    execution_events: list[Mapping[str, Any]],
+    has_outcome: bool,
+    missing_due_date: bool,
+) -> str:
+    status_state = str((record.get("status") or {}).get("state") or "")
+    if latest_label == "data_issue" or missing_due_date:
+        return "blocked_data"
+    if latest_label in {"invalidated", "execution_gap", "missed_opportunity"}:
+        return "ready_review"
+    if status_state == "superseded":
+        return "ready_review"
+    if has_outcome and latest_label in {"validated", "avoided_loss"}:
+        return "reviewed"
+    if has_outcome:
+        return "low_priority"
+    if _action_requires_execution(action) and not execution_events:
+        return "pending_execution"
+    return "pending_outcome"
+
+
+def _missing_fields_for_record(
+    *,
+    record: Mapping[str, Any],
+    review_status: str,
+    latest_label: str,
+    action: str,
+    execution_events: list[Mapping[str, Any]],
+    has_outcome: bool,
+    maturity: Mapping[str, Any],
+) -> list[str]:
+    missing: list[str] = []
+    stock = record.get("stock") or {}
+    evidence = record.get("evidence_snapshot") or {}
+    if not stock.get("code"):
+        missing.append("stock.code")
+    if not record.get("trade_date"):
+        missing.append("trade_date")
+    if not has_outcome:
+        missing.append("outcome_events")
+    if _action_requires_execution(action) and not execution_events:
+        missing.append("execution_events")
+    if maturity.get("missing_due_date"):
+        missing.append("maturity_due_at")
+    if latest_label == "data_issue" or review_status == "blocked_data":
+        missing.append("market_data")
+    if evidence.get("readiness_ready") is False and evidence.get("blockers"):
+        missing.append("ready_evidence")
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for item in missing:
+        if item and item not in seen:
+            deduped.append(item)
+            seen.add(item)
+    return deduped
+
+
+def _calibration_action_for_record(
+    *,
+    review_status: str,
+    latest_label: str,
+    is_high_confidence: bool,
+    is_overdue: bool,
+) -> tuple[str, str, str]:
+    if review_status == "blocked_data":
+        action = "fix_data"
+        reason = "结果无法用于学习，先修复行情/成熟日/来源数据。"
+    elif review_status == "pending_execution":
+        action = "fix_execution"
+        reason = "判断与执行链路脱节，优先补齐成交/未成交原因。"
+        if is_overdue:
+            reason = "样本已过成熟日，先补齐执行记录；若只缺 outcome，立即补跑 outcome evaluator。"
+    elif latest_label == "execution_gap":
+        action = "fix_execution"
+        reason = "判断与执行链路脱节，优先补齐成交/未成交原因。"
+    elif latest_label == "invalidated":
+        action = "investigate_pattern"
+        reason = "判断被结果否定，需要先完成归因；单条样本不能直接收紧规则。"
+    elif latest_label == "missed_opportunity":
+        action = "investigate_pattern"
+        reason = "谨慎动作错过机会，需要先完成归因；单条样本不能直接放宽规则。"
+    elif review_status == "ready_review":
+        action = "investigate_pattern"
+        reason = "样本已成熟且值得人工归因，先确认是否为重复模式。"
+    elif review_status in _PENDING_REVIEW_STATUSES:
+        if is_overdue:
+            action = "run_outcome_evaluator"
+            reason = "样本已过成熟日但 outcome 未落盘，先补跑 outcome evaluator，让学习闭环继续走。"
+        else:
+            action = "wait_for_sample"
+            reason = "样本尚未形成完整 outcome，先等待或运行 outcome evaluator。"
+    elif review_status == "low_priority":
+        action = "wait_for_sample"
+        reason = "结果信号仍在中性带，暂不因单样本改规则。"
+    else:
+        action = "keep_rule"
+        reason = "当前样本没有显示规则偏移，继续观察即可。"
+    return action, _CALIBRATION_ACTION_LABELS[action], reason
+
+
+def _quality_axes_for_record(
+    *,
+    record: Mapping[str, Any],
+    review_status: str,
+    latest_label: str,
+    action: str,
+    execution_events: list[Mapping[str, Any]],
+    is_overdue: bool,
+) -> dict[str, Any]:
+    if latest_label in {"validated", "avoided_loss", "execution_gap"}:
+        judgment = _axis("good", 82 if latest_label != "execution_gap" else 76, "positive", "结果支持原始判断方向。")
+    elif latest_label in {"invalidated", "missed_opportunity"}:
+        judgment = _axis("weak", 28, "risk", "结果与原始判断方向相反，需要归因。")
+    elif latest_label == "data_issue" or review_status == "blocked_data":
+        judgment = _axis("blocked", 0, "warning", "数据缺口阻塞判断质量评价。")
+    elif latest_label == "inconclusive":
+        judgment = _axis("inconclusive", 50, "watch", "收益落在中性区间，不足以改规则。")
+    else:
+        judgment = _axis("pending", 45, "watch", "尚未形成 outcome，判断质量暂不可评价。")
+
+    statuses = {
+        str(event.get("status") or "").strip().lower()
+        for event in execution_events
+    }
+    if latest_label == "execution_gap":
+        execution = _axis("gap", 22, "risk", "建议有效但没有形成对应执行。")
+    elif "filled" in statuses:
+        execution = _axis("aligned", 82, "positive", "已记录成交，执行链路可评价。")
+    elif statuses & {"no_fill", "skip"}:
+        execution = _axis("explicit_skip", 58, "watch", "已记录未执行原因，可用于执行归因。")
+    elif _action_requires_execution(action):
+        execution = _axis("missing", 35, "warning", "动作需要执行记录，但当前缺少 fill/no_fill。")
+    else:
+        execution = _axis("not_required", 68, "info", "该动作不强制要求成交记录。")
+
+    if review_status in _READY_REVIEW_STATUSES:
+        learning = _axis("needs_review", 42, "warning", "样本已能触发学习动作，等待人工归因。")
+    elif is_overdue:
+        learning = _axis("overdue", 30, "risk", "样本成熟但 outcome 未落盘，学习闭环停住了。")
+    elif review_status in _PENDING_REVIEW_STATUSES:
+        learning = _axis("collecting", 55, "watch", "正在等待 outcome 或执行信息成熟。")
+    elif review_status == "reviewed":
+        learning = _axis("learned", 78, "positive", "样本已纳入规则质量统计。")
+    else:
+        learning = _axis("low_signal", 50, "watch", "当前结果信号不足，避免过拟合。")
+
+    return {
+        "judgment_quality": judgment,
+        "execution_quality": execution,
+        "learning_quality": learning,
+    }
+
+
+def _priority_for_record(
+    *,
+    record: Mapping[str, Any],
+    review_status: str,
+    latest_label: str,
+    is_high_confidence: bool,
+    is_overdue: bool,
+    action: str,
+    execution_events: list[Mapping[str, Any]],
+    pattern_count: int,
+) -> tuple[int, list[str]]:
+    score = 0
+    reasons: list[str] = []
+
+    if latest_label == "invalidated":
+        score += 45
+        reasons.append("判断被行情否定")
+        if is_high_confidence:
+            score += 12
+            reasons.append("高信心样本失效")
+    elif latest_label == "execution_gap":
+        score += 50
+        reasons.append("出现 execution gap")
+    elif latest_label == "missed_opportunity":
+        score += 42
+        reasons.append("可能错过机会")
+    elif latest_label == "data_issue" or review_status == "blocked_data":
+        score += 34
+        reasons.append("数据缺口阻塞学习")
+
+    if str((record.get("status") or {}).get("state") or "") == "superseded":
+        score += 28
+        reasons.append("判断已被后续建议替代")
+
+    if is_overdue:
+        score += 38
+        reasons.append("pending 已过成熟日")
+
+    if review_status == "pending_execution":
+        score += 22
+        reasons.append("缺少执行记录")
+    elif _action_requires_execution(action) and not execution_events:
+        score += 10
+        reasons.append("动作需要执行证据")
+
+    if pattern_count >= 2:
+        score += 14
+        reasons.append("同链路/动作重复失败")
+
+    if _record_has_real_position_context(record, execution_events):
+        score += 8
+        reasons.append("涉及真实仓位或执行")
+
+    if review_status == "reviewed":
+        score += 8
+        reasons.append("已完成 outcome，可纳入统计")
+    elif review_status == "low_priority":
+        score += 5
+        reasons.append("低信号样本，避免过拟合")
+    elif not reasons:
+        score += 12
+        reasons.append("等待样本成熟")
+
+    return min(score, 100), reasons
+
+
+def _decision_learning_card(
+    record: Mapping[str, Any],
+    *,
+    as_of: str,
+    pattern_counts: Mapping[tuple[str, str], int],
+) -> dict[str, Any]:
+    source = record.get("source") or {}
+    recommendation = record.get("recommendation") or {}
+    evidence = record.get("evidence_snapshot") or {}
+    action = str(recommendation.get("action") or "unknown").strip().lower()
+    lane = str(source.get("lane") or "unknown")
+    outcome_events = list(record.get("outcome_events") or [])
+    execution_events = list(record.get("execution_events") or [])
+    latest_outcome = _latest_outcome_event(outcome_events)
+    latest_label = _latest_outcome_label(latest_outcome)
+    has_outcome = latest_outcome is not None
+    maturity = _next_maturity(record, as_of=as_of)
+    review_status = _review_status_for_record(
+        record=record,
+        latest_label=latest_label,
+        action=action,
+        execution_events=execution_events,
+        has_outcome=has_outcome,
+        missing_due_date=bool(maturity.get("missing_due_date")),
+    )
+    missing_fields = _missing_fields_for_record(
+        record=record,
+        review_status=review_status,
+        latest_label=latest_label,
+        action=action,
+        execution_events=execution_events,
+        has_outcome=has_outcome,
+        maturity=maturity,
+    )
+    is_high_confidence = bool(evidence.get("readiness_ready")) and not (evidence.get("blockers") or [])
+    is_overdue = bool(maturity.get("is_overdue")) and not has_outcome
+    pattern_count = int(pattern_counts.get((lane, action), 0))
+    priority_score, priority_reasons = _priority_for_record(
+        record=record,
+        review_status=review_status,
+        latest_label=latest_label,
+        is_high_confidence=is_high_confidence,
+        is_overdue=is_overdue,
+        action=action,
+        execution_events=execution_events,
+        pattern_count=pattern_count,
+    )
+    calibration_action, action_label, action_reason = _calibration_action_for_record(
+        review_status=review_status,
+        latest_label=latest_label,
+        is_high_confidence=is_high_confidence,
+        is_overdue=is_overdue,
+    )
+    review_reason_key, review_reason = _review_reason(record, latest_label)
+    if review_status in _PENDING_REVIEW_STATUSES:
+        review_reason_key = review_status
+        review_reason = "等待 outcome / execution 成熟"
+    elif review_status == "reviewed":
+        review_reason_key = "reviewed"
+        review_reason = "样本已完成评价，当前不需要优先复盘"
+    elif review_status == "low_priority":
+        review_reason_key = "low_priority"
+        review_reason = "结果信号不足，暂不推动规则校准"
+
+    card = _decision_summary_card(record)
+    latest_execution_status = str((card.get("latest_execution") or {}).get("status") or "")
+    if not latest_execution_status:
+        latest_execution_status = "missing" if _action_requires_execution(action) else "not_required"
+
+    card.update(
+        {
+            "review_status": review_status,
+            "review_reason": review_reason,
+            "review_reason_key": review_reason_key,
+            "maturity_due_at": maturity.get("maturity_due_at"),
+            "maturity_label": maturity.get("maturity_label"),
+            "maturity_window": maturity.get("maturity_window"),
+            "missing_fields": missing_fields,
+            "is_overdue": is_overdue,
+            "next_action_label": action_label,
+            "next_action_reason": action_reason,
+            "quality_axes": _quality_axes_for_record(
+                record=record,
+                review_status=review_status,
+                latest_label=latest_label,
+                action=action,
+                execution_events=execution_events,
+                is_overdue=is_overdue,
+            ),
+            "priority_score": priority_score,
+            "priority_label": _priority_label(priority_score),
+            "priority_reasons": priority_reasons,
+            "calibration_action": calibration_action,
+            "calibration_action_label": action_label,
+            "calibration_action_reason": action_reason,
+            "outcome_status": latest_label or "pending",
+            "outcome_tone": _latest_outcome_tone(latest_outcome),
+            "execution_status": latest_execution_status,
+            "maturity": dict(maturity),
+        }
+    )
+    return card
+
+
+def _learning_card_sort_key(item: Mapping[str, Any]) -> tuple[int, str, str]:
+    return (
+        int(item.get("priority_score") or 0),
+        str(item.get("trade_date") or ""),
+        str(item.get("decision_id") or ""),
+    )
+
+
+def _build_review_workbench(
+    records: list[dict[str, Any]],
+    *,
+    errors: list[dict[str, Any]],
+) -> dict[str, Any]:
+    ready_count = sum(1 for item in records if item.get("review_status") == "ready_review")
+    blocked_count = sum(1 for item in records if item.get("review_status") == "blocked_data")
+    pending_count = sum(1 for item in records if item.get("review_status") in _PENDING_REVIEW_STATUSES)
+    overdue_count = sum(1 for item in records if item.get("is_overdue"))
+    today_queue = [
+        item for item in records
+        if item.get("review_status") in _READY_REVIEW_STATUSES
+        or item.get("is_overdue")
+        or item.get("review_status") == "pending_execution"
+    ]
+    today_queue.sort(key=_learning_card_sort_key, reverse=True)
+    top = today_queue[0] if today_queue else None
+
+    if errors:
+        state = "data_blocked"
+        next_best_action = "先修复 ledger 文件解析错误，避免学习样本缺失。"
+    elif ready_count or blocked_count:
+        state = "needs_review"
+        next_best_action = str((top or {}).get("next_action_label") or "先处理最高优先级复盘样本。")
+    elif overdue_count:
+        state = "outcome_overdue"
+        next_best_action = "补跑 outcome evaluator，让已成熟样本进入复盘。"
+    elif pending_count:
+        state = "collecting_evidence"
+        next_best_action = "等待样本成熟，同时补齐缺失执行记录。"
+    elif records:
+        state = "stable_learning"
+        next_best_action = "保持当前规则，继续积累样本，避免单点过拟合。"
+    else:
+        state = "no_samples"
+        next_best_action = "先捕获今天的观察、判断和执行记录。"
+
+    top_reason = "暂无优先风险"
+    if top:
+        reasons = top.get("priority_reasons") or []
+        if isinstance(reasons, list) and reasons:
+            top_reason = str(reasons[0])
+        else:
+            top_reason = str(top.get("review_reason") or top_reason)
+
+    return {
+        "today_queue_count": len(today_queue),
+        "ready_review_count": ready_count,
+        "blocked_data_count": blocked_count,
+        "pending_count": pending_count,
+        "overdue_count": overdue_count,
+        "top_priority_reason": top_reason,
+        "system_learning_state": state,
+        "next_best_action": next_best_action,
+        "top_priority_decision_id": top.get("decision_id") if top else None,
+    }
+
+
+def _suggestion_card(
+    *,
+    kind: str,
+    tone: str,
+    title: str,
+    summary: str,
+    calibration_action: str,
+    sample_size: int = 0,
+    action_reason: str = "",
+) -> dict[str, Any]:
+    sample_size = max(0, int(sample_size or 0))
+    insufficient_sample = sample_size < 5 and calibration_action not in {
+        "fix_data",
+        "fix_execution",
+        "run_outcome_evaluator",
+    }
+    return {
+        "kind": kind,
+        "tone": tone,
+        "title": title,
+        "summary": summary,
+        "calibration_action": calibration_action,
+        "action_label": _CALIBRATION_ACTION_LABELS.get(calibration_action, calibration_action),
+        "action_reason": action_reason or summary,
+        "evidence_strength": _evidence_strength(sample_size),
+        "sample_size": sample_size,
+        "insufficient_sample": insufficient_sample,
+    }
+
+
+def _calibration_suggestion_cards(
+    *,
+    by_lane: list[dict[str, Any]],
+    by_action: list[dict[str, Any]],
+    needs_review_count: int,
+    top_review_reasons: list[str],
+    data_issue_count: int,
+    pending_count: int,
+    overdue_count: int,
+) -> list[dict[str, Any]]:
+    cards: list[dict[str, Any]] = []
+
+    weak_lane = next(
+        (
+            item for item in by_lane
+            if int(item.get("evaluated") or 0) >= 2 and float(item.get("invalidated_rate") or 0) >= 35
+        ),
+        None,
+    )
+    if weak_lane:
+        cards.append(
+            _suggestion_card(
+                kind="lane_invalidated",
+                tone="risk",
+                title=f"{weak_lane['label']} 近期失误偏高",
+                summary=(
+                    f"已评估 {weak_lane['evaluated']} 条，invalidated "
+                    f"{weak_lane['invalidated_rate']}%。建议先复查该链路阈值和证据质量。"
+                ),
+                calibration_action=(
+                    "tighten_rule" if int(weak_lane.get("evaluated") or 0) >= 5
+                    else "investigate_pattern"
+                ),
+                sample_size=int(weak_lane.get("evaluated") or 0),
+                action_reason="失败率偏高，先确认是否为稳定模式，再决定是否收紧规则。",
+            )
+        )
+
+    weak_action = next(
+        (
+            item for item in by_action
+            if int(item.get("evaluated") or 0) >= 2 and float(item.get("review_rate") or 0) >= 40
+        ),
+        None,
+    )
+    if weak_action:
+        cards.append(
+            _suggestion_card(
+                kind="action_review",
+                tone="warning",
+                title=f"{weak_action['label']} 动作需要校准",
+                summary=(
+                    f"该动作 {weak_action['review_rate']}% 进入复盘池。建议检查触发条件是否过宽或过窄。"
+                ),
+                calibration_action=(
+                    "add_guardrail" if int(weak_action.get("evaluated") or 0) >= 5
+                    else "investigate_pattern"
+                ),
+                sample_size=int(weak_action.get("evaluated") or 0),
+                action_reason="同一动作进入复盘池比例偏高，需要定位触发条件还是执行链路问题。",
+            )
+        )
+
+    if data_issue_count:
+        cards.append(
+            _suggestion_card(
+                kind="data_quality",
+                tone="warning",
+                title="先处理数据问题",
+                summary=f"当前窗口有 {data_issue_count} 条 data_issue，复盘前应优先确认行情和来源新鲜度。",
+                calibration_action="fix_data",
+                sample_size=data_issue_count,
+                action_reason="数据问题会污染命中率，先修复再讨论规则。",
+            )
+        )
+
+    if overdue_count:
+        cards.append(
+            _suggestion_card(
+                kind="outcome_overdue",
+                tone="risk",
+                title="补跑 outcome evaluator",
+                summary=f"当前窗口有 {overdue_count} 条样本已过成熟日但 outcome 未落盘，先让结果评估补齐证据。",
+                calibration_action="run_outcome_evaluator",
+                sample_size=overdue_count,
+                action_reason="成熟样本缺 outcome 会卡住学习闭环；先补跑评估，再决定是否复盘或调规则。",
+            )
+        )
+
+    if needs_review_count:
+        reason_text = " / ".join(
+            _REVIEW_REASON_LABELS.get(reason, reason)
+            for reason in top_review_reasons[:2]
+        ) or "复盘池"
+        cards.append(
+            _suggestion_card(
+                kind="review_queue",
+                tone="info",
+                title="先看复盘池",
+                summary=f"有 {needs_review_count} 条决策值得人工复盘，建议先看 {reason_text}。",
+                calibration_action="investigate_pattern",
+                sample_size=needs_review_count,
+                action_reason="先做归因，再决定 keep / tighten / loosen，避免直接过拟合。",
+            )
+        )
+
+    future_pending_count = max(0, pending_count - overdue_count)
+    if future_pending_count and not cards:
+        cards.append(
+            _suggestion_card(
+                kind="pending",
+                tone="watch",
+                title="等待样本成熟",
+                summary=f"当前窗口仍有 {future_pending_count} 条待评估，先等 T+N outcome 落盘后再校准。",
+                calibration_action="wait_for_sample",
+                sample_size=future_pending_count,
+                action_reason="样本未成熟时不要改规则，先让 outcome / execution 补齐。",
+            )
+        )
+
+    if not cards:
+        cards.append(
+            _suggestion_card(
+                kind="steady",
+                tone="positive",
+                title="暂无明显校准压力",
+                summary="当前窗口没有突出失败簇，继续积累样本并观察 lane / action 分布。",
+                calibration_action="keep_rule",
+                sample_size=0,
+                action_reason="没有足够反证时，默认保留规则并继续观察。",
+            )
+        )
+
+    return cards[:4]
+
+
+def build_calibration_review(
+    *,
+    window_days: int = 20,
+    as_of: str | None = None,
+    limit: int = 12,
+) -> dict[str, Any]:
+    """Aggregate the ledger into a small review-and-calibration brief.
+
+    This is intentionally a product-facing projection, not a new storage
+    model.  It scans the append-only decisions and answers the operator's
+    next question: which decisions deserve review, and which lane/action
+    looks suspicious enough to inspect before changing rules.
+    """
+
+    days = max(1, int(window_days) if isinstance(window_days, int) else 20)
+    review_limit = max(1, min(int(limit) if isinstance(limit, int) else 12, 100))
+    as_of_norm = _resolve_as_of(as_of)
+    try:
+        end = datetime.strptime(as_of_norm, "%Y-%m-%d").date()
+    except ValueError:
+        end = datetime.now().date()
+        as_of_norm = end.strftime("%Y-%m-%d")
+    start = end - timedelta(days=days)
+    from_date = start.strftime("%Y-%m-%d")
+
+    records, errors = scan_all_decisions()
+    review_cases = _read_review_cases_file()
+    review_cases_by_decision = _review_cases_by_decision(review_cases)
+    in_window = [
+        record for record in records
+        if from_date <= str(record.get("trade_date") or "") <= as_of_norm
+    ]
+    in_window.sort(
+        key=lambda r: (
+            str(r.get("trade_date") or ""),
+            str(r.get("decision_id") or ""),
+        ),
+        reverse=True,
+    )
+
+    overall = _empty_group("overall")
+    by_lane_map: dict[str, dict[str, Any]] = {}
+    by_action_map: dict[str, dict[str, Any]] = {}
+    pattern_counts: dict[tuple[str, str], int] = {}
+
+    for record in in_window:
+        source = record.get("source") or {}
+        recommendation = record.get("recommendation") or {}
+        latest_outcome = _latest_outcome_event(record.get("outcome_events") or [])
+        latest_label = _latest_outcome_label(latest_outcome)
+        status_state = str((record.get("status") or {}).get("state") or "")
+        if latest_label in {"invalidated", "execution_gap", "missed_opportunity"} or status_state == "superseded":
+            key = (
+                str(source.get("lane") or "unknown"),
+                str(recommendation.get("action") or "unknown"),
+            )
+            pattern_counts[key] = pattern_counts.get(key, 0) + 1
+
+    learning_records: list[dict[str, Any]] = []
+    review_items: list[dict[str, Any]] = []
+
+    for record in in_window:
+        source = record.get("source") or {}
+        recommendation = record.get("recommendation") or {}
+        outcome_events = record.get("outcome_events") or []
+        latest_outcome = _latest_outcome_event(outcome_events)
+        latest_label = _latest_outcome_label(latest_outcome)
+        has_outcome = latest_outcome is not None
+
+        lane = str(source.get("lane") or "unknown")
+        action = str(recommendation.get("action") or "unknown")
+        lane_group = by_lane_map.setdefault(lane, _empty_group(lane))
+        action_group = by_action_map.setdefault(action, _empty_group(action))
+        status_state = str((record.get("status") or {}).get("state") or "")
+        _bump_group(
+            overall,
+            latest_label=latest_label,
+            has_outcome=has_outcome,
+            status_state=status_state,
+        )
+        _bump_group(
+            lane_group,
+            latest_label=latest_label,
+            has_outcome=has_outcome,
+            status_state=status_state,
+        )
+        _bump_group(
+            action_group,
+            latest_label=latest_label,
+            has_outcome=has_outcome,
+            status_state=status_state,
+        )
+
+        card = _decision_learning_card(
+            record,
+            as_of=as_of_norm,
+            pattern_counts=pattern_counts,
+        )
+        card = _apply_review_case_to_card(
+            card,
+            review_cases_by_decision.get(str(record.get("decision_id") or "")),
+        )
+        learning_records.append(card)
+        if card.get("review_status") in _READY_REVIEW_STATUSES:
+            review_items.append(card)
+
+    by_lane = sorted(
+        (_group_rates(item) for item in by_lane_map.values()),
+        key=lambda item: (int(item.get("review_needed") or 0), int(item.get("total") or 0)),
+        reverse=True,
+    )
+    by_action = sorted(
+        (_group_rates(item) for item in by_action_map.values()),
+        key=lambda item: (int(item.get("review_needed") or 0), int(item.get("total") or 0)),
+        reverse=True,
+    )
+    overall_view = _group_rates(overall)
+    review_items.sort(
+        key=lambda item: _REVIEW_REASON_PRIORITY.get(
+            str(item.get("review_reason_key") or ""),
+            99,
+        ),
+    )
+    review_items.sort(key=_learning_card_sort_key, reverse=True)
+    learning_records.sort(key=_learning_card_sort_key, reverse=True)
+    needs_review = review_items[:review_limit]
+    pending_reviews = [
+        item for item in learning_records
+        if item.get("review_status") in _PENDING_REVIEW_STATUSES
+    ][:review_limit]
+    ready_reviews = [
+        item for item in learning_records
+        if item.get("review_status") == "ready_review"
+    ][:review_limit]
+    review_queue = [
+        item for item in learning_records
+        if item.get("review_status") in _READY_REVIEW_STATUSES
+        or item.get("review_status") in _PENDING_REVIEW_STATUSES
+    ][:review_limit]
+    workbench = _build_review_workbench(learning_records, errors=errors)
+    shadow_calibration = build_shadow_calibration_summary()
+    top_review_reasons: list[str] = []
+    for item in review_items:
+        reason = str(item.get("review_reason_key") or "")
+        if reason and reason not in top_review_reasons:
+            top_review_reasons.append(reason)
+
+    return {
+        "as_of": as_of_norm,
+        "window_days": days,
+        "from_date": from_date,
+        "to_date": as_of_norm,
+        "overall": overall_view,
+        "by_lane": by_lane,
+        "by_action": by_action,
+        "review_workbench": workbench,
+        "review_records": learning_records,
+        "review_queue": review_queue,
+        "ready_reviews": ready_reviews,
+        "pending_reviews": pending_reviews,
+        "needs_review": needs_review,
+        "needs_review_count": len(review_items),
+        "reviewed_case_count": len(review_cases_by_decision),
+        "review_case_patterns": build_review_case_patterns(cases=review_cases).get("patterns", []),
+        "review_case_summary": {
+            "total": len(review_cases),
+            "attributed": len([case for case in review_cases if case.get("primary_cause")]),
+            "patterns": build_review_case_patterns(cases=review_cases).get("count", 0),
+        },
+        "shadow_calibration": shadow_calibration,
+        "suggestion_cards": _calibration_suggestion_cards(
+            by_lane=by_lane,
+            by_action=by_action,
+            needs_review_count=len(review_items),
+            top_review_reasons=top_review_reasons,
+            data_issue_count=int(overall_view.get("data_issue") or 0),
+            pending_count=int(overall_view.get("pending") or 0),
+            overdue_count=int(workbench.get("overdue_count") or 0),
+        ),
         "errors": errors,
     }
 

@@ -24,6 +24,7 @@ import { EmptyState, ErrorState, Panel } from "@/components/data-card";
 import { MetricCard } from "@/components/metric-card";
 import { PageTitle } from "@/components/page-title";
 import { PreviewDrawer, type PreviewDrawerState } from "@/components/preview-drawer";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { api, ApiError } from "@/lib/api";
 import {
   useDecisionLedgerHealth,
@@ -1463,6 +1464,12 @@ export default function SettingsPage() {
             </div>
 
             <div className="flex flex-col gap-6">
+              <Panel title="外观" eyebrow="Display">
+                <div className="surface-card p-4">
+                  <ThemeToggle />
+                </div>
+              </Panel>
+
               <Panel title="服务状态" eyebrow="System">
                 <div className="surface-card p-4">
                   <div className="mb-4 flex items-center gap-3">

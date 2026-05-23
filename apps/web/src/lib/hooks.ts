@@ -28,6 +28,11 @@ export const queryKeys = {
   decisionLedgerSummary: (params: { window?: string; as_of?: string } = {}) =>
     ["decision-ledger", "summary", params.window || "", params.as_of || ""] as const,
   decisionLedgerRecent: (limit: number) => ["decision-ledger", "recent", limit] as const,
+  decisionLedgerCalibration: (params: { window?: string; as_of?: string; limit?: number } = {}) =>
+    ["decision-ledger", "calibration", params.window || "", params.as_of || "", params.limit || ""] as const,
+  decisionLedgerReviewCases: ["decision-ledger", "review-cases"] as const,
+  decisionLedgerReviewCase: (decisionId: string) => ["decision-ledger", "review-case", decisionId] as const,
+  decisionLedgerAttributionDraft: (decisionId: string) => ["decision-ledger", "attribution-draft", decisionId] as const,
   decisionLedgerStock: (code: string) => ["decision-ledger", "stock", code] as const,
   decisionLedgerDetail: (decisionId: string) => ["decision-ledger", "detail", decisionId] as const,
   decisionLedgerHealth: ["decision-ledger", "health"] as const,
@@ -83,8 +88,9 @@ export function useReview(params: { baseline?: string; window?: string } = {}) {
   return useQuery({
     queryKey: queryKeys.review(params),
     queryFn: () => api.getReview(params),
-    staleTime: 300_000,
-    refetchInterval: false,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -99,8 +105,8 @@ export function useReviewDetail(params: { section?: string; label?: string; base
         window: params.window,
       }),
     enabled: Boolean(params.section && params.label),
-    staleTime: 300_000,
-    refetchInterval: false,
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -190,6 +196,7 @@ export function useRunTask() {
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.overview });
       void queryClient.invalidateQueries({ queryKey: queryKeys.runs });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.decisionLedger });
     },
   });
 }
@@ -229,6 +236,11 @@ export function useTriggerRefresh(page: string, options: { stockCode?: string } 
       if (page === "opportunities") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.opportunities });
         void queryClient.invalidateQueries({ queryKey: queryKeys.stockProfiles });
+      }
+      if (page === "review") {
+        void queryClient.invalidateQueries({ queryKey: ["review"] });
+        void queryClient.invalidateQueries({ queryKey: ["review-detail"] });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.decisionLedger });
       }
       if (stockCode) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.stockProfile(stockCode) });
@@ -330,6 +342,21 @@ export function useRecordPortfolioFill() {
   });
 }
 
+export function useAmendPortfolioHoldingIdentity() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: api.amendPortfolioHoldingIdentity,
+    onSuccess: (payload) => {
+      queryClient.setQueryData(queryKeys.portfolioAccount, payload);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.portfolioAccount });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.today });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.decisionLedger });
+    },
+  });
+}
+
 export function useRecordPortfolioNoFill() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -368,6 +395,55 @@ export function useDecisionLedgerRecent(limit: number = 20) {
     queryFn: () => api.getDecisionLedgerRecent({ limit }),
     staleTime: 30_000,
     refetchInterval: 60_000,
+  });
+}
+
+export function useDecisionLedgerCalibration(params: { window?: string; as_of?: string; limit?: number } = {}) {
+  return useQuery({
+    queryKey: queryKeys.decisionLedgerCalibration(params),
+    queryFn: () => api.getDecisionLedgerCalibration(params),
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+  });
+}
+
+export function useDecisionLedgerReviewCases() {
+  return useQuery({
+    queryKey: queryKeys.decisionLedgerReviewCases,
+    queryFn: api.getDecisionLedgerReviewCases,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+  });
+}
+
+export function useDecisionLedgerReviewCase(decisionId: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.decisionLedgerReviewCase(decisionId),
+    queryFn: () => api.getDecisionLedgerReviewCase(decisionId),
+    enabled: Boolean(decisionId) && enabled,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useSaveDecisionLedgerReviewCase() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ decisionId, payload }: {
+      decisionId: string;
+      payload: Parameters<typeof api.saveDecisionLedgerReviewCase>[1];
+    }) => api.saveDecisionLedgerReviewCase(decisionId, payload),
+    onSuccess: (response, variables) => {
+      queryClient.setQueryData(queryKeys.decisionLedgerReviewCase(variables.decisionId), response.workbench);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.decisionLedger });
+    },
+  });
+}
+
+export function useGenerateDecisionLedgerAttributionDraft() {
+  return useMutation({
+    mutationFn: (decisionId: string) => api.generateDecisionLedgerAttributionDraft(decisionId),
   });
 }
 

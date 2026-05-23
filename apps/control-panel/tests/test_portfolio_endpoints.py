@@ -199,6 +199,103 @@ class PortfolioEndpointsTests(unittest.TestCase):
         self.assertEqual(len(markers), 1)
         self.assertEqual(markers[0]["intent_key"], "wl-priority-sh600690")
 
+    def test_holding_identity_correction_endpoint(self) -> None:
+        self.client.post("/api/portfolio/cash", json={"delta": 10000.0, "reason": "seed"})
+        fill = self.client.post(
+            "/api/portfolio/fills",
+            json={
+                "trade_date": "2026-05-06",
+                "code": "sh000625",
+                "side": "buy",
+                "qty": 500,
+                "price": 11.21,
+                "fees": 0.0,
+                "name": "错码记录",
+            },
+        )
+        self.assertEqual(fill.status_code, 200)
+
+        response = self.client.post(
+            "/api/portfolio/holding/identity",
+            json={
+                "from_code": "sh000625",
+                "to_code": "sz000625",
+                "name": "长安汽车",
+                "reason": "录入代码修正",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        position = body["account"]["open_positions"][0]
+        self.assertEqual(position["code"], "sz000625")
+        self.assertEqual(position["name"], "长安汽车")
+        self.assertEqual(body["account"]["identity_corrections"][0]["from_code"], "sh000625")
+
+    def test_quote_refresh_uses_provider_name_for_code_like_position_name(self) -> None:
+        self.client.post("/api/portfolio/cash", json={"delta": 10000.0, "reason": "seed"})
+        with mock.patch("control_panel.app.fetch_stock_name", return_value=None):
+            fill = self.client.post(
+                "/api/portfolio/fills",
+                json={
+                    "trade_date": "2026-05-06",
+                    "code": "sh601021",
+                    "side": "buy",
+                    "qty": 100,
+                    "price": 46.84,
+                    "fees": 0.0,
+                    "name": "sh601021",
+                },
+            )
+        self.assertEqual(fill.status_code, 200)
+
+        class NamedGateway:
+            def fetch_quotes_batch(self, codes, **kwargs):  # type: ignore[no-untyped-def]
+                from datetime import datetime
+
+                provider_result = ProviderResult(
+                    status=DatasetStatus.OK,
+                    data=[
+                        {
+                            "code": "601021",
+                            "symbol": "sh601021",
+                            "name": "春秋航空",
+                            "price": 47.82,
+                            "change_pct": 4.89,
+                        }
+                    ],
+                    provider="fake",
+                    provider_role=ProviderRole.PRIMARY,
+                    dataset="quotes.batch",
+                    trade_date="2026-05-06",
+                    fetched_at=datetime(2026, 5, 6, 10, 0, 0),
+                    asof=datetime(2026, 5, 6, 10, 0, 0),
+                )
+                return type(
+                    "GatewayResult",
+                    (),
+                    {
+                        "data": provider_result.data,
+                        "manifest": {
+                            "provider": "fake",
+                            "trade_date": "2026-05-06",
+                            "fetched_at": "2026-05-06 10:00:00",
+                            "freshness_status": "fresh",
+                            "live_small_allowed": True,
+                        },
+                        "data_path": "/tmp/quotes.json",
+                        "manifest_path": "/tmp/quotes.manifest.json",
+                        "provider_result": provider_result,
+                    },
+                )()
+
+        with mock.patch("control_panel.dashboard_data.get_data_gateway", return_value=NamedGateway()):
+            response = self.client.post("/api/portfolio/quotes/refresh")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["account"]["open_positions"][0]["name"], "春秋航空")
+        self.assertEqual(body["holding_reviews"][0]["name"], "春秋航空")
+
     def test_allow_unsafe_mode_stays_risky_in_readiness(self) -> None:
         self.client.post("/api/portfolio/cash", json={"delta": 5000.0, "reason": "seed"})
         response = self.client.post(

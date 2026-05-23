@@ -7,6 +7,7 @@ export type ResolvedTheme = "light" | "dark";
 
 const THEME_STORAGE_KEY = "prism-web-theme-mode";
 const THEME_MODES: ThemeMode[] = ["light", "dark", "system"];
+const DEFAULT_THEME_MODE: ThemeMode = "light";
 
 type ThemeContextValue = {
   mode: ThemeMode;
@@ -17,7 +18,7 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function normalizeThemeMode(value: unknown): ThemeMode {
-  return typeof value === "string" && THEME_MODES.includes(value as ThemeMode) ? (value as ThemeMode) : "system";
+  return typeof value === "string" && THEME_MODES.includes(value as ThemeMode) ? (value as ThemeMode) : DEFAULT_THEME_MODE;
 }
 
 function systemTheme(): ResolvedTheme {
@@ -35,7 +36,7 @@ function readStoredMode(): ThemeMode {
   try {
     return normalizeThemeMode(window.localStorage.getItem(THEME_STORAGE_KEY));
   } catch {
-    return "system";
+    return DEFAULT_THEME_MODE;
   }
 }
 
@@ -57,7 +58,7 @@ function applyTheme(mode: ThemeMode): ResolvedTheme {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [mode, setModeState] = useState<ThemeMode>("system");
+  const [mode, setModeState] = useState<ThemeMode>(DEFAULT_THEME_MODE);
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("light");
 
   useEffect(() => {

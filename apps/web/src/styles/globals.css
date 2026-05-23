@@ -548,13 +548,19 @@ kbd.prism-kbd {
   gap: 8px;
 }
 
+.prism-theme-select {
+  position: relative;
+  flex: 0 0 auto;
+}
+
 .prism-theme-cycle {
   display: inline-flex;
-  width: 28px;
+  min-width: 42px;
   height: 28px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
+  gap: 3px;
   border: 1px solid var(--border-subtle);
   border-radius: 7px;
   background: color-mix(in oklab, var(--panel-2), transparent 42%);
@@ -575,6 +581,41 @@ kbd.prism-kbd {
 
 .prism-theme-cycle[data-mode="system"] {
   color: var(--faint);
+}
+
+.prism-theme-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 40;
+  display: grid;
+  width: 132px;
+  gap: 2px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  padding: 4px;
+  box-shadow: 0 18px 42px -28px rgba(18, 24, 38, 0.45);
+}
+
+.prism-theme-menu-item {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 0 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: left;
+}
+
+.prism-theme-menu-item:hover,
+.prism-theme-menu-item[data-active="true"] {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 .prism-mobile-shell {
@@ -1021,7 +1062,7 @@ kbd.prism-kbd {
   color: var(--avoid);
 }
 
-.prism-app-shell {
+:root[data-theme="dark"] .prism-app-shell {
   --bg-primary: #080908;
   --bg-secondary: #0f100f;
   --bg-tertiary: #171713;
@@ -1056,13 +1097,13 @@ kbd.prism-kbd {
   background-size: 48px 48px;
 }
 
-.prism-sidebar {
+:root[data-theme="dark"] .prism-sidebar {
   background:
     linear-gradient(180deg, rgba(231, 183, 95, 0.04), transparent 34%),
     #0c0d0c;
 }
 
-.prism-brand {
+:root[data-theme="dark"] .prism-brand {
   border-bottom-color: rgba(231, 183, 95, 0.14);
 }
 
@@ -1071,18 +1112,18 @@ kbd.prism-kbd {
   letter-spacing: 0;
 }
 
-.prism-nav-link {
+:root[data-theme="dark"] .prism-nav-link {
   color: #948b7e;
 }
 
-.prism-nav-link[data-active="true"] {
+:root[data-theme="dark"] .prism-nav-link[data-active="true"] {
   border-color: rgba(231, 183, 95, 0.24);
   background: rgba(231, 183, 95, 0.1);
   color: #f7ecd5;
 }
 
-.prism-kbd,
-kbd.prism-kbd {
+:root[data-theme="dark"] .prism-kbd,
+:root[data-theme="dark"] kbd.prism-kbd {
   border-color: rgba(244, 239, 228, 0.12);
   background: rgba(255, 255, 255, 0.04);
 }
@@ -1713,6 +1754,98 @@ kbd.prism-kbd {
   color: var(--text);
   font-family: var(--font-mono);
   font-size: 17px;
+}
+
+:root[data-theme="light"] .war-command,
+:root[data-theme="light"] .war-tool-btn,
+:root[data-theme="light"] .war-check {
+  border-color: rgba(18, 24, 38, 0.1);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--text-secondary);
+}
+
+:root[data-theme="light"] .war-command:hover,
+:root[data-theme="light"] .war-tool-btn:hover {
+  border-color: color-mix(in srgb, var(--warning) 34%, rgba(18, 24, 38, 0.12));
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .war-error,
+:root[data-theme="light"] .war-inline-note {
+  border-color: color-mix(in srgb, var(--warning) 18%, rgba(18, 24, 38, 0.08));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--warning) 8%, #ffffff), rgba(255, 255, 255, 0.78));
+}
+
+:root[data-theme="light"] .war-brief {
+  border-color: rgba(18, 24, 38, 0.1);
+  background:
+    linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(34, 197, 94, 0.045) 42%, rgba(255, 255, 255, 0.86)),
+    #ffffff;
+  box-shadow: 0 18px 45px -34px rgba(18, 24, 38, 0.36);
+}
+
+:root[data-theme="light"] .war-brief::before {
+  background:
+    linear-gradient(90deg, rgba(18, 24, 38, 0.045) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(18, 24, 38, 0.035) 1px, transparent 1px);
+  opacity: 0.75;
+}
+
+:root[data-theme="light"] .war-brief-action {
+  background: color-mix(in srgb, var(--accent) 8%, #ffffff);
+}
+
+:root[data-theme="light"] .war-action-label {
+  color: color-mix(in srgb, var(--accent) 78%, #1f2937);
+}
+
+:root[data-theme="light"] .war-gate-card {
+  border-color: rgba(18, 24, 38, 0.09);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+:root[data-theme="light"] .war-gate-meter {
+  background: rgba(18, 24, 38, 0.08);
+}
+
+:root[data-theme="light"] .war-signal,
+:root[data-theme="light"] .war-rail-card,
+:root[data-theme="light"] .war-link-grid a {
+  border-color: rgba(18, 24, 38, 0.08);
+  background: rgba(255, 255, 255, 0.74);
+}
+
+:root[data-theme="light"] .war-stack {
+  border-color: rgba(18, 24, 38, 0.1);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 16px 38px -34px rgba(18, 24, 38, 0.28);
+}
+
+:root[data-theme="light"] .war-section-head,
+:root[data-theme="light"] .war-action-card,
+:root[data-theme="light"] .war-action-legacy,
+:root[data-theme="light"] .war-action-freeze,
+:root[data-theme="light"] .war-rail-row {
+  border-color: rgba(18, 24, 38, 0.07);
+}
+
+:root[data-theme="light"] .war-counts span {
+  border-color: rgba(18, 24, 38, 0.08);
+  background: rgba(18, 24, 38, 0.035);
+}
+
+:root[data-theme="light"] .war-action-card:hover {
+  background: rgba(18, 24, 38, 0.028);
+}
+
+:root[data-theme="light"] .war-action-card.is-frozen,
+:root[data-theme="light"] .war-action-legacy {
+  background: rgba(18, 24, 38, 0.018);
+}
+
+:root[data-theme="light"] .war-skeleton span,
+:root[data-theme="light"] .war-skeleton div {
+  background: rgba(18, 24, 38, 0.07);
 }
 
 @media (max-width: 1180px) {

@@ -1,0 +1,8002 @@
+[
+  {
+    "code": "000001",
+    "symbol": "sz000001",
+    "name": "平安银行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000002",
+    "symbol": "sz000002",
+    "name": "万科A",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000009",
+    "symbol": "sz000009",
+    "name": "中国宝安",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000021",
+    "symbol": "sz000021",
+    "name": "深科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000027",
+    "symbol": "sz000027",
+    "name": "深圳能源",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000032",
+    "symbol": "sz000032",
+    "name": "深桑达A",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000034",
+    "symbol": "sz000034",
+    "name": "神州数码",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000039",
+    "symbol": "sz000039",
+    "name": "中集集团",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000050",
+    "symbol": "sz000050",
+    "name": "深天马A",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000060",
+    "symbol": "sz000060",
+    "name": "中金岭南",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000062",
+    "symbol": "sz000062",
+    "name": "深圳华强",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000063",
+    "symbol": "sz000063",
+    "name": "中兴通讯",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000088",
+    "symbol": "sz000088",
+    "name": "盐田港",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000100",
+    "symbol": "sz000100",
+    "name": "TCL科技",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000155",
+    "symbol": "sz000155",
+    "name": "川能动力",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000157",
+    "symbol": "sz000157",
+    "name": "中联重科",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000166",
+    "symbol": "sz000166",
+    "name": "申万宏源",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000301",
+    "symbol": "sz000301",
+    "name": "东方盛虹",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000333",
+    "symbol": "sz000333",
+    "name": "美的集团",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000338",
+    "symbol": "sz000338",
+    "name": "潍柴动力",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000400",
+    "symbol": "sz000400",
+    "name": "许继电气",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000408",
+    "symbol": "sz000408",
+    "name": "藏格矿业",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000415",
+    "symbol": "sz000415",
+    "name": "渤海租赁",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000423",
+    "symbol": "sz000423",
+    "name": "东阿阿胶",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000425",
+    "symbol": "sz000425",
+    "name": "徐工机械",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000426",
+    "symbol": "sz000426",
+    "name": "兴业银锡",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000429",
+    "symbol": "sz000429",
+    "name": "粤高速A",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000513",
+    "symbol": "sz000513",
+    "name": "丽珠集团",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000519",
+    "symbol": "sz000519",
+    "name": "中兵红箭",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000528",
+    "symbol": "sz000528",
+    "name": "柳工",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000537",
+    "symbol": "sz000537",
+    "name": "绿发电力",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000538",
+    "symbol": "sz000538",
+    "name": "云南白药",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000539",
+    "symbol": "sz000539",
+    "name": "粤电力A",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000559",
+    "symbol": "sz000559",
+    "name": "万向钱潮",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000563",
+    "symbol": "sz000563",
+    "name": "陕国投A",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000568",
+    "symbol": "sz000568",
+    "name": "泸州老窖",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000582",
+    "symbol": "sz000582",
+    "name": "北部湾港",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000591",
+    "symbol": "sz000591",
+    "name": "太阳能",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000596",
+    "symbol": "sz000596",
+    "name": "古井贡酒",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000598",
+    "symbol": "sz000598",
+    "name": "兴蓉环境",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000617",
+    "symbol": "sz000617",
+    "name": "中油资本",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000623",
+    "symbol": "sz000623",
+    "name": "吉林敖东",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000625",
+    "symbol": "sz000625",
+    "name": "长安汽车",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000629",
+    "symbol": "sz000629",
+    "name": "钒钛股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000630",
+    "symbol": "sz000630",
+    "name": "铜陵有色",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000651",
+    "symbol": "sz000651",
+    "name": "格力电器",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000657",
+    "symbol": "sz000657",
+    "name": "中钨高新",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000661",
+    "symbol": "sz000661",
+    "name": "长春高新",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000683",
+    "symbol": "sz000683",
+    "name": "博源化工",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000703",
+    "symbol": "sz000703",
+    "name": "恒逸石化",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000708",
+    "symbol": "sz000708",
+    "name": "中信特钢",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000709",
+    "symbol": "sz000709",
+    "name": "河钢股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000723",
+    "symbol": "sz000723",
+    "name": "美锦能源",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000725",
+    "symbol": "sz000725",
+    "name": "京东方A",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000728",
+    "symbol": "sz000728",
+    "name": "国元证券",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000729",
+    "symbol": "sz000729",
+    "name": "燕京啤酒",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000733",
+    "symbol": "sz000733",
+    "name": "振华科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000738",
+    "symbol": "sz000738",
+    "name": "航发控制",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000739",
+    "symbol": "sz000739",
+    "name": "普洛药业",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000750",
+    "symbol": "sz000750",
+    "name": "国海证券",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000768",
+    "symbol": "sz000768",
+    "name": "中航西飞",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000776",
+    "symbol": "sz000776",
+    "name": "广发证券",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000783",
+    "symbol": "sz000783",
+    "name": "长江证券",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000785",
+    "symbol": "sz000785",
+    "name": "居然智家",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000786",
+    "symbol": "sz000786",
+    "name": "北新建材",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000792",
+    "symbol": "sz000792",
+    "name": "盐湖股份",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000807",
+    "symbol": "sz000807",
+    "name": "云铝股份",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000825",
+    "symbol": "sz000825",
+    "name": "太钢不锈",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000830",
+    "symbol": "sz000830",
+    "name": "鲁西化工",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000831",
+    "symbol": "sz000831",
+    "name": "中国稀土",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000858",
+    "symbol": "sz000858",
+    "name": "五 粮 液",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000876",
+    "symbol": "sz000876",
+    "name": "新 希 望",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000878",
+    "symbol": "sz000878",
+    "name": "云南铜业",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000883",
+    "symbol": "sz000883",
+    "name": "湖北能源",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000887",
+    "symbol": "sz000887",
+    "name": "中鼎股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000893",
+    "symbol": "sz000893",
+    "name": "亚钾国际",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000895",
+    "symbol": "sz000895",
+    "name": "双汇发展",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000898",
+    "symbol": "sz000898",
+    "name": "鞍钢股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000921",
+    "symbol": "sz000921",
+    "name": "海信家电",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000932",
+    "symbol": "sz000932",
+    "name": "华菱钢铁",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000933",
+    "symbol": "sz000933",
+    "name": "神火股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000937",
+    "symbol": "sz000937",
+    "name": "冀中能源",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000938",
+    "symbol": "sz000938",
+    "name": "紫光股份",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000951",
+    "symbol": "sz000951",
+    "name": "中国重汽",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000958",
+    "symbol": "sz000958",
+    "name": "电投产融",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000959",
+    "symbol": "sz000959",
+    "name": "首钢股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000960",
+    "symbol": "sz000960",
+    "name": "锡业股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000963",
+    "symbol": "sz000963",
+    "name": "华东医药",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000967",
+    "symbol": "sz000967",
+    "name": "盈峰环境",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000975",
+    "symbol": "sz000975",
+    "name": "山金国际",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000977",
+    "symbol": "sz000977",
+    "name": "浪潮信息",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000983",
+    "symbol": "sz000983",
+    "name": "山西焦煤",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "000987",
+    "symbol": "sz000987",
+    "name": "越秀资本",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000997",
+    "symbol": "sz000997",
+    "name": "新 大 陆",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "000999",
+    "symbol": "sz000999",
+    "name": "华润三九",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "001213",
+    "symbol": "sz001213",
+    "name": "中铁特货",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "001221",
+    "symbol": "sz001221",
+    "name": "悍高集团",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "001286",
+    "symbol": "sz001286",
+    "name": "陕西能源",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "001389",
+    "symbol": "sz001389",
+    "name": "广合科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "001391",
+    "symbol": "sz001391",
+    "name": "国货航",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "001696",
+    "symbol": "sz001696",
+    "name": "宗申动力",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "001965",
+    "symbol": "sz001965",
+    "name": "招商公路",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "001979",
+    "symbol": "sz001979",
+    "name": "招商蛇口",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002001",
+    "symbol": "sz002001",
+    "name": "新和成",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002007",
+    "symbol": "sz002007",
+    "name": "华兰生物",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002008",
+    "symbol": "sz002008",
+    "name": "大族激光",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002025",
+    "symbol": "sz002025",
+    "name": "航天电器",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002027",
+    "symbol": "sz002027",
+    "name": "分众传媒",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002028",
+    "symbol": "sz002028",
+    "name": "思源电气",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002032",
+    "symbol": "sz002032",
+    "name": "苏泊尔",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002044",
+    "symbol": "sz002044",
+    "name": "美年健康",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002049",
+    "symbol": "sz002049",
+    "name": "紫光国微",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002050",
+    "symbol": "sz002050",
+    "name": "三花智控",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002056",
+    "symbol": "sz002056",
+    "name": "横店东磁",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002064",
+    "symbol": "sz002064",
+    "name": "华峰化学",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002065",
+    "symbol": "sz002065",
+    "name": "东华软件",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002074",
+    "symbol": "sz002074",
+    "name": "国轩高科",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002078",
+    "symbol": "sz002078",
+    "name": "太阳纸业",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002080",
+    "symbol": "sz002080",
+    "name": "中材科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002085",
+    "symbol": "sz002085",
+    "name": "万丰奥威",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002120",
+    "symbol": "sz002120",
+    "name": "韵达股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002126",
+    "symbol": "sz002126",
+    "name": "银轮股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002128",
+    "symbol": "sz002128",
+    "name": "电投能源",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002130",
+    "symbol": "sz002130",
+    "name": "沃尔核材",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002131",
+    "symbol": "sz002131",
+    "name": "利欧股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002138",
+    "symbol": "sz002138",
+    "name": "顺络电子",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002142",
+    "symbol": "sz002142",
+    "name": "宁波银行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002152",
+    "symbol": "sz002152",
+    "name": "广电运通",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002153",
+    "symbol": "sz002153",
+    "name": "石基信息",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002155",
+    "symbol": "sz002155",
+    "name": "湖南黄金",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002156",
+    "symbol": "sz002156",
+    "name": "通富微电",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002157",
+    "symbol": "sz002157",
+    "name": "正邦科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002179",
+    "symbol": "sz002179",
+    "name": "中航光电",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002185",
+    "symbol": "sz002185",
+    "name": "华天科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002195",
+    "symbol": "sz002195",
+    "name": "岩山科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002202",
+    "symbol": "sz002202",
+    "name": "金风科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002203",
+    "symbol": "sz002203",
+    "name": "海亮股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002223",
+    "symbol": "sz002223",
+    "name": "鱼跃医疗",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002230",
+    "symbol": "sz002230",
+    "name": "科大讯飞",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002236",
+    "symbol": "sz002236",
+    "name": "大华股份",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002241",
+    "symbol": "sz002241",
+    "name": "歌尔股份",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002244",
+    "symbol": "sz002244",
+    "name": "滨江集团",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002252",
+    "symbol": "sz002252",
+    "name": "上海莱士",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002261",
+    "symbol": "sz002261",
+    "name": "拓维信息",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002262",
+    "symbol": "sz002262",
+    "name": "恩华药业",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002265",
+    "symbol": "sz002265",
+    "name": "建设工业",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002266",
+    "symbol": "sz002266",
+    "name": "浙富控股",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002271",
+    "symbol": "sz002271",
+    "name": "东方雨虹",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002273",
+    "symbol": "sz002273",
+    "name": "水晶光电",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002281",
+    "symbol": "sz002281",
+    "name": "光迅科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002294",
+    "symbol": "sz002294",
+    "name": "信立泰",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002299",
+    "symbol": "sz002299",
+    "name": "圣农发展",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002304",
+    "symbol": "sz002304",
+    "name": "洋河股份",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002311",
+    "symbol": "sz002311",
+    "name": "海大集团",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002312",
+    "symbol": "sz002312",
+    "name": "川发龙蟒",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002318",
+    "symbol": "sz002318",
+    "name": "久立特材",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002335",
+    "symbol": "sz002335",
+    "name": "科华数据",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002340",
+    "symbol": "sz002340",
+    "name": "格林美",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002352",
+    "symbol": "sz002352",
+    "name": "顺丰控股",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002353",
+    "symbol": "sz002353",
+    "name": "杰瑞股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002371",
+    "symbol": "sz002371",
+    "name": "北方华创",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002372",
+    "symbol": "sz002372",
+    "name": "伟星新材",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002384",
+    "symbol": "sz002384",
+    "name": "东山精密",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002385",
+    "symbol": "sz002385",
+    "name": "大北农",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002402",
+    "symbol": "sz002402",
+    "name": "和而泰",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002409",
+    "symbol": "sz002409",
+    "name": "雅克科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002410",
+    "symbol": "sz002410",
+    "name": "广联达",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002414",
+    "symbol": "sz002414",
+    "name": "高德红外",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002415",
+    "symbol": "sz002415",
+    "name": "海康威视",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002422",
+    "symbol": "sz002422",
+    "name": "科伦药业",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002423",
+    "symbol": "sz002423",
+    "name": "中粮资本",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002429",
+    "symbol": "sz002429",
+    "name": "兆驰股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002430",
+    "symbol": "sz002430",
+    "name": "杭氧股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002432",
+    "symbol": "sz002432",
+    "name": "九安医疗",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002436",
+    "symbol": "sz002436",
+    "name": "兴森科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002439",
+    "symbol": "sz002439",
+    "name": "启明星辰",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002444",
+    "symbol": "sz002444",
+    "name": "巨星科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002459",
+    "symbol": "sz002459",
+    "name": "晶澳科技",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002460",
+    "symbol": "sz002460",
+    "name": "赣锋锂业",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002461",
+    "symbol": "sz002461",
+    "name": "珠江啤酒",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002463",
+    "symbol": "sz002463",
+    "name": "沪电股份",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002465",
+    "symbol": "sz002465",
+    "name": "海格通信",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002466",
+    "symbol": "sz002466",
+    "name": "天齐锂业",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002472",
+    "symbol": "sz002472",
+    "name": "双环传动",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002475",
+    "symbol": "sz002475",
+    "name": "立讯精密",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002493",
+    "symbol": "sz002493",
+    "name": "荣盛石化",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002500",
+    "symbol": "sz002500",
+    "name": "山西证券",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002508",
+    "symbol": "sz002508",
+    "name": "老板电器",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002517",
+    "symbol": "sz002517",
+    "name": "恺英网络",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002532",
+    "symbol": "sz002532",
+    "name": "天山铝业",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002558",
+    "symbol": "sz002558",
+    "name": "巨人网络",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002568",
+    "symbol": "sz002568",
+    "name": "百润股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002583",
+    "symbol": "sz002583",
+    "name": "海能达",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002594",
+    "symbol": "sz002594",
+    "name": "比亚迪",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002595",
+    "symbol": "sz002595",
+    "name": "豪迈科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002600",
+    "symbol": "sz002600",
+    "name": "领益智造",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002601",
+    "symbol": "sz002601",
+    "name": "龙佰集团",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002603",
+    "symbol": "sz002603",
+    "name": "以岭药业",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002607",
+    "symbol": "sz002607",
+    "name": "中公教育",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002608",
+    "symbol": "sz002608",
+    "name": "江苏国信",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002624",
+    "symbol": "sz002624",
+    "name": "完美世界",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002625",
+    "symbol": "sz002625",
+    "name": "光启技术",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002648",
+    "symbol": "sz002648",
+    "name": "卫星化学",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002670",
+    "symbol": "sz002670",
+    "name": "国盛证券",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002673",
+    "symbol": "sz002673",
+    "name": "西部证券",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002683",
+    "symbol": "sz002683",
+    "name": "广东宏大",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002709",
+    "symbol": "sz002709",
+    "name": "天赐材料",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002714",
+    "symbol": "sz002714",
+    "name": "牧原股份",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002736",
+    "symbol": "sz002736",
+    "name": "国信证券",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002738",
+    "symbol": "sz002738",
+    "name": "中矿资源",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002739",
+    "symbol": "sz002739",
+    "name": "儒意电影",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002756",
+    "symbol": "sz002756",
+    "name": "永兴材料",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002773",
+    "symbol": "sz002773",
+    "name": "康弘药业",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002797",
+    "symbol": "sz002797",
+    "name": "第一创业",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002821",
+    "symbol": "sz002821",
+    "name": "凯莱英",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002831",
+    "symbol": "sz002831",
+    "name": "裕同科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002837",
+    "symbol": "sz002837",
+    "name": "英维克",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002841",
+    "symbol": "sz002841",
+    "name": "视源股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002850",
+    "symbol": "sz002850",
+    "name": "科达利",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002851",
+    "symbol": "sz002851",
+    "name": "麦格米特",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002916",
+    "symbol": "sz002916",
+    "name": "深南电路",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002920",
+    "symbol": "sz002920",
+    "name": "德赛西威",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002926",
+    "symbol": "sz002926",
+    "name": "华西证券",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002938",
+    "symbol": "sz002938",
+    "name": "鹏鼎控股",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "002939",
+    "symbol": "sz002939",
+    "name": "长城证券",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002945",
+    "symbol": "sz002945",
+    "name": "华林证券",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002958",
+    "symbol": "sz002958",
+    "name": "青农商行",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002966",
+    "symbol": "sz002966",
+    "name": "苏州银行",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "002984",
+    "symbol": "sz002984",
+    "name": "森麒麟",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "003021",
+    "symbol": "sz003021",
+    "name": "兆威机电",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "003022",
+    "symbol": "sz003022",
+    "name": "联泓新科",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "003031",
+    "symbol": "sz003031",
+    "name": "中瓷电子",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "003035",
+    "symbol": "sz003035",
+    "name": "南网能源",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "003816",
+    "symbol": "sz003816",
+    "name": "中国广核",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300001",
+    "symbol": "sz300001",
+    "name": "特锐德",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300002",
+    "symbol": "sz300002",
+    "name": "神州泰岳",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300003",
+    "symbol": "sz300003",
+    "name": "乐普医疗",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300012",
+    "symbol": "sz300012",
+    "name": "华测检测",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300014",
+    "symbol": "sz300014",
+    "name": "亿纬锂能",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300015",
+    "symbol": "sz300015",
+    "name": "爱尔眼科",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300017",
+    "symbol": "sz300017",
+    "name": "网宿科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300024",
+    "symbol": "sz300024",
+    "name": "机器人",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300033",
+    "symbol": "sz300033",
+    "name": "同花顺",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300037",
+    "symbol": "sz300037",
+    "name": "新宙邦",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300054",
+    "symbol": "sz300054",
+    "name": "鼎龙股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300058",
+    "symbol": "sz300058",
+    "name": "蓝色光标",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300059",
+    "symbol": "sz300059",
+    "name": "东方财富",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300070",
+    "symbol": "sz300070",
+    "name": "碧水源",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300073",
+    "symbol": "sz300073",
+    "name": "当升科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300100",
+    "symbol": "sz300100",
+    "name": "双林股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300115",
+    "symbol": "sz300115",
+    "name": "长盈精密",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300122",
+    "symbol": "sz300122",
+    "name": "智飞生物",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300124",
+    "symbol": "sz300124",
+    "name": "汇川技术",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300136",
+    "symbol": "sz300136",
+    "name": "信维通信",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300140",
+    "symbol": "sz300140",
+    "name": "节能环境",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300142",
+    "symbol": "sz300142",
+    "name": "沃森生物",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300144",
+    "symbol": "sz300144",
+    "name": "宋城演艺",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300146",
+    "symbol": "sz300146",
+    "name": "汤臣倍健",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300207",
+    "symbol": "sz300207",
+    "name": "欣旺达",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300223",
+    "symbol": "sz300223",
+    "name": "北京君正",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300251",
+    "symbol": "sz300251",
+    "name": "光线传媒",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300274",
+    "symbol": "sz300274",
+    "name": "阳光电源",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300285",
+    "symbol": "sz300285",
+    "name": "国瓷材料",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300308",
+    "symbol": "sz300308",
+    "name": "中际旭创",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300316",
+    "symbol": "sz300316",
+    "name": "晶盛机电",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300339",
+    "symbol": "sz300339",
+    "name": "润和软件",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300346",
+    "symbol": "sz300346",
+    "name": "南大光电",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300347",
+    "symbol": "sz300347",
+    "name": "泰格医药",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300373",
+    "symbol": "sz300373",
+    "name": "扬杰科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300383",
+    "symbol": "sz300383",
+    "name": "光环新网",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300390",
+    "symbol": "sz300390",
+    "name": "天华新能",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300394",
+    "symbol": "sz300394",
+    "name": "天孚通信",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300395",
+    "symbol": "sz300395",
+    "name": "菲利华",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300408",
+    "symbol": "sz300408",
+    "name": "三环集团",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300413",
+    "symbol": "sz300413",
+    "name": "芒果超媒",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300418",
+    "symbol": "sz300418",
+    "name": "昆仑万维",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300432",
+    "symbol": "sz300432",
+    "name": "富临精工",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300433",
+    "symbol": "sz300433",
+    "name": "蓝思科技",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300442",
+    "symbol": "sz300442",
+    "name": "润泽科技",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300450",
+    "symbol": "sz300450",
+    "name": "先导智能",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300454",
+    "symbol": "sz300454",
+    "name": "深信服",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300458",
+    "symbol": "sz300458",
+    "name": "全志科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300474",
+    "symbol": "sz300474",
+    "name": "景嘉微",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300476",
+    "symbol": "sz300476",
+    "name": "胜宏科技",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300487",
+    "symbol": "sz300487",
+    "name": "蓝晓科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300496",
+    "symbol": "sz300496",
+    "name": "中科创达",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300498",
+    "symbol": "sz300498",
+    "name": "温氏股份",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300502",
+    "symbol": "sz300502",
+    "name": "新易盛",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300529",
+    "symbol": "sz300529",
+    "name": "健帆生物",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300558",
+    "symbol": "sz300558",
+    "name": "贝达药业",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300567",
+    "symbol": "sz300567",
+    "name": "精测电子",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300570",
+    "symbol": "sz300570",
+    "name": "太辰光",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300601",
+    "symbol": "sz300601",
+    "name": "康泰生物",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300604",
+    "symbol": "sz300604",
+    "name": "长川科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300623",
+    "symbol": "sz300623",
+    "name": "捷捷微电",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300627",
+    "symbol": "sz300627",
+    "name": "华测导航",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300628",
+    "symbol": "sz300628",
+    "name": "亿联网络",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300661",
+    "symbol": "sz300661",
+    "name": "圣邦股份",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300676",
+    "symbol": "sz300676",
+    "name": "华大基因",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300677",
+    "symbol": "sz300677",
+    "name": "英科医疗",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300679",
+    "symbol": "sz300679",
+    "name": "电连技术",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300699",
+    "symbol": "sz300699",
+    "name": "光威复材",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300718",
+    "symbol": "sz300718",
+    "name": "长盛轴承",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300724",
+    "symbol": "sz300724",
+    "name": "捷佳伟创",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300735",
+    "symbol": "sz300735",
+    "name": "光弘科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300748",
+    "symbol": "sz300748",
+    "name": "金力永磁",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300750",
+    "symbol": "sz300750",
+    "name": "宁德时代",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300751",
+    "symbol": "sz300751",
+    "name": "迈为股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300757",
+    "symbol": "sz300757",
+    "name": "罗博特科",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300759",
+    "symbol": "sz300759",
+    "name": "康龙化成",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300760",
+    "symbol": "sz300760",
+    "name": "迈瑞医疗",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300763",
+    "symbol": "sz300763",
+    "name": "锦浪科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300782",
+    "symbol": "sz300782",
+    "name": "卓胜微",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300803",
+    "symbol": "sz300803",
+    "name": "指南针",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300832",
+    "symbol": "sz300832",
+    "name": "新产业",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300857",
+    "symbol": "sz300857",
+    "name": "协创数据",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300866",
+    "symbol": "sz300866",
+    "name": "安克创新",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300888",
+    "symbol": "sz300888",
+    "name": "稳健医疗",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300896",
+    "symbol": "sz300896",
+    "name": "爱美客",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300919",
+    "symbol": "sz300919",
+    "name": "中伟新材",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300957",
+    "symbol": "sz300957",
+    "name": "贝泰妮",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300972",
+    "symbol": "sz300972",
+    "name": "万辰集团",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "300979",
+    "symbol": "sz300979",
+    "name": "华利集团",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "300999",
+    "symbol": "sz300999",
+    "name": "金龙鱼",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "301200",
+    "symbol": "sz301200",
+    "name": "大族数控",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "301236",
+    "symbol": "sz301236",
+    "name": "软通动力",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "301269",
+    "symbol": "sz301269",
+    "name": "华大九天",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "301301",
+    "symbol": "sz301301",
+    "name": "川宁生物",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "301308",
+    "symbol": "sz301308",
+    "name": "江波龙",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "301358",
+    "symbol": "sz301358",
+    "name": "湖南裕能",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "301498",
+    "symbol": "sz301498",
+    "name": "乖宝宠物",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "301536",
+    "symbol": "sz301536",
+    "name": "星宸科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "301611",
+    "symbol": "sz301611",
+    "name": "珂玛科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "302132",
+    "symbol": "sz302132",
+    "name": "中航成飞",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600000",
+    "symbol": "sh600000",
+    "name": "浦发银行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600004",
+    "symbol": "sh600004",
+    "name": "白云机场",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600007",
+    "symbol": "sh600007",
+    "name": "中国国贸",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600008",
+    "symbol": "sh600008",
+    "name": "首创环保",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600009",
+    "symbol": "sh600009",
+    "name": "上海机场",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600010",
+    "symbol": "sh600010",
+    "name": "包钢股份",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600011",
+    "symbol": "sh600011",
+    "name": "华能国际",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600015",
+    "symbol": "sh600015",
+    "name": "华夏银行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600016",
+    "symbol": "sh600016",
+    "name": "民生银行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600018",
+    "symbol": "sh600018",
+    "name": "上港集团",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600019",
+    "symbol": "sh600019",
+    "name": "宝钢股份",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600021",
+    "symbol": "sh600021",
+    "name": "上海电力",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600023",
+    "symbol": "sh600023",
+    "name": "浙能电力",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600025",
+    "symbol": "sh600025",
+    "name": "华能水电",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600026",
+    "symbol": "sh600026",
+    "name": "中远海能",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600027",
+    "symbol": "sh600027",
+    "name": "华电国际",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600028",
+    "symbol": "sh600028",
+    "name": "中国石化",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600029",
+    "symbol": "sh600029",
+    "name": "南方航空",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600030",
+    "symbol": "sh600030",
+    "name": "中信证券",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600031",
+    "symbol": "sh600031",
+    "name": "三一重工",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600032",
+    "symbol": "sh600032",
+    "name": "浙江新能",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600036",
+    "symbol": "sh600036",
+    "name": "招商银行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600038",
+    "symbol": "sh600038",
+    "name": "中直股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600039",
+    "symbol": "sh600039",
+    "name": "四川路桥",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600048",
+    "symbol": "sh600048",
+    "name": "保利发展",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600050",
+    "symbol": "sh600050",
+    "name": "中国联通",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600060",
+    "symbol": "sh600060",
+    "name": "海信视像",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600061",
+    "symbol": "sh600061",
+    "name": "国投资本",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600062",
+    "symbol": "sh600062",
+    "name": "华润双鹤",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600066",
+    "symbol": "sh600066",
+    "name": "宇通客车",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600085",
+    "symbol": "sh600085",
+    "name": "同仁堂",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600089",
+    "symbol": "sh600089",
+    "name": "特变电工",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600095",
+    "symbol": "sh600095",
+    "name": "湘财股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600096",
+    "symbol": "sh600096",
+    "name": "云天化",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600098",
+    "symbol": "sh600098",
+    "name": "广州发展",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600104",
+    "symbol": "sh600104",
+    "name": "上汽集团",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600109",
+    "symbol": "sh600109",
+    "name": "国金证券",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600111",
+    "symbol": "sh600111",
+    "name": "北方稀土",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600115",
+    "symbol": "sh600115",
+    "name": "中国东航",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600118",
+    "symbol": "sh600118",
+    "name": "中国卫星",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600126",
+    "symbol": "sh600126",
+    "name": "杭钢股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600131",
+    "symbol": "sh600131",
+    "name": "国网信通",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600132",
+    "symbol": "sh600132",
+    "name": "重庆啤酒",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600141",
+    "symbol": "sh600141",
+    "name": "兴发集团",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600143",
+    "symbol": "sh600143",
+    "name": "金发科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600150",
+    "symbol": "sh600150",
+    "name": "中国船舶",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600153",
+    "symbol": "sh600153",
+    "name": "建发股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600157",
+    "symbol": "sh600157",
+    "name": "永泰能源",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600160",
+    "symbol": "sh600160",
+    "name": "巨化股份",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600161",
+    "symbol": "sh600161",
+    "name": "天坛生物",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600166",
+    "symbol": "sh600166",
+    "name": "福田汽车",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600170",
+    "symbol": "sh600170",
+    "name": "上海建工",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600171",
+    "symbol": "sh600171",
+    "name": "上海贝岭",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600176",
+    "symbol": "sh600176",
+    "name": "中国巨石",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600177",
+    "symbol": "sh600177",
+    "name": "雅戈尔",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600183",
+    "symbol": "sh600183",
+    "name": "生益科技",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600188",
+    "symbol": "sh600188",
+    "name": "兖矿能源",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600196",
+    "symbol": "sh600196",
+    "name": "复星医药",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600208",
+    "symbol": "sh600208",
+    "name": "衢州发展",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600219",
+    "symbol": "sh600219",
+    "name": "南山铝业",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600233",
+    "symbol": "sh600233",
+    "name": "圆通速递",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600276",
+    "symbol": "sh600276",
+    "name": "恒瑞医药",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600282",
+    "symbol": "sh600282",
+    "name": "南钢股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600295",
+    "symbol": "sh600295",
+    "name": "鄂尔多斯",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600298",
+    "symbol": "sh600298",
+    "name": "安琪酵母",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600299",
+    "symbol": "sh600299",
+    "name": "安迪苏",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600309",
+    "symbol": "sh600309",
+    "name": "万华化学",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600312",
+    "symbol": "sh600312",
+    "name": "平高电气",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600316",
+    "symbol": "sh600316",
+    "name": "洪都航空",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600329",
+    "symbol": "sh600329",
+    "name": "达仁堂",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600332",
+    "symbol": "sh600332",
+    "name": "白云山",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600339",
+    "symbol": "sh600339",
+    "name": "中油工程",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600346",
+    "symbol": "sh600346",
+    "name": "恒力石化",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600348",
+    "symbol": "sh600348",
+    "name": "华阳股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600352",
+    "symbol": "sh600352",
+    "name": "浙江龙盛",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600362",
+    "symbol": "sh600362",
+    "name": "江西铜业",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600363",
+    "symbol": "sh600363",
+    "name": "联创光电",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600369",
+    "symbol": "sh600369",
+    "name": "西南证券",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600372",
+    "symbol": "sh600372",
+    "name": "中航机载",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600377",
+    "symbol": "sh600377",
+    "name": "宁沪高速",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600378",
+    "symbol": "sh600378",
+    "name": "昊华科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600380",
+    "symbol": "sh600380",
+    "name": "健康元",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600390",
+    "symbol": "sh600390",
+    "name": "五矿资本",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600392",
+    "symbol": "sh600392",
+    "name": "盛和资源",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600398",
+    "symbol": "sh600398",
+    "name": "海澜之家",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600406",
+    "symbol": "sh600406",
+    "name": "国电南瑞",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600415",
+    "symbol": "sh600415",
+    "name": "小商品城",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600426",
+    "symbol": "sh600426",
+    "name": "华鲁恒升",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600435",
+    "symbol": "sh600435",
+    "name": "北方导航",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600436",
+    "symbol": "sh600436",
+    "name": "片仔癀",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600438",
+    "symbol": "sh600438",
+    "name": "通威股份",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600460",
+    "symbol": "sh600460",
+    "name": "士兰微",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600482",
+    "symbol": "sh600482",
+    "name": "中国动力",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600483",
+    "symbol": "sh600483",
+    "name": "福能股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600486",
+    "symbol": "sh600486",
+    "name": "扬农化工",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600487",
+    "symbol": "sh600487",
+    "name": "亨通光电",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600489",
+    "symbol": "sh600489",
+    "name": "中金黄金",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600497",
+    "symbol": "sh600497",
+    "name": "驰宏锌锗",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600498",
+    "symbol": "sh600498",
+    "name": "烽火通信",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600499",
+    "symbol": "sh600499",
+    "name": "科达制造",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600511",
+    "symbol": "sh600511",
+    "name": "国药股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600515",
+    "symbol": "sh600515",
+    "name": "海南机场",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600516",
+    "symbol": "sh600516",
+    "name": "方大炭素",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600517",
+    "symbol": "sh600517",
+    "name": "国网英大",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600519",
+    "symbol": "sh600519",
+    "name": "贵州茅台",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600521",
+    "symbol": "sh600521",
+    "name": "华海药业",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600522",
+    "symbol": "sh600522",
+    "name": "中天科技",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600528",
+    "symbol": "sh600528",
+    "name": "中铁工业",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600535",
+    "symbol": "sh600535",
+    "name": "天士力",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600536",
+    "symbol": "sh600536",
+    "name": "中国软件",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600546",
+    "symbol": "sh600546",
+    "name": "山煤国际",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600547",
+    "symbol": "sh600547",
+    "name": "山东黄金",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600549",
+    "symbol": "sh600549",
+    "name": "厦门钨业",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600562",
+    "symbol": "sh600562",
+    "name": "国睿科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600563",
+    "symbol": "sh600563",
+    "name": "法拉电子",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600566",
+    "symbol": "sh600566",
+    "name": "济川药业",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600570",
+    "symbol": "sh600570",
+    "name": "恒生电子",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600578",
+    "symbol": "sh600578",
+    "name": "京能电力",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600580",
+    "symbol": "sh600580",
+    "name": "卧龙电驱",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600582",
+    "symbol": "sh600582",
+    "name": "天地科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600583",
+    "symbol": "sh600583",
+    "name": "海油工程",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600584",
+    "symbol": "sh600584",
+    "name": "长电科技",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600585",
+    "symbol": "sh600585",
+    "name": "海螺水泥",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600588",
+    "symbol": "sh600588",
+    "name": "用友网络",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600598",
+    "symbol": "sh600598",
+    "name": "北大荒",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600600",
+    "symbol": "sh600600",
+    "name": "青岛啤酒",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600601",
+    "symbol": "sh600601",
+    "name": "方正科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600602",
+    "symbol": "sh600602",
+    "name": "云赛智联",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600606",
+    "symbol": "sh600606",
+    "name": "绿地控股",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600637",
+    "symbol": "sh600637",
+    "name": "东方明珠",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600642",
+    "symbol": "sh600642",
+    "name": "申能股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600655",
+    "symbol": "sh600655",
+    "name": "豫园股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600660",
+    "symbol": "sh600660",
+    "name": "福耀玻璃",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600663",
+    "symbol": "sh600663",
+    "name": "陆家嘴",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600673",
+    "symbol": "sh600673",
+    "name": "东阳光",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600674",
+    "symbol": "sh600674",
+    "name": "川投能源",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600685",
+    "symbol": "sh600685",
+    "name": "中船防务",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600688",
+    "symbol": "sh600688",
+    "name": "上海石化",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600690",
+    "symbol": "sh600690",
+    "name": "海尔智家",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600699",
+    "symbol": "sh600699",
+    "name": "均胜电子",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600704",
+    "symbol": "sh600704",
+    "name": "物产中大",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600707",
+    "symbol": "sh600707",
+    "name": "彩虹股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600720",
+    "symbol": "sh600720",
+    "name": "中交设计",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600737",
+    "symbol": "sh600737",
+    "name": "中粮糖业",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600739",
+    "symbol": "sh600739",
+    "name": "辽宁成大",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600741",
+    "symbol": "sh600741",
+    "name": "华域汽车",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600754",
+    "symbol": "sh600754",
+    "name": "锦江酒店",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600760",
+    "symbol": "sh600760",
+    "name": "中航沈飞",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600763",
+    "symbol": "sh600763",
+    "name": "通策医疗",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600764",
+    "symbol": "sh600764",
+    "name": "中国海防",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600765",
+    "symbol": "sh600765",
+    "name": "中航重机",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600795",
+    "symbol": "sh600795",
+    "name": "国电电力",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600801",
+    "symbol": "sh600801",
+    "name": "华新建材",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600803",
+    "symbol": "sh600803",
+    "name": "新奥股份",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600808",
+    "symbol": "sh600808",
+    "name": "马钢股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600809",
+    "symbol": "sh600809",
+    "name": "山西汾酒",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600816",
+    "symbol": "sh600816",
+    "name": "建元信托",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600820",
+    "symbol": "sh600820",
+    "name": "隧道股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600845",
+    "symbol": "sh600845",
+    "name": "宝信软件",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600848",
+    "symbol": "sh600848",
+    "name": "上海临港",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600862",
+    "symbol": "sh600862",
+    "name": "中航高科",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600863",
+    "symbol": "sh600863",
+    "name": "华能蒙电",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600871",
+    "symbol": "sh600871",
+    "name": "石化油服",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600873",
+    "symbol": "sh600873",
+    "name": "梅花生物",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600875",
+    "symbol": "sh600875",
+    "name": "东方电气",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600879",
+    "symbol": "sh600879",
+    "name": "航天电子",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600884",
+    "symbol": "sh600884",
+    "name": "杉杉股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600885",
+    "symbol": "sh600885",
+    "name": "宏发股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600886",
+    "symbol": "sh600886",
+    "name": "国投电力",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600887",
+    "symbol": "sh600887",
+    "name": "伊利股份",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600893",
+    "symbol": "sh600893",
+    "name": "航发动力",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600900",
+    "symbol": "sh600900",
+    "name": "长江电力",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600901",
+    "symbol": "sh600901",
+    "name": "江苏金租",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600905",
+    "symbol": "sh600905",
+    "name": "三峡能源",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600906",
+    "symbol": "sh600906",
+    "name": "财达证券",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600909",
+    "symbol": "sh600909",
+    "name": "华安证券",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600918",
+    "symbol": "sh600918",
+    "name": "中泰证券",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600919",
+    "symbol": "sh600919",
+    "name": "江苏银行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600926",
+    "symbol": "sh600926",
+    "name": "杭州银行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600927",
+    "symbol": "sh600927",
+    "name": "永安期货",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600930",
+    "symbol": "sh600930",
+    "name": "华电新能",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600938",
+    "symbol": "sh600938",
+    "name": "中国海油",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600941",
+    "symbol": "sh600941",
+    "name": "中国移动",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600958",
+    "symbol": "sh600958",
+    "name": "东方证券",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600959",
+    "symbol": "sh600959",
+    "name": "江苏有线",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600967",
+    "symbol": "sh600967",
+    "name": "内蒙一机",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600968",
+    "symbol": "sh600968",
+    "name": "海油发展",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600970",
+    "symbol": "sh600970",
+    "name": "中材国际",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600977",
+    "symbol": "sh600977",
+    "name": "中国电影",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600985",
+    "symbol": "sh600985",
+    "name": "淮北矿业",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600988",
+    "symbol": "sh600988",
+    "name": "赤峰黄金",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600989",
+    "symbol": "sh600989",
+    "name": "宝丰能源",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "600995",
+    "symbol": "sh600995",
+    "name": "南网储能",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600998",
+    "symbol": "sh600998",
+    "name": "九州通",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "600999",
+    "symbol": "sh600999",
+    "name": "招商证券",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601000",
+    "symbol": "sh601000",
+    "name": "唐山港",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601001",
+    "symbol": "sh601001",
+    "name": "晋控煤业",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601006",
+    "symbol": "sh601006",
+    "name": "大秦铁路",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601009",
+    "symbol": "sh601009",
+    "name": "南京银行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601012",
+    "symbol": "sh601012",
+    "name": "隆基绿能",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601016",
+    "symbol": "sh601016",
+    "name": "节能风电",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601018",
+    "symbol": "sh601018",
+    "name": "宁波港",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601019",
+    "symbol": "sh601019",
+    "name": "山东出版",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601021",
+    "symbol": "sh601021",
+    "name": "春秋航空",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601058",
+    "symbol": "sh601058",
+    "name": "赛轮轮胎",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601059",
+    "symbol": "sh601059",
+    "name": "信达证券",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601061",
+    "symbol": "sh601061",
+    "name": "中信金属",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601066",
+    "symbol": "sh601066",
+    "name": "中信建投",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601077",
+    "symbol": "sh601077",
+    "name": "渝农商行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601088",
+    "symbol": "sh601088",
+    "name": "中国神华",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601098",
+    "symbol": "sh601098",
+    "name": "中南传媒",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601099",
+    "symbol": "sh601099",
+    "name": "太平洋",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601100",
+    "symbol": "sh601100",
+    "name": "恒立液压",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601106",
+    "symbol": "sh601106",
+    "name": "中国一重",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601108",
+    "symbol": "sh601108",
+    "name": "财通证券",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601111",
+    "symbol": "sh601111",
+    "name": "中国国航",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601117",
+    "symbol": "sh601117",
+    "name": "中国化学",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601118",
+    "symbol": "sh601118",
+    "name": "海南橡胶",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601127",
+    "symbol": "sh601127",
+    "name": "赛力斯",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601128",
+    "symbol": "sh601128",
+    "name": "常熟银行",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601136",
+    "symbol": "sh601136",
+    "name": "首创证券",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601138",
+    "symbol": "sh601138",
+    "name": "工业富联",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601139",
+    "symbol": "sh601139",
+    "name": "深圳燃气",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601155",
+    "symbol": "sh601155",
+    "name": "新城控股",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601156",
+    "symbol": "sh601156",
+    "name": "东航物流",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601162",
+    "symbol": "sh601162",
+    "name": "天风证券",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601166",
+    "symbol": "sh601166",
+    "name": "兴业银行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601168",
+    "symbol": "sh601168",
+    "name": "西部矿业",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601169",
+    "symbol": "sh601169",
+    "name": "北京银行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601179",
+    "symbol": "sh601179",
+    "name": "中国西电",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601186",
+    "symbol": "sh601186",
+    "name": "中国铁建",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601198",
+    "symbol": "sh601198",
+    "name": "东兴证券",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601211",
+    "symbol": "sh601211",
+    "name": "国泰海通",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601212",
+    "symbol": "sh601212",
+    "name": "白银有色",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601216",
+    "symbol": "sh601216",
+    "name": "君正集团",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601225",
+    "symbol": "sh601225",
+    "name": "陕西煤业",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601228",
+    "symbol": "sh601228",
+    "name": "广州港",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601229",
+    "symbol": "sh601229",
+    "name": "上海银行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601231",
+    "symbol": "sh601231",
+    "name": "环旭电子",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601233",
+    "symbol": "sh601233",
+    "name": "桐昆股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601236",
+    "symbol": "sh601236",
+    "name": "红塔证券",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601238",
+    "symbol": "sh601238",
+    "name": "广汽集团",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601288",
+    "symbol": "sh601288",
+    "name": "农业银行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601298",
+    "symbol": "sh601298",
+    "name": "青岛港",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601318",
+    "symbol": "sh601318",
+    "name": "中国平安",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601319",
+    "symbol": "sh601319",
+    "name": "中国人保",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601328",
+    "symbol": "sh601328",
+    "name": "交通银行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601333",
+    "symbol": "sh601333",
+    "name": "广深铁路",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601336",
+    "symbol": "sh601336",
+    "name": "新华保险",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601360",
+    "symbol": "sh601360",
+    "name": "三六零",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601377",
+    "symbol": "sh601377",
+    "name": "兴业证券",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601390",
+    "symbol": "sh601390",
+    "name": "中国中铁",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601398",
+    "symbol": "sh601398",
+    "name": "工商银行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601399",
+    "symbol": "sh601399",
+    "name": "国机重装",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601456",
+    "symbol": "sh601456",
+    "name": "国联民生",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601555",
+    "symbol": "sh601555",
+    "name": "东吴证券",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601567",
+    "symbol": "sh601567",
+    "name": "三星电气",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601577",
+    "symbol": "sh601577",
+    "name": "长沙银行",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601598",
+    "symbol": "sh601598",
+    "name": "中国外运",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601600",
+    "symbol": "sh601600",
+    "name": "中国铝业",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601601",
+    "symbol": "sh601601",
+    "name": "中国太保",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601607",
+    "symbol": "sh601607",
+    "name": "上海医药",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601608",
+    "symbol": "sh601608",
+    "name": "中信重工",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601611",
+    "symbol": "sh601611",
+    "name": "中国核建",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601615",
+    "symbol": "sh601615",
+    "name": "明阳智能",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601618",
+    "symbol": "sh601618",
+    "name": "中国中冶",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601628",
+    "symbol": "sh601628",
+    "name": "中国人寿",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601633",
+    "symbol": "sh601633",
+    "name": "长城汽车",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601658",
+    "symbol": "sh601658",
+    "name": "邮储银行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601665",
+    "symbol": "sh601665",
+    "name": "齐鲁银行",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601666",
+    "symbol": "sh601666",
+    "name": "平煤股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601668",
+    "symbol": "sh601668",
+    "name": "中国建筑",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601669",
+    "symbol": "sh601669",
+    "name": "中国电建",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601688",
+    "symbol": "sh601688",
+    "name": "华泰证券",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601689",
+    "symbol": "sh601689",
+    "name": "拓普集团",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601696",
+    "symbol": "sh601696",
+    "name": "中银证券",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601698",
+    "symbol": "sh601698",
+    "name": "中国卫通",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601699",
+    "symbol": "sh601699",
+    "name": "潞安环能",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601717",
+    "symbol": "sh601717",
+    "name": "中创智领",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601728",
+    "symbol": "sh601728",
+    "name": "中国电信",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601766",
+    "symbol": "sh601766",
+    "name": "中国中车",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601788",
+    "symbol": "sh601788",
+    "name": "光大证券",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601799",
+    "symbol": "sh601799",
+    "name": "星宇股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601800",
+    "symbol": "sh601800",
+    "name": "中国交建",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601808",
+    "symbol": "sh601808",
+    "name": "中海油服",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601816",
+    "symbol": "sh601816",
+    "name": "京沪高铁",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601818",
+    "symbol": "sh601818",
+    "name": "光大银行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601825",
+    "symbol": "sh601825",
+    "name": "沪农商行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601838",
+    "symbol": "sh601838",
+    "name": "成都银行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601857",
+    "symbol": "sh601857",
+    "name": "中国石油",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601865",
+    "symbol": "sh601865",
+    "name": "福莱特",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601866",
+    "symbol": "sh601866",
+    "name": "中远海发",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601868",
+    "symbol": "sh601868",
+    "name": "中国能建",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601872",
+    "symbol": "sh601872",
+    "name": "招商轮船",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601877",
+    "symbol": "sh601877",
+    "name": "正泰电器",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601878",
+    "symbol": "sh601878",
+    "name": "浙商证券",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601880",
+    "symbol": "sh601880",
+    "name": "辽港股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601881",
+    "symbol": "sh601881",
+    "name": "中国银河",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601888",
+    "symbol": "sh601888",
+    "name": "中国中免",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601898",
+    "symbol": "sh601898",
+    "name": "中煤能源",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601899",
+    "symbol": "sh601899",
+    "name": "紫金矿业",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601901",
+    "symbol": "sh601901",
+    "name": "方正证券",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601916",
+    "symbol": "sh601916",
+    "name": "浙商银行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601918",
+    "symbol": "sh601918",
+    "name": "新集能源",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601919",
+    "symbol": "sh601919",
+    "name": "中远海控",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601921",
+    "symbol": "sh601921",
+    "name": "浙版传媒",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601928",
+    "symbol": "sh601928",
+    "name": "凤凰传媒",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601939",
+    "symbol": "sh601939",
+    "name": "建设银行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601958",
+    "symbol": "sh601958",
+    "name": "金钼股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601965",
+    "symbol": "sh601965",
+    "name": "中国汽研",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601966",
+    "symbol": "sh601966",
+    "name": "玲珑轮胎",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601985",
+    "symbol": "sh601985",
+    "name": "中国核电",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601988",
+    "symbol": "sh601988",
+    "name": "中国银行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601990",
+    "symbol": "sh601990",
+    "name": "南京证券",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601991",
+    "symbol": "sh601991",
+    "name": "大唐发电",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601995",
+    "symbol": "sh601995",
+    "name": "中金公司",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "601997",
+    "symbol": "sh601997",
+    "name": "贵阳银行",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "601998",
+    "symbol": "sh601998",
+    "name": "中信银行",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "603000",
+    "symbol": "sh603000",
+    "name": "人民网",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603019",
+    "symbol": "sh603019",
+    "name": "中科曙光",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "603049",
+    "symbol": "sh603049",
+    "name": "中策橡胶",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603077",
+    "symbol": "sh603077",
+    "name": "和邦生物",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603087",
+    "symbol": "sh603087",
+    "name": "甘李药业",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603129",
+    "symbol": "sh603129",
+    "name": "春风动力",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603156",
+    "symbol": "sh603156",
+    "name": "养元饮品",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603160",
+    "symbol": "sh603160",
+    "name": "汇顶科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603179",
+    "symbol": "sh603179",
+    "name": "新泉股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603195",
+    "symbol": "sh603195",
+    "name": "公牛集团",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "603225",
+    "symbol": "sh603225",
+    "name": "新凤鸣",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603228",
+    "symbol": "sh603228",
+    "name": "景旺电子",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603233",
+    "symbol": "sh603233",
+    "name": "大参林",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603259",
+    "symbol": "sh603259",
+    "name": "药明康德",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "603260",
+    "symbol": "sh603260",
+    "name": "合盛硅业",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "603288",
+    "symbol": "sh603288",
+    "name": "海天味业",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "603290",
+    "symbol": "sh603290",
+    "name": "斯达半导",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603296",
+    "symbol": "sh603296",
+    "name": "华勤技术",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "603298",
+    "symbol": "sh603298",
+    "name": "杭叉集团",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603338",
+    "symbol": "sh603338",
+    "name": "浙江鼎力",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603341",
+    "symbol": "sh603341",
+    "name": "龙旗科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603345",
+    "symbol": "sh603345",
+    "name": "安井食品",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603369",
+    "symbol": "sh603369",
+    "name": "今世缘",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "603379",
+    "symbol": "sh603379",
+    "name": "三美股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603392",
+    "symbol": "sh603392",
+    "name": "万泰生物",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "603444",
+    "symbol": "sh603444",
+    "name": "吉比特",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603486",
+    "symbol": "sh603486",
+    "name": "科沃斯",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603501",
+    "symbol": "sh603501",
+    "name": "豪威集团",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "603529",
+    "symbol": "sh603529",
+    "name": "爱玛科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603565",
+    "symbol": "sh603565",
+    "name": "中谷物流",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603568",
+    "symbol": "sh603568",
+    "name": "伟明环保",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603589",
+    "symbol": "sh603589",
+    "name": "口子窖",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603596",
+    "symbol": "sh603596",
+    "name": "伯特利",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603605",
+    "symbol": "sh603605",
+    "name": "珀莱雅",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603606",
+    "symbol": "sh603606",
+    "name": "东方电缆",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603650",
+    "symbol": "sh603650",
+    "name": "彤程新材",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603658",
+    "symbol": "sh603658",
+    "name": "安图生物",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603659",
+    "symbol": "sh603659",
+    "name": "璞泰来",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603688",
+    "symbol": "sh603688",
+    "name": "石英股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603699",
+    "symbol": "sh603699",
+    "name": "纽威股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603707",
+    "symbol": "sh603707",
+    "name": "健友股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603728",
+    "symbol": "sh603728",
+    "name": "鸣志电器",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603737",
+    "symbol": "sh603737",
+    "name": "三棵树",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603766",
+    "symbol": "sh603766",
+    "name": "隆鑫通用",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603786",
+    "symbol": "sh603786",
+    "name": "科博达",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603799",
+    "symbol": "sh603799",
+    "name": "华友钴业",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "603806",
+    "symbol": "sh603806",
+    "name": "福斯特",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603816",
+    "symbol": "sh603816",
+    "name": "顾家家居",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603833",
+    "symbol": "sh603833",
+    "name": "欧派家居",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603858",
+    "symbol": "sh603858",
+    "name": "步长制药",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603885",
+    "symbol": "sh603885",
+    "name": "吉祥航空",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603893",
+    "symbol": "sh603893",
+    "name": "瑞芯微",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "603899",
+    "symbol": "sh603899",
+    "name": "晨光股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603920",
+    "symbol": "sh603920",
+    "name": "世运电路",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603927",
+    "symbol": "sh603927",
+    "name": "中科软",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603939",
+    "symbol": "sh603939",
+    "name": "益丰药房",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603979",
+    "symbol": "sh603979",
+    "name": "金诚信",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "603986",
+    "symbol": "sh603986",
+    "name": "兆易创新",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "603993",
+    "symbol": "sh603993",
+    "name": "洛阳钼业",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "605117",
+    "symbol": "sh605117",
+    "name": "德业股份",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "605358",
+    "symbol": "sh605358",
+    "name": "立昂微",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "605499",
+    "symbol": "sh605499",
+    "name": "东鹏饮料",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "605589",
+    "symbol": "sh605589",
+    "name": "圣泉集团",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688002",
+    "symbol": "sh688002",
+    "name": "睿创微纳",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688008",
+    "symbol": "sh688008",
+    "name": "澜起科技",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "688009",
+    "symbol": "sh688009",
+    "name": "中国通号",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "688012",
+    "symbol": "sh688012",
+    "name": "中微公司",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "688017",
+    "symbol": "sh688017",
+    "name": "绿的谐波",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688018",
+    "symbol": "sh688018",
+    "name": "乐鑫科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688019",
+    "symbol": "sh688019",
+    "name": "安集科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688027",
+    "symbol": "sh688027",
+    "name": "国盾量子",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688036",
+    "symbol": "sh688036",
+    "name": "传音控股",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "688037",
+    "symbol": "sh688037",
+    "name": "芯源微",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688041",
+    "symbol": "sh688041",
+    "name": "海光信息",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "688047",
+    "symbol": "sh688047",
+    "name": "龙芯中科",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "688052",
+    "symbol": "sh688052",
+    "name": "纳芯微",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688065",
+    "symbol": "sh688065",
+    "name": "凯赛生物",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688082",
+    "symbol": "sh688082",
+    "name": "盛美上海",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "688099",
+    "symbol": "sh688099",
+    "name": "晶晨股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688100",
+    "symbol": "sh688100",
+    "name": "威胜信息",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688111",
+    "symbol": "sh688111",
+    "name": "金山办公",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "688114",
+    "symbol": "sh688114",
+    "name": "华大智造",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688120",
+    "symbol": "sh688120",
+    "name": "华海清科",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688122",
+    "symbol": "sh688122",
+    "name": "西部超导",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688126",
+    "symbol": "sh688126",
+    "name": "沪硅产业",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "688166",
+    "symbol": "sh688166",
+    "name": "博瑞医药",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688169",
+    "symbol": "sh688169",
+    "name": "石头科技",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "688172",
+    "symbol": "sh688172",
+    "name": "燕东微",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688180",
+    "symbol": "sh688180",
+    "name": "君实生物",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688183",
+    "symbol": "sh688183",
+    "name": "生益电子",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688187",
+    "symbol": "sh688187",
+    "name": "时代电气",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "688188",
+    "symbol": "sh688188",
+    "name": "柏楚电子",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688192",
+    "symbol": "sh688192",
+    "name": "迪哲医药",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688213",
+    "symbol": "sh688213",
+    "name": "思特威",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688220",
+    "symbol": "sh688220",
+    "name": "翱捷科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688223",
+    "symbol": "sh688223",
+    "name": "晶科能源",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "688234",
+    "symbol": "sh688234",
+    "name": "天岳先进",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688235",
+    "symbol": "sh688235",
+    "name": "百济神州",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688248",
+    "symbol": "sh688248",
+    "name": "南网科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688256",
+    "symbol": "sh688256",
+    "name": "寒武纪",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "688266",
+    "symbol": "sh688266",
+    "name": "泽璟制药",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688271",
+    "symbol": "sh688271",
+    "name": "联影医疗",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "688278",
+    "symbol": "sh688278",
+    "name": "特宝生物",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688281",
+    "symbol": "sh688281",
+    "name": "华秦科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688295",
+    "symbol": "sh688295",
+    "name": "中复神鹰",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688297",
+    "symbol": "sh688297",
+    "name": "中无人机",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688301",
+    "symbol": "sh688301",
+    "name": "奕瑞科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688303",
+    "symbol": "sh688303",
+    "name": "大全能源",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "688318",
+    "symbol": "sh688318",
+    "name": "财富趋势",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688322",
+    "symbol": "sh688322",
+    "name": "奥比中光",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688336",
+    "symbol": "sh688336",
+    "name": "三生国健",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688347",
+    "symbol": "sh688347",
+    "name": "华虹公司",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688349",
+    "symbol": "sh688349",
+    "name": "三一重能",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688361",
+    "symbol": "sh688361",
+    "name": "中科飞测",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688363",
+    "symbol": "sh688363",
+    "name": "华熙生物",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688375",
+    "symbol": "sh688375",
+    "name": "国博电子",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688385",
+    "symbol": "sh688385",
+    "name": "复旦微电",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688387",
+    "symbol": "sh688387",
+    "name": "信科移动",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688396",
+    "symbol": "sh688396",
+    "name": "华润微",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "688425",
+    "symbol": "sh688425",
+    "name": "铁建重工",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688469",
+    "symbol": "sh688469",
+    "name": "芯联集成",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688472",
+    "symbol": "sh688472",
+    "name": "阿特斯",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "688475",
+    "symbol": "sh688475",
+    "name": "萤石网络",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688506",
+    "symbol": "sh688506",
+    "name": "百利天恒",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "688520",
+    "symbol": "sh688520",
+    "name": "神州细胞",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688525",
+    "symbol": "sh688525",
+    "name": "佰维存储",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688538",
+    "symbol": "sh688538",
+    "name": "和辉光电",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688561",
+    "symbol": "sh688561",
+    "name": "奇安信",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688563",
+    "symbol": "sh688563",
+    "name": "航材股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688568",
+    "symbol": "sh688568",
+    "name": "中科星图",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688578",
+    "symbol": "sh688578",
+    "name": "艾力斯",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688582",
+    "symbol": "sh688582",
+    "name": "芯动联科",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688599",
+    "symbol": "sh688599",
+    "name": "天合光能",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688608",
+    "symbol": "sh688608",
+    "name": "恒玄科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688615",
+    "symbol": "sh688615",
+    "name": "合合信息",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688617",
+    "symbol": "sh688617",
+    "name": "惠泰医疗",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688629",
+    "symbol": "sh688629",
+    "name": "华丰科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688676",
+    "symbol": "sh688676",
+    "name": "金盘科技",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688692",
+    "symbol": "sh688692",
+    "name": "达梦数据",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688702",
+    "symbol": "sh688702",
+    "name": "盛科通信",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688709",
+    "symbol": "sh688709",
+    "name": "成都华微",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688728",
+    "symbol": "sh688728",
+    "name": "格科微",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688772",
+    "symbol": "sh688772",
+    "name": "珠海冠宇",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688777",
+    "symbol": "sh688777",
+    "name": "中控技术",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688778",
+    "symbol": "sh688778",
+    "name": "厦钨新能",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688819",
+    "symbol": "sh688819",
+    "name": "天能股份",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  },
+  {
+    "code": "688981",
+    "symbol": "sh688981",
+    "name": "中芯国际",
+    "source_pool": "hs300",
+    "index_symbol": "000300",
+    "source_pools": [
+      "hs300"
+    ]
+  },
+  {
+    "code": "689009",
+    "symbol": "sh689009",
+    "name": "九号公司",
+    "source_pool": "zz500",
+    "index_symbol": "000905",
+    "source_pools": [
+      "zz500"
+    ]
+  }
+]
