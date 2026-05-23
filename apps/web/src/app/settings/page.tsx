@@ -380,6 +380,154 @@ function ParametersEditor() {
   );
 }
 
+function readinessStateTone(state?: string): "positive" | "info" | "watch" | "warning" | "risk" {
+  switch ((state || "").toUpperCase()) {
+    case "FRESH":
+      return "positive";
+    case "USABLE":
+      return "info";
+    case "STALE":
+      return "watch";
+    case "DEGRADED":
+      return "warning";
+    case "INVALID":
+    case "BLOCKED":
+      return "risk";
+    default:
+      return "info";
+  }
+}
+
+function readinessStateLabel(state?: string): string {
+  switch ((state || "").toUpperCase()) {
+    case "FRESH":
+      return "新鲜";
+    case "USABLE":
+      return "可用";
+    case "STALE":
+      return "过期";
+    case "DEGRADED":
+      return "降级";
+    case "INVALID":
+      return "无效";
+    case "BLOCKED":
+      return "阻塞";
+    default:
+      return state || "-";
+  }
+}
+
+const CAPABILITY_LABELS: Record<string, string> = {
+  observe: "观察",
+  review: "复盘",
+  approve: "审批",
+  trade: "交易",
+  notify: "通知",
+  ledger_capture: "账本回写",
+};
+
+function DatasetFreshnessPanel({ status }: { status?: RefreshStatus }) {
+  const readiness = status?.readiness;
+  const datasets = readiness?.dataset_freshness || [];
+  const datasetStates = readiness?.dataset_states || {};
+  const capabilities = readiness?.capabilities || {};
+  const [expanded, setExpanded] = useState(false);
+
+  if (!datasets.length) {
+    return null;
+  }
+
+  const blockingDatasets = new Set<string>();
+  Object.values(capabilities).forEach((report) => {
+    if (!report || report.granted) return;
+    (report.blocking_sources || []).forEach((key) => blockingDatasets.add(key));
+  });
+
+  const sorted = [...datasets].sort((a, b) => {
+    const aBlocks = blockingDatasets.has(a.key) ? 0 : 1;
+    const bBlocks = blockingDatasets.has(b.key) ? 0 : 1;
+    if (aBlocks !== bBlocks) return aBlocks - bBlocks;
+    const aTone = readinessStateTone(datasetStates[a.key]);
+    const bTone = readinessStateTone(datasetStates[b.key]);
+    const severity = { risk: 0, warning: 1, watch: 2, info: 3, positive: 4 } as const;
+    return severity[aTone] - severity[bTone];
+  });
+
+  const visible = expanded ? sorted : sorted.slice(0, 4);
+  const degradedCapabilities = Object.entries(capabilities)
+    .filter(([, report]) => report && !report.granted)
+    .map(([key, report]) => ({ key, report }));
+
+  return (
+    <div className="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <Database size={15} className="text-[var(--text-primary)]" />
+        <span className="text-[13px] font-medium text-[var(--text-primary)]">底层数据源</span>
+        <span className="text-[11px] text-[var(--text-tertiary)]">
+          {datasets.length} 个数据源 · {blockingDatasets.size ? `${blockingDatasets.size} 个阻塞能力` : "无阻塞"}
+        </span>
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          className="ml-auto rounded border border-[var(--border-subtle)] px-2 py-0.5 text-[11px] text-[var(--text-secondary)] hover:bg-[var(--bg-primary)]"
+        >
+          {expanded ? "收起" : "展开全部"}
+        </button>
+      </div>
+      <p className="text-[12px] leading-5 text-[var(--text-secondary)]">
+        显示进入能力闸门的每一个底层数据源（如 quotes.batch、capital_flow.batch）。当某项能力被阻塞时，这里会标出具体是哪个数据源不满足。
+      </p>
+
+      {degradedCapabilities.length ? (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {degradedCapabilities.map(({ key, report }) => (
+            <Badge key={key} tone={report.status === "blocked" ? "risk" : "warning"}>
+              {CAPABILITY_LABELS[key] || key}: {(report.blocking_sources || []).slice(0, 2).join(", ") || "未知"}
+            </Badge>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {visible.map((row) => {
+          const state = datasetStates[row.key];
+          const tone = readinessStateTone(state);
+          const isBlocking = blockingDatasets.has(row.key);
+          return (
+            <div
+              key={row.key}
+              className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-3 py-2"
+              style={isBlocking ? { borderColor: "color-mix(in_srgb,var(--warning) 60%, transparent)" } : undefined}
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[12px] font-medium text-[var(--text-primary)]">{row.label || row.key}</span>
+                <Badge tone={tone}>{readinessStateLabel(state)}</Badge>
+                {isBlocking ? <Badge tone="risk">阻塞能力</Badge> : null}
+              </div>
+              <div className="mt-1 text-[11px] leading-5 text-[var(--text-tertiary)]">
+                {row.value || "-"}
+                {row.age_label ? ` · ${row.age_label}` : ""}
+              </div>
+              {row.stale_reasons?.length ? (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {row.stale_reasons.slice(0, 4).map((reason, index) => (
+                    <span
+                      key={`${row.key}-${reason}-${index}`}
+                      className="rounded border border-[var(--border-subtle)] px-1.5 py-0.5 text-[10px] text-[var(--text-secondary)]"
+                    >
+                      {refreshReasonLabel(reason)}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ReadinessStatusPanel({ status }: { status?: RefreshStatus }) {
   const readiness = status?.readiness;
   const copy = readinessModeCopy(readiness?.readiness_mode);
@@ -486,6 +634,8 @@ function ReadinessStatusPanel({ status }: { status?: RefreshStatus }) {
             </div>
           </div>
         ) : null}
+
+        <DatasetFreshnessPanel status={status} />
       </div>
     </Panel>
   );

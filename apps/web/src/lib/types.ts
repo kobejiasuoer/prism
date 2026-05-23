@@ -98,6 +98,47 @@ export interface ReadinessSourceFreshness {
   source_authority_ready?: boolean;
   formal_decision_allowed?: boolean;
   authority_flags?: string[];
+  dataset_manifest?: boolean;
+}
+
+export type FreshnessState =
+  | "FRESH"
+  | "USABLE"
+  | "STALE"
+  | "DEGRADED"
+  | "INVALID"
+  | "BLOCKED";
+
+export type CapabilityKey =
+  | "observe"
+  | "review"
+  | "approve"
+  | "trade"
+  | "notify"
+  | "ledger_capture";
+
+export interface CapabilityReason {
+  code: string;
+  label?: string;
+  message?: string;
+  source?: string;
+}
+
+export interface CapabilityNextAction {
+  task?: string;
+  label?: string;
+  detail?: string;
+}
+
+export interface CapabilityReport {
+  capability: CapabilityKey | string;
+  status: "ok" | "degraded" | "blocked" | string;
+  granted: boolean;
+  why_not: CapabilityReason[];
+  degraded_path: CapabilityReason[];
+  next_actions: CapabilityNextAction[];
+  blocking_sources: string[];
+  last_checked_at: string;
 }
 
 export interface ReadinessQualityFreshness {
@@ -133,6 +174,10 @@ export interface ReadinessPayload {
   recommended_tasks: string[];
   account_state?: AccountReadinessState;
   calendar_horizon?: string;
+  source_states?: Record<string, FreshnessState | string>;
+  dataset_freshness?: ReadinessSourceFreshness[];
+  dataset_states?: Record<string, FreshnessState | string>;
+  capabilities?: Partial<Record<CapabilityKey, CapabilityReport>> & Record<string, CapabilityReport>;
 }
 
 export type AccountMode = "research" | "shadow" | "live_small";
