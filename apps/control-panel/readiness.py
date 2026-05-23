@@ -506,6 +506,7 @@ def compute_readiness(
     quality_status: Mapping[str, Any] | None,
     account_book: Mapping[str, Any] | None = None,
     today_action_decisions: Mapping[str, Any] | None = None,
+    dataset_freshness: list[dict[str, Any]] | None = None,
     now: datetime | None = None,
     expected_date: str | None = None,
     source_thresholds: Mapping[str, int] | None = None,
@@ -832,12 +833,21 @@ def compute_readiness(
             continue
         source_state_map[key] = classify_source_row(row).value
 
+    dataset_rows = list(dataset_freshness or [])
+    dataset_state_map: dict[str, str] = {}
+    for row in dataset_rows:
+        key = str(row.get("dataset") or row.get("key") or "").strip()
+        if not key:
+            continue
+        dataset_state_map[key] = classify_source_row(row).value
+
     base_payload_for_caps = {
         "ready": ready,
         "readiness_mode": readiness_mode,
         "formal_ready": not formal_blockers,
         "session": session,
         "source_freshness": sources,
+        "dataset_freshness": dataset_rows,
         "blockers": blockers,
         "warnings": warnings,
         "stale_count": stale_count,
@@ -871,6 +881,8 @@ def compute_readiness(
         "recommended_tasks": recommended_tasks,
         "account_state": account_state,
         "source_states": source_state_map,
+        "dataset_freshness": dataset_rows,
+        "dataset_states": dataset_state_map,
         "capabilities": capabilities_payload,
     }
 

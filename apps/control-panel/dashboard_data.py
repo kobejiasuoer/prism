@@ -49,6 +49,7 @@ from readiness import (  # type: ignore  # local module under apps/control-panel
     current_session,
     expected_trade_date,
 )
+from dataset_manifests import build_dataset_freshness_rows  # type: ignore  # local module under apps/control-panel
 from account_book import (  # type: ignore  # local module under apps/control-panel
     ACCOUNT_MODES,
     AccountBookError,
@@ -7040,6 +7041,10 @@ def build_watchlist_page_view() -> dict[str, Any]:
         quality_status=safe_canonical_load(load_quality_status, lane="all"),
         account_book=load_account_book(),
         today_action_decisions=load_today_action_decision_store(),
+        dataset_freshness=build_dataset_freshness_rows(
+            expected_date=trade_date_hint,
+            now=datetime.now(),
+        ),
     )
     expected_date_w = readiness_for_page["expected_trade_date"]
     trade_date = readiness_for_page["data_trade_date"] or current_trade_date(watchlist, screening_batch, decision_brief)
@@ -7271,6 +7276,10 @@ def build_opportunities_view() -> dict[str, Any]:
         quality_status=safe_canonical_load(load_quality_status, lane="all"),
         account_book=load_account_book(),
         today_action_decisions=load_today_action_decision_store(),
+        dataset_freshness=build_dataset_freshness_rows(
+            expected_date=trade_date_hint,
+            now=datetime.now(),
+        ),
     )
     expected_date_o = readiness_for_opps["expected_trade_date"]
     trade_date = readiness_for_opps["data_trade_date"] or current_trade_date(watchlist, screening_batch, decision_brief)
@@ -8291,6 +8300,10 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
         quality_status=quality_status,
         account_book=account_book,
         today_action_decisions=today_action_decisions,
+        dataset_freshness=build_dataset_freshness_rows(
+            expected_date=trade_date_hint,
+            now=datetime.now(),
+        ),
     )
     action_groups = build_today_action_groups(
         watchlist,
@@ -8555,6 +8568,10 @@ def build_today_view() -> dict[str, Any]:
         quality_status=quality_status,
         account_book=account_book,
         today_action_decisions=today_action_decisions,
+        dataset_freshness=build_dataset_freshness_rows(
+            expected_date=trade_date_hint,
+            now=datetime.now(),
+        ),
     )
 
     expected_date = readiness["expected_trade_date"]
@@ -9029,6 +9046,10 @@ def build_portfolio_account_view(*, refresh_quotes: bool = False) -> dict[str, A
         quality_status=quality_status,
         account_book=account_book,
         today_action_decisions=today_action_decisions,
+        dataset_freshness=build_dataset_freshness_rows(
+            expected_date=trade_date_hint,
+            now=datetime.now(),
+        ),
     )
     account_view = compute_account_view(account_book)
     cash_balance = float(account_view.get("cash_balance") or 0.0)
