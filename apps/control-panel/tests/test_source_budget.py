@@ -26,6 +26,8 @@ from source_budget import (  # noqa: E402
     SourceBudget,
     SOURCE_BUDGETS,
     budgets_for_capability,
+    budgets_critical_for_capability,
+    budgets_important_for_capability,
     budgets_for_role,
     build_source_budget_payload,
     source_budget,
@@ -41,8 +43,6 @@ KNOWN_CADENCES = {"intraday_high", "intraday_medium", "daily", "event"}
 
 class SourceBudgetRegistryTests(unittest.TestCase):
     def test_registry_subset_of_manifest_datasets(self) -> None:
-        # Every budget MUST reference a real dataset (except special "account.book"
-        # which is internal-only and documented as an exception).
         manifest_keys = set(DATASET_REGISTRY.keys()) | {"account.book"}
         budget_keys = set(SOURCE_BUDGETS.keys())
         unknown = budget_keys - manifest_keys
@@ -57,28 +57,60 @@ class SourceBudgetRegistryTests(unittest.TestCase):
                 self.assertIn(budget.role, KNOWN_ROLES, f"{key} bad role: {budget.role}")
                 self.assertIn(budget.cost_class, KNOWN_COSTS, f"{key} bad cost_class")
                 self.assertIn(budget.cadence, KNOWN_CADENCES, f"{key} bad cadence")
-                self.assertGreater(budget.min_refresh_interval_seconds, 0)
+                self.assertGreater(budget.provider_min_interval_seconds, 0)
+                self.assertGreater(budget.target_freshness_seconds, 0)
                 self.assertTrue(budget.primary_provider)
                 self.assertIn(budget.decision_scope, {"live_small", "display_only"})
-                self.assertTrue(budget.supports_capabilities, f"{key} missing capabilities")
-                for cap in budget.supports_capabilities:
+                # Either critical_for or important_for must list at least one capability.
+                self.assertTrue(
+                    budget.critical_for or budget.important_for,
+                    f"{key} declares no supported capabilities",
+                )
+                for cap in budget.critical_for + budget.important_for:
                     self.assertIn(cap, KNOWN_CAPABILITIES, f"{key} bad capability: {cap}")
+                # No capability should appear in both critical_for and important_for.
+                overlap = set(budget.critical_for) & set(budget.important_for)
+                self.assertFalse(overlap, f"{key} has overlap between critical/important: {overlap}")
                 self.assertTrue(budget.failure_impact, f"{key} missing failure_impact")
 
-    def test_min_refresh_interval_does_not_exceed_intraday_ttl(self) -> None:
-        # min_refresh_interval is a *business* lower bound; it must not request
-        # data more frequently than the TTL declares the data can change.
+    def test_provider_min_interval_not_above_target_freshness(self) -> None:
+        # We cannot promise freshness X if we cannot poll fast enough to refresh by X.
+        for key, budget in SOURCE_BUDGETS.items():
+            with self.subTest(key=key):
+                self.assertLessEqual(
+                    budget.provider_min_interval_seconds,
+                    budget.target_freshness_seconds,
+                    f"{key}: provider_min_interval ({budget.provider_min_interval_seconds}) "
+                    f"exceeds target_freshness ({budget.target_freshness_seconds}); cannot meet that freshness",
+                )
+
+    def test_target_freshness_not_above_intraday_ttl(self) -> None:
+        # Operator's tolerance must not exceed the technical validity window.
         for key, budget in SOURCE_BUDGETS.items():
             if key not in DATASET_REGISTRY:
                 continue
             with self.subTest(key=key):
                 ttl = DATASET_REGISTRY[key].ttl_intraday
                 self.assertLessEqual(
-                    budget.min_refresh_interval_seconds,
+                    budget.target_freshness_seconds,
                     ttl,
-                    f"{key}: min_refresh_interval ({budget.min_refresh_interval_seconds}) "
-                    f"exceeds ttl_intraday ({ttl}); business should not poll faster than TTL allows",
+                    f"{key}: target_freshness ({budget.target_freshness_seconds}) "
+                    f"exceeds ttl_intraday ({ttl}); data declared invalid before operator would refresh",
                 )
+
+    def test_observe_is_never_critical(self) -> None:
+        # observe is the always-permissive view; nothing should hard-block it.
+        for key, budget in SOURCE_BUDGETS.items():
+            with self.subTest(key=key):
+                self.assertNotIn(
+                    "observe", budget.critical_for,
+                    f"{key}: observe must not be critical_for (it is the permissive view)",
+                )
+
+    def test_trade_has_critical_account_and_quotes(self) -> None:
+        critical_for_trade = {b.dataset for b in budgets_critical_for_capability("trade")}
+        self.assertIn("account.book", critical_for_trade)
+        self.assertIn("quotes.batch", critical_for_trade)
 
 
 class SourceBudgetQueryTests(unittest.TestCase):
@@ -95,6 +127,11 @@ class SourceBudgetQueryTests(unittest.TestCase):
         self.assertIn("quotes.batch", keys, "trade capability must require quotes.batch")
         self.assertIn("watchlist.snapshot", keys, "trade capability must require watchlist")
 
+    def test_budgets_critical_vs_important_partition(self) -> None:
+        crit = {b.dataset for b in budgets_critical_for_capability("review")}
+        imp = {b.dataset for b in budgets_important_for_capability("review")}
+        self.assertFalse(crit & imp, "no dataset may be both critical and important for the same capability")
+
     def test_budgets_for_capability_observe_is_permissive(self) -> None:
         observe = budgets_for_capability("observe")
         self.assertGreaterEqual(len(observe), 4, "observe should cover at least market_data + watchlist")
@@ -103,6 +140,15 @@ class SourceBudgetQueryTests(unittest.TestCase):
         keys = {item.dataset for item in budgets_for_role("market_data")}
         self.assertIn("quotes.batch", keys)
         self.assertIn("capital_flow.batch", keys)
+
+    def test_supports_capabilities_is_derived(self) -> None:
+        budget = source_budget("watchlist.snapshot")
+        assert budget is not None
+        # Union of critical_for + important_for, no duplicates.
+        self.assertEqual(
+            set(budget.supports_capabilities),
+            set(budget.critical_for) | set(budget.important_for),
+        )
 
     def test_build_payload_shape(self) -> None:
         payload = build_source_budget_payload()
@@ -117,10 +163,13 @@ class SourceBudgetQueryTests(unittest.TestCase):
             "cost_class",
             "cadence",
             "batchable",
-            "min_refresh_interval_seconds",
+            "provider_min_interval_seconds",
+            "target_freshness_seconds",
             "primary_provider",
             "fallback_providers",
             "decision_scope",
+            "critical_for",
+            "important_for",
             "supports_capabilities",
             "failure_impact",
         ):

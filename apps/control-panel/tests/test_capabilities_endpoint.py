@@ -33,8 +33,10 @@ class SourceBudgetEndpointTests(unittest.TestCase):
         sample = datasets[0]
         for key in (
             "dataset", "label", "role", "cost_class", "cadence", "batchable",
-            "min_refresh_interval_seconds", "primary_provider",
-            "fallback_providers", "decision_scope", "supports_capabilities",
+            "provider_min_interval_seconds", "target_freshness_seconds",
+            "primary_provider",
+            "fallback_providers", "decision_scope",
+            "critical_for", "important_for", "supports_capabilities",
             "failure_impact",
         ):
             self.assertIn(key, sample, f"missing {key} in /api/source-budget payload")
