@@ -29,8 +29,14 @@ if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
 if str(STOCK_ANALYZER_ROOT) not in sys.path:
     sys.path.insert(0, str(STOCK_ANALYZER_ROOT))
-if str(CONTROL_PANEL_ROOT) not in sys.path:
-    sys.path.insert(0, str(CONTROL_PANEL_ROOT))
+# Force control-panel ahead of the stock-analyzer copy of ``watchlist_registry``;
+# otherwise the legacy duplicate at stock-analyzer/watchlist_registry.py shadows
+# the canonical control-panel one and downstream consumers (e.g. app.py imports)
+# fail to find names only exported by the canonical module.
+_control_panel_root_str = str(CONTROL_PANEL_ROOT)
+if _control_panel_root_str in sys.path:
+    sys.path.remove(_control_panel_root_str)
+sys.path.insert(0, _control_panel_root_str)
 
 from prism_canonical import (  # type: ignore
     diff_watchlist_snapshots,
