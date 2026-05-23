@@ -160,6 +160,8 @@ def build_dataset_freshness_rows(
             reasons.append("fallback_not_allowed")
         if not parsed:
             reasons.append("missing")
+        if manifest.get("error") and status != "ok":
+            reasons.append("provider_failure")
 
         rows.append({
             "dataset": dataset_key,
@@ -180,6 +182,14 @@ def build_dataset_freshness_rows(
             "fallback_used": bool(manifest.get("fallback_used")),
             "live_small_allowed": bool(manifest.get("live_small_allowed")),
             "manifest_path": manifest.get("manifest_path"),
+            "source_lane": manifest.get("source_lane"),
+            "decision_scope": manifest.get("decision_scope"),
+            "authority_provider": manifest.get("authority_provider"),
+            "target_authority_provider": manifest.get("target_authority_provider"),
+            "audit_providers": list(manifest.get("audit_providers") or []),
+            "source_authority_ready": bool(manifest.get("source_authority_ready", True)),
+            "formal_decision_allowed": bool(manifest.get("formal_decision_allowed")),
+            "authority_flags": list(manifest.get("authority_flags") or []),
             "dataset_manifest": True,
         })
     return rows

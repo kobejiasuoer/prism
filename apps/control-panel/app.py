@@ -70,6 +70,7 @@ from stock_name_backfill import (
     stop_worker as _stop_stock_name_backfill_worker,
 )
 from source_budget import build_source_budget_payload
+from dataset_manifests import build_dataset_freshness_rows  # type: ignore  # local module
 from refresh_policy import (
     CRON_POLICIES,
     PAGE_POLICIES,
@@ -97,9 +98,7 @@ from scheduled_run_state import (
     scheduler_alive,
 )
 from trading_calendar import calendar_status
-from prism_data.freshness import update_manifest_freshness
-from prism_data.repositories import DatasetRepository
-from prism_data.utils import default_dataset_repository_root
+from prism_data.data_capability_matrix import data_capability_matrix_as_dict
 
 import decision_ledger
 
@@ -873,126 +872,27 @@ def _readiness_freshness_rows(
     return rows
 
 
-def _manifest_dt(value: Any) -> datetime | None:
-    return parse_timestamp(str(value or ""))
-
-
-def _manifest_sort_key(manifest: dict[str, Any]) -> datetime:
-    return (
-        _manifest_dt(manifest.get("asof"))
-        or _manifest_dt(manifest.get("fetched_at"))
-        or datetime.min
-    )
-
-
-def _latest_dataset_manifest(
-    *,
-    repository: DatasetRepository,
-    dataset: str,
-    expected_date: str,
-    now: datetime,
-) -> dict[str, Any] | None:
-    manifests = repository.list_manifests(dataset, expected_date)
-    if not manifests:
-        return None
-    refreshed = [update_manifest_freshness(dict(item), expected_date, now=now) for item in manifests]
-    return max(refreshed, key=_manifest_sort_key)
-
-
 def _dataset_manifest_freshness_rows(*, expected_date: str, now: datetime) -> list[dict[str, Any]]:
-    try:
-        repository = DatasetRepository(os.environ.get("PRISM_DATASET_REPOSITORY_ROOT", "").strip() or default_dataset_repository_root())
-    except Exception:
-        return []
+    """Bottom-level dataset freshness for the /api/refresh-status payload.
 
-    rows: list[dict[str, Any]] = []
-    labels = {
-        "quotes.snapshot": "轻量行情快照",
-        "quotes.batch": "轻量行情批量",
-        "capital_flow.daily": "轻量资金流单票",
-        "capital_flow.batch": "轻量资金流批量",
-    }
-    for dataset, label in labels.items():
-        manifest = _latest_dataset_manifest(
-            repository=repository,
-            dataset=dataset,
-            expected_date=expected_date,
-            now=now,
-        )
-        reasons: list[str] = []
-        if not manifest:
-            rows.append(
-                {
-                    "key": dataset,
-                    "label": label,
-                    "value": "-",
-                    "detail": "dataset_manifest_missing",
-                    "available": False,
-                    "age_seconds": None,
-                    "age_label": "-",
-                    "stale": True,
-                    "stale_after_seconds": int((task_policy("quotes_light") if dataset.startswith("quotes.") else task_policy("capital_flow_light")).cooldown_seconds),
-                    "trade_date": None,
-                    "stale_reasons": ["manifest_missing"],
-                    "dataset_manifest": True,
-                }
-            )
-            continue
-
-        raw_value = manifest.get("asof") or manifest.get("fetched_at")
-        parsed = parse_timestamp(str(raw_value or ""))
-        age_seconds = max(int((now - parsed).total_seconds()), 0) if parsed else None
-        trade_date = str(manifest.get("trade_date") or "").strip() or None
-        freshness_status = str(manifest.get("freshness_status") or "").strip().lower()
-        status = str(manifest.get("status") or "").strip().lower()
-        if status and status != "ok":
-            reasons.append(f"manifest_status_{status}")
-        if freshness_status in {"stale", "expired"}:
-            reasons.append(f"freshness_{freshness_status}")
-        elif not freshness_status:
-            reasons.append("freshness_unknown")
-        if trade_date != expected_date:
-            reasons.append("trade_date_mismatch" if trade_date else "trade_date_unknown")
-        if not bool(manifest.get("live_small_allowed")):
-            reasons.append("live_small_not_allowed")
-        if bool(manifest.get("fallback_used")) and not bool(manifest.get("live_small_allowed")):
-            reasons.append("fallback_not_allowed")
-        if not parsed:
-            reasons.append("missing")
-        if manifest.get("error") and status != "ok":
-            reasons.append("provider_failure")
-
-        rows.append(
-            {
-                "key": dataset,
-                "label": label,
-                "value": str(raw_value or "-"),
-                "detail": str(manifest.get("provider") or ""),
-                "available": bool(parsed),
-                "age_seconds": age_seconds,
-                "age_label": age_label(age_seconds),
-                "stale": bool(reasons),
-                "stale_after_seconds": int(manifest.get("ttl_seconds") or 0),
-                "trade_date": trade_date,
-                "stale_reasons": reasons,
-                "provider": manifest.get("provider"),
-                "provider_role": manifest.get("provider_role"),
-                "freshness_status": freshness_status,
-                "fallback_used": bool(manifest.get("fallback_used")),
-                "live_small_allowed": bool(manifest.get("live_small_allowed")),
-                "manifest_path": manifest.get("manifest_path"),
-                "source_lane": manifest.get("source_lane"),
-                "decision_scope": manifest.get("decision_scope"),
-                "authority_provider": manifest.get("authority_provider"),
-                "target_authority_provider": manifest.get("target_authority_provider"),
-                "audit_providers": list(manifest.get("audit_providers") or []),
-                "source_authority_ready": bool(manifest.get("source_authority_ready", True)),
-                "formal_decision_allowed": bool(manifest.get("formal_decision_allowed")),
-                "authority_flags": list(manifest.get("authority_flags") or []),
-                "dataset_manifest": True,
-            }
-        )
-    return rows
+    Delegates to :func:`dataset_manifests.build_dataset_freshness_rows` so
+    we have a single implementation: same parsing, same reasons, same
+    schema as the rows surfaced through the readiness gate and the
+    Settings page detail view. The dataset list is restricted to the
+    lightweight market-data manifests this page cares about; for the
+    full registry-driven sweep used by the capability gate, callers go
+    through ``build_dataset_freshness_rows`` directly.
+    """
+    return build_dataset_freshness_rows(
+        expected_date=expected_date,
+        now=now,
+        datasets=(
+            "quotes.snapshot",
+            "quotes.batch",
+            "capital_flow.daily",
+            "capital_flow.batch",
+        ),
+    )
 
 
 def _stale_subset(freshness: list[dict[str, Any]], dependencies: list[str]) -> list[dict[str, Any]]:
