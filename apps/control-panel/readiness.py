@@ -38,6 +38,9 @@ from trading_calendar import (
     most_recent_trading_day,
 )
 
+from freshness_state import FreshnessState, classify_source_row
+from capability_matrix import evaluate_capabilities
+
 
 __all__ = [
     "expected_trade_date",
@@ -821,6 +824,33 @@ def compute_readiness(
         # Nothing is broken — point operators at the natural next step.
         recommended_tasks = ["command_brief"]
 
+    # Phase 1 additive translation layer (no existing field is changed).
+    source_state_map: dict[str, str] = {}
+    for row in sources:
+        key = str(row.get("key") or "").strip()
+        if not key:
+            continue
+        source_state_map[key] = classify_source_row(row).value
+
+    base_payload_for_caps = {
+        "ready": ready,
+        "readiness_mode": readiness_mode,
+        "formal_ready": not formal_blockers,
+        "session": session,
+        "source_freshness": sources,
+        "blockers": blockers,
+        "warnings": warnings,
+        "stale_count": stale_count,
+        "checked_at": current.strftime("%Y-%m-%d %H:%M:%S"),
+        "recommended_tasks": recommended_tasks,
+        "account_state": account_state,
+    }
+    capability_reports = evaluate_capabilities(
+        readiness_payload=base_payload_for_caps,
+        now=current,
+    )
+    capabilities_payload = {key: report.as_dict() for key, report in capability_reports.items()}
+
     return {
         "expected_trade_date": expected,
         "data_trade_date": data_trade_date,
@@ -840,6 +870,8 @@ def compute_readiness(
         "quality_freshness": quality_items,
         "recommended_tasks": recommended_tasks,
         "account_state": account_state,
+        "source_states": source_state_map,
+        "capabilities": capabilities_payload,
     }
 
 

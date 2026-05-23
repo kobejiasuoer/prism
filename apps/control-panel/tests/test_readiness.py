@@ -929,5 +929,112 @@ class TodayRefreshConsistencyTest(unittest.TestCase):
         self.assertEqual(readiness["recommended_tasks"], ["command_brief"])
 
 
+class ReadinessCapabilityExtensionTests(unittest.TestCase):
+    """Phase 1 additive contract: source_states + capabilities appear on the
+    readiness payload without disturbing any existing field."""
+
+    def _golden_payload(self) -> dict[str, object]:
+        now = datetime(2026, 5, 22, 9, 35, 0)
+        expected = "2026-05-22"
+        watchlist = _source(
+            "watchlist.snapshot",
+            expected,
+            "2026-05-22 09:30:00",
+            stocks=[],
+            priority_codes=[],
+            follow_codes=[],
+            observe_codes=[],
+            stock_count=0,
+        )
+        screening = _source(
+            "screening.batch",
+            expected,
+            "2026-05-22 09:32:00",
+            candidates=[],
+            screening_summary={},
+            market_regime={},
+            candidate_count=0,
+            pool_label="全市场",
+        )
+        confirmation = _source(
+            "screening.confirmation",
+            expected,
+            "2026-05-22 09:34:00",
+            validation_status="ok",
+            confirmed=[],
+            downgraded=[],
+            fresh_candidates=[],
+            counts={},
+        )
+        brief = _source(
+            "decision_brief.snapshot",
+            expected,
+            "2026-05-22 09:35:00",
+            summary={"main_theme": "test"},
+            focus={},
+            paths={},
+        )
+        quality_status = {
+            "lanes": {
+                "watchlist": {
+                    "validation_status": "ok",
+                    "checked_at": "2026-05-22 09:30:00",
+                    "expected_timestamp": expected,
+                },
+                "aggressive": {
+                    "validation_status": "ok",
+                    "checked_at": "2026-05-22 09:32:00",
+                    "expected_timestamp": expected,
+                },
+                "midday_confirmation": {
+                    "validation_status": "ok",
+                    "checked_at": "2026-05-22 09:34:00",
+                    "expected_timestamp": expected,
+                },
+            }
+        }
+        return compute_readiness(
+            watchlist=watchlist,
+            screening_batch=screening,
+            confirmation=confirmation,
+            decision_brief=brief,
+            quality_status=quality_status,
+            now=now,
+            expected_date=expected,
+        )
+
+    def test_source_states_field_present(self) -> None:
+        payload = self._golden_payload()
+        self.assertIn("source_states", payload)
+        self.assertIsInstance(payload["source_states"], dict)
+        for key in ("watchlist", "screening", "confirmation", "decision_brief"):
+            self.assertIn(key, payload["source_states"], f"missing source_states key {key}")
+        for value in payload["source_states"].values():
+            self.assertIn(value, {"fresh", "usable", "stale", "degraded", "invalid", "blocked"})
+
+    def test_capabilities_field_present(self) -> None:
+        payload = self._golden_payload()
+        self.assertIn("capabilities", payload)
+        caps = payload["capabilities"]
+        for name in ("observe", "review", "approve", "trade", "notify", "ledger_capture"):
+            self.assertIn(name, caps, f"missing capability {name}")
+            report = caps[name]
+            self.assertIn("status", report)
+            self.assertIn("granted", report)
+            self.assertIn("why_not", report)
+            self.assertIn("degraded_path", report)
+
+    def test_existing_payload_fields_unchanged(self) -> None:
+        payload = self._golden_payload()
+        for key in (
+            "expected_trade_date", "data_trade_date", "display_date", "checked_at",
+            "session", "readiness_mode", "ready", "brief_is_live", "stale_count",
+            "blockers", "warnings", "formal_ready", "formal_blockers",
+            "source_freshness", "quality_freshness", "recommended_tasks",
+            "account_state", "calendar_horizon",
+        ):
+            self.assertIn(key, payload, f"existing field disappeared: {key}")
+
+
 if __name__ == "__main__":
     unittest.main()
