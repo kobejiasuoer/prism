@@ -62,6 +62,23 @@ class FakeProvider:
             live_small_allowed=True,
         )
 
+    def fetch_kline(self, code: str, period: str = "daily", count: int = 120, **kwargs):
+        now = datetime.now()
+        rows = self.data if isinstance(self.data, list) else [{"code": code, "trade_date": self.trade_date, "close": 27.34}]
+        return ProviderResult(
+            status=self.status,
+            data=rows if self.status == DatasetStatus.OK else None,
+            provider=self.name,
+            provider_role=ProviderRole.PRIMARY,
+            dataset="bars.daily",
+            trade_date=self.trade_date,
+            fetched_at=now,
+            asof=now,
+            ttl_seconds=3600,
+            error=None if self.status == DatasetStatus.OK else "boom",
+            live_small_allowed=self.live_small_allowed,
+        )
+
 
 class ContractsTests(unittest.TestCase):
     def test_data_manifest_roundtrip(self) -> None:
@@ -97,6 +114,25 @@ class ContractsTests(unittest.TestCase):
         self.assertEqual(definition.name, "quotes.snapshot")
         self.assertEqual(definition.primary_provider, "sina")
         self.assertIn("eastmoney", definition.fallback_providers)
+
+    def test_authority_matrix_defines_formal_source_lanes(self) -> None:
+        bars = get_dataset_definition("bars.daily")
+        self.assertIsNotNone(bars)
+        self.assertEqual(bars.source_lane, "authoritative_daily")
+        self.assertEqual(bars.authority_provider, "sina")
+        self.assertEqual(bars.target_authority_provider, "tushare")
+        self.assertIn("akshare", bars.audit_providers)
+
+        execution = get_dataset_definition("execution.flags")
+        self.assertIsNotNone(execution)
+        self.assertEqual(execution.source_lane, "execution")
+        self.assertEqual(execution.primary_provider, "ricequant")
+        self.assertIn("joinquant", execution.fallback_providers)
+
+        benchmark = get_dataset_definition("benchmark.index_daily")
+        self.assertIsNotNone(benchmark)
+        self.assertEqual(benchmark.authority_provider, "tushare")
+        self.assertEqual(benchmark.decision_scope, "formal_candidate")
 
 
 class FreshnessTests(unittest.TestCase):
@@ -136,6 +172,10 @@ class GatewayTests(unittest.TestCase):
             self.assertEqual(result.manifest["provider"], "sina")
             self.assertEqual(result.manifest["freshness_status"], "fresh")
             self.assertTrue(result.manifest["live_small_allowed"])
+            self.assertEqual(result.manifest["source_lane"], "live")
+            self.assertEqual(result.manifest["decision_scope"], "live_small")
+            self.assertTrue(result.manifest["source_authority_ready"])
+            self.assertFalse(result.manifest["formal_decision_allowed"])
             self.assertTrue(Path(result.data_path or "").exists())
             self.assertTrue(Path(result.manifest_path).exists())
             self.assertLessEqual(result.manifest["ttl_seconds"], DATASET_REGISTRY["quotes.snapshot"].ttl_intraday)
@@ -154,7 +194,29 @@ class GatewayTests(unittest.TestCase):
             self.assertEqual(result.manifest["provider"], "eastmoney")
             self.assertTrue(result.manifest["fallback_used"])
             self.assertFalse(result.manifest["live_small_allowed"])
+            self.assertEqual(result.manifest["decision_scope"], "display_only")
+            self.assertFalse(result.manifest["source_authority_ready"])
+            self.assertIn("fallback_display_only", result.manifest["authority_flags"])
             self.assertGreaterEqual(len(result.attempt_manifests), 2)
+
+    def test_gateway_marks_non_target_authority_as_not_formal_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repository = DatasetRepository(tmpdir)
+            gateway = DataGateway(
+                providers={
+                    "sina": FakeProvider("sina", data=[{"code": "600690", "trade_date": "2026-05-07", "close": 27.34}]),
+                },
+                repository=repository,
+            )
+            result = gateway.fetch_kline("600690", trade_date="2026-05-07", key="600690", allow_fallback=False)
+            self.assertEqual(result.manifest["dataset"], "bars.daily")
+            self.assertEqual(result.manifest["source_lane"], "authoritative_daily")
+            self.assertEqual(result.manifest["authority_provider"], "sina")
+            self.assertEqual(result.manifest["target_authority_provider"], "tushare")
+            self.assertTrue(result.manifest["live_small_allowed"])
+            self.assertFalse(result.manifest["source_authority_ready"])
+            self.assertFalse(result.manifest["formal_decision_allowed"])
+            self.assertIn("target_authority_not_in_use:tushare", result.manifest["authority_flags"])
 
     def test_pipeline_manifest_requires_group_presence(self) -> None:
         manifest = build_pipeline_manifest(
@@ -167,6 +229,47 @@ class GatewayTests(unittest.TestCase):
         )
         self.assertFalse(manifest["live_small_allowed"])
         self.assertIn("missing_required_dataset_group:screening.scan_result", manifest["quality_flags"])
+        self.assertFalse(manifest["source_authority_ready"])
+        self.assertFalse(manifest["formal_decision_allowed"])
+
+    def test_pipeline_manifest_carries_upstream_authority_flags(self) -> None:
+        upstream = {
+            "schema_version": 1,
+            "dataset": "bars.daily",
+            "provider": "sina",
+            "provider_role": "primary",
+            "trade_date": "2026-05-07",
+            "fetched_at": "2026-05-07 10:30:00",
+            "asof": "2026-05-07 10:30:00",
+            "ttl_seconds": 3600,
+            "status": "ok",
+            "freshness_status": "fresh",
+            "fallback_used": False,
+            "row_count": 1,
+            "payload_hash": "abc",
+            "live_small_allowed": True,
+            "source_lane": "authoritative_daily",
+            "decision_scope": "live_small",
+            "authority_provider": "sina",
+            "target_authority_provider": "tushare",
+            "source_authority_ready": False,
+            "formal_decision_allowed": False,
+            "authority_flags": ["target_authority_not_in_use:tushare"],
+        }
+        manifest = build_pipeline_manifest(
+            dataset="screening.batch",
+            trade_date="2026-05-07",
+            payload={"ok": True},
+            upstream_manifests=[upstream],
+            ttl_seconds=900,
+            required_dataset_groups=[{"bars.daily"}],
+        )
+        self.assertTrue(manifest["live_small_allowed"])
+        self.assertFalse(manifest["source_authority_ready"])
+        self.assertFalse(manifest["formal_decision_allowed"])
+        self.assertIn("target_authority_not_in_use:tushare", manifest["authority_flags"])
+        self.assertIn("upstream_authority_not_ready", manifest["authority_flags"])
+        self.assertIn("upstream_formal_not_allowed", manifest["authority_flags"])
 
 
 class DatasetsTests(unittest.TestCase):

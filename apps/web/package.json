@@ -6,6 +6,7 @@
     "dev": "node ./scripts/dev.mjs",
     "build": "next build",
     "start": "next start",
+    "smoke:portfolio": "node ./scripts/smoke-portfolio.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

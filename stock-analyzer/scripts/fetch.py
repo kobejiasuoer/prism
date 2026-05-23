@@ -29,6 +29,7 @@ DATA_DIR = os.path.join(SKILL_ROOT, "data")
 SNAPSHOT_DIR = os.path.join(DATA_DIR, "daily_snapshots")
 REPORTS_DIR = os.path.join(SKILL_ROOT, "reports")
 FUNDAMENTALS_CACHE_DIR = os.path.join(DATA_DIR, "fundamentals_cache")
+QUALITY_GATE_DIR = DATA_DIR
 
 if SKILL_ROOT not in sys.path:
     sys.path.insert(0, SKILL_ROOT)
@@ -1681,6 +1682,42 @@ def save_daily_snapshots(today, records, replace_existing=False):
         path,
         f"analyzer/daily_snapshots/{today}.json",
         artifact_type="daily_snapshot",
+        trade_date=today,
+    )
+    write_watchlist_quality_gate(today, path, records)
+
+
+def write_watchlist_quality_gate(today, snapshot_path, records):
+    checked_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    errors = []
+    if not os.path.exists(snapshot_path):
+        errors.append("snapshot_missing")
+    if not records:
+        errors.append("stock_count_zero")
+
+    payload = {
+        "checked_at": checked_at,
+        "mode": "watchlist",
+        "validation_status": "ok" if not errors else "failed",
+        "errors": errors,
+        "warnings": [],
+        "paths": {
+            "snapshot": os.path.abspath(snapshot_path),
+            "generator": os.path.abspath(__file__),
+        },
+        "expected_timestamp": checked_at,
+        "stats": {
+            "stock_count": len(records or {}),
+        },
+    }
+    quality_path = os.path.join(QUALITY_GATE_DIR, f"quality_gate_watchlist_{today}.json")
+    os.makedirs(os.path.dirname(quality_path), exist_ok=True)
+    with open(quality_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    mirror_analyzer_artifact(
+        quality_path,
+        f"analyzer/quality_gates/{os.path.basename(quality_path)}",
+        artifact_type="quality_gate",
         trade_date=today,
     )
 

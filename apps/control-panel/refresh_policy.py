@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Iterable, Mapping, Sequence
 
+from trading_calendar import calendar_status
+
 
 MarketMode = str
 
@@ -105,13 +107,28 @@ class CronJobPolicy:
     command: tuple[str, ...]
     delivery_default: bool = True
     fixed_window: bool = True
+    catchup_enabled: bool = False
+    catchup_until: str = ""
+    retry_attempts: int = 0
+    retry_delay_seconds: int = 0
+    depends_on: tuple[str, ...] = ()
 
     def as_openclaw_job(self, *, target: str = "") -> dict[str, Any]:
         command = " ".join(self.command)
+        direct_command = (
+            f"SEND_TO_FEISHU=1 FEISHU_TARGET={target} {command}"
+            if self.delivery_default
+            else command
+        )
+        delivery_note = (
+            "发往飞书的消息由 shell runner 自己完成；"
+            if self.delivery_default
+            else "该任务只写本地状态文件；"
+        )
         message = (
-            f"执行 {self.name}。发往飞书的消息由 shell runner 自己完成；"
+            f"执行 {self.name}。{delivery_note}"
             "最终回复只允许写 `DONE` 或 `FAILED: ...`。\n\n"
-            f"直接执行：`SEND_TO_FEISHU=1 FEISHU_TARGET={target} {command}`\n"
+            f"直接执行：`{direct_command}`\n"
             "如果 runner 已在运行或返回 running 状态，禁止重复执行。"
         )
         return {
@@ -150,6 +167,11 @@ class CronJobPolicy:
             "command": list(self.command),
             "delivery_default": self.delivery_default,
             "fixed_window": self.fixed_window,
+            "catchup_enabled": self.catchup_enabled,
+            "catchup_until": self.catchup_until,
+            "retry_attempts": self.retry_attempts,
+            "retry_delay_seconds": self.retry_delay_seconds,
+            "depends_on": list(self.depends_on),
         }
 
 
@@ -180,6 +202,15 @@ TASK_POLICIES: dict[str, TaskPolicy] = {
         cooldown_seconds=360,
         auto_windows=("morning", "midday", "afternoon", "preclose"),
         manifest_dependencies=("capital_flow.batch",),
+        same_family="lightweight_market_data",
+    ),
+    "morning_warmup": TaskPolicy(
+        task_name="morning_warmup",
+        title="晨间数据预热",
+        kind="lightweight",
+        cooldown_seconds=10 * 60,
+        auto_windows=("premarket", "morning"),
+        manifest_dependencies=("quotes.batch", "capital_flow.batch"),
         same_family="lightweight_market_data",
     ),
     "watchlist_refresh": TaskPolicy(
@@ -249,6 +280,16 @@ TASK_POLICIES: dict[str, TaskPolicy] = {
         fixed_cron_only=True,
         same_family="command_brief",
     ),
+    "decision_ledger_outcomes": TaskPolicy(
+        task_name="decision_ledger_outcomes",
+        title="Decision Ledger 结果评估",
+        kind="maintenance",
+        cooldown_seconds=30 * 60,
+        auto_windows=("postclose",),
+        auto_enabled=False,
+        fixed_cron_only=True,
+        same_family="decision_ledger",
+    ),
 }
 
 
@@ -256,6 +297,7 @@ PAGE_POLICIES: dict[str, PagePolicy] = {
     "today": PagePolicy(
         page="today",
         allowed_tasks=(
+            "morning_warmup",
             "quotes_light",
             "capital_flow_light",
             "watchlist_refresh",
@@ -265,6 +307,7 @@ PAGE_POLICIES: dict[str, PagePolicy] = {
             "aggressive",
         ),
         related_tasks=(
+            "morning_warmup",
             "quotes_light",
             "capital_flow_light",
             "watchlist_refresh",
@@ -279,8 +322,8 @@ PAGE_POLICIES: dict[str, PagePolicy] = {
     ),
     "watchlist": PagePolicy(
         page="watchlist",
-        allowed_tasks=("quotes_light", "capital_flow_light", "watchlist_refresh", "watchlist"),
-        related_tasks=("quotes_light", "capital_flow_light", "watchlist_refresh", "watchlist", "command_brief"),
+        allowed_tasks=("morning_warmup", "quotes_light", "capital_flow_light", "watchlist_refresh", "watchlist"),
+        related_tasks=("morning_warmup", "quotes_light", "capital_flow_light", "watchlist_refresh", "watchlist", "command_brief"),
         poll_seconds={"trading": 60, "standby": 90, "off": 300},
         stale_after_seconds={"trading": 3600, "standby": 7200, "off": 14_400},
     ),
@@ -293,8 +336,8 @@ PAGE_POLICIES: dict[str, PagePolicy] = {
     ),
     "review": PagePolicy(
         page="review",
-        allowed_tasks=("command_brief",),
-        related_tasks=("command_brief",),
+        allowed_tasks=("command_brief", "decision_ledger_outcomes"),
+        related_tasks=("command_brief", "decision_ledger_outcomes"),
         poll_seconds={"trading": 120, "standby": 180, "off": 600},
         stale_after_seconds={"trading": 7200, "standby": 14_400, "off": 86_400},
         auto_on_open=False,
@@ -304,10 +347,23 @@ PAGE_POLICIES: dict[str, PagePolicy] = {
 
 CRON_POLICIES: tuple[CronJobPolicy, ...] = (
     CronJobPolicy(
+        task_name="morning_warmup",
+        name="晨间数据预热",
+        cron_expr="25 9 * * 1-5",
+        command=("python3", "apps/scripts/run_morning_warmup.py"),
+        catchup_enabled=True,
+        catchup_until="10:20",
+        retry_attempts=2,
+        retry_delay_seconds=180,
+    ),
+    CronJobPolicy(
         task_name="watchlist_refresh",
         name="自选股早盘分析",
         cron_expr="50 9 * * 1-5",
         command=("bash", "apps/scripts/run_watchlist_refresh.sh"),
+        catchup_enabled=True,
+        catchup_until="11:15",
+        depends_on=("morning_warmup",),
     ),
     CronJobPolicy(
         task_name="aggressive",
@@ -325,32 +381,71 @@ CRON_POLICIES: tuple[CronJobPolicy, ...] = (
             "3",
             "--handoff-min-consistency",
             "6",
+            "--lifecycle",
         ),
+        catchup_enabled=True,
+        catchup_until="11:30",
+        depends_on=("morning_warmup",),
     ),
     CronJobPolicy(
         task_name="midday_refresh",
         name="进攻型选股-午盘",
         cron_expr="10 13 * * 1-5",
         command=("bash", "packages/screener/run_midday_refresh_cron.sh", "--pool", "aggressive", "--top", "10"),
+        catchup_enabled=True,
+        catchup_until="13:40",
+        depends_on=("aggressive",),
     ),
     CronJobPolicy(
         task_name="midday_confirmation",
         name="进攻型选股-午盘确认",
         cron_expr="45 13 * * 1-5",
         command=("bash", "packages/screener/run_midday_confirmation_cron.sh", "--pool", "aggressive", "--top", "10"),
+        catchup_enabled=True,
+        catchup_until="14:30",
+        depends_on=("midday_refresh",),
     ),
     CronJobPolicy(
         task_name="preclose_risk_refresh",
         name="收盘前风险刷新",
         cron_expr="50 14 * * 1-5",
         command=("bash", "apps/scripts/run_command_brief.sh"),
+        catchup_enabled=True,
+        catchup_until="15:05",
     ),
     CronJobPolicy(
         task_name="postclose_command_brief",
         name="收盘后总控简报",
         cron_expr="5 15 * * 1-5",
         command=("bash", "apps/scripts/run_command_brief.sh"),
+        catchup_enabled=True,
+        catchup_until="15:30",
     ),
+    CronJobPolicy(
+        task_name="decision_ledger_outcomes",
+        name="Decision Ledger 结果评估",
+        cron_expr="35 15 * * 1-5",
+        command=("python3", "apps/scripts/evaluate_decision_ledger.py"),
+        delivery_default=False,
+        catchup_enabled=True,
+        catchup_until="16:15",
+        retry_attempts=2,
+        retry_delay_seconds=300,
+        depends_on=("postclose_command_brief",),
+    ),
+)
+
+
+# Daily tasks that should trigger an automatic Decision Ledger capture
+# once they finish successfully.  The scheduled-job runner reads this
+# list as a *best-effort* post-hook -- capture failure must never flip
+# the underlying task's exit code, because the recommendation snapshot
+# is metadata about the run, not the run itself.  Add a task here when
+# its successful completion implies the Today action queue is in its
+# canonical state for the day.
+DECISION_LEDGER_CAPTURE_AFTER_TASKS: tuple[str, ...] = (
+    "midday_confirmation",
+    "postclose_command_brief",
 )
 
 
@@ -361,8 +456,14 @@ def _clock_minutes(value: str) -> int:
 
 def current_market_mode(now: datetime | None = None) -> tuple[str, str]:
     current = now or datetime.now()
-    if current.weekday() >= 5:
-        return "off", "周末休市"
+    cal = calendar_status(current)
+    if cal.get("status") != "trading":
+        labels = {
+            "weekend": "周末休市",
+            "holiday": "交易所休市",
+            "unknown": "交易日历未知",
+        }
+        return "off", labels.get(str(cal.get("status") or ""), "非交易日")
 
     clock = current.hour * 60 + current.minute
     if (570 <= clock < 690) or (780 <= clock < 900):
@@ -374,7 +475,7 @@ def current_market_mode(now: datetime | None = None) -> tuple[str, str]:
 
 def active_auto_windows(now: datetime | None = None) -> list[dict[str, str]]:
     current = now or datetime.now()
-    if current.weekday() >= 5:
+    if calendar_status(current).get("status") != "trading":
         return []
     return [window.as_dict() for window in AUTO_WINDOWS.values() if window.contains(current)]
 
@@ -404,6 +505,18 @@ def task_is_running(task_name: str, running: Sequence[Mapping[str, Any]]) -> boo
     family = task_family(task_name)
     for item in running:
         if task_family(str(item.get("task_name") or "")) == family:
+            return True
+    return False
+
+
+def task_conflict_is_running(task_name: str, running: Sequence[Mapping[str, Any]]) -> bool:
+    task = normalize_task_name(task_name)
+    conflicts = {task_family(task)}
+    if task in {"command_brief", "preclose_risk_refresh", "postclose_command_brief"}:
+        conflicts.add(task_family("watchlist_refresh"))
+    for item in running:
+        running_task = normalize_task_name(str(item.get("task_name") or ""))
+        if task_family(running_task) in conflicts:
             return True
     return False
 
@@ -584,11 +697,14 @@ def evaluate_auto_refresh(
     policy = task_policy(task_name)
     manifest_reasons = manifest_trigger_reasons(freshness)
     stale_count = sum(1 for item in freshness if item.get("stale"))
+    current_calendar = calendar_status(current)
     auto_windows = active_auto_windows(current)
     active_window_keys = {item["key"] for item in auto_windows}
     reasons: list[str] = []
     blockers: list[str] = []
 
+    if current_calendar.get("status") != "trading":
+        blockers.append("non_trading_day")
     if page_cfg is None:
         blockers.append("unsupported_page")
     elif task_name not in {normalize_task_name(item) for item in page_cfg.allowed_tasks}:
@@ -610,7 +726,7 @@ def evaluate_auto_refresh(
 
     if not (page_cfg and page_cfg.auto_on_open) and not force:
         blockers.append("page_auto_disabled")
-    if task_is_running(task_name, running):
+    if task_conflict_is_running(task_name, running):
         blockers.append("running")
     if int(cooldown.get("remaining_seconds") or 0) > 0 and not force:
         blockers.append("cooldown")
@@ -645,6 +761,7 @@ def evaluate_auto_refresh(
         "stale_count": stale_count,
         "cooldown_remaining_seconds": int(cooldown.get("remaining_seconds") or 0),
         "next_allowed_at": str(cooldown.get("next_allowed_at") or ""),
+        "calendar_status": current_calendar,
         "summary": "",
     }
     decision["summary"] = summarize_auto_decision(decision)
@@ -671,6 +788,7 @@ def summarize_auto_decision(decision: Mapping[str, Any]) -> str:
         "page_auto_disabled": "该页面未开启打开即自动刷新",
         "task_not_allowed_for_page": "当前页面不允许该任务",
         "provider_failure": "上游 provider 失败",
+        "non_trading_day": "当前不是交易日",
     }
     return "没有自动刷新：" + "，".join(labels.get(item, item) for item in blocked) + "。"
 
@@ -735,7 +853,7 @@ def _source_needs_capital_refresh(item: Mapping[str, Any]) -> bool:
 
 def _in_window(key: str, current: datetime) -> bool:
     window = AUTO_WINDOWS.get(key)
-    return bool(window and current.weekday() < 5 and window.contains(current))
+    return bool(window and calendar_status(current).get("status") == "trading" and window.contains(current))
 
 
 def _unique(values: Iterable[str]) -> list[str]:
@@ -750,6 +868,7 @@ def _unique(values: Iterable[str]) -> list[str]:
 __all__ = [
     "AUTO_WINDOWS",
     "CRON_POLICIES",
+    "DECISION_LEDGER_CAPTURE_AFTER_TASKS",
     "PAGE_POLICIES",
     "TASK_POLICIES",
     "active_auto_windows",
@@ -764,6 +883,7 @@ __all__ = [
     "pick_recommended_task",
     "summarize_auto_decision",
     "task_family",
+    "task_conflict_is_running",
     "task_is_running",
     "task_policy",
     "validate_cron_policies",

@@ -103,6 +103,35 @@ class AccountBookTests(unittest.TestCase):
         # Cash = 10000 - (100*20) + (60*25) = 9500
         self.assertAlmostEqual(view["cash_balance"], 9500.0, places=2)
 
+    def test_amend_holding_identity_updates_fills_and_position_plan(self) -> None:
+        ab = self.account_book
+        ab.record_cash_adjustment(delta=10000.0, reason="seed")
+        ab.record_fill(
+            trade_date="2026-05-06",
+            code="sh000625",
+            name="sh000625",
+            side="buy",
+            qty=500,
+            price=11.21,
+            fees=0.0,
+        )
+
+        state = ab.amend_holding_identity(
+            from_code="sh000625",
+            to_code="sz000625",
+            name="长安汽车",
+            reason="录入代码修正",
+        )
+        self.assertEqual(state["fills"][0]["code"], "sz000625")
+        self.assertEqual(state["fills"][0]["name"], "长安汽车")
+        self.assertEqual(state["position_plans"][0]["code"], "sz000625")
+        self.assertEqual(state["position_plans"][0]["name"], "长安汽车")
+        self.assertEqual(state["identity_corrections"][0]["from_code"], "sh000625")
+
+        view = ab.compute_account_view()
+        self.assertEqual(view["open_positions"][0]["code"], "sz000625")
+        self.assertEqual(view["open_positions"][0]["name"], "长安汽车")
+
     def test_live_small_requires_cash_and_recent_reconciliation(self) -> None:
         ab = self.account_book
         # Empty book -> live_small must fail

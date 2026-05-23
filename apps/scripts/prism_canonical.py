@@ -27,6 +27,7 @@ from screener.parameters import build_intraday_observation_contract
 from watchlist_registry import load_active_watchlist_codes
 
 WATCHLIST_SNAPSHOT_DIR = STOCK_ANALYZER_ROOT / "data" / "daily_snapshots"
+WATCHLIST_SNAPSHOT_ARTIFACT_DIR = BASE_DIR.parent / "data" / "artifacts" / "analyzer" / "daily_snapshots"
 SCREENER_DATA_DIR = STOCK_SCREENER_ROOT / "data"
 CURRENT_SCREENER_DATA_DIR = PACKAGES_ROOT / "data"
 SCREENER_DATA_DIRS = (CURRENT_SCREENER_DATA_DIR, SCREENER_DATA_DIR)
@@ -56,7 +57,46 @@ def load_sidecar_manifest(path: Path | None, raw: dict[str, Any] | None = None) 
     if manifest:
         return manifest
     ingress_path = (((raw or {}).get("data_ingress") or {}).get("manifest_path")) if isinstance(raw, dict) else None
-    return load_manifest_file(ingress_path)
+    manifest = load_manifest_file(ingress_path)
+    if manifest:
+        return manifest
+    if path.parent == COMMAND_BRIEF_DIR:
+        artifact_manifest = BASE_DIR.parent / "data" / "artifacts" / "command_brief" / path.with_suffix(".manifest.json").name
+        return load_manifest_file(artifact_manifest)
+    if path.parent == WATCHLIST_SNAPSHOT_ARTIFACT_DIR:
+        legacy_manifest = WATCHLIST_SNAPSHOT_DIR / path.with_suffix(".manifest.json").name
+        manifest = load_manifest_file(legacy_manifest)
+        if manifest:
+            return manifest
+    if isinstance(raw, dict):
+        ingress = raw.get("data_ingress") if isinstance(raw.get("data_ingress"), dict) else {}
+        dataset = str(ingress.get("dataset") or "").strip()
+        if dataset:
+            return {
+                "dataset": dataset,
+                "provider": "pipeline",
+                "provider_role": "primary",
+                "trade_date": raw.get("date") or raw.get("trade_date"),
+                "fetched_at": raw.get("generated_at"),
+                "asof": raw.get("generated_at"),
+                "ttl_seconds": 900,
+                "status": "ok",
+                "freshness_status": ingress.get("freshness_status") or "expired",
+                "fallback_used": False,
+                "row_count": len(raw.get("stocks") or []) if isinstance(raw.get("stocks"), list) else len(raw.get("stocks") or {}),
+                "live_small_allowed": bool(ingress.get("live_small_allowed")),
+                "quality_flags": ["sidecar_manifest_missing"],
+                "manifest_path": ingress.get("manifest_path"),
+                "source_lane": "pipeline",
+                "decision_scope": "live_small" if ingress.get("live_small_allowed") else "display_only",
+                "authority_provider": "pipeline",
+                "target_authority_provider": "pipeline",
+                "audit_providers": [],
+                "source_authority_ready": bool(ingress.get("live_small_allowed")),
+                "formal_decision_allowed": False,
+                "authority_flags": ["sidecar_manifest_missing"],
+            }
+    return None
 
 
 def parse_ts(value: str | None) -> datetime | None:
@@ -159,23 +199,24 @@ def mutable_alias_path(path_value: str | None) -> str | None:
     return None
 
 
+def _path_sort_key(path: Path) -> tuple[datetime, float, str]:
+    name_stamp = re.search(r"(\d{4}-\d{2}-\d{2})(?:[_-](\d{2})-(\d{2})(?:-(\d{2}))?)?", path.stem)
+    if name_stamp:
+        date_part, hour, minute, second = name_stamp.groups()
+        parsed = parse_ts(
+            f"{date_part} {hour or '00'}:{minute or '00'}:{second or '00'}"
+        )
+        if parsed:
+            return (parsed, path.stat().st_mtime, path.name)
+    return (datetime.fromtimestamp(path.stat().st_mtime), path.stat().st_mtime, path.name)
+
+
 def latest_matching(pattern: Path, exclude_tokens: tuple[str, ...] = ()) -> Path | None:
     files = list(pattern.parent.glob(pattern.name))
     if exclude_tokens:
         files = [path for path in files if not any(token in path.name for token in exclude_tokens)]
 
-    def sort_key(path: Path) -> tuple[datetime, float, str]:
-        name_stamp = re.search(r"(\d{4}-\d{2}-\d{2})(?:[_-](\d{2})-(\d{2})(?:-(\d{2}))?)?", path.stem)
-        if name_stamp:
-            date_part, hour, minute, second = name_stamp.groups()
-            parsed = parse_ts(
-                f"{date_part} {hour or '00'}:{minute or '00'}:{second or '00'}"
-            )
-            if parsed:
-                return (parsed, path.stat().st_mtime, path.name)
-        return (datetime.fromtimestamp(path.stat().st_mtime), path.stat().st_mtime, path.name)
-
-    files.sort(key=sort_key, reverse=True)
+    files.sort(key=_path_sort_key, reverse=True)
     return files[0] if files else None
 
 
@@ -187,44 +228,120 @@ def resolve_watchlist_snapshot_path(path: str | None = None, trade_date: str | N
         candidate = WATCHLIST_SNAPSHOT_DIR / f"{trade_date}.json"
         if candidate.exists():
             return candidate
-    return latest_matching(WATCHLIST_SNAPSHOT_DIR / "*.json")
+        artifact_candidate = WATCHLIST_SNAPSHOT_ARTIFACT_DIR / f"{trade_date}.json"
+        if artifact_candidate.exists():
+            return artifact_candidate
+    candidates = [
+        candidate
+        for snapshot_dir in (WATCHLIST_SNAPSHOT_DIR, WATCHLIST_SNAPSHOT_ARTIFACT_DIR)
+        for candidate in snapshot_dir.glob("*.json")
+        if re.match(r"^\d{4}-\d{2}-\d{2}\.json$", candidate.name)
+    ]
+    candidates.sort(key=_path_sort_key, reverse=True)
+    return candidates[0] if candidates else None
 
 
-def resolve_screening_batch_path(path: str | None = None) -> Path | None:
+def _payload_trade_date(path: Path) -> str | None:
+    raw = load_json(path)
+    manifest = load_sidecar_manifest(path, raw)
+    candidates = [
+        (manifest or {}).get("trade_date"),
+        raw.get("trade_date"),
+        raw.get("source_scan_timestamp"),
+        raw.get("verified_against_scan_timestamp"),
+        raw.get("scan_timestamp"),
+        raw.get("timestamp"),
+        raw.get("generated_at"),
+    ]
+    for value in candidates:
+        text = str(value or "").strip()
+        if len(text) >= 10 and re.match(r"^\d{4}-\d{2}-\d{2}", text):
+            return text[:10]
+    return None
+
+
+def _matches_trade_date(path: Path, trade_date: str | None) -> bool:
+    if not trade_date:
+        return True
+    return _payload_trade_date(path) == trade_date
+
+
+def resolve_screening_batch_path(path: str | None = None, trade_date: str | None = None) -> Path | None:
     if path:
         candidate = Path(path).expanduser()
-        return candidate if candidate.exists() else None
+        return candidate if candidate.exists() and _matches_trade_date(candidate, trade_date) else None
     for data_dir in SCREENER_DATA_DIRS:
         current = data_dir / "ai_screening_result.json"
-        if current.exists():
+        if current.exists() and _matches_trade_date(current, trade_date):
             return current
     for data_dir in SCREENER_DATA_DIRS:
-        history = latest_matching(data_dir / "ai_history" / "ai_screening_*.json")
+        history = [
+            candidate
+            for candidate in (data_dir / "ai_history").glob("ai_screening_*.json")
+            if _matches_trade_date(candidate, trade_date)
+        ]
+        history.sort(key=_path_sort_key, reverse=True)
         if history:
-            return history
+            return history[0]
     return None
 
 
-def resolve_confirmation_path(path: str | None = None) -> Path | None:
+def resolve_confirmation_path(path: str | None = None, trade_date: str | None = None) -> Path | None:
     if path:
         candidate = Path(path).expanduser()
-        return candidate if candidate.exists() else None
+        return candidate if candidate.exists() and _matches_trade_date(candidate, trade_date) else None
     for data_dir in SCREENER_DATA_DIRS:
         current = data_dir / "midday_verification_result.json"
-        if current.exists():
+        if current.exists() and _matches_trade_date(current, trade_date):
             return current
     for data_dir in SCREENER_DATA_DIRS:
-        history = latest_matching(data_dir / "midday_verification_*.json")
+        history = [
+            candidate
+            for candidate in data_dir.glob("midday_verification_*.json")
+            if _matches_trade_date(candidate, trade_date)
+        ]
+        history.sort(key=_path_sort_key, reverse=True)
         if history:
-            return history
+            return history[0]
     return None
 
 
-def resolve_decision_brief_path(path: str | None = None) -> Path | None:
+def _decision_brief_trade_dates(path: Path) -> tuple[str | None, str | None]:
+    raw = load_json(path)
+    manifest = load_sidecar_manifest(path, raw)
+    summary = raw.get("summary") if isinstance(raw.get("summary"), dict) else {}
+    summary_trade_date = summary.get("trade_date") or raw.get("trade_date")
+    manifest_trade_date = (manifest or {}).get("trade_date")
+    return str(summary_trade_date) if summary_trade_date else None, str(manifest_trade_date) if manifest_trade_date else None
+
+
+def _decision_brief_rank(path: Path, trade_date: str | None = None) -> tuple[int, datetime, float, str]:
+    summary_trade_date, manifest_trade_date = _decision_brief_trade_dates(path)
+    if trade_date:
+        if manifest_trade_date == trade_date:
+            priority = 3
+        elif not manifest_trade_date and summary_trade_date == trade_date:
+            priority = 2
+        else:
+            priority = 0
+    elif manifest_trade_date and summary_trade_date and manifest_trade_date == summary_trade_date:
+        priority = 2
+    elif not manifest_trade_date and summary_trade_date:
+        priority = 1
+    else:
+        priority = 0
+    return (priority, *_path_sort_key(path))
+
+
+def resolve_decision_brief_path(path: str | None = None, trade_date: str | None = None) -> Path | None:
     if path:
         candidate = Path(path).expanduser()
         return candidate if candidate.exists() else None
-    return latest_matching(COMMAND_BRIEF_DIR / "prism_command_brief_*.json")
+    files = list(COMMAND_BRIEF_DIR.glob("prism_command_brief_*.json"))
+    if not files:
+        return None
+    files.sort(key=lambda candidate: _decision_brief_rank(candidate, trade_date), reverse=True)
+    return files[0]
 
 
 def action_rank(action: str | None) -> int:
@@ -567,8 +684,8 @@ def normalize_candidate(raw: dict[str, Any], batch_id: str) -> dict[str, Any]:
     }
 
 
-def load_screening_batch(path: str | None = None) -> dict[str, Any]:
-    batch_path = resolve_screening_batch_path(path=path)
+def load_screening_batch(path: str | None = None, trade_date: str | None = None) -> dict[str, Any]:
+    batch_path = resolve_screening_batch_path(path=path, trade_date=trade_date)
     if not batch_path:
         raise FileNotFoundError("screening batch not found")
 
@@ -638,8 +755,8 @@ def normalize_confirmation_item(
     }
 
 
-def load_confirmation(path: str | None = None) -> dict[str, Any]:
-    confirm_path = resolve_confirmation_path(path=path)
+def load_confirmation(path: str | None = None, trade_date: str | None = None) -> dict[str, Any]:
+    confirm_path = resolve_confirmation_path(path=path, trade_date=trade_date)
     if not confirm_path:
         raise FileNotFoundError("confirmation result not found")
 
@@ -687,8 +804,8 @@ def load_confirmation(path: str | None = None) -> dict[str, Any]:
     }
 
 
-def load_decision_brief(path: str | None = None) -> dict[str, Any]:
-    brief_path = resolve_decision_brief_path(path=path)
+def load_decision_brief(path: str | None = None, trade_date: str | None = None) -> dict[str, Any]:
+    brief_path = resolve_decision_brief_path(path=path, trade_date=trade_date)
     if not brief_path:
         raise FileNotFoundError("decision brief not found")
 
@@ -768,14 +885,18 @@ def load_decision_brief(path: str | None = None) -> dict[str, Any]:
     }
 
 
-def find_candidate_detail(code: str, path: str | None = None) -> dict[str, Any]:
+def find_candidate_detail(code: str, path: str | None = None, trade_date: str | None = None) -> dict[str, Any]:
     target = code.strip()
-    batch = load_screening_batch(path=path)
+    batch = (
+        load_screening_batch(path=path, trade_date=trade_date)
+        if trade_date is not None
+        else load_screening_batch(path=path)
+    )
     for candidate in batch.get("candidates", []):
         if candidate.get("code") == target:
             return candidate
 
-    confirmation = load_confirmation()
+    confirmation = load_confirmation(trade_date=trade_date) if trade_date is not None else load_confirmation()
     for group in ("confirmed", "downgraded", "fresh_candidates"):
         for item in confirmation.get(group, []):
             if item.get("code") != target:
@@ -860,7 +981,15 @@ def resolve_lifecycle_path(path: str | None = None, require_activity: bool = Fal
         candidate = Path(path).expanduser()
         return candidate if candidate.exists() else None
 
-    files = sorted(SCREENER_DATA_DIR.glob("lifecycle_*.json"), key=lambda item: item.stat().st_mtime, reverse=True)
+    files = sorted(
+        [
+            candidate
+            for data_dir in SCREENER_DATA_DIRS
+            for candidate in data_dir.glob("lifecycle_*.json")
+        ],
+        key=lambda item: item.stat().st_mtime,
+        reverse=True,
+    )
     if not require_activity:
         return files[0] if files else None
 

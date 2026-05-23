@@ -24,8 +24,19 @@ import { EmptyState, ErrorState, Panel } from "@/components/data-card";
 import { MetricCard } from "@/components/metric-card";
 import { PageTitle } from "@/components/page-title";
 import { PreviewDrawer, type PreviewDrawerState } from "@/components/preview-drawer";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { api, ApiError } from "@/lib/api";
-import { useHealth, useOverview, useParameters, useRefreshStatus, useRunTask, useRuns, useSaveParameters, useTriggerRefresh } from "@/lib/hooks";
+import {
+  useDecisionLedgerHealth,
+  useHealth,
+  useOverview,
+  useParameters,
+  useRefreshStatus,
+  useRunTask,
+  useRuns,
+  useSaveParameters,
+  useTriggerRefresh,
+} from "@/lib/hooks";
 import {
   formatCooldown,
   normalizeTaskName,
@@ -35,7 +46,13 @@ import {
   refreshReasonLabel,
   refreshTaskCopy,
 } from "@/lib/readiness-copy";
-import type { ParametersResponse, RefreshStatus, RunItem, TaskDefinition } from "@/lib/types";
+import type {
+  DecisionLedgerHealthResponse,
+  ParametersResponse,
+  RefreshStatus,
+  RunItem,
+  TaskDefinition,
+} from "@/lib/types";
 
 function runIdOf(run?: RunItem) {
   return String(run?.run_id || run?.task_id || "").trim();
@@ -68,6 +85,23 @@ function safeTaskList(tasks: TaskDefinition[]) {
 
 function advancedTaskList(tasks: TaskDefinition[]) {
   return tasks.filter((task) => taskCategory(task) !== "safe");
+}
+
+function formatAuthorityLabel(value?: string) {
+  const key = String(value || "").trim();
+  const copy: Record<string, string> = {
+    authoritative_daily: "权威日线",
+    disclosure: "公告披露",
+    display_only: "仅展示",
+    execution: "执行约束",
+    formal_candidate: "Formal 候选",
+    live: "盘中快源",
+    live_small: "小额实盘",
+    news: "新闻",
+    pipeline: "工作流",
+    reference: "参考源",
+  };
+  return copy[key] || key || "-";
 }
 
 function ParametersEditor() {
@@ -175,7 +209,7 @@ function ParametersEditor() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="focus-ring inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            className="focus-ring prism-btn prism-btn-secondary"
             onClick={reloadFromDisk}
             disabled={parameters.isFetching || !editorOpen}
           >
@@ -184,7 +218,7 @@ function ParametersEditor() {
           </button>
           <button
             type="button"
-            className="focus-ring inline-flex items-center gap-2 rounded-md bg-[var(--text-primary)] px-3 py-1.5 text-[12px] font-medium text-[var(--text-inverse)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="focus-ring prism-btn prism-btn-primary"
             onClick={() => save()}
             disabled={saveParameters.isPending || !raw.trim() || !editorOpen}
           >
@@ -259,7 +293,7 @@ function ParametersEditor() {
             </div>
             <button
               type="button"
-              className="focus-ring rounded-md border border-[var(--border-subtle)] px-2.5 py-1 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              className="focus-ring prism-btn prism-btn-secondary prism-btn-sm"
               onClick={formatJson}
             >
               格式化
@@ -325,7 +359,7 @@ function ParametersEditor() {
             </div>
             <button
               type="button"
-              className="mt-2 rounded-md border border-[color-mix(in_srgb,var(--negative)_35%,transparent)] px-2.5 py-1 text-[12px] text-[var(--negative)] disabled:cursor-not-allowed disabled:opacity-50"
+              className="focus-ring prism-btn prism-btn-danger mt-2"
               onClick={() => save(true)}
               disabled={saveParameters.isPending || !unsafeReady}
             >
@@ -347,6 +381,154 @@ function ParametersEditor() {
   );
 }
 
+function readinessStateTone(state?: string): "positive" | "info" | "watch" | "warning" | "risk" {
+  switch ((state || "").toUpperCase()) {
+    case "FRESH":
+      return "positive";
+    case "USABLE":
+      return "info";
+    case "STALE":
+      return "watch";
+    case "DEGRADED":
+      return "warning";
+    case "INVALID":
+    case "BLOCKED":
+      return "risk";
+    default:
+      return "info";
+  }
+}
+
+function readinessStateLabel(state?: string): string {
+  switch ((state || "").toUpperCase()) {
+    case "FRESH":
+      return "新鲜";
+    case "USABLE":
+      return "可用";
+    case "STALE":
+      return "过期";
+    case "DEGRADED":
+      return "降级";
+    case "INVALID":
+      return "无效";
+    case "BLOCKED":
+      return "阻塞";
+    default:
+      return state || "-";
+  }
+}
+
+const CAPABILITY_LABELS: Record<string, string> = {
+  observe: "观察",
+  review: "复盘",
+  approve: "审批",
+  trade: "交易",
+  notify: "通知",
+  ledger_capture: "账本回写",
+};
+
+function DatasetFreshnessPanel({ status }: { status?: RefreshStatus }) {
+  const readiness = status?.readiness;
+  const datasets = readiness?.dataset_freshness || [];
+  const datasetStates = readiness?.dataset_states || {};
+  const capabilities = readiness?.capabilities || {};
+  const [expanded, setExpanded] = useState(false);
+
+  if (!datasets.length) {
+    return null;
+  }
+
+  const blockingDatasets = new Set<string>();
+  Object.values(capabilities).forEach((report) => {
+    if (!report || report.granted) return;
+    (report.blocking_sources || []).forEach((key) => blockingDatasets.add(key));
+  });
+
+  const sorted = [...datasets].sort((a, b) => {
+    const aBlocks = blockingDatasets.has(a.key) ? 0 : 1;
+    const bBlocks = blockingDatasets.has(b.key) ? 0 : 1;
+    if (aBlocks !== bBlocks) return aBlocks - bBlocks;
+    const aTone = readinessStateTone(datasetStates[a.key]);
+    const bTone = readinessStateTone(datasetStates[b.key]);
+    const severity = { risk: 0, warning: 1, watch: 2, info: 3, positive: 4 } as const;
+    return severity[aTone] - severity[bTone];
+  });
+
+  const visible = expanded ? sorted : sorted.slice(0, 4);
+  const degradedCapabilities = Object.entries(capabilities)
+    .filter(([, report]) => report && !report.granted)
+    .map(([key, report]) => ({ key, report }));
+
+  return (
+    <div className="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <Database size={15} className="text-[var(--text-primary)]" />
+        <span className="text-[13px] font-medium text-[var(--text-primary)]">底层数据源</span>
+        <span className="text-[11px] text-[var(--text-tertiary)]">
+          {datasets.length} 个数据源 · {blockingDatasets.size ? `${blockingDatasets.size} 个阻塞能力` : "无阻塞"}
+        </span>
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          className="ml-auto rounded border border-[var(--border-subtle)] px-2 py-0.5 text-[11px] text-[var(--text-secondary)] hover:bg-[var(--bg-primary)]"
+        >
+          {expanded ? "收起" : "展开全部"}
+        </button>
+      </div>
+      <p className="text-[12px] leading-5 text-[var(--text-secondary)]">
+        显示进入能力闸门的每一个底层数据源（如 quotes.batch、capital_flow.batch）。当某项能力被阻塞时，这里会标出具体是哪个数据源不满足。
+      </p>
+
+      {degradedCapabilities.length ? (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {degradedCapabilities.map(({ key, report }) => (
+            <Badge key={key} tone={report.status === "blocked" ? "risk" : "warning"}>
+              {CAPABILITY_LABELS[key] || key}: {(report.blocking_sources || []).slice(0, 2).join(", ") || "未知"}
+            </Badge>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {visible.map((row) => {
+          const state = datasetStates[row.key];
+          const tone = readinessStateTone(state);
+          const isBlocking = blockingDatasets.has(row.key);
+          return (
+            <div
+              key={row.key}
+              className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-3 py-2"
+              style={isBlocking ? { borderColor: "color-mix(in_srgb,var(--warning) 60%, transparent)" } : undefined}
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[12px] font-medium text-[var(--text-primary)]">{row.label || row.key}</span>
+                <Badge tone={tone}>{readinessStateLabel(state)}</Badge>
+                {isBlocking ? <Badge tone="risk">阻塞能力</Badge> : null}
+              </div>
+              <div className="mt-1 text-[11px] leading-5 text-[var(--text-tertiary)]">
+                {row.value || "-"}
+                {row.age_label ? ` · ${row.age_label}` : ""}
+              </div>
+              {row.stale_reasons?.length ? (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {row.stale_reasons.slice(0, 4).map((reason, index) => (
+                    <span
+                      key={`${row.key}-${reason}-${index}`}
+                      className="rounded border border-[var(--border-subtle)] px-1.5 py-0.5 text-[10px] text-[var(--text-secondary)]"
+                    >
+                      {refreshReasonLabel(reason)}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ReadinessStatusPanel({ status }: { status?: RefreshStatus }) {
   const readiness = status?.readiness;
   const copy = readinessModeCopy(readiness?.readiness_mode);
@@ -355,6 +537,10 @@ function ReadinessStatusPanel({ status }: { status?: RefreshStatus }) {
   const staleReasons = (readiness?.source_freshness || [])
     .flatMap((source) => (source.stale_reasons || []).map((reason) => ({ reason, source: source.label })))
     .slice(0, 8);
+  const formalBlockers = readiness?.formal_blockers || [];
+  const formalSources = (readiness?.source_freshness || [])
+    .filter((source) => source.manifest_path)
+    .slice(0, 4);
   const account = readiness?.account_state;
 
   return (
@@ -389,6 +575,43 @@ function ReadinessStatusPanel({ status }: { status?: RefreshStatus }) {
 
         <div className="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
           <div className="mb-2 flex flex-wrap items-center gap-2">
+            <Database size={15} className={readiness?.formal_ready ? "text-[var(--positive)]" : "text-[var(--warning)]"} />
+            <span className="text-[13px] font-medium text-[var(--text-primary)]">Formal 数据源闸门</span>
+            <Badge tone={readiness?.formal_ready ? "positive" : "watch"}>
+              {readiness?.formal_ready ? "Formal Ready" : "Live 快源 / Formal 未放行"}
+            </Badge>
+          </div>
+          <p className="text-[12px] leading-5 text-[var(--text-secondary)]">
+            Live-ready 只代表当前控制台数据可按纪律观察/小额执行；formal-ready 需要权威日线、复权、benchmark 和执行约束源全部通过。
+          </p>
+          {formalSources.length ? (
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {formalSources.map((source) => (
+                <div key={source.key} className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[12px] font-medium text-[var(--text-primary)]">{source.label}</span>
+                    <Badge tone={source.formal_decision_allowed ? "positive" : "watch"}>
+                      {source.formal_decision_allowed ? "formal" : formatAuthorityLabel(source.decision_scope)}
+                    </Badge>
+                  </div>
+                  <div className="mt-1 text-[11px] leading-5 text-[var(--text-tertiary)]">
+                    {formatAuthorityLabel(source.source_lane)} · 当前 {source.provider || "-"} · 目标 {source.target_authority_provider || source.authority_provider || "-"}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {formalBlockers.length ? (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {formalBlockers.slice(0, 6).map((item) => (
+                <Badge key={item.code} tone="warning">{item.label}</Badge>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
             <CheckCircle2 size={15} className="text-[var(--positive)]" />
             <span className="text-[13px] font-medium text-[var(--text-primary)]">推荐下一步</span>
             {next.taskName ? <Badge tone={refreshTaskCopy(next.taskName).category === "safe" ? "info" : "watch"}>{next.taskTitle || next.taskName}</Badge> : null}
@@ -412,6 +635,8 @@ function ReadinessStatusPanel({ status }: { status?: RefreshStatus }) {
             </div>
           </div>
         ) : null}
+
+        <DatasetFreshnessPanel status={status} />
       </div>
     </Panel>
   );
@@ -514,7 +739,7 @@ function SafeRefreshPanel({
                 ) : null}
                 <button
                   type="button"
-                  className="focus-ring mt-3 inline-flex items-center gap-2 rounded-md bg-[var(--text-primary)] px-3 py-1.5 text-[12px] font-medium text-[var(--text-inverse)] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="focus-ring prism-btn prism-btn-primary mt-3"
                   onClick={() => startRefresh(taskName)}
                   disabled={disabled}
                 >
@@ -525,6 +750,112 @@ function SafeRefreshPanel({
             );
           })}
           {!rows.length ? <EmptyState>暂无可推荐的安全刷新任务。</EmptyState> : null}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function schedulerHealthTone(health?: string) {
+  if (health === "success") {
+    return "positive";
+  }
+  if (health === "running") {
+    return "watch";
+  }
+  if (health === "failed") {
+    return "risk";
+  }
+  if (health === "stale") {
+    return "warning";
+  }
+  return "info";
+}
+
+function schedulerHealthLabel(health?: string) {
+  const labels: Record<string, string> = {
+    success: "今日成功",
+    running: "运行中",
+    failed: "今日失败",
+    stale: "旧数据",
+    missing: "未运行",
+  };
+  return labels[String(health || "")] || "待检查";
+}
+
+function SchedulerStatusPanel({ status }: { status?: RefreshStatus }) {
+  const scheduler = status?.scheduler_status;
+  const service = scheduler?.scheduler;
+  const summary = scheduler?.summary;
+  const jobs = scheduler?.jobs || [];
+  const visibleJobs = jobs.filter((job) => job.health !== "success").concat(jobs.filter((job) => job.health === "success")).slice(0, 7);
+  const hasIssues = Boolean((summary?.failed || 0) + (summary?.stale || 0) + (summary?.missing || 0));
+
+  return (
+    <Panel title="后台刷新守护" eyebrow="Scheduler">
+      <div className="surface-card p-4">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)]">
+              <RefreshCw size={18} className={service?.alive ? "text-[var(--positive)]" : "text-[var(--warning)]"} />
+            </div>
+            <div className="min-w-0">
+              <div className="font-medium text-[var(--text-primary)]">{service?.alive ? "Scheduler 正在心跳" : "Scheduler 未确认在线"}</div>
+              <div className="mt-1 truncate text-[12px] text-[var(--text-tertiary)]">
+                last tick {service?.last_tick_at || "-"} · pid {service?.pid || "-"}
+              </div>
+            </div>
+          </div>
+          <Badge tone={service?.alive && !hasIssues ? "positive" : hasIssues ? "warning" : "info"}>
+            {service?.alive && !hasIssues ? "守护正常" : hasIssues ? "需要留意" : "等待状态"}
+          </Badge>
+        </div>
+
+        <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+            <div className="text-[11px] text-[var(--text-tertiary)]">今日成功</div>
+            <div className="mt-1 text-[16px] font-semibold text-[var(--text-primary)]">{summary?.success ?? 0}</div>
+          </div>
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+            <div className="text-[11px] text-[var(--text-tertiary)]">运行中</div>
+            <div className="mt-1 text-[16px] font-semibold text-[var(--text-primary)]">{summary?.running ?? 0}</div>
+          </div>
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+            <div className="text-[11px] text-[var(--text-tertiary)]">失败</div>
+            <div className="mt-1 text-[16px] font-semibold text-[var(--text-primary)]">{summary?.failed ?? 0}</div>
+          </div>
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+            <div className="text-[11px] text-[var(--text-tertiary)]">旧/缺失</div>
+            <div className="mt-1 text-[16px] font-semibold text-[var(--text-primary)]">{(summary?.stale || 0) + (summary?.missing || 0)}</div>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          {visibleJobs.map((job) => {
+            const run = job.run || {};
+            return (
+              <div key={job.task_name || job.name} className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-medium text-[var(--text-primary)]">{job.name || run.title || job.task_name}</div>
+                    <div className="mono mt-1 text-[11px] text-[var(--text-tertiary)]">
+                      {job.cron_expr || "-"}{job.catchup_enabled ? ` · catch-up 至 ${job.catchup_until || "-"}` : ""}
+                    </div>
+                  </div>
+                  <Badge tone={schedulerHealthTone(job.health)}>{schedulerHealthLabel(job.health)}</Badge>
+                </div>
+                <div className="mt-2 text-[12px] leading-5 text-[var(--text-secondary)]">
+                  {run.finished_at || run.started_at || "今日暂无运行记录"}
+                  {run.trade_date ? ` · 数据日 ${run.trade_date}` : ""}
+                  {run.skip_reason ? ` · ${run.skip_reason}` : ""}
+                </div>
+                {job.depends_on?.length ? (
+                  <div className="mt-1 text-[11px] text-[var(--text-tertiary)]">依赖：{job.depends_on.join(" / ")}</div>
+                ) : null}
+              </div>
+            );
+          })}
+          {!visibleJobs.length ? <EmptyState>等待 scheduler 状态。</EmptyState> : null}
         </div>
       </div>
     </Panel>
@@ -723,7 +1054,7 @@ function TaskRunnerPanel({
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    className="focus-ring inline-flex items-center gap-2 rounded-md bg-[var(--text-primary)] px-3 py-1.5 text-[12px] font-medium text-[var(--text-inverse)] disabled:cursor-not-allowed disabled:opacity-50"
+                    className="focus-ring prism-btn prism-btn-primary"
                     onClick={() => startTask(task)}
                     disabled={runTask.isPending || !taskName}
                   >
@@ -734,7 +1065,7 @@ function TaskRunnerPanel({
                     <>
                       <button
                         type="button"
-                        className="focus-ring inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] px-3 py-1.5 text-[12px] text-[var(--text-secondary)]"
+                        className="focus-ring prism-btn prism-btn-secondary"
                         onClick={() => void openRunDetail(lastRun)}
                       >
                         <Eye size={13} />
@@ -742,7 +1073,7 @@ function TaskRunnerPanel({
                       </button>
                       <button
                         type="button"
-                        className="focus-ring inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] px-3 py-1.5 text-[12px] text-[var(--text-secondary)]"
+                        className="focus-ring prism-btn prism-btn-secondary"
                         onClick={() => void openRunLog(lastRun)}
                       >
                         <FileJson size={13} />
@@ -830,7 +1161,7 @@ function RecentRunsPanel({
               <div className="mt-2 flex gap-2">
                 <button
                   type="button"
-                  className="focus-ring rounded-md border border-[var(--border-subtle)] px-2 py-1 text-[11px] text-[var(--text-secondary)]"
+                  className="focus-ring prism-btn prism-btn-secondary prism-btn-sm"
                   onClick={() => onPreview({
                     open: true,
                     title: run.title || run.task_name || runId || "运行详情",
@@ -844,7 +1175,7 @@ function RecentRunsPanel({
                 {(runId || run.log_path) ? (
                   <button
                     type="button"
-                    className="focus-ring rounded-md border border-[var(--border-subtle)] px-2 py-1 text-[11px] text-[var(--text-secondary)]"
+                    className="focus-ring prism-btn prism-btn-secondary prism-btn-sm"
                     onClick={() => void openLog(run)}
                   >
                     日志
@@ -953,6 +1284,121 @@ function RefreshPolicyPanel({ status }: { status?: RefreshStatus }) {
   );
 }
 
+function captureStatusTone(status?: string) {
+  if (status === "success") {
+    return "positive" as const;
+  }
+  if (status === "failed") {
+    return "risk" as const;
+  }
+  return "info" as const;
+}
+
+function DecisionLedgerHealthPanel() {
+  const ledger = useDecisionLedgerHealth();
+  const data = ledger.data as DecisionLedgerHealthResponse | undefined;
+
+  const capture = data?.last_capture;
+  const outcome = data?.last_outcome_evaluation;
+  const corrupt = data?.corrupt_files || [];
+  const statusErrors = data?.status_errors || [];
+
+  return (
+    <Panel
+      title="Decision Ledger 健康"
+      eyebrow="Ledger"
+      action={
+        <button
+          type="button"
+          className="focus-ring inline-flex items-center gap-1.5 rounded-md border border-[var(--border-subtle)] px-2 py-1 text-[11px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+          onClick={() => void ledger.refetch()}
+        >
+          <RefreshCw size={12} className={ledger.isFetching ? "animate-spin" : ""} />
+          刷新
+        </button>
+      }
+    >
+      <div className="surface-card p-4">
+        {ledger.isError ? (
+          <ErrorState message="Decision Ledger 健康暂不可用" onRetry={() => void ledger.refetch()} />
+        ) : !data ? (
+          <EmptyState>等待 Decision Ledger 健康数据。</EmptyState>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <MetricCard label="决策总数" value={data.decisions_total} tone="info" />
+              <MetricCard label="进行中" value={data.decisions_open} tone="info" />
+              <MetricCard label="已替代" value={data.decisions_superseded} tone="warning" />
+              <MetricCard label="待评估" value={data.pending_outcomes} tone={data.pending_outcomes > 0 ? "warning" : "info"} />
+            </div>
+
+            <div className="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-[12px] font-medium text-[var(--text-primary)]">最近一次 capture</div>
+                <Badge tone={captureStatusTone(capture?.status)}>{capture?.status || "未运行"}</Badge>
+              </div>
+              <div className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">
+                {capture
+                  ? `${capture.recorded_at || "-"} · 任务 ${capture.task_name || "-"} · 新增 ${capture.captured ?? 0} · 已存在 ${capture.already_present ?? 0} · 已替代 ${capture.superseded ?? 0}`
+                  : "scheduler 尚未执行 Decision Ledger capture 任务。"}
+              </div>
+              {capture?.status === "failed" && capture.error ? (
+                <div className="mt-1 text-[11px] text-[var(--text-warn)]">{capture.error}</div>
+              ) : null}
+            </div>
+
+            <div className="mt-3 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-[12px] font-medium text-[var(--text-primary)]">最近一次 outcome 评估</div>
+                <Badge tone={captureStatusTone(outcome?.status)}>{outcome?.status || "未运行"}</Badge>
+              </div>
+              <div className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">
+                {outcome
+                  ? `${outcome.recorded_at || "-"} · provider ${outcome.provider || "-"} · 新增 ${outcome.evaluated ?? 0} · 复用 ${outcome.already_present ?? 0} · 数据缺失 ${outcome.data_issue ?? 0}`
+                  : "尚未运行 evaluate_decision_ledger.py。"}
+              </div>
+              {outcome?.status === "failed" && outcome.error ? (
+                <div className="mt-1 text-[11px] text-[var(--text-warn)]">{outcome.error}</div>
+              ) : null}
+              {outcome && (outcome.skipped_no_provider ?? 0) > 0 ? (
+                <div className="mt-1 text-[11px] text-[var(--text-tertiary)]">
+                  缺少 price provider 时跳过 {outcome.skipped_no_provider} 项；下次接入 provider 后会重新评估。
+                </div>
+              ) : null}
+            </div>
+
+            {corrupt.length ? (
+              <div className="mt-3 rounded-md border border-[var(--border-warn)] bg-[var(--surface-warn)] px-3 py-2 text-[11px] text-[var(--text-warn)]">
+                <div className="font-medium">Decisions 文件损坏 ({corrupt.length})</div>
+                <ul className="mt-1 space-y-0.5">
+                  {corrupt.slice(0, 3).map((err, index) => (
+                    <li key={index} className="truncate">
+                      {err.file}: {err.error}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {statusErrors.length ? (
+              <div className="mt-3 rounded-md border border-[var(--border-warn)] bg-[var(--surface-warn)] px-3 py-2 text-[11px] text-[var(--text-warn)]">
+                <div className="font-medium">Status 文件解析失败 ({statusErrors.length})</div>
+                <ul className="mt-1 space-y-0.5">
+                  {statusErrors.slice(0, 3).map((err, index) => (
+                    <li key={index} className="truncate">
+                      {err.kind}: {err.error}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
 export default function SettingsPage() {
   const overview = useOverview();
   const health = useHealth();
@@ -985,7 +1431,7 @@ export default function SettingsPage() {
             actions={
               <button
                 type="button"
-                className="focus-ring inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] px-3 py-2 text-[12px] text-[var(--text-secondary)]"
+                className="focus-ring prism-btn prism-btn-secondary"
                 onClick={() => {
                   void overview.refetch();
                   void health.refetch();
@@ -1012,11 +1458,18 @@ export default function SettingsPage() {
             <div className="flex flex-col gap-6">
               <ReadinessStatusPanel status={refreshStatus.data} />
               <SafeRefreshPanel status={refreshStatus.data} tasks={safeTasks} />
+              <SchedulerStatusPanel status={refreshStatus.data} />
               <RefreshPolicyPanel status={refreshStatus.data} />
               <RecentRunsPanel runs={runRows} onPreview={setPreview} />
             </div>
 
             <div className="flex flex-col gap-6">
+              <Panel title="外观" eyebrow="Display">
+                <div className="surface-card p-4">
+                  <ThemeToggle />
+                </div>
+              </Panel>
+
               <Panel title="服务状态" eyebrow="System">
                 <div className="surface-card p-4">
                   <div className="mb-4 flex items-center gap-3">
@@ -1044,6 +1497,8 @@ export default function SettingsPage() {
                 feishuDetail={feishuDetail}
                 onPreview={setPreview}
               />
+
+              <DecisionLedgerHealthPanel />
 
               <ParametersEditor />
 

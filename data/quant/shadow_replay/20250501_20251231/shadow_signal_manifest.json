@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-20T23:19:18",
+  "args": {
+    "start_date": "2025-05-01",
+    "end_date": "2025-12-31",
+    "replay_root": "data/quant/shadow_replay/20250501_20251231",
+    "top_n": 10,
+    "near_n": 20,
+    "reject_n": 10,
+    "min_lookback": 20
+  },
+  "outputs": {
+    "panel": "data/quant/shadow_replay/20250501_20251231/shadow_signal_panel.jsonl",
+    "labels": "data/quant/shadow_replay/20250501_20251231/shadow_forward_labels.jsonl",
+    "report": "data/quant/shadow_replay/20250501_20251231/shadow_signal_report.md",
+    "manifest": "data/quant/shadow_replay/20250501_20251231/shadow_signal_manifest.json"
+  },
+  "summary": {
+    "status": "completed",
+    "start_date": "2025-05-01",
+    "end_date": "2025-12-31",
+    "panel_rows": 6600,
+    "label_rows": 19800,
+    "available_labels": 19800,
+    "trade_dates_with_samples": 165,
+    "sample_codes": 783,
+    "bucket_counts": {
+      "top_observe": 1650,
+      "near_miss": 3300,
+      "risk_reject": 1650
+    },
+    "action_counts": {
+      "observe": 4950,
+      "skip": 1650
+    },
+    "setup_counts": {
+      "trend_follow": 1949,
+      "pullback_support": 259,
+      "volume_rebound": 1880,
+      "mixed_observation": 867,
+      "overheated_reject": 1645
+    },
+    "classification_counts": {
+      "invalidated": 3066,
+      "inconclusive": 10471,
+      "validated": 3183,
+      "avoided_loss": 1702,
+      "missed_opportunity": 1378
+    }
+  },
+  "input_hashes": {
+    "backfill_manifest": "3f24cdaf59fc1a60c19e597c8ea8aac51a6ec233ccef20c81dffe2b98b9361e2"
+  }
+}

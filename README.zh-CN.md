@@ -154,7 +154,9 @@ python3 scripts/scrub-secrets.py
 ./start_prism.sh
 ```
 
-默认会启动两层服务：Next 前端在 `http://127.0.0.1:8000`，FastAPI 后端 API 在 `http://127.0.0.1:8001`。
+默认会启动三层服务：Next 前端在 `http://127.0.0.1:8000`，FastAPI 后端 API 在 `http://127.0.0.1:8001`，以及 Prism 内置调度器，用来执行固定时间的刷新任务。
+调度器只会在确认的 A 股交易日运行任务，并且会跳过自己启动所在分钟内正好到点的任务，避免在 cron 时间点重启 Prism 时意外补跑。
+如果只想启动页面和 API，不启动定时刷新，可以设置 `PRISM_ENABLE_SCHEDULER=0`。
 
 几个常用页面：
 
@@ -191,6 +193,16 @@ pnpm dev -- --hostname 127.0.0.1 --port 8000
 $env:PRISM_BACKEND_ORIGIN="http://127.0.0.1:8001"
 .\node_modules\.bin\next dev --hostname 127.0.0.1 --port 8000
 ```
+
+Windows 下如果要启动 Prism 内置调度器，再开一个 PowerShell 窗口执行：
+
+```powershell
+$env:PRISM_REPO_ROOT=(Get-Location).Path
+python apps\scripts\prism_scheduler.py
+```
+
+这个调度器读取 Prism 自己的任务策略，不依赖 macOS `launchd`、Windows Task Scheduler 或 OpenClaw。
+它和 Unix 启动脚本使用同一套非交易日与启动分钟保护。
 
 如果 PowerShell 阻止虚拟环境激活，可以只对当前窗口放开脚本执行权限：
 

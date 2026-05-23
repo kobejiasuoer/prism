@@ -66,6 +66,12 @@ export const REFRESH_TASK_COPY: Record<
     summary: "只补资金流 manifest 相关轻量数据。",
     impact: "不写真实账本，不提交成交。",
   },
+  morning_warmup: {
+    title: "晨间数据预热",
+    category: "safe",
+    summary: "顺序补轻量行情和资金流。",
+    impact: "不写真实账本，不提交成交。",
+  },
   watchlist: {
     title: "自选股全流程刷新",
     category: "safe",

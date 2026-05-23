@@ -3,6 +3,17 @@ import type {
   AskFollowupResponse,
   AskResponse,
   AskSuggestResponse,
+  DecisionLedgerAttributionDraftResponse,
+  DecisionLedgerCalibrationResponse,
+  DecisionLedgerDetailResponse,
+  DecisionLedgerHealthResponse,
+  DecisionLedgerRecentResponse,
+  DecisionLedgerReviewCaseSavePayload,
+  DecisionLedgerReviewCaseSaveResponse,
+  DecisionLedgerReviewCaseWorkbench,
+  DecisionLedgerReviewCasesResponse,
+  DecisionLedgerStockResponse,
+  DecisionLedgerSummaryResponse,
   DecisionValue,
   HealthResponse,
   OpportunitiesData,
@@ -14,7 +25,9 @@ import type {
   RefreshStatus,
   RefreshTriggerResponse,
   ReviewData,
+  ReviewDetailData,
   RunItem,
+  SchedulerStatus,
   StockProfileData,
   TaskRunResponse,
   TodayData,
@@ -163,16 +176,37 @@ export const api = {
   getStockProfile(code: string) {
     return fetchJson<StockProfileData>(`/api/stock/${encodeURIComponent(code)}`);
   },
-  getReview() {
-    return fetchJson<ReviewData>("/api/review");
+  getReview(params: { baseline?: string; window?: string } = {}) {
+    const query = new URLSearchParams();
+    if (params.baseline) {
+      query.set("baseline", params.baseline);
+    }
+    if (params.window) {
+      query.set("window", params.window);
+    }
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return fetchJson<ReviewData>(`/api/review${suffix}`);
+  },
+  getReviewDetail(params: { section: string; label: string; baseline?: string; window?: string }) {
+    const query = new URLSearchParams({
+      section: params.section,
+      label: params.label,
+    });
+    if (params.baseline) {
+      query.set("baseline", params.baseline);
+    }
+    if (params.window) {
+      query.set("window", params.window);
+    }
+    return fetchJson<ReviewDetailData>(`/api/review/detail?${query.toString()}`);
   },
   ask(query: string) {
     const q = query ? `?q=${encodeURIComponent(query)}` : "";
     return fetchJson<AskResponse>(`/api/ask${q}`);
   },
-  askSuggest(query: string) {
+  askSuggest(query: string, init?: RequestInit) {
     const q = query ? `?q=${encodeURIComponent(query)}` : "";
-    return fetchJson<AskSuggestResponse>(`/api/ask/suggest${q}`);
+    return fetchJson<AskSuggestResponse>(`/api/ask/suggest${q}`, init);
   },
   askFollowup(payload: { query: string; question: string; history?: unknown[] }) {
     return fetchJson<AskFollowupResponse>("/api/ask/followup", {
@@ -228,6 +262,9 @@ export const api = {
     const auto = options.auto ? "&auto=1" : "";
     return fetchJson<RefreshStatus>(`/api/refresh/status?page=${encodeURIComponent(page)}${auto}`);
   },
+  getSchedulerStatus() {
+    return fetchJson<SchedulerStatus>("/api/scheduler/status");
+  },
   getReadinessLive() {
     return fetchJson<ReadinessPayload & { generated_at?: string; trade_date?: string }>(
       "/api/readiness/live",
@@ -244,6 +281,11 @@ export const api = {
   },
   getPortfolioAccount() {
     return fetchJson<PortfolioAccountResponse>("/api/portfolio/account");
+  },
+  refreshPortfolioQuotes() {
+    return fetchJson<PortfolioAccountResponse>("/api/portfolio/quotes/refresh", {
+      method: "POST",
+    });
   },
   setPortfolioMode(payload: {
     mode: AccountMode;
@@ -279,6 +321,17 @@ export const api = {
       json: payload,
     });
   },
+  amendPortfolioHoldingIdentity(payload: {
+    from_code: string;
+    to_code: string;
+    name?: string;
+    reason: string;
+  }) {
+    return fetchJson<PortfolioAccountResponse>("/api/portfolio/holding/identity", {
+      method: "POST",
+      json: payload,
+    });
+  },
   recordPortfolioNoFill(payload: { trade_date: string; intent_key: string; reason: string }) {
     return fetchJson<PortfolioAccountResponse>("/api/portfolio/intent/no_fill", {
       method: "POST",
@@ -295,5 +348,76 @@ export const api = {
       method: "POST",
       json: payload,
     });
+  },
+  getDecisionLedgerSummary(params: { window?: string; as_of?: string } = {}) {
+    const query = new URLSearchParams();
+    if (params.window) {
+      query.set("window", params.window);
+    }
+    if (params.as_of) {
+      query.set("as_of", params.as_of);
+    }
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return fetchJson<DecisionLedgerSummaryResponse>(`/api/decision-ledger/summary${suffix}`);
+  },
+  getDecisionLedgerRecent(params: { limit?: number } = {}) {
+    const query = new URLSearchParams();
+    if (params.limit !== undefined) {
+      query.set("limit", String(params.limit));
+    }
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return fetchJson<DecisionLedgerRecentResponse>(`/api/decision-ledger/recent${suffix}`);
+  },
+  getDecisionLedgerCalibration(params: { window?: string; as_of?: string; limit?: number } = {}) {
+    const query = new URLSearchParams();
+    if (params.window) {
+      query.set("window", params.window);
+    }
+    if (params.as_of) {
+      query.set("as_of", params.as_of);
+    }
+    if (params.limit !== undefined) {
+      query.set("limit", String(params.limit));
+    }
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return fetchJson<DecisionLedgerCalibrationResponse>(`/api/decision-ledger/calibration${suffix}`);
+  },
+  getDecisionLedgerReviewCases() {
+    return fetchJson<DecisionLedgerReviewCasesResponse>("/api/decision-ledger/review-cases");
+  },
+  getDecisionLedgerReviewCase(decisionId: string) {
+    return fetchJson<DecisionLedgerReviewCaseWorkbench>(
+      `/api/decision-ledger/review-case/${encodeURIComponent(decisionId)}`,
+    );
+  },
+  generateDecisionLedgerAttributionDraft(decisionId: string) {
+    return fetchJson<DecisionLedgerAttributionDraftResponse>(
+      `/api/decision-ledger/review-case/${encodeURIComponent(decisionId)}/attribution-draft`,
+      {
+        method: "POST",
+      },
+    );
+  },
+  saveDecisionLedgerReviewCase(decisionId: string, payload: DecisionLedgerReviewCaseSavePayload) {
+    return fetchJson<DecisionLedgerReviewCaseSaveResponse>(
+      `/api/decision-ledger/review-case/${encodeURIComponent(decisionId)}`,
+      {
+        method: "POST",
+        json: payload as unknown as Record<string, unknown>,
+      },
+    );
+  },
+  getDecisionLedgerStock(code: string) {
+    return fetchJson<DecisionLedgerStockResponse>(
+      `/api/decision-ledger/stock/${encodeURIComponent(code)}`,
+    );
+  },
+  getDecisionLedgerDetail(decisionId: string) {
+    return fetchJson<DecisionLedgerDetailResponse>(
+      `/api/decision-ledger/decision/${encodeURIComponent(decisionId)}`,
+    );
+  },
+  getDecisionLedgerHealth() {
+    return fetchJson<DecisionLedgerHealthResponse>("/api/decision-ledger/health");
   },
 };

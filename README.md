@@ -154,8 +154,8 @@ If you want to explore Prism locally, start the full stack with one command:
 ./start_prism.sh
 ```
 
-By default this starts the Next frontend at `http://127.0.0.1:8000` and the FastAPI backend API at `http://127.0.0.1:8001`.
-You can override the bind addresses with environment variables such as `PRISM_WEB_PORT`, `PRISM_BACKEND_PORT`, and `PRISM_BACKEND_ORIGIN`.
+By default this starts the Next frontend at `http://127.0.0.1:8000`, the FastAPI backend API at `http://127.0.0.1:8001`, and the Prism internal scheduler that runs the fixed refresh workflows.
+The scheduler only runs on confirmed A-share trading days and skips jobs due in its own startup minute so restarting Prism at an exact cron time does not backfill by surprise. You can override the bind addresses with environment variables such as `PRISM_WEB_PORT`, `PRISM_BACKEND_PORT`, and `PRISM_BACKEND_ORIGIN`. Set `PRISM_ENABLE_SCHEDULER=0` if you want to start only the web/API stack without scheduled refreshes.
 
 Useful routes after startup:
 
@@ -192,6 +192,16 @@ If `pnpm` is not available, use `npm install` in `apps\web`, then run the local 
 $env:PRISM_BACKEND_ORIGIN="http://127.0.0.1:8001"
 .\node_modules\.bin\next dev --hostname 127.0.0.1 --port 8000
 ```
+
+To run Prism's internal scheduler on Windows, keep one additional PowerShell window open:
+
+```powershell
+$env:PRISM_REPO_ROOT=(Get-Location).Path
+python apps\scripts\prism_scheduler.py
+```
+
+The scheduler uses the same task policy as the rest of Prism; it does not depend on macOS `launchd`, Windows Task Scheduler, or OpenClaw.
+It uses the same non-trading-day and startup-minute guards as the Unix startup script.
 
 If PowerShell blocks virtualenv activation, enable scripts for the current shell only:
 

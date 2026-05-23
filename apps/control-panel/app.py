@@ -16,8 +16,10 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGES_ROOT = REPO_ROOT / "packages"
-if str(PACKAGES_ROOT) not in sys.path:
-    sys.path.insert(0, str(PACKAGES_ROOT))
+SCRIPTS_ROOT = REPO_ROOT / "apps" / "scripts"
+for import_path in (str(PACKAGES_ROOT), str(SCRIPTS_ROOT)):
+    if import_path not in sys.path:
+        sys.path.insert(0, import_path)
 
 import stock_parameter_config as parameter_config
 
@@ -57,10 +59,19 @@ from control_panel.dashboard_data import (
     record_reconciliation,
     set_account_mode,
     TASK_RUN_REPOSITORY,
+    amend_holding_identity,
     update_today_action_decision,
 )
-from watchlist_registry import archive_watchlist_stock, restore_watchlist_stock, upsert_watchlist_stock
+from watchlist_registry import archive_watchlist_stock, fetch_stock_name, lookup_stock_name_local, restore_watchlist_stock, upsert_watchlist_stock
+from stock_name_backfill import (
+    needs_backfill as _stock_name_needs_backfill,
+    request_name_backfill as _request_stock_name_backfill,
+    start_worker as _start_stock_name_backfill_worker,
+    stop_worker as _stop_stock_name_backfill_worker,
+)
+from source_budget import build_source_budget_payload
 from refresh_policy import (
+    CRON_POLICIES,
     PAGE_POLICIES,
     TASK_POLICIES,
     active_auto_windows,
@@ -73,20 +84,31 @@ from refresh_policy import (
     page_policy,
     pick_recommended_task as policy_pick_recommended_task,
     task_family,
+    task_conflict_is_running,
     task_is_running,
     task_policy,
     validate_cron_policies,
 )
 from readiness import expected_trade_date as readiness_expected_trade_date
+from scheduled_run_state import (
+    STATE_PATH as SCHEDULER_STATE_PATH,
+    load_scheduler_state,
+    run_state_for_task,
+    scheduler_alive,
+)
+from trading_calendar import calendar_status
 from prism_data.freshness import update_manifest_freshness
 from prism_data.repositories import DatasetRepository
 from prism_data.utils import default_dataset_repository_root
+
+import decision_ledger
 
 
 TASK_RUNNER = INVEST_FLOW_ROOT / "scripts" / "control_panel_task_runner.py"
 PREVIEW_MAX_BYTES = 220_000
 WATCHLIST_REFRESH_COMMAND = ["bash", "apps/scripts/run_watchlist_refresh.sh"]
 LIGHTWEIGHT_REFRESH_COMMAND = [sys.executable, "apps/scripts/refresh_lightweight_data.py"]
+MORNING_WARMUP_COMMAND = [sys.executable, "apps/scripts/run_morning_warmup.py"]
 PARAMETERS_PATH = STOCK_ANALYZER_ROOT / "config" / "stocks.json"
 WEB_ORIGIN = os.environ.get("PRISM_WEB_ORIGIN", "http://127.0.0.1:8000").rstrip("/")
 TASK_NAME_ALIASES = {
@@ -94,6 +116,29 @@ TASK_NAME_ALIASES = {
 }
 
 app = FastAPI(title="Prism Control", version="0.1.0")
+
+
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def _prism_lifespan(_app: FastAPI):
+    # Best-effort background worker that backfills friendly stock names
+    # asynchronously so account-write paths stay non-blocking.
+    try:
+        _start_stock_name_backfill_worker()
+    except Exception:
+        pass
+    try:
+        yield
+    finally:
+        try:
+            _stop_stock_name_backfill_worker()
+        except Exception:
+            pass
+
+
+app.router.lifespan_context = _prism_lifespan
 
 
 def allowed_cors_origins() -> list[str]:
@@ -584,6 +629,40 @@ def parse_bool_value(value: Any, default: bool = False) -> bool:
     return default
 
 
+def resolve_stock_display_name(code: Any, name: Any = None) -> str:
+    raw_code = str(code or "").strip().lower()
+    provided_name = str(name or "").strip()
+    code_like_names = {raw_code}
+    if len(raw_code) == 8 and raw_code[:2].isalpha():
+        code_like_names.add(raw_code[2:])
+
+    if provided_name and provided_name.lower() not in code_like_names:
+        return provided_name
+
+    bare_code = raw_code[2:] if len(raw_code) == 8 and raw_code[:2].isalpha() else raw_code
+    if len(bare_code) == 6 and bare_code.isdigit():
+        # Local-only lookup. The account-write request path must NOT block
+        # on a synchronous external quote roundtrip just to attach a
+        # friendlier display name; if local sources can't resolve it, fall
+        # through to the bare code and let an async backfill upgrade later.
+        try:
+            local_book = load_account_book()
+        except Exception:
+            local_book = None
+        local = lookup_stock_name_local(bare_code, account_book=local_book)
+        if local:
+            return local
+        # Fell through — enqueue an async backfill so the friendly name
+        # eventually lands in account_book/watchlist without blocking the
+        # current request.
+        try:
+            _request_stock_name_backfill(bare_code)
+        except Exception:
+            pass
+
+    return provided_name or bare_code or raw_code
+
+
 REFRESH_STATE_PATH = CONTROL_PANEL_STATE_DIR / "refresh_state.json"
 REFRESH_PAGE_CONFIG: dict[str, dict[str, Any]] = {
     page: policy.as_dict() for page, policy in PAGE_POLICIES.items()
@@ -647,6 +726,15 @@ def resolve_refresh_task(task_name: str) -> dict[str, Any]:
             "task_name": normalized,
             "title": policy.title if policy else ("轻量行情补刷" if kind == "quotes" else "轻量资金流补刷"),
             "command": [*LIGHTWEIGHT_REFRESH_COMMAND, "--kind", kind],
+            "cwd": str(WORKSPACE_ROOT),
+            "send_to_feishu": False,
+        }
+
+    if normalized == "morning_warmup":
+        return {
+            "task_name": normalized,
+            "title": policy.title if policy else "晨间数据预热",
+            "command": MORNING_WARMUP_COMMAND,
             "cwd": str(WORKSPACE_ROOT),
             "send_to_feishu": False,
         }
@@ -778,6 +866,8 @@ def _readiness_freshness_rows(
                 ),
                 "trade_date": item.get("trade_date"),
                 "stale_reasons": list(item.get("stale_reasons") or []),
+                "degraded": bool(item.get("degraded")),
+                "degradation_reasons": list(item.get("degradation_reasons") or []),
             }
         )
     return rows
@@ -891,6 +981,14 @@ def _dataset_manifest_freshness_rows(*, expected_date: str, now: datetime) -> li
                 "fallback_used": bool(manifest.get("fallback_used")),
                 "live_small_allowed": bool(manifest.get("live_small_allowed")),
                 "manifest_path": manifest.get("manifest_path"),
+                "source_lane": manifest.get("source_lane"),
+                "decision_scope": manifest.get("decision_scope"),
+                "authority_provider": manifest.get("authority_provider"),
+                "target_authority_provider": manifest.get("target_authority_provider"),
+                "audit_providers": list(manifest.get("audit_providers") or []),
+                "source_authority_ready": bool(manifest.get("source_authority_ready", True)),
+                "formal_decision_allowed": bool(manifest.get("formal_decision_allowed")),
+                "authority_flags": list(manifest.get("authority_flags") or []),
                 "dataset_manifest": True,
             }
         )
@@ -986,7 +1084,7 @@ def _build_readiness_recovery_steps(
         step_cooldown = page_cooldown_state(page=page, task_name=task_name, state=state)
         cooldown_remaining = int(step_cooldown.get("remaining_seconds") or 0)
         status = "ready"
-        if task_is_running(task_name, running):
+        if task_conflict_is_running(task_name, running):
             status = "running"
         elif cooldown_remaining > 0:
             status = "cooldown"
@@ -1011,6 +1109,90 @@ def _build_readiness_recovery_steps(
             }
         )
     return steps
+
+
+def _public_run_state(task_name: str, *, now: datetime) -> dict[str, Any]:
+    state = run_state_for_task(task_name, now=now)
+    return {
+        "task_name": state.get("task_name") or task_name,
+        "status": state.get("status") or "missing",
+        "same_day": bool(state.get("same_day")),
+        "today_success": bool(state.get("today_success")),
+        "running": bool(state.get("running")),
+        "failed_today": bool(state.get("failed_today")),
+        "missing": bool(state.get("missing")),
+        "stale_latest": bool(state.get("stale_latest")),
+        "trade_date": state.get("trade_date") or "",
+        "expected_trade_date": state.get("expected_trade_date") or "",
+        "run_id": state.get("run_id") or "",
+        "title": state.get("title") or task_name,
+        "started_at": state.get("started_at") or "",
+        "finished_at": state.get("finished_at") or "",
+        "exit_code": state.get("exit_code"),
+        "skip_reason": state.get("skip_reason") or "",
+        "log_path": state.get("log_path") or "",
+        "meta_path": state.get("meta_path") or "",
+    }
+
+
+def _job_health(run_state: dict[str, Any]) -> str:
+    if run_state.get("running"):
+        return "running"
+    if run_state.get("today_success"):
+        return "success"
+    if run_state.get("failed_today"):
+        return "failed"
+    if run_state.get("stale_latest"):
+        return "stale"
+    return "missing"
+
+
+def build_scheduler_status_payload(*, now: datetime | None = None) -> dict[str, Any]:
+    current = now or datetime.now()
+    state = load_scheduler_state()
+    alive = scheduler_alive(state, now=current)
+    catchup_fired = state.get("catchup_fired") if isinstance(state.get("catchup_fired"), dict) else {}
+    retry_counts = state.get("retry_counts") if isinstance(state.get("retry_counts"), dict) else {}
+    day = current.strftime("%Y-%m-%d")
+    jobs: list[dict[str, Any]] = []
+    counts = {"total": 0, "success": 0, "running": 0, "failed": 0, "stale": 0, "missing": 0}
+    for policy in CRON_POLICIES:
+        run_state = _public_run_state(policy.task_name, now=current)
+        health = _job_health(run_state)
+        counts["total"] += 1
+        counts[health] = counts.get(health, 0) + 1
+        key = f"{day}:{policy.task_name}"
+        jobs.append(
+            {
+                "task_name": policy.task_name,
+                "name": policy.name,
+                "cron_expr": policy.cron_expr,
+                "catchup_enabled": bool(policy.catchup_enabled),
+                "catchup_until": policy.catchup_until,
+                "catchup_fired": catchup_fired.get(key) or None,
+                "retry_attempts": int(policy.retry_attempts or 0),
+                "retry_delay_seconds": int(policy.retry_delay_seconds or 0),
+                "retry_count_today": int(retry_counts.get(key) or 0),
+                "depends_on": list(policy.depends_on),
+                "health": health,
+                "run": run_state,
+            }
+        )
+    return {
+        "server_time": current.strftime("%Y-%m-%d %H:%M:%S"),
+        "calendar": calendar_status(current),
+        "scheduler": {
+            "alive": alive,
+            "pid": state.get("pid"),
+            "started_at": state.get("started_at") or "",
+            "last_tick_at": state.get("last_tick_at") or "",
+            "state_path": str(SCHEDULER_STATE_PATH),
+            "send_to_feishu": bool(state.get("send_to_feishu")),
+            "fire_on_start": bool(state.get("fire_on_start")),
+        },
+        "summary": counts,
+        "jobs": jobs,
+    }
 
 
 def build_refresh_status_payload(
@@ -1197,6 +1379,7 @@ def build_refresh_status_payload(
             "task": policy.as_dict() if policy else {},
         },
         "policy_catalog": build_policy_payload(),
+        "scheduler_status": build_scheduler_status_payload(now=current),
         "active_auto_windows": active_auto_windows(current),
         "snapshot_signature": snapshot_signature,
     }
@@ -1418,6 +1601,24 @@ async def api_today_action_decision(request: Request) -> JSONResponse:
         ),
         None,
     )
+
+    # ``watch`` / ``skip`` are real operator decisions that belong in the
+    # ledger.  ``done`` is intentionally NOT translated into a filled
+    # event -- a fill needs price + quantity, which Portfolio writeback
+    # supplies.  ``pending`` is an undo of the local action queue
+    # checklist state, not a decision.
+    if decision in {"watch", "skip"}:
+        parsed_code = key.split(":", 1)[1].strip() if ":" in key else ""
+        ledger_result = decision_ledger.append_execution_event_for_writeback(
+            trade_date=trade_date,
+            code=parsed_code,
+            status=decision,
+            today_action_key=key,
+            source="today_decision_writeback",
+        )
+    else:
+        ledger_result = {"attached": False, "reason": "ineligible"}
+
     return JSONResponse(
         {
             "ok": True,
@@ -1431,6 +1632,7 @@ async def api_today_action_decision(request: Request) -> JSONResponse:
                 "updated_at": "",
             },
             "counts": ((today_view.get("action_queue") or {}).get("counts") or {}),
+            "ledger": ledger_result,
         }
     )
 
@@ -1596,9 +1798,43 @@ async def api_refresh_policy() -> JSONResponse:
     return JSONResponse(build_policy_payload())
 
 
+@app.get("/api/scheduler/status")
+async def api_scheduler_status() -> JSONResponse:
+    return JSONResponse(build_scheduler_status_payload())
+
+
 @app.get("/api/cron/validate")
 async def api_cron_validate() -> JSONResponse:
     return JSONResponse(validate_cron_policies())
+
+
+@app.get("/api/source-budget")
+async def api_source_budget() -> JSONResponse:
+    """Static business profile registry for all Prism data sources.
+
+    Read-only. Does not trigger any task or fetch. Useful for capability
+    diagnostics and future UI panels.
+    """
+    return JSONResponse(build_source_budget_payload())
+
+
+@app.get("/api/capabilities")
+async def api_capabilities() -> JSONResponse:
+    """Read-only capability matrix for the current readiness payload.
+
+    Returns 6 investment capabilities (observe/review/approve/trade/notify/
+    ledger_capture) translated from the engineering-language readiness into
+    operator-facing status, why_not and degraded_path. Strictly read-only.
+    """
+    today_view = build_today_view()
+    readiness = today_view.get("readiness") or {}
+    return JSONResponse(
+        {
+            "checked_at": readiness.get("checked_at"),
+            "session": readiness.get("session"),
+            "capabilities": readiness.get("capabilities", {}),
+        }
+    )
 
 
 @app.get("/api/readiness/live")
@@ -1628,6 +1864,8 @@ async def api_readiness_live() -> JSONResponse:
             "source_freshness": readiness.get("source_freshness", []),
             "quality_freshness": readiness.get("quality_freshness", []),
             "recommended_tasks": readiness.get("recommended_tasks", []),
+            "source_states": readiness.get("source_states", {}),
+            "capabilities": readiness.get("capabilities", {}),
         }
     )
 
@@ -1657,7 +1895,7 @@ async def api_refresh_trigger(request: Request) -> JSONResponse:
     state = load_refresh_state()
     cooldown = page_cooldown_state(page=page, task_name=task_name, state=state)
     remaining = int(cooldown.get("remaining_seconds") or 0)
-    if task_is_running(task_name, running):
+    if task_conflict_is_running(task_name, running):
         raise HTTPException(status_code=409, detail="同类刷新任务仍在运行，请稍后再试。")
     if remaining > 0 and not force:
         raise HTTPException(status_code=429, detail=f"刷新冷却中，请 {remaining} 秒后再试。")
@@ -2039,6 +2277,13 @@ async def api_portfolio_account() -> JSONResponse:
     return JSONResponse(build_portfolio_account_view())
 
 
+@app.post("/api/portfolio/quotes/refresh")
+async def api_portfolio_quotes_refresh() -> JSONResponse:
+    """Refresh market quotes for current open positions and recompute P/L."""
+
+    return JSONResponse(build_portfolio_account_view(refresh_quotes=True))
+
+
 @app.post("/api/portfolio/mode")
 async def api_portfolio_mode(request: Request) -> JSONResponse:
     try:
@@ -2089,6 +2334,7 @@ async def api_portfolio_fill(request: Request) -> JSONResponse:
     except Exception:
         payload = {}
 
+    resolved_name = resolve_stock_display_name(payload.get("code"), payload.get("name"))
     try:
         record_fill(
             trade_date=payload.get("trade_date"),
@@ -2097,10 +2343,60 @@ async def api_portfolio_fill(request: Request) -> JSONResponse:
             qty=payload.get("qty"),
             price=payload.get("price"),
             fees=payload.get("fees"),
-            name=payload.get("name"),
+            name=resolved_name,
             broker_ref=payload.get("broker_ref"),
             intent_key=payload.get("intent_key"),
             note=payload.get("note"),
+        )
+    except AccountBookError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    qty_val = payload.get("qty")
+    price_val = payload.get("price")
+    amount_val: float | None = None
+    try:
+        if qty_val is not None and price_val is not None:
+            amount_val = round(float(qty_val) * float(price_val), 2)
+    except (TypeError, ValueError):
+        amount_val = None
+
+    ledger_result = decision_ledger.append_execution_event_for_writeback(
+        trade_date=payload.get("trade_date"),
+        code=payload.get("code"),
+        status="filled",
+        side=str(payload.get("side") or "").lower() or None,
+        price=payload.get("price"),
+        quantity=payload.get("qty"),
+        amount=amount_val,
+        note=str(payload.get("note") or ""),
+        intent_key=payload.get("intent_key"),
+        source="portfolio_writeback",
+    )
+    view = build_portfolio_account_view()
+    view["ledger"] = ledger_result
+    return JSONResponse(view)
+
+
+@app.post("/api/portfolio/holding/identity")
+async def api_portfolio_holding_identity(request: Request) -> JSONResponse:
+    try:
+        payload: dict[str, Any] = await request.json()
+    except Exception:
+        payload = {}
+
+    from_code = str(payload.get("from_code") or "").strip()
+    to_code = str(payload.get("to_code") or "").strip()
+    reason = str(payload.get("reason") or "").strip()
+    if not from_code or not to_code:
+        raise HTTPException(status_code=400, detail="缺少原代码或新代码")
+
+    resolved_name = resolve_stock_display_name(to_code, payload.get("name"))
+    try:
+        amend_holding_identity(
+            from_code=from_code,
+            to_code=to_code,
+            name=resolved_name,
+            reason=reason,
         )
     except AccountBookError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -2124,7 +2420,19 @@ async def api_portfolio_intent_no_fill(request: Request) -> JSONResponse:
     except AccountBookError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    return JSONResponse(build_portfolio_account_view())
+    # The intent payload does not carry an explicit ``code``; we rely on
+    # ``intent_key`` matching the captured decision's ``source.action_key``.
+    ledger_result = decision_ledger.append_execution_event_for_writeback(
+        trade_date=payload.get("trade_date"),
+        code=None,
+        status="no_fill",
+        note=str(payload.get("reason") or ""),
+        intent_key=payload.get("intent_key"),
+        source="portfolio_writeback",
+    )
+    view = build_portfolio_account_view()
+    view["ledger"] = ledger_result
+    return JSONResponse(view)
 
 
 @app.post("/api/portfolio/reconcile")
@@ -2145,3 +2453,282 @@ async def api_portfolio_reconcile(request: Request) -> JSONResponse:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return JSONResponse(build_portfolio_account_view())
+
+
+# ---------------------------------------------------------------- decision ledger
+
+
+@app.post("/api/decision-ledger/capture")
+async def api_decision_ledger_capture(request: Request) -> JSONResponse:
+    """Capture today's action queue into the ledger.
+
+    Callers may post a ``today_view`` body to capture an exact snapshot
+    (used by tests and by tasks that already assembled the view).  When
+    the body omits ``today_view``, we rebuild via ``build_today_view``
+    so an operator can hit the endpoint directly without coordinating
+    with the dashboard route.
+    """
+
+    try:
+        payload: dict[str, Any] = await request.json()
+    except Exception:
+        payload = {}
+
+    today_view = payload.get("today_view")
+    if today_view is None:
+        today_view = build_today_view()
+
+    try:
+        summary = decision_ledger.capture_today_action_queue(today_view)
+    except decision_ledger.DecisionLedgerError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return JSONResponse(summary)
+
+
+# ----------------------------------------------- decision ledger read-only API
+#
+# These endpoints are pure queries -- they never mutate the ledger, never
+# trigger capture, never hit the network.  Corrupt files surface either
+# in an ``errors`` field (for the scan-style endpoints) or as a 5xx
+# response (for the targeted detail endpoint) so an operator notices.
+
+
+import re as _re  # local alias to avoid clashing with anything below
+
+_DECISION_ID_PREFIX_RE = _re.compile(r"^\d{4}-\d{2}-\d{2}:")
+
+
+def _parse_window_days(value: Any) -> int:
+    """Parse ``?window=7d`` / ``?window=7`` / int into a positive int.
+
+    Defaults to 7 on missing / unparseable input rather than raising:
+    the API stays usable without forcing the caller to hand-craft the
+    parameter.
+    """
+
+    if value is None:
+        return 7
+    text = str(value).strip().lower()
+    if text.endswith("d"):
+        text = text[:-1]
+    try:
+        n = int(text)
+    except (TypeError, ValueError):
+        return 7
+    return max(1, n)
+
+
+def _parse_limit(value: Any, *, default: int = 20) -> int:
+    if value is None:
+        return default
+    try:
+        n = int(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+    return max(1, n)
+
+
+@app.get("/api/decision-ledger/summary")
+async def api_decision_ledger_summary(request: Request) -> JSONResponse:
+    """Aggregate ledger counts over a trailing ``window`` (default 7d).
+
+    Query params:
+
+    * ``window`` -- ``7d`` / ``14d`` / integer days (default ``7``).
+    * ``as_of`` -- end date in ``YYYY-MM-DD`` (default today).
+
+    The response shape is stable; an empty ledger yields zeroed
+    counters.  Corrupt files surface under ``errors`` so the dashboard
+    can show a banner without losing the rest of the data.
+    """
+
+    window_days = _parse_window_days(request.query_params.get("window"))
+    as_of = request.query_params.get("as_of") or None
+
+    summary = decision_ledger.summarize_window(
+        window_days=window_days,
+        as_of=as_of,
+    )
+    return JSONResponse(summary)
+
+
+@app.get("/api/decision-ledger/recent")
+async def api_decision_ledger_recent(request: Request) -> JSONResponse:
+    """Most-recent decisions plus their latest execution / outcome events.
+
+    Query params:
+
+    * ``limit`` -- 1..500 (default 20).  Invalid input is clamped, not
+      rejected -- a dashboard should not break because a URL got
+      hand-edited.
+    """
+
+    limit = _parse_limit(request.query_params.get("limit"), default=20)
+    payload = decision_ledger.list_recent_decisions(limit=limit)
+    return JSONResponse(payload)
+
+
+@app.get("/api/decision-ledger/calibration")
+async def api_decision_ledger_calibration(request: Request) -> JSONResponse:
+    """Review-oriented ledger projection for calibration work.
+
+    This endpoint does not mutate the ledger.  It groups decisions by
+    lane/action, highlights failed or questionable outcomes, and returns
+    small suggestion cards so Review can guide the operator toward the
+    next useful inspection instead of dumping another raw list.
+    """
+
+    window_days = _parse_window_days(request.query_params.get("window") or "20d")
+    as_of = request.query_params.get("as_of") or None
+    limit = _parse_limit(request.query_params.get("limit"), default=12)
+    payload = decision_ledger.build_calibration_review(
+        window_days=window_days,
+        as_of=as_of,
+        limit=limit,
+    )
+    return JSONResponse(payload)
+
+
+@app.get("/api/decision-ledger/review-cases")
+async def api_decision_ledger_review_cases() -> JSONResponse:
+    """Saved Review Cases plus same-pattern learning clusters."""
+
+    try:
+        payload = decision_ledger.list_review_cases()
+    except decision_ledger.DecisionLedgerError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return JSONResponse(payload)
+
+
+@app.get("/api/decision-ledger/review-case/{decision_id}")
+async def api_decision_ledger_review_case(decision_id: str) -> JSONResponse:
+    """Single-decision Review Case workbench.
+
+    The payload combines the immutable DecisionRecord, the current
+    learning-card projection, any saved Review Case, and same-pattern
+    cases so the frontend can render a complete attribution workspace.
+    """
+
+    try:
+        payload = decision_ledger.build_review_case_workbench(decision_id)
+    except decision_ledger.DecisionLedgerError as exc:
+        message = str(exc)
+        status = 404 if "decision not found" in message else 400
+        raise HTTPException(status_code=status, detail=message) from exc
+    return JSONResponse(payload)
+
+
+@app.post("/api/decision-ledger/review-case/{decision_id}/attribution-draft")
+async def api_decision_ledger_attribution_draft(decision_id: str) -> JSONResponse:
+    """Generate an AI attribution draft without saving final attribution."""
+
+    try:
+        draft = decision_ledger.build_attribution_draft(decision_id)
+    except decision_ledger.DecisionLedgerError as exc:
+        message = str(exc)
+        status = 404 if "decision not found" in message else 400
+        raise HTTPException(status_code=status, detail=message) from exc
+    return JSONResponse({"ok": True, "draft": draft})
+
+
+@app.post("/api/decision-ledger/review-case/{decision_id}")
+async def api_decision_ledger_save_review_case(decision_id: str, request: Request) -> JSONResponse:
+    """Save structured attribution for one Decision Ledger record."""
+
+    payload = await request.json()
+    try:
+        review_case = decision_ledger.save_review_case(decision_id, payload)
+        workbench = decision_ledger.build_review_case_workbench(decision_id)
+    except decision_ledger.DecisionLedgerError as exc:
+        message = str(exc)
+        status = 404 if "decision not found" in message else 400
+        raise HTTPException(status_code=status, detail=message) from exc
+    return JSONResponse({"ok": True, "review_case": review_case, "workbench": workbench})
+
+
+@app.get("/api/decision-ledger/stock/{code}")
+async def api_decision_ledger_stock(code: str) -> JSONResponse:
+    """Decision history for one stock code.
+
+    Accepts ``600690`` / ``sh600690`` / ``sz000001`` forms; returns the
+    canonical prefixed form in the response so downstream caches can
+    key off it.  Garbage codes get a 400 (not silently empty) so a
+    client typo is loud.
+    """
+
+    canonical = decision_ledger.normalize_stock_code(code)
+    if not canonical:
+        raise HTTPException(status_code=400, detail=f"invalid stock code: {code!r}")
+
+    records, errors = decision_ledger.scan_all_decisions()
+    matched = [
+        r for r in records
+        if (r.get("stock") or {}).get("code") == canonical
+    ]
+    matched.sort(
+        key=lambda r: (
+            str(r.get("trade_date") or ""),
+            str(r.get("decision_id") or ""),
+        ),
+        reverse=True,
+    )
+    items = [decision_ledger._decision_summary_card(r) for r in matched]
+    return JSONResponse(
+        {
+            "code": canonical,
+            "items": items,
+            "count": len(items),
+            "errors": errors,
+        }
+    )
+
+
+@app.get("/api/decision-ledger/decision/{decision_id}")
+async def api_decision_ledger_detail(decision_id: str) -> JSONResponse:
+    """Raw DecisionRecord for one decision_id.
+
+    * 400 -- id doesn't start with ``YYYY-MM-DD:`` (malformed).
+    * 404 -- id is well-formed but no record matches.
+    * 500 -- the file that should host the record is corrupt; the
+      detail message points at the ledger error so the operator can
+      fix the file.
+    """
+
+    if not _DECISION_ID_PREFIX_RE.match(decision_id):
+        raise HTTPException(
+            status_code=400,
+            detail=f"malformed decision_id: {decision_id!r}",
+        )
+
+    try:
+        record = decision_ledger.load_decision(decision_id)
+    except decision_ledger.DecisionLedgerError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"ledger error reading {decision_id!r}: {exc}",
+        ) from exc
+
+    if record is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"decision not found: {decision_id!r}",
+        )
+
+    return JSONResponse(record)
+
+
+@app.get("/api/decision-ledger/health")
+async def api_decision_ledger_health() -> JSONResponse:
+    """Surface Decision Ledger capture + evaluation health for Settings.
+
+    Combines the last capture status, the last outcome-evaluation
+    status, any corrupt decisions/status files, and a coarse pending
+    outcome counter into a single payload.  Always returns 200 -- the
+    shape is stable, missing sections degrade to ``null`` so the UI can
+    show "never run yet" without distinguishing it from "endpoint
+    failed".
+    """
+
+    payload = decision_ledger.build_ledger_health()
+    return JSONResponse(payload)

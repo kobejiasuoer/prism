@@ -16,7 +16,7 @@ export function MetricCard({
     <div className={cn("surface-card min-h-[116px] p-4", className)}>
       <div className="truncate text-[11px] font-medium uppercase text-[var(--text-tertiary)]">{label}</div>
       <div
-        className="mt-2 min-w-0 truncate text-[28px] font-bold leading-none"
+        className="mt-2 min-w-0 break-words text-[clamp(20px,2.1vw,28px)] font-bold leading-tight"
         style={{ color: color ?? "var(--text-primary)" }}
       >
         {value}

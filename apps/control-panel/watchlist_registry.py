@@ -6,7 +6,7 @@ import sys
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 
 SKILL_ROOT = Path(__file__).resolve().parent
@@ -83,7 +83,7 @@ def fetch_stock_name(code: Any, market: str | None = None, timeout: float = 6.0)
     return name
 
 
-def search_sina_stock_suggestions(query: str, limit: int = 8, timeout: float = 6.0) -> list[dict[str, Any]]:
+def search_sina_stock_suggestions(query: str, limit: int = 8, timeout: float = 2.5) -> list[dict[str, Any]]:
     normalized_query = str(query or "").strip()
     if not normalized_query:
         return []
@@ -102,6 +102,7 @@ def search_sina_stock_suggestions(query: str, limit: int = 8, timeout: float = 6
             trade_date=_trade_date_today(),
             key=cache_key,
             timeout=timeout,
+            retries=0,
         )
     except Exception:
         return []
@@ -431,6 +432,65 @@ def restore_watchlist_stock(code: Any, *, path: str | Path | None = None) -> dic
     }
 
 
+def lookup_stock_name_local(
+    code: Any,
+    *,
+    account_book: Mapping[str, Any] | None = None,
+) -> str | None:
+    """Resolve a friendly stock name using only locally-available sources.
+
+    The account-write request path must not block on a synchronous external
+    quote roundtrip just to attach a display name. This helper walks, in
+    order: the watchlist config, the mtime-memoized historical catalog, and
+    (when supplied) the account book's recent fills. Returns ``None`` when
+    no local source supplies a non-trivial name.
+    """
+    normalized = normalize_stock_code(code)
+    if not normalized or not CODE_PATTERN.fullmatch(normalized):
+        return None
+
+    def _clean(value: Any) -> str | None:
+        text = str(value or "").strip()
+        if not text or text == normalized:
+            return None
+        return text
+
+    try:
+        cfg = load_watchlist_config()
+        for stock in cfg.get("stocks") or []:
+            if normalize_stock_code(stock.get("code")) != normalized:
+                continue
+            name = _clean(stock.get("name"))
+            if name:
+                return name
+    except Exception:
+        pass
+
+    try:
+        for item in list_historical_stock_catalog():
+            if str(item.get("code") or "").strip() != normalized:
+                continue
+            name = _clean(item.get("name"))
+            if name:
+                return name
+    except Exception:
+        pass
+
+    if isinstance(account_book, Mapping):
+        fills = account_book.get("fills")
+        if isinstance(fills, list):
+            for fill in reversed(fills):
+                if not isinstance(fill, Mapping):
+                    continue
+                if str(fill.get("code") or "").strip() != normalized:
+                    continue
+                name = _clean(fill.get("name"))
+                if name:
+                    return name
+
+    return None
+
+
 __all__ = [
     "WATCHLIST_CONFIG_PATH",
     "archive_watchlist_stock",
@@ -443,6 +503,7 @@ __all__ = [
     "list_watchlist_stocks",
     "load_active_watchlist_codes",
     "load_watchlist_config",
+    "lookup_stock_name_local",
     "normalize_stock_code",
     "restore_watchlist_stock",
     "save_watchlist_config",

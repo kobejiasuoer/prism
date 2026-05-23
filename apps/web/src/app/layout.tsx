@@ -17,7 +17,7 @@ const themeInitScript = `
   const root = document.documentElement;
   try {
     const stored = window.localStorage.getItem(storageKey);
-    const mode = validModes.includes(stored) ? stored : "system";
+    const mode = validModes.includes(stored) ? stored : "light";
     const prefersDark =
       typeof window.matchMedia === "function" &&
       window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -26,7 +26,7 @@ const themeInitScript = `
     root.dataset.theme = resolved;
     root.style.colorScheme = resolved;
   } catch {
-    root.dataset.themeMode = "system";
+    root.dataset.themeMode = "light";
     root.dataset.theme = "light";
     root.style.colorScheme = "light";
   }

@@ -56,7 +56,9 @@ from prism_storage import AppStateRepository  # type: ignore
 __all__ = [
     "ACCOUNT_MODES",
     "AccountBookError",
+    "apply_name_backfill",
     "compute_account_view",
+    "amend_holding_identity",
     "default_state_path",
     "load_account_book",
     "record_cash_adjustment",
@@ -179,6 +181,29 @@ def _normalize_fees(value: Any) -> float:
     return _round_money(fees)
 
 
+def _default_position_plan_rules() -> dict[str, float | int]:
+    return {
+        "warning_loss_pct": -3.0,
+        "defense_reduce_loss_pct": -5.0,
+        "clear_loss_pct": -8.0,
+        "profit_take_pct": 8.0,
+        "max_hold_days": 5,
+        "min_progress_pct": 1.0,
+    }
+
+
+def _default_position_plan_levels(avg_cost: float, rules: Mapping[str, Any] | None = None) -> dict[str, float]:
+    active_rules = dict(rules or _default_position_plan_rules())
+    return {
+        "warning_price": _round_money(avg_cost * (1 + float(active_rules["warning_loss_pct"]) / 100)),
+        "defense_reduce_price": _round_money(avg_cost * (1 + float(active_rules["defense_reduce_loss_pct"]) / 100)),
+        "clear_exit_price": _round_money(avg_cost * (1 + float(active_rules["clear_loss_pct"]) / 100)),
+        "profit_take_price": _round_money(avg_cost * (1 + float(active_rules["profit_take_pct"]) / 100)),
+        "reclaim_price": _round_money(avg_cost),
+        "time_fail_price": _round_money(avg_cost * (1 + float(active_rules["min_progress_pct"]) / 100)),
+    }
+
+
 def _empty_state() -> dict[str, Any]:
     return {
         "version": 1,
@@ -194,6 +219,8 @@ def _empty_state() -> dict[str, Any]:
         "cash_adjustments": [],
         "reconciliations": [],
         "no_fill_intents": [],
+        "position_plans": [],
+        "identity_corrections": [],
         "mode_history": [],
         "updated_at": "",
     }
@@ -229,6 +256,12 @@ def _coerce_state(data: Any) -> dict[str, Any]:
     ]
     state["no_fill_intents"] = [
         dict(item) for item in (data.get("no_fill_intents") or []) if isinstance(item, Mapping)
+    ]
+    state["position_plans"] = [
+        dict(item) for item in (data.get("position_plans") or []) if isinstance(item, Mapping)
+    ]
+    state["identity_corrections"] = [
+        dict(item) for item in (data.get("identity_corrections") or []) if isinstance(item, Mapping)
     ]
     state["mode_history"] = [
         dict(item) for item in (data.get("mode_history") or []) if isinstance(item, Mapping)
@@ -377,6 +410,86 @@ def record_cash_adjustment(
     return _persist(state)
 
 
+def _open_position_plan(state: Mapping[str, Any], code: str) -> dict[str, Any] | None:
+    for plan in reversed(list(state.get("position_plans") or [])):
+        if str(plan.get("code") or "") == code and str(plan.get("status") or "open") == "open":
+            return plan
+    return None
+
+
+def _sync_position_plan_after_fill(state: dict[str, Any], fill_entry: Mapping[str, Any]) -> None:
+    code = str(fill_entry.get("code") or "")
+    side = str(fill_entry.get("side") or "")
+    if not code or side not in {"buy", "sell"}:
+        return
+
+    position = _compute_positions(state.get("fills") or []).get(code) or {}
+    now_text = _now()
+    plans = state.setdefault("position_plans", [])
+    existing = _open_position_plan(state, code)
+
+    if side == "sell":
+        if existing:
+            existing["current_qty"] = int(position.get("qty") or 0)
+            existing["updated_at"] = now_text
+            if int(position.get("qty") or 0) <= 0:
+                existing["status"] = "closed"
+                existing["closed_at"] = now_text
+                existing["close_reason"] = "position_qty_zero"
+        return
+
+    avg_cost = _round_money(position.get("avg_cost") or fill_entry.get("price") or 0.0)
+    qty = int(position.get("qty") or fill_entry.get("qty") or 0)
+    rules = _default_position_plan_rules()
+    levels = _default_position_plan_levels(avg_cost, rules)
+    revision = {
+        "ts": now_text,
+        "fill_id": fill_entry.get("fill_id"),
+        "side": side,
+        "qty": fill_entry.get("qty"),
+        "price": fill_entry.get("price"),
+        "avg_cost": avg_cost,
+        "position_qty": qty,
+    }
+
+    if existing:
+        existing["name"] = str(fill_entry.get("name") or existing.get("name") or code)
+        existing["current_qty"] = qty
+        existing["avg_cost_basis"] = avg_cost
+        existing["rules"] = rules
+        existing["levels"] = levels
+        existing["updated_at"] = now_text
+        existing.setdefault("revisions", []).append(revision)
+        return
+
+    plans.append(
+        {
+            "plan_id": str(uuid.uuid4()),
+            "status": "open",
+            "source": "auto_on_buy_fill",
+            "created_at": now_text,
+            "updated_at": now_text,
+            "code": code,
+            "name": str(fill_entry.get("name") or code),
+            "entry_trade_date": str(fill_entry.get("trade_date") or ""),
+            "entry_fill_id": str(fill_entry.get("fill_id") or ""),
+            "entry_price": _round_money(fill_entry.get("price") or avg_cost),
+            "entry_qty": int(fill_entry.get("qty") or qty),
+            "current_qty": qty,
+            "avg_cost_basis": avg_cost,
+            "intent_key": fill_entry.get("intent_key"),
+            "broker_ref": fill_entry.get("broker_ref"),
+            "rules": rules,
+            "levels": levels,
+            "logic": {
+                "entry_reason": "Prism 根据买入成交自动生成持仓剧本。",
+                "risk_model": "小额实盘默认规则：亏损达到 -5% 触发防守减仓，-8% 触发清仓退出，盈利达到 8% 触发止盈兑现。",
+            },
+            "revisions": [revision],
+        }
+    )
+
+
 def record_fill(
     *,
     trade_date: str,
@@ -455,6 +568,140 @@ def record_fill(
     }
     state["fills"].append(fill_entry)
     state["cash_balance"] = new_balance
+    _sync_position_plan_after_fill(state, fill_entry)
+    return _persist(state)
+
+
+def _is_code_like_name(name: Any, code: str) -> bool:
+    text = str(name or "").strip()
+    if not text or text == code:
+        return True
+    lowered = text.lower()
+    return lowered.startswith(("sh", "sz")) and lowered[2:] == code
+
+
+def apply_name_backfill(code: Any, name: Any) -> bool:
+    """Patch fills/positions where the current name is still code-like.
+
+    Used by the async stock-name backfill worker: the money-write path stays
+    non-blocking, then a background fetch upgrades the friendly name. Returns
+    True if anything actually changed (and was persisted).
+    """
+
+    try:
+        normalized_code = _normalize_code(code)
+    except AccountBookError:
+        return False
+    clean_name = str(name or "").strip()
+    if not clean_name or _is_code_like_name(clean_name, normalized_code):
+        return False
+
+    state = load_account_book()
+    changed = False
+
+    for fill in state.get("fills") or []:
+        if not isinstance(fill, dict):
+            continue
+        if str(fill.get("code") or "").strip() != normalized_code:
+            continue
+        if _is_code_like_name(fill.get("name"), normalized_code):
+            fill["name"] = clean_name
+            changed = True
+
+    plans = state.get("position_plans")
+    if isinstance(plans, list):
+        for plan in plans:
+            if not isinstance(plan, dict):
+                continue
+            if str(plan.get("code") or "").strip() != normalized_code:
+                continue
+            if _is_code_like_name(plan.get("name"), normalized_code):
+                plan["name"] = clean_name
+                changed = True
+
+    if changed:
+        _persist(state)
+    return changed
+
+
+def amend_holding_identity(
+    *,
+    from_code: str,
+    to_code: str,
+    name: str | None = None,
+    reason: str = "",
+    ts: str | None = None,
+) -> dict[str, Any]:
+    """Correct a mistaken code/name without changing cash or quantities.
+
+    This is intentionally narrow: it amends identity fields on existing fills
+    and their generated position plans, then writes an audit entry.  It does
+    not change side, quantity, price, fees, or cash balances.
+    """
+
+    from_code_n = _normalize_code(from_code)
+    to_code_n = _normalize_code(to_code)
+    reason_text = str(reason or "").strip()
+    if not reason_text:
+        raise AccountBookError("reason is required for holding identity correction")
+    name_text = str(name or "").strip() or to_code_n
+
+    state = load_account_book()
+    fills = state.get("fills") or []
+    plans = state.get("position_plans") or []
+
+    if from_code_n != to_code_n:
+        target_exists = any(
+            str(fill.get("code") or "").strip().lower() == to_code_n
+            for fill in fills
+        )
+        if target_exists:
+            raise AccountBookError(
+                f"cannot amend {from_code_n} to {to_code_n}: target code already has fills"
+            )
+
+    affected_fills = 0
+    affected_plans = 0
+    fill_ids: list[str] = []
+    now_text = ts or _now()
+
+    for fill in fills:
+        if str(fill.get("code") or "").strip().lower() != from_code_n:
+            continue
+        fill["code"] = to_code_n
+        fill["name"] = name_text
+        fill["identity_amended_at"] = now_text
+        fill["identity_amended_from_code"] = from_code_n
+        affected_fills += 1
+        fill_id = str(fill.get("fill_id") or "").strip()
+        if fill_id:
+            fill_ids.append(fill_id)
+
+    for plan in plans:
+        if str(plan.get("code") or "").strip().lower() != from_code_n:
+            continue
+        plan["code"] = to_code_n
+        plan["name"] = name_text
+        plan["updated_at"] = now_text
+        plan["identity_amended_at"] = now_text
+        plan["identity_amended_from_code"] = from_code_n
+        affected_plans += 1
+
+    if affected_fills == 0 and affected_plans == 0:
+        raise AccountBookError(f"no holding records found for {from_code_n}")
+
+    state.setdefault("identity_corrections", []).append(
+        {
+            "ts": now_text,
+            "from_code": from_code_n,
+            "to_code": to_code_n,
+            "name": name_text,
+            "reason": reason_text,
+            "affected_fills": affected_fills,
+            "affected_plans": affected_plans,
+            "fill_ids": fill_ids,
+        }
+    )
     return _persist(state)
 
 
@@ -652,6 +899,8 @@ def compute_account_view(state: Mapping[str, Any] | None = None) -> dict[str, An
         "last_fill_at": fills[-1]["ts"] if fills else "",
         "reconciliations": list(book.get("reconciliations") or [])[-5:],
         "no_fill_intents": list(book.get("no_fill_intents") or []),
+        "position_plans": list(book.get("position_plans") or []),
+        "identity_corrections": list(book.get("identity_corrections") or [])[-20:],
         "mode_history": list(book.get("mode_history") or [])[-20:],
         "fills": fills,
         "updated_at": book.get("updated_at", ""),

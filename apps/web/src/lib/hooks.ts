@@ -11,7 +11,10 @@ export const queryKeys = {
   watchlist: ["watchlist"] as const,
   watchlistManager: ["watchlist-manager"] as const,
   opportunities: ["opportunities"] as const,
-  review: ["review"] as const,
+  review: (params: { baseline?: string; window?: string } = {}) =>
+    ["review", params.baseline || "", params.window || ""] as const,
+  reviewDetail: (params: { section?: string; label?: string; baseline?: string; window?: string } = {}) =>
+    ["review-detail", params.section || "", params.label || "", params.baseline || "", params.window || ""] as const,
   ask: (query: string) => ["ask", query] as const,
   askSuggest: (query: string) => ["ask-suggest", query] as const,
   refreshStatus: (page: string, auto = false) => ["refresh-status", page, auto ? "auto" : "passive"] as const,
@@ -21,6 +24,18 @@ export const queryKeys = {
   runs: ["runs"] as const,
   health: ["health"] as const,
   portfolioAccount: ["portfolio-account"] as const,
+  decisionLedger: ["decision-ledger"] as const,
+  decisionLedgerSummary: (params: { window?: string; as_of?: string } = {}) =>
+    ["decision-ledger", "summary", params.window || "", params.as_of || ""] as const,
+  decisionLedgerRecent: (limit: number) => ["decision-ledger", "recent", limit] as const,
+  decisionLedgerCalibration: (params: { window?: string; as_of?: string; limit?: number } = {}) =>
+    ["decision-ledger", "calibration", params.window || "", params.as_of || "", params.limit || ""] as const,
+  decisionLedgerReviewCases: ["decision-ledger", "review-cases"] as const,
+  decisionLedgerReviewCase: (decisionId: string) => ["decision-ledger", "review-case", decisionId] as const,
+  decisionLedgerAttributionDraft: (decisionId: string) => ["decision-ledger", "attribution-draft", decisionId] as const,
+  decisionLedgerStock: (code: string) => ["decision-ledger", "stock", code] as const,
+  decisionLedgerDetail: (decisionId: string) => ["decision-ledger", "detail", decisionId] as const,
+  decisionLedgerHealth: ["decision-ledger", "health"] as const,
 };
 
 export function useTodayData() {
@@ -69,12 +84,29 @@ export function useOpportunities() {
   });
 }
 
-export function useReview() {
+export function useReview(params: { baseline?: string; window?: string } = {}) {
   return useQuery({
-    queryKey: queryKeys.review,
-    queryFn: api.getReview,
-    staleTime: 300_000,
-    refetchInterval: false,
+    queryKey: queryKeys.review(params),
+    queryFn: () => api.getReview(params),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useReviewDetail(params: { section?: string; label?: string; baseline?: string; window?: string }) {
+  return useQuery({
+    queryKey: queryKeys.reviewDetail(params),
+    queryFn: () =>
+      api.getReviewDetail({
+        section: params.section || "",
+        label: params.label || "",
+        baseline: params.baseline,
+        window: params.window,
+      }),
+    enabled: Boolean(params.section && params.label),
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -88,11 +120,11 @@ export function useStockProfile(code: string) {
   });
 }
 
-export function useAsk(query: string) {
+export function useAsk(query: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.ask(query),
     queryFn: () => api.ask(query),
-    enabled: Boolean(query),
+    enabled: Boolean(query) && enabled,
     staleTime: 60_000,
   });
 }
@@ -147,6 +179,10 @@ export function useUpdateTodayActionDecision() {
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.today });
       void queryClient.invalidateQueries({ queryKey: queryKeys.portfolioAccount });
+      // Today action "watch"/"skip" decisions attach execution events to
+      // the matching ledger record; invalidate ledger views so the next
+      // poll surfaces the new event without waiting for refetchInterval.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.decisionLedger });
     },
   });
 }
@@ -160,6 +196,7 @@ export function useRunTask() {
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.overview });
       void queryClient.invalidateQueries({ queryKey: queryKeys.runs });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.decisionLedger });
     },
   });
 }
@@ -199,6 +236,11 @@ export function useTriggerRefresh(page: string, options: { stockCode?: string } 
       if (page === "opportunities") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.opportunities });
         void queryClient.invalidateQueries({ queryKey: queryKeys.stockProfiles });
+      }
+      if (page === "review") {
+        void queryClient.invalidateQueries({ queryKey: ["review"] });
+        void queryClient.invalidateQueries({ queryKey: ["review-detail"] });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.decisionLedger });
       }
       if (stockCode) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.stockProfile(stockCode) });
@@ -268,6 +310,16 @@ export function useSetPortfolioMode() {
   });
 }
 
+export function useRefreshPortfolioQuotes() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: api.refreshPortfolioQuotes,
+    onSuccess: (payload) => {
+      queryClient.setQueryData(queryKeys.portfolioAccount, payload);
+    },
+  });
+}
+
 export function useRecordPortfolioCash() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -285,6 +337,22 @@ export function useRecordPortfolioFill() {
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.portfolioAccount });
       void queryClient.invalidateQueries({ queryKey: queryKeys.today });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.decisionLedger });
+    },
+  });
+}
+
+export function useAmendPortfolioHoldingIdentity() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: api.amendPortfolioHoldingIdentity,
+    onSuccess: (payload) => {
+      queryClient.setQueryData(queryKeys.portfolioAccount, payload);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.portfolioAccount });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.today });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.decisionLedger });
     },
   });
 }
@@ -296,6 +364,7 @@ export function useRecordPortfolioNoFill() {
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.portfolioAccount });
       void queryClient.invalidateQueries({ queryKey: queryKeys.today });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.decisionLedger });
     },
   });
 }
@@ -308,5 +377,99 @@ export function useRecordPortfolioReconcile() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.portfolioAccount });
       void queryClient.invalidateQueries({ queryKey: queryKeys.today });
     },
+  });
+}
+
+export function useDecisionLedgerSummary(params: { window?: string; as_of?: string } = {}) {
+  return useQuery({
+    queryKey: queryKeys.decisionLedgerSummary(params),
+    queryFn: () => api.getDecisionLedgerSummary(params),
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+  });
+}
+
+export function useDecisionLedgerRecent(limit: number = 20) {
+  return useQuery({
+    queryKey: queryKeys.decisionLedgerRecent(limit),
+    queryFn: () => api.getDecisionLedgerRecent({ limit }),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useDecisionLedgerCalibration(params: { window?: string; as_of?: string; limit?: number } = {}) {
+  return useQuery({
+    queryKey: queryKeys.decisionLedgerCalibration(params),
+    queryFn: () => api.getDecisionLedgerCalibration(params),
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+  });
+}
+
+export function useDecisionLedgerReviewCases() {
+  return useQuery({
+    queryKey: queryKeys.decisionLedgerReviewCases,
+    queryFn: api.getDecisionLedgerReviewCases,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+  });
+}
+
+export function useDecisionLedgerReviewCase(decisionId: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.decisionLedgerReviewCase(decisionId),
+    queryFn: () => api.getDecisionLedgerReviewCase(decisionId),
+    enabled: Boolean(decisionId) && enabled,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useSaveDecisionLedgerReviewCase() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ decisionId, payload }: {
+      decisionId: string;
+      payload: Parameters<typeof api.saveDecisionLedgerReviewCase>[1];
+    }) => api.saveDecisionLedgerReviewCase(decisionId, payload),
+    onSuccess: (response, variables) => {
+      queryClient.setQueryData(queryKeys.decisionLedgerReviewCase(variables.decisionId), response.workbench);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.decisionLedger });
+    },
+  });
+}
+
+export function useGenerateDecisionLedgerAttributionDraft() {
+  return useMutation({
+    mutationFn: (decisionId: string) => api.generateDecisionLedgerAttributionDraft(decisionId),
+  });
+}
+
+export function useDecisionLedgerStock(code: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.decisionLedgerStock(code),
+    queryFn: () => api.getDecisionLedgerStock(code),
+    enabled: Boolean(code) && enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useDecisionLedgerDetail(decisionId: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.decisionLedgerDetail(decisionId),
+    queryFn: () => api.getDecisionLedgerDetail(decisionId),
+    enabled: Boolean(decisionId) && enabled,
+    staleTime: 300_000,
+  });
+}
+
+export function useDecisionLedgerHealth() {
+  return useQuery({
+    queryKey: queryKeys.decisionLedgerHealth,
+    queryFn: api.getDecisionLedgerHealth,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   });
 }
