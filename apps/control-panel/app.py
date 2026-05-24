@@ -70,6 +70,7 @@ from stock_name_backfill import (
     stop_worker as _stop_stock_name_backfill_worker,
 )
 from source_budget import build_source_budget_payload
+from dataset_manifests import build_dataset_freshness_rows  # type: ignore  # local module
 from refresh_policy import (
     CRON_POLICIES,
     PAGE_POLICIES,
@@ -97,9 +98,7 @@ from scheduled_run_state import (
     scheduler_alive,
 )
 from trading_calendar import calendar_status
-from prism_data.freshness import update_manifest_freshness
-from prism_data.repositories import DatasetRepository
-from prism_data.utils import default_dataset_repository_root
+from prism_data.data_capability_matrix import data_capability_matrix_as_dict
 
 import decision_ledger
 
@@ -873,126 +872,27 @@ def _readiness_freshness_rows(
     return rows
 
 
-def _manifest_dt(value: Any) -> datetime | None:
-    return parse_timestamp(str(value or ""))
-
-
-def _manifest_sort_key(manifest: dict[str, Any]) -> datetime:
-    return (
-        _manifest_dt(manifest.get("asof"))
-        or _manifest_dt(manifest.get("fetched_at"))
-        or datetime.min
-    )
-
-
-def _latest_dataset_manifest(
-    *,
-    repository: DatasetRepository,
-    dataset: str,
-    expected_date: str,
-    now: datetime,
-) -> dict[str, Any] | None:
-    manifests = repository.list_manifests(dataset, expected_date)
-    if not manifests:
-        return None
-    refreshed = [update_manifest_freshness(dict(item), expected_date, now=now) for item in manifests]
-    return max(refreshed, key=_manifest_sort_key)
-
-
 def _dataset_manifest_freshness_rows(*, expected_date: str, now: datetime) -> list[dict[str, Any]]:
-    try:
-        repository = DatasetRepository(os.environ.get("PRISM_DATASET_REPOSITORY_ROOT", "").strip() or default_dataset_repository_root())
-    except Exception:
-        return []
+    """Bottom-level dataset freshness for the /api/refresh-status payload.
 
-    rows: list[dict[str, Any]] = []
-    labels = {
-        "quotes.snapshot": "轻量行情快照",
-        "quotes.batch": "轻量行情批量",
-        "capital_flow.daily": "轻量资金流单票",
-        "capital_flow.batch": "轻量资金流批量",
-    }
-    for dataset, label in labels.items():
-        manifest = _latest_dataset_manifest(
-            repository=repository,
-            dataset=dataset,
-            expected_date=expected_date,
-            now=now,
-        )
-        reasons: list[str] = []
-        if not manifest:
-            rows.append(
-                {
-                    "key": dataset,
-                    "label": label,
-                    "value": "-",
-                    "detail": "dataset_manifest_missing",
-                    "available": False,
-                    "age_seconds": None,
-                    "age_label": "-",
-                    "stale": True,
-                    "stale_after_seconds": int((task_policy("quotes_light") if dataset.startswith("quotes.") else task_policy("capital_flow_light")).cooldown_seconds),
-                    "trade_date": None,
-                    "stale_reasons": ["manifest_missing"],
-                    "dataset_manifest": True,
-                }
-            )
-            continue
-
-        raw_value = manifest.get("asof") or manifest.get("fetched_at")
-        parsed = parse_timestamp(str(raw_value or ""))
-        age_seconds = max(int((now - parsed).total_seconds()), 0) if parsed else None
-        trade_date = str(manifest.get("trade_date") or "").strip() or None
-        freshness_status = str(manifest.get("freshness_status") or "").strip().lower()
-        status = str(manifest.get("status") or "").strip().lower()
-        if status and status != "ok":
-            reasons.append(f"manifest_status_{status}")
-        if freshness_status in {"stale", "expired"}:
-            reasons.append(f"freshness_{freshness_status}")
-        elif not freshness_status:
-            reasons.append("freshness_unknown")
-        if trade_date != expected_date:
-            reasons.append("trade_date_mismatch" if trade_date else "trade_date_unknown")
-        if not bool(manifest.get("live_small_allowed")):
-            reasons.append("live_small_not_allowed")
-        if bool(manifest.get("fallback_used")) and not bool(manifest.get("live_small_allowed")):
-            reasons.append("fallback_not_allowed")
-        if not parsed:
-            reasons.append("missing")
-        if manifest.get("error") and status != "ok":
-            reasons.append("provider_failure")
-
-        rows.append(
-            {
-                "key": dataset,
-                "label": label,
-                "value": str(raw_value or "-"),
-                "detail": str(manifest.get("provider") or ""),
-                "available": bool(parsed),
-                "age_seconds": age_seconds,
-                "age_label": age_label(age_seconds),
-                "stale": bool(reasons),
-                "stale_after_seconds": int(manifest.get("ttl_seconds") or 0),
-                "trade_date": trade_date,
-                "stale_reasons": reasons,
-                "provider": manifest.get("provider"),
-                "provider_role": manifest.get("provider_role"),
-                "freshness_status": freshness_status,
-                "fallback_used": bool(manifest.get("fallback_used")),
-                "live_small_allowed": bool(manifest.get("live_small_allowed")),
-                "manifest_path": manifest.get("manifest_path"),
-                "source_lane": manifest.get("source_lane"),
-                "decision_scope": manifest.get("decision_scope"),
-                "authority_provider": manifest.get("authority_provider"),
-                "target_authority_provider": manifest.get("target_authority_provider"),
-                "audit_providers": list(manifest.get("audit_providers") or []),
-                "source_authority_ready": bool(manifest.get("source_authority_ready", True)),
-                "formal_decision_allowed": bool(manifest.get("formal_decision_allowed")),
-                "authority_flags": list(manifest.get("authority_flags") or []),
-                "dataset_manifest": True,
-            }
-        )
-    return rows
+    Delegates to :func:`dataset_manifests.build_dataset_freshness_rows` so
+    we have a single implementation: same parsing, same reasons, same
+    schema as the rows surfaced through the readiness gate and the
+    Settings page detail view. The dataset list is restricted to the
+    lightweight market-data manifests this page cares about; for the
+    full registry-driven sweep used by the capability gate, callers go
+    through ``build_dataset_freshness_rows`` directly.
+    """
+    return build_dataset_freshness_rows(
+        expected_date=expected_date,
+        now=now,
+        datasets=(
+            "quotes.snapshot",
+            "quotes.batch",
+            "capital_flow.daily",
+            "capital_flow.batch",
+        ),
+    )
 
 
 def _stale_subset(freshness: list[dict[str, Any]], dependencies: list[str]) -> list[dict[str, Any]]:
@@ -1032,6 +932,54 @@ def _latest_audit_event(*, state: dict[str, Any], trigger_type: str | None = Non
             continue
         return event
     return None
+
+
+_RECOVERY_TASK_METADATA: dict[str, dict[str, Any]] = {
+    "watchlist_refresh": {
+        "purpose": "刷新自选股快照，后续观察池与持仓复核都依赖它。",
+        "writes_to_ledger": False,
+        "estimated_seconds": 60,
+    },
+    "aggressive": {
+        "purpose": "重跑进攻型选股，决定今天有没有新的候选股。",
+        "writes_to_ledger": False,
+        "estimated_seconds": 120,
+    },
+    "screening": {
+        "purpose": "重跑进攻型选股，决定今天有没有新的候选股。",
+        "writes_to_ledger": False,
+        "estimated_seconds": 120,
+    },
+    "midday_confirmation": {
+        "purpose": "重跑午盘承接确认，决定哪些观察项继续保留。",
+        "writes_to_ledger": False,
+        "estimated_seconds": 90,
+    },
+    "command_brief": {
+        "purpose": "重新生成投资总控简报，把当日判断串成一条链。",
+        "writes_to_ledger": False,
+        "estimated_seconds": 30,
+    },
+    "portfolio_cash": {
+        "purpose": "修复账户现金口径，避免真钱执行误判。",
+        "writes_to_ledger": True,
+        "estimated_seconds": 30,
+    },
+    "account_reconcile": {
+        "purpose": "完成账户对账，让真钱执行重新有依据。",
+        "writes_to_ledger": True,
+        "estimated_seconds": 60,
+    },
+}
+
+
+def _recovery_metadata(task_name: str) -> dict[str, Any]:
+    base = _RECOVERY_TASK_METADATA.get(task_name) or {}
+    return {
+        "purpose": base.get("purpose") or "运行此任务以恢复对应数据源。",
+        "writes_to_ledger": bool(base.get("writes_to_ledger", False)),
+        "estimated_seconds": int(base.get("estimated_seconds") or 60),
+    }
 
 
 def _build_readiness_recovery_steps(
@@ -1088,6 +1036,7 @@ def _build_readiness_recovery_steps(
             status = "running"
         elif cooldown_remaining > 0:
             status = "cooldown"
+        metadata = _recovery_metadata(task_name)
         steps.append(
             {
                 "step": index,
@@ -1106,6 +1055,9 @@ def _build_readiness_recovery_steps(
                     }
                     for item in issues[:3]
                 ],
+                "purpose": metadata["purpose"],
+                "writes_to_ledger": metadata["writes_to_ledger"],
+                "estimated_seconds": metadata["estimated_seconds"],
             }
         )
     return steps
@@ -1818,6 +1770,21 @@ async def api_source_budget() -> JSONResponse:
     return JSONResponse(build_source_budget_payload())
 
 
+@app.get("/api/data-capability-matrix")
+async def api_data_capability_matrix() -> JSONResponse:
+    """Static data capability matrix derived from prism_data DATASET_REGISTRY.
+
+    Read-only. Reports each dataset's configured source authority semantics
+    (primary / fallback / authority / target_authority / audit providers,
+    source_lane, decision_scope, required_for_live_small, the static
+    source_authority_ready and formal_decision_allowed values reachable
+    given the configuration, and risk_flags such as display_only,
+    target_authority_not_in_use, fallback_default_not_live, pipeline_dataset).
+    Does not perform any fetch or trigger any task.
+    """
+    return JSONResponse(data_capability_matrix_as_dict())
+
+
 @app.get("/api/capabilities")
 async def api_capabilities() -> JSONResponse:
     """Read-only capability matrix for the current readiness payload.
@@ -1832,6 +1799,8 @@ async def api_capabilities() -> JSONResponse:
         {
             "checked_at": readiness.get("checked_at"),
             "session": readiness.get("session"),
+            "readiness_mode": readiness.get("readiness_mode"),
+            "trust_level": readiness.get("trust_level"),
             "capabilities": readiness.get("capabilities", {}),
         }
     )
@@ -1848,6 +1817,7 @@ async def api_readiness_live() -> JSONResponse:
 
     today_view = build_today_view()
     readiness = today_view.get("readiness") or {}
+    matrix_payload = data_capability_matrix_as_dict()
     return JSONResponse(
         {
             "generated_at": today_view.get("generated_at"),
@@ -1866,6 +1836,11 @@ async def api_readiness_live() -> JSONResponse:
             "recommended_tasks": readiness.get("recommended_tasks", []),
             "source_states": readiness.get("source_states", {}),
             "capabilities": readiness.get("capabilities", {}),
+            "trust_level": readiness.get("trust_level"),
+            "data_capability_summary": {
+                **matrix_payload["summary"],
+                "registry_issues": matrix_payload["registry_issues"],
+            },
         }
     )
 

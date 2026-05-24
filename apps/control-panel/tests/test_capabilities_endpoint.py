@@ -73,6 +73,19 @@ class CapabilitiesEndpointTests(unittest.TestCase):
         self.assertIn("checked_at", body)
         self.assertIn("session", body)
 
+    def test_includes_trust_level(self) -> None:
+        body = self.client.get("/api/capabilities").json()
+        self.assertIn("trust_level", body)
+        trust = body["trust_level"]
+        self.assertIsInstance(trust, dict)
+        for field in (
+            "level", "label", "tone", "headline",
+            "can_observe", "can_review", "can_approve", "can_trade_live",
+            "blocking_reasons", "next_step", "next_step_label",
+        ):
+            self.assertIn(field, trust, f"trust_level missing {field}")
+        self.assertIn(trust["level"], {"trusted", "observe_only", "unreliable"})
+
 
 class ReadinessLiveExtensionTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -92,8 +105,28 @@ class ReadinessLiveExtensionTests(unittest.TestCase):
         body = self.client.get("/api/readiness/live").json()
         self.assertIn("source_states", body)
         self.assertIn("capabilities", body)
+        self.assertIn("trust_level", body)
         self.assertIsInstance(body["source_states"], dict)
         self.assertIsInstance(body["capabilities"], dict)
+        self.assertIsInstance(body["trust_level"], dict)
+
+    def test_data_capability_summary_embedded(self) -> None:
+        body = self.client.get("/api/readiness/live").json()
+        self.assertIn("data_capability_summary", body)
+        summary = body["data_capability_summary"]
+        for key in (
+            "total",
+            "formal_ready",
+            "display_only",
+            "pending_target_authority",
+            "pipeline_datasets",
+            "required_for_live_small",
+            "formal_lane_not_ready",
+            "registry_issues",
+        ):
+            self.assertIn(key, summary, f"missing {key} in data_capability_summary")
+        self.assertGreaterEqual(summary["total"], 15)
+        self.assertEqual(summary["registry_issues"], [])
 
 
 if __name__ == "__main__":

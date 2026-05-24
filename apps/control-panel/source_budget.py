@@ -27,12 +27,20 @@ Two distinct freshness fields capture two distinct concerns:
 
 Invariants enforced by tests:
     provider_min_interval_seconds <= target_freshness_seconds <= ttl_intraday
+
+Provider authority fields (``primary_provider``, ``fallback_providers``,
+``decision_scope``) are NOT duplicated here — they are derived live from
+``prism_data.manifest.DATASET_REGISTRY`` so the two registries cannot drift.
+``account.book`` is the one non-registry dataset and falls back to the
+``_NON_REGISTRY_AUTHORITY`` table below.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+
+from prism_data.manifest import DATASET_REGISTRY
 
 
 __all__ = [
@@ -47,9 +55,22 @@ __all__ = [
 ]
 
 
+_NON_REGISTRY_AUTHORITY: dict[str, dict[str, Any]] = {
+    "account.book": {
+        "primary_provider": "account_book",
+        "fallback_providers": (),
+        "decision_scope": "live_small",
+    },
+}
+
+
 @dataclass(frozen=True)
 class SourceBudget:
     """Business profile for one dataset.
+
+    Provider authority fields (``primary_provider``, ``fallback_providers``,
+    ``decision_scope``) are intentionally derived properties — they read
+    from ``DATASET_REGISTRY`` so the source-of-truth lives in one place.
 
     ``critical_for`` lists the capabilities that MUST have this dataset
     fresh; if it is stale/missing, the capability is BLOCKED.
@@ -66,12 +87,30 @@ class SourceBudget:
     batchable: bool
     provider_min_interval_seconds: int       # technical rate-limit floor
     target_freshness_seconds: int            # operator's max-age tolerance
-    primary_provider: str
-    fallback_providers: tuple[str, ...]
-    decision_scope: str                      # live_small | display_only
     critical_for: tuple[str, ...]
     important_for: tuple[str, ...]
     failure_impact: str
+
+    @property
+    def primary_provider(self) -> str:
+        definition = DATASET_REGISTRY.get(self.dataset)
+        if definition is not None:
+            return definition.primary_provider
+        return _NON_REGISTRY_AUTHORITY[self.dataset]["primary_provider"]
+
+    @property
+    def fallback_providers(self) -> tuple[str, ...]:
+        definition = DATASET_REGISTRY.get(self.dataset)
+        if definition is not None:
+            return tuple(definition.fallback_providers)
+        return tuple(_NON_REGISTRY_AUTHORITY[self.dataset]["fallback_providers"])
+
+    @property
+    def decision_scope(self) -> str:
+        definition = DATASET_REGISTRY.get(self.dataset)
+        if definition is not None:
+            return definition.decision_scope
+        return _NON_REGISTRY_AUTHORITY[self.dataset]["decision_scope"]
 
     @property
     def supports_capabilities(self) -> tuple[str, ...]:
@@ -114,9 +153,6 @@ SOURCE_BUDGETS: dict[str, SourceBudget] = {
         batchable=True,
         provider_min_interval_seconds=30,
         target_freshness_seconds=60,
-        primary_provider="eastmoney",
-        fallback_providers=("sina",),
-        decision_scope="live_small",
         critical_for=("approve", "trade"),
         important_for=("observe", "review"),
         failure_impact="行情读不到,影响所有交易决策与命令台",
@@ -130,9 +166,6 @@ SOURCE_BUDGETS: dict[str, SourceBudget] = {
         batchable=False,
         provider_min_interval_seconds=30,
         target_freshness_seconds=60,
-        primary_provider="sina",
-        fallback_providers=("eastmoney",),
-        decision_scope="live_small",
         critical_for=(),
         important_for=("observe", "trade"),
         failure_impact="个股行情缺失,影响盯盘但不阻断批量决策",
@@ -146,9 +179,6 @@ SOURCE_BUDGETS: dict[str, SourceBudget] = {
         batchable=True,
         provider_min_interval_seconds=60,
         target_freshness_seconds=300,
-        primary_provider="sina",
-        fallback_providers=(),
-        decision_scope="display_only",
         critical_for=(),
         important_for=("observe",),
         failure_impact="全市场观察池缺失,只影响观察视图",
@@ -162,9 +192,6 @@ SOURCE_BUDGETS: dict[str, SourceBudget] = {
         batchable=True,
         provider_min_interval_seconds=60,
         target_freshness_seconds=180,
-        primary_provider="eastmoney",
-        fallback_providers=(),
-        decision_scope="live_small",
         critical_for=(),
         important_for=("observe", "review"),
         failure_impact="资金流缺失,复核可降级但置信度下降",
@@ -178,9 +205,6 @@ SOURCE_BUDGETS: dict[str, SourceBudget] = {
         batchable=False,
         provider_min_interval_seconds=60,
         target_freshness_seconds=300,
-        primary_provider="eastmoney",
-        fallback_providers=("ths",),
-        decision_scope="live_small",
         critical_for=(),
         important_for=("review",),
         failure_impact="单股资金流断档,复核降级",
@@ -194,9 +218,6 @@ SOURCE_BUDGETS: dict[str, SourceBudget] = {
         batchable=False,
         provider_min_interval_seconds=600,
         target_freshness_seconds=1800,
-        primary_provider="sina",
-        fallback_providers=("akshare",),
-        decision_scope="live_small",
         critical_for=(),
         important_for=("review", "approve"),
         failure_impact="K线缺失,技术信号失效",
@@ -210,9 +231,6 @@ SOURCE_BUDGETS: dict[str, SourceBudget] = {
         batchable=True,
         provider_min_interval_seconds=3600,
         target_freshness_seconds=21600,
-        primary_provider="eastmoney",
-        fallback_providers=(),
-        decision_scope="display_only",
         critical_for=(),
         important_for=("review",),
         failure_impact="估值/财务无法显示,复核中性化",
@@ -226,9 +244,6 @@ SOURCE_BUDGETS: dict[str, SourceBudget] = {
         batchable=False,
         provider_min_interval_seconds=3600,
         target_freshness_seconds=21600,
-        primary_provider="eastmoney",
-        fallback_providers=("ths",),
-        decision_scope="display_only",
         critical_for=(),
         important_for=("review",),
         failure_impact="个股估值/财务无法显示",
@@ -242,9 +257,6 @@ SOURCE_BUDGETS: dict[str, SourceBudget] = {
         batchable=False,
         provider_min_interval_seconds=600,
         target_freshness_seconds=3600,
-        primary_provider="eastmoney",
-        fallback_providers=(),
-        decision_scope="display_only",
         critical_for=(),
         important_for=("review",),
         failure_impact="事件上下文缺失,复核中性化",
@@ -258,9 +270,6 @@ SOURCE_BUDGETS: dict[str, SourceBudget] = {
         batchable=False,
         provider_min_interval_seconds=600,
         target_freshness_seconds=3600,
-        primary_provider="eastmoney",
-        fallback_providers=(),
-        decision_scope="display_only",
         critical_for=(),
         important_for=("review",),
         failure_impact="公告上下文缺失,复核中性化",
@@ -274,9 +283,6 @@ SOURCE_BUDGETS: dict[str, SourceBudget] = {
         batchable=False,
         provider_min_interval_seconds=300,
         target_freshness_seconds=1800,
-        primary_provider="eastmoney",
-        fallback_providers=(),
-        decision_scope="display_only",
         critical_for=(),
         important_for=("review",),
         failure_impact="板块对比缺失,相对强度判断降级",
@@ -290,9 +296,6 @@ SOURCE_BUDGETS: dict[str, SourceBudget] = {
         batchable=False,
         provider_min_interval_seconds=21600,
         target_freshness_seconds=86400,
-        primary_provider="akshare",
-        fallback_providers=(),
-        decision_scope="display_only",
         critical_for=(),
         important_for=("review",),
         failure_impact="指数对照缺失,基本面板降级",
@@ -306,9 +309,6 @@ SOURCE_BUDGETS: dict[str, SourceBudget] = {
         batchable=False,
         provider_min_interval_seconds=300,
         target_freshness_seconds=900,
-        primary_provider="pipeline",
-        fallback_providers=(),
-        decision_scope="live_small",
         critical_for=("review", "approve", "trade"),
         important_for=("observe",),
         failure_impact="自选股报告缺失,无法做命令台决策",
@@ -322,9 +322,6 @@ SOURCE_BUDGETS: dict[str, SourceBudget] = {
         batchable=False,
         provider_min_interval_seconds=300,
         target_freshness_seconds=900,
-        primary_provider="pipeline",
-        fallback_providers=(),
-        decision_scope="live_small",
         critical_for=("approve",),
         important_for=("review", "trade"),
         failure_impact="进攻型候选缺失,无法复核与放行",
@@ -338,9 +335,6 @@ SOURCE_BUDGETS: dict[str, SourceBudget] = {
         batchable=False,
         provider_min_interval_seconds=300,
         target_freshness_seconds=900,
-        primary_provider="pipeline",
-        fallback_providers=(),
-        decision_scope="live_small",
         critical_for=("approve", "trade"),
         important_for=("review",),
         failure_impact="午盘承接确认缺失,下午进攻动作受阻",
@@ -354,9 +348,6 @@ SOURCE_BUDGETS: dict[str, SourceBudget] = {
         batchable=False,
         provider_min_interval_seconds=300,
         target_freshness_seconds=900,
-        primary_provider="pipeline",
-        fallback_providers=(),
-        decision_scope="live_small",
         critical_for=("review",),
         important_for=("approve", "observe"),
         failure_impact="命令台简报缺失,无法形成统一动作清单",
@@ -370,9 +361,6 @@ SOURCE_BUDGETS: dict[str, SourceBudget] = {
         batchable=False,
         provider_min_interval_seconds=30,
         target_freshness_seconds=60,
-        primary_provider="account_book",
-        fallback_providers=(),
-        decision_scope="live_small",
         critical_for=("trade", "ledger_capture"),
         important_for=("approve",),
         failure_impact="账本不可读,真钱执行与对账阻断",

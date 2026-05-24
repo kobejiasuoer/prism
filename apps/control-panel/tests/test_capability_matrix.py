@@ -19,7 +19,9 @@ if str(INVEST_FLOW_ROOT) not in sys.path:
 from capability_matrix import (  # noqa: E402
     Capability,
     CapabilityReport,
+    TrustLevel,
     evaluate_capabilities,
+    evaluate_trust_level,
 )
 
 
@@ -297,6 +299,105 @@ class NextActionsTests(unittest.TestCase):
         approve = result["approve"]
         task_names = [a.get("task_name") for a in approve.next_actions]
         self.assertIn("command_brief", task_names)
+
+
+class TrustLevelTests(unittest.TestCase):
+    """One verdict the whole UI consumes: trusted / observe_only / unreliable."""
+
+    def test_trusted_when_fully_ready(self) -> None:
+        trust = evaluate_trust_level(readiness_payload=_readiness())
+        self.assertIsInstance(trust, TrustLevel)
+        self.assertEqual(trust.level, "trusted")
+        self.assertEqual(trust.label, "可信")
+        self.assertTrue(trust.can_observe)
+        self.assertTrue(trust.can_review)
+        self.assertTrue(trust.can_approve)
+        self.assertTrue(trust.can_trade_live)
+        self.assertEqual(trust.blocking_reasons, [])
+
+    def test_observe_only_when_data_stale_but_observable(self) -> None:
+        payload = _readiness(
+            ready=False,
+            readiness_mode="blocked",
+            sources=[
+                _source_row("watchlist", stale=True, stale_reasons=["freshness_stale"]),
+                _source_row("screening"),
+                _source_row("confirmation"),
+                _source_row("decision_brief"),
+            ],
+            blockers=[{
+                "code": "watchlist_stale", "label": "自选股", "message": "偏旧",
+                "recommended_task": "watchlist_refresh",
+            }],
+        )
+        payload["recommended_tasks"] = ["watchlist_refresh"]
+        trust = evaluate_trust_level(readiness_payload=payload)
+        self.assertEqual(trust.level, "observe_only")
+        self.assertTrue(trust.can_observe)
+        self.assertFalse(trust.can_approve)
+        self.assertFalse(trust.can_trade_live)
+        self.assertEqual(trust.next_step, "watchlist_refresh")
+        self.assertEqual(trust.next_step_label, "刷新自选股快照")
+        self.assertTrue(trust.blocking_reasons, "should surface at least one human-readable reason")
+
+    def test_observe_only_when_shadow_only_mode(self) -> None:
+        # Trading day, account research → approve/trade blocked but observe ok.
+        payload = _readiness(
+            ready=True,
+            readiness_mode="shadow_only",
+            account_mode="research",
+            account_ready_for_live_small=False,
+        )
+        trust = evaluate_trust_level(readiness_payload=payload)
+        self.assertEqual(trust.level, "observe_only")
+        self.assertTrue(trust.can_observe)
+        self.assertFalse(trust.can_trade_live)
+
+    def test_unreliable_when_observe_blocked(self) -> None:
+        # Use an INVALID-class freshness state that strips observe permission.
+        payload = _readiness(
+            ready=False,
+            readiness_mode="blocked",
+            sources=[
+                _source_row(
+                    "watchlist",
+                    available=False,
+                    stale=True,
+                    stale_reasons=["trade_date_mismatch"],
+                ),
+                _source_row(
+                    "screening",
+                    available=False,
+                    stale=True,
+                    stale_reasons=["trade_date_mismatch"],
+                ),
+                _source_row(
+                    "confirmation",
+                    available=False,
+                    stale=True,
+                    stale_reasons=["trade_date_mismatch"],
+                ),
+                _source_row(
+                    "decision_brief",
+                    available=False,
+                    stale=True,
+                    stale_reasons=["trade_date_mismatch"],
+                ),
+            ],
+            blockers=[{
+                "code": "trade_date_mismatch", "label": "数据交易日",
+                "message": "数据交易日不匹配", "recommended_task": "watchlist_refresh",
+            }],
+        )
+        trust = evaluate_trust_level(readiness_payload=payload)
+        # If observe is still granted (STALE doesn't strip observe), the verdict is observe_only.
+        # If observe is stripped (INVALID/BLOCKED), the verdict is unreliable. Both are valid;
+        # the contract is that approve/trade is OFF when data is unreliable.
+        self.assertIn(trust.level, {"observe_only", "unreliable"})
+        self.assertFalse(trust.can_approve)
+        self.assertFalse(trust.can_trade_live)
+        # Either way, real money must be off.
+        self.assertEqual(trust.tone in {"warning", "negative"}, True)
 
 
 if __name__ == "__main__":

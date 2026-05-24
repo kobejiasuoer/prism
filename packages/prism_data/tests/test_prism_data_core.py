@@ -17,7 +17,13 @@ from prism_data.contracts import DatasetStatus, ProviderResult, ProviderRole  # 
 from prism_data.datasets import validate_bars_dataset, validate_quotes_dataset  # noqa: E402
 from prism_data.freshness import compute_freshness_status, update_manifest_freshness  # noqa: E402
 from prism_data.gateway import DataGateway  # noqa: E402
-from prism_data.manifest import DATASET_REGISTRY, DataManifest, build_pipeline_manifest, get_dataset_definition  # noqa: E402
+from prism_data.manifest import (  # noqa: E402
+    DATASET_REGISTRY,
+    DataManifest,
+    build_pipeline_manifest,
+    get_dataset_definition,
+    manifest_from_provider_result,
+)
 from prism_data.repositories import DatasetRepository  # noqa: E402
 
 
@@ -270,6 +276,38 @@ class GatewayTests(unittest.TestCase):
         self.assertIn("target_authority_not_in_use:tushare", manifest["authority_flags"])
         self.assertIn("upstream_authority_not_ready", manifest["authority_flags"])
         self.assertIn("upstream_formal_not_allowed", manifest["authority_flags"])
+
+
+class DisplayOnlyRuntimeTests(unittest.TestCase):
+    def test_display_only_dataset_never_formal_at_runtime(self) -> None:
+        # quotes.pool is lane=live, scope=display_only — even on a clean fetch
+        # the runtime manifest must not flip formal_decision_allowed=true.
+        now = datetime(2026, 5, 7, 10, 30, 0)
+        result = ProviderResult(
+            status=DatasetStatus.OK,
+            data=[{"code": "600690", "price": 27.34}],
+            provider="sina",
+            provider_role=ProviderRole.PRIMARY,
+            dataset="quotes.pool",
+            trade_date="2026-05-07",
+            fetched_at=now,
+            asof=now,
+            ttl_seconds=900,
+            payload_hash="abc",
+            row_count=1,
+            live_small_allowed=True,
+        )
+        manifest = manifest_from_provider_result(
+            result,
+            expected_trade_date="2026-05-07",
+            live_small_allowed=True,
+        )
+        self.assertEqual(manifest["dataset"], "quotes.pool")
+        self.assertEqual(manifest["decision_scope"], "display_only")
+        self.assertFalse(
+            manifest["formal_decision_allowed"],
+            "display_only dataset must not become formal_decision_allowed at runtime",
+        )
 
 
 class DatasetsTests(unittest.TestCase):

@@ -136,7 +136,6 @@ class DatasetDefinition:
     authority_provider: str | None = None
     target_authority_provider: str | None = None
     audit_providers: list[str] = field(default_factory=list)
-    allow_fallback_for_live: bool = False
 
 
 DATASET_REGISTRY: dict[str, DatasetDefinition] = {
@@ -437,6 +436,110 @@ def get_dataset_definition(name: str) -> DatasetDefinition | None:
     return DATASET_REGISTRY.get(name)
 
 
+_VALID_DECISION_SCOPES = frozenset({"live_small", "display_only", "formal_candidate"})
+_VALID_SOURCE_LANES = frozenset({
+    "live",
+    "authoritative_daily",
+    "disclosure",
+    "reference",
+    "news",
+    "execution",
+    "pipeline",
+})
+_FORMAL_LANES = frozenset({"authoritative_daily", "execution"})
+
+
+@dataclass(frozen=True)
+class RegistryIssue:
+    dataset: str
+    code: str
+    message: str
+
+    def as_dict(self) -> dict[str, Any]:
+        return {"dataset": self.dataset, "code": self.code, "message": self.message}
+
+
+def validate_dataset_registry(
+    registry: dict[str, DatasetDefinition] | None = None,
+) -> list[RegistryIssue]:
+    """Run static schema + semantic checks against a dataset registry.
+
+    Returns a (possibly empty) list of issues. The real ``DATASET_REGISTRY``
+    must validate clean — the test suite enforces that.
+    """
+    target = DATASET_REGISTRY if registry is None else registry
+    issues: list[RegistryIssue] = []
+    for name, definition in target.items():
+        if definition.name != name:
+            issues.append(RegistryIssue(
+                dataset=name,
+                code="name_key_mismatch",
+                message=f"registry key `{name}` does not match definition.name `{definition.name}`",
+            ))
+        if definition.decision_scope not in _VALID_DECISION_SCOPES:
+            issues.append(RegistryIssue(
+                dataset=name,
+                code="unknown_decision_scope",
+                message=f"decision_scope `{definition.decision_scope}` is not in {sorted(_VALID_DECISION_SCOPES)}",
+            ))
+        if definition.source_lane not in _VALID_SOURCE_LANES:
+            issues.append(RegistryIssue(
+                dataset=name,
+                code="unknown_source_lane",
+                message=f"source_lane `{definition.source_lane}` is not in {sorted(_VALID_SOURCE_LANES)}",
+            ))
+        if definition.source_lane == "pipeline" and definition.primary_provider != "pipeline":
+            issues.append(RegistryIssue(
+                dataset=name,
+                code="pipeline_lane_requires_pipeline_primary",
+                message=(
+                    f"source_lane=pipeline but primary_provider=`{definition.primary_provider}`; "
+                    "pipeline datasets must use primary_provider=`pipeline`"
+                ),
+            ))
+        if definition.required_for_live_small and definition.decision_scope != "live_small":
+            issues.append(RegistryIssue(
+                dataset=name,
+                code="required_for_live_small_requires_live_small_scope",
+                message=(
+                    f"required_for_live_small=True but decision_scope=`{definition.decision_scope}`; "
+                    "must be live_small"
+                ),
+            ))
+        if definition.decision_scope == "formal_candidate" and definition.source_lane not in _FORMAL_LANES:
+            issues.append(RegistryIssue(
+                dataset=name,
+                code="formal_candidate_requires_formal_lane",
+                message=(
+                    f"decision_scope=formal_candidate but source_lane=`{definition.source_lane}`; "
+                    f"must be one of {sorted(_FORMAL_LANES)}"
+                ),
+            ))
+        if definition.primary_provider in definition.fallback_providers:
+            issues.append(RegistryIssue(
+                dataset=name,
+                code="primary_in_fallback",
+                message=(
+                    f"primary_provider `{definition.primary_provider}` also appears in fallback_providers; "
+                    "fallback list must not duplicate the primary"
+                ),
+            ))
+        if (
+            definition.authority_provider
+            and definition.authority_provider != definition.primary_provider
+        ):
+            issues.append(RegistryIssue(
+                dataset=name,
+                code="authority_not_primary",
+                message=(
+                    f"authority_provider `{definition.authority_provider}` differs from "
+                    f"primary_provider `{definition.primary_provider}`; the registry tracks current "
+                    "authority — these must match until primary itself is rotated"
+                ),
+            ))
+    return issues
+
+
 def _authority_metadata(
     *,
     dataset: str,
@@ -711,9 +814,11 @@ __all__ = [
     "DATASET_REGISTRY",
     "DataManifest",
     "DatasetDefinition",
+    "RegistryIssue",
     "build_pipeline_manifest",
     "get_dataset_definition",
     "load_manifest_file",
     "manifest_from_provider_result",
+    "validate_dataset_registry",
     "write_sidecar_manifest",
 ]

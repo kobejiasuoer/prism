@@ -11,6 +11,7 @@ import { EvidencePanel } from "@/components/evidence-panel";
 import { LearningMemoryPreview } from "@/components/learning-memory";
 import { MetricCard, MetricSkeleton } from "@/components/metric-card";
 import { PageTitle } from "@/components/page-title";
+import { TrustBanner } from "@/components/trust-banner";
 import { api } from "@/lib/api";
 import {
   useAddWatchlistStock,
@@ -894,7 +895,9 @@ export default function StockProfilePage() {
     items.push("证据");
     return items;
   }, [hasOpportunityDetail, hasWatchlistDetail]);
-  const stockName = detail?.name || profileData?.name || queryName || activeManagerItem?.name || archivedManagerItem?.name || askCase?.name || code;
+  const rawStockName = detail?.name || profileData?.name || queryName || activeManagerItem?.name || archivedManagerItem?.name || askCase?.name || "";
+  const stockName = rawStockName && rawStockName !== code ? rawStockName : code;
+  const hasResolvedName = Boolean(rawStockName && rawStockName !== code);
   const followupShell = ask.data?.followup || askCase?.evidence_layer?.followup || null;
   const sourceLabel =
     profileData?.primary_source_label && activeTab === "决策"
@@ -932,9 +935,14 @@ export default function StockProfilePage() {
   const todayAction = profileData?.today_action;
   const decisionContext = (detail || askCase) as DecisionContext | undefined;
   const decisionLocked = Boolean(profileData?.readiness && (profileData.readiness.readiness_mode !== "live_ready" || readinessHasStaleData(profileData.readiness)));
+  const trustLevel = profileData?.readiness?.trust_level;
   const pageTitle = decisionLocked
-    ? `${stockName || "个股档案"} ${code}`
-    : detail?.hero?.title || askCase?.hero?.title || `${stockName || "个股档案"} · ${code}`;
+    ? hasResolvedName
+      ? `${stockName} ${code}`
+      : code
+    : detail?.hero?.title
+      || askCase?.hero?.title
+      || (hasResolvedName ? `${stockName} · ${code}` : code);
   const pageSummary = decisionLocked
     ? "数据新鲜度未通过，旧结论已从首屏移除；当前只允许查看证据和刷新状态。"
     : detail?.hero?.summary || detail?.topline?.verdict_summary || askCase?.hero?.summary || "统一查看这只股票的决策、持仓、发现和证据。";
@@ -1133,6 +1141,10 @@ export default function StockProfilePage() {
             </div>
           }
         />
+
+        {trustLevel && trustLevel.level !== "trusted" ? (
+          <TrustBanner trust={trustLevel} className="mb-4" />
+        ) : null}
 
         {profile.isError ? <ErrorState message="个股详情暂不可用" onRetry={() => void profile.refetch()} /> : null}
         {manageFeedback ? (

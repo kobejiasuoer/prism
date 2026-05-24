@@ -141,6 +141,23 @@ export interface CapabilityReport {
   last_checked_at: string;
 }
 
+export type TrustLevelValue = "trusted" | "observe_only" | "unreliable";
+
+export interface TrustLevel {
+  level: TrustLevelValue | string;
+  label: string;
+  tone: Tone | string;
+  headline: string;
+  can_observe: boolean;
+  can_review: boolean;
+  can_approve: boolean;
+  can_trade_live: boolean;
+  blocking_reasons: string[];
+  next_step: string | null;
+  next_step_label: string | null;
+  last_checked_at: string;
+}
+
 export interface ReadinessQualityFreshness {
   key: string;
   title: string;
@@ -178,6 +195,7 @@ export interface ReadinessPayload {
   dataset_freshness?: ReadinessSourceFreshness[];
   dataset_states?: Record<string, FreshnessState | string>;
   capabilities?: Partial<Record<CapabilityKey, CapabilityReport>> & Record<string, CapabilityReport>;
+  trust_level?: TrustLevel;
 }
 
 export type AccountMode = "research" | "shadow" | "live_small";
@@ -1588,6 +1606,9 @@ export interface RefreshStatus {
     next_allowed_at?: string;
     issue_count?: number;
     issues?: ReadinessIssue[];
+    purpose?: string;
+    writes_to_ledger?: boolean;
+    estimated_seconds?: number;
   }>;
   cooldown: {
     seconds: number;

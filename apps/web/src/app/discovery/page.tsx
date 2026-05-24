@@ -10,7 +10,8 @@ import { EvidencePanel } from "@/components/evidence-panel";
 import { LearningMemoryPreview } from "@/components/learning-memory";
 import { MetricCard, MetricSkeleton } from "@/components/metric-card";
 import { PageTitle } from "@/components/page-title";
-import { useAddWatchlistStock, useOpportunities, useUpdateTodayActionDecision } from "@/lib/hooks";
+import { TrustBanner } from "@/components/trust-banner";
+import { useAddWatchlistStock, useOpportunities, useTodayData, useUpdateTodayActionDecision } from "@/lib/hooks";
 import type { BasicCard, CardGroup, OpportunitiesData, StockListCard } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -333,11 +334,15 @@ function ThemeRadar({ cards }: { cards?: BasicCard[] }) {
 
 export default function DiscoveryPage() {
   const opportunities = useOpportunities();
+  const today = useTodayData();
+  const trust = today.data?.readiness?.trust_level;
   const addStock = useAddWatchlistStock();
   const reviewDecision = useUpdateTodayActionDecision();
   const data = opportunities.data;
   const groups = data?.groups?.length ? data.groups : data?.secondary_groups || [];
   const learningMemories = data?.learning_memories || [];
+  const totalGroupCount = useMemo(() => groups.reduce((sum, group) => sum + groupCount(group), 0), [groups]);
+  const trustBlocksTopline = trust && trust.level !== "trusted" && totalGroupCount === 0;
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [feedback, setFeedback] = useState("");
   const firstNonEmptyIndex = useMemo(() => {
@@ -388,8 +393,10 @@ export default function DiscoveryPage() {
       <div className="mx-auto max-w-7xl">
         <PageTitle
           eyebrow={data?.display_date || data?.generated_at?.slice(0, 10) || data?.trade_date || "Discovery"}
-          title={data?.topline?.verdict_title || data?.hero?.title || "观察池"}
-          summary={data?.topline?.verdict_summary || data?.hero?.summary || "候选 Pipeline、阀门状态、质检和主线热力。"}
+          title={trustBlocksTopline ? "观察池" : (data?.topline?.verdict_title || data?.hero?.title || "观察池")}
+          summary={trustBlocksTopline
+            ? "今日观察池没有产生新名字。先按下方可信度提示完成恢复，再决定要不要复核。"
+            : data?.topline?.verdict_summary || data?.hero?.summary || "候选 Pipeline、阀门状态、质检和主线热力。"}
           icon={Telescope}
           badge={data?.hero?.status_label || (data?.brief_is_live ? "总控同步" : "实时链路")}
           actions={
@@ -403,6 +410,10 @@ export default function DiscoveryPage() {
             </button>
           }
         />
+
+        {trust && trust.level !== "trusted" ? (
+          <TrustBanner trust={trust} className="mb-4" />
+        ) : null}
 
         {opportunities.isError ? (
           <ErrorState message="观察池数据暂不可用" onRetry={() => void opportunities.refetch()} />

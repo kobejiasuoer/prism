@@ -40,7 +40,9 @@ from source_budget import SOURCE_BUDGETS
 __all__ = [
     "Capability",
     "CapabilityReport",
+    "TrustLevel",
     "evaluate_capabilities",
+    "evaluate_trust_level",
 ]
 
 
@@ -415,6 +417,169 @@ def _humanize_state_for_capability(
     if state is FreshnessState.USABLE:
         return f"{label}接近过期阈值，建议尽快刷新。"
     return f"{label}状态需要确认。"
+
+
+@dataclass(frozen=True)
+class TrustLevel:
+    """Single three-state trust verdict consumed by every UI surface.
+
+    Maps the 6-capability matrix into one answer to "can the user trust
+    today's data?". Surfaces use the same verdict so sidebar, command center,
+    stock page and observation pool never disagree.
+    """
+
+    level: str                              # "trusted" | "observe_only" | "unreliable"
+    label: str                              # 可信 / 仅可观察 / 数据失信
+    tone: str                               # good / warning / negative
+    headline: str                           # one operator-facing sentence
+    can_observe: bool
+    can_review: bool
+    can_approve: bool
+    can_trade_live: bool
+    blocking_reasons: list[str] = field(default_factory=list)
+    next_step: str | None = None            # recommended task name
+    next_step_label: str | None = None      # human-readable task label
+    last_checked_at: str = ""
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "level": self.level,
+            "label": self.label,
+            "tone": self.tone,
+            "headline": self.headline,
+            "can_observe": self.can_observe,
+            "can_review": self.can_review,
+            "can_approve": self.can_approve,
+            "can_trade_live": self.can_trade_live,
+            "blocking_reasons": list(self.blocking_reasons),
+            "next_step": self.next_step,
+            "next_step_label": self.next_step_label,
+            "last_checked_at": self.last_checked_at,
+        }
+
+
+_TASK_LABELS: dict[str, str] = {
+    "watchlist_refresh": "刷新自选股快照",
+    "aggressive": "重跑进攻型选股",
+    "screening": "重跑进攻型选股",
+    "midday_confirmation": "重跑午盘承接确认",
+    "command_brief": "重生成投资总控简报",
+    "portfolio_cash": "修复账户现金口径",
+    "account_reconcile": "完成账户对账",
+}
+
+
+def _task_label(task_name: str | None) -> str | None:
+    if not task_name:
+        return None
+    return _TASK_LABELS.get(task_name, task_name)
+
+
+def evaluate_trust_level(
+    *,
+    readiness_payload: Mapping[str, Any],
+    capabilities: Mapping[str, Mapping[str, Any]] | None = None,
+    now: datetime | None = None,
+) -> TrustLevel:
+    """Collapse the capability matrix into a single trust verdict.
+
+    Rules:
+    * ``unreliable`` — observe is blocked. Data is too broken to look at.
+    * ``observe_only`` — observe is granted but approve is not. The page is
+      readable but today's decisions cannot be promoted to real money.
+    * ``trusted`` — approve is granted. Real-money execution is gated only
+      by account mode, which is reported separately via ``can_trade_live``.
+    """
+
+    if capabilities is None:
+        reports = evaluate_capabilities(readiness_payload=readiness_payload, now=now)
+        capabilities = {key: report.as_dict() for key, report in reports.items()}
+
+    def _granted(key: str) -> bool:
+        entry = capabilities.get(key) or {}
+        return bool(entry.get("granted"))
+
+    def _status(key: str) -> str:
+        entry = capabilities.get(key) or {}
+        return str(entry.get("status") or "").strip().lower()
+
+    can_observe = _granted("observe")
+    can_review = _granted("review")
+    can_approve = _granted("approve")
+    can_trade_live = _granted("trade")
+
+    # "Unreliable" only when observe is fully blocked. A degraded observe still
+    # supports look-only usage, which belongs to "observe_only", not "unreliable".
+    observe_blocked = _status("observe") == "blocked"
+
+    checked_at = str(readiness_payload.get("checked_at") or "")
+    if not checked_at:
+        checked_at = (now or datetime.now()).strftime("%Y-%m-%d %H:%M:%S")
+
+    readiness_mode = str(readiness_payload.get("readiness_mode") or "").strip().lower()
+
+    # readiness_mode is the upstream truth: blocked / shadow_only / live_ready.
+    # Trust verdict respects it so the sidebar never disagrees with the home page.
+    if observe_blocked:
+        source_cap = capabilities.get("observe") or {}
+        level = "unreliable"
+        label = "数据失信"
+        tone = "negative"
+        headline = "关键数据失信，今日不作为任何判断依据。先按恢复指引把数据补齐再继续。"
+    elif readiness_mode in {"blocked", "shadow_only"} or not can_approve:
+        source_cap = capabilities.get("approve") or {}
+        level = "observe_only"
+        label = "仅可观察"
+        tone = "warning"
+        if readiness_mode == "blocked":
+            headline = "关键数据被阻断，今日只看不动；先按恢复指引修复再考虑放行。"
+        else:
+            headline = "数据可观察可复核，但今日不可作为真钱执行依据。先补齐缺口再考虑放行。"
+    else:
+        source_cap = capabilities.get("trade") or capabilities.get("approve") or {}
+        level = "trusted"
+        label = "可信"
+        tone = "good"
+        if can_trade_live:
+            headline = "数据完备，今日可作为正式判断与真钱执行的依据。"
+        else:
+            headline = "数据完备，可作为正式判断依据；真钱执行还受账户模式约束，按需切换。"
+
+    blocking_reasons: list[str] = []
+    seen: set[str] = set()
+    for entry in source_cap.get("why_not") or []:
+        message = str(entry.get("message") or entry.get("label") or "").strip()
+        if not message or message in seen:
+            continue
+        seen.add(message)
+        blocking_reasons.append(message)
+        if len(blocking_reasons) >= 3:
+            break
+
+    # Prefer top-level readiness recommendation; fall back to the source capability's first action.
+    next_step: str | None = None
+    recommended_tasks = list(readiness_payload.get("recommended_tasks") or [])
+    if recommended_tasks:
+        next_step = str(recommended_tasks[0]).strip() or None
+    if not next_step:
+        actions = source_cap.get("next_actions") or []
+        if actions:
+            next_step = str(actions[0].get("task_name") or "").strip() or None
+
+    return TrustLevel(
+        level=level,
+        label=label,
+        tone=tone,
+        headline=headline,
+        can_observe=can_observe,
+        can_review=can_review,
+        can_approve=can_approve,
+        can_trade_live=can_trade_live,
+        blocking_reasons=blocking_reasons,
+        next_step=next_step,
+        next_step_label=_task_label(next_step),
+        last_checked_at=checked_at,
+    )
 
 
 def _build_degraded_path(

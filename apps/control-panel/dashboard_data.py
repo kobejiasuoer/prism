@@ -4726,7 +4726,7 @@ def learning_memory_from_pattern(pattern: dict[str, Any], *, match_reason: str) 
     }
 
 
-_REVIEW_LEARNING_INDEX_CACHE: dict[str, Any] = {"mtime_ns": None, "value": None}
+_REVIEW_LEARNING_INDEX_CACHE: dict[str, Any] = {"revision": None, "value": None}
 
 
 def build_review_learning_memory_index() -> dict[str, Any]:
@@ -4736,19 +4736,16 @@ def build_review_learning_memory_index() -> dict[str, Any]:
         return {"cases": [], "patterns": [], "by_code": {}, "error": str(exc)}
 
     try:
-        review_cases_path = decision_ledger._review_cases_path()
+        revision = decision_ledger.read_review_cases_revision()
     except Exception:
-        review_cases_path = None
-
-    mtime_ns: int = 0
-    if review_cases_path is not None:
-        try:
-            mtime_ns = review_cases_path.stat().st_mtime_ns
-        except OSError:
-            mtime_ns = 0
+        revision = None
 
     cached_value = _REVIEW_LEARNING_INDEX_CACHE.get("value")
-    if cached_value is not None and _REVIEW_LEARNING_INDEX_CACHE.get("mtime_ns") == mtime_ns:
+    if (
+        cached_value is not None
+        and revision is not None
+        and _REVIEW_LEARNING_INDEX_CACHE.get("revision") == revision
+    ):
         return cached_value
 
     try:
@@ -4757,6 +4754,9 @@ def build_review_learning_memory_index() -> dict[str, Any]:
         return {"cases": [], "patterns": [], "by_code": {}, "error": str(exc)}
     cases = [item for item in (payload.get("items") or []) if isinstance(item, dict)]
     patterns = [item for item in (payload.get("patterns") or []) if isinstance(item, dict)]
+    # Prefer the revision the payload reports — that matches the content
+    # we actually cache and is what callers will compare against next time.
+    payload_revision = str(payload.get("revision") or "") or revision
 
     by_code: dict[str, list[dict[str, Any]]] = {}
     for case in cases:
@@ -4771,7 +4771,7 @@ def build_review_learning_memory_index() -> dict[str, Any]:
         "by_code": by_code,
         "error": None,
     }
-    _REVIEW_LEARNING_INDEX_CACHE["mtime_ns"] = mtime_ns
+    _REVIEW_LEARNING_INDEX_CACHE["revision"] = payload_revision
     _REVIEW_LEARNING_INDEX_CACHE["value"] = result
     return result
 
