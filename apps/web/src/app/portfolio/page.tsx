@@ -10,6 +10,7 @@ import { EmptyState, ErrorState, Panel, SkeletonBlock } from "@/components/data-
 import { MetricCard, MetricSkeleton } from "@/components/metric-card";
 import { PageTitle } from "@/components/page-title";
 import { StockCard } from "@/components/stock-card";
+import { TrustBanner } from "@/components/trust-banner";
 import { WatchlistManagerPanel } from "@/components/watchlist-manager-panel";
 import {
   useDecisionLedgerRecent,
@@ -2409,6 +2410,10 @@ function PortfolioPageContent() {
 
         {portfolio.isError ? (
           <ErrorState message="账户数据暂不可用" onRetry={() => void portfolio.refetch()} />
+        ) : null}
+
+        {data?.readiness?.trust_level ? (
+          <TrustBanner trust={data.readiness.trust_level} className="mb-4" />
         ) : null}
 
         {data ? <ReadinessBanner data={data} /> : null}

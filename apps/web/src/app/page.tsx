@@ -10,6 +10,7 @@ import {
   MiddayVerify,
   TrustFold,
 } from "@/components/command-brief";
+import { TrustBanner } from "@/components/trust-banner";
 
 export default function CommandCenterPage() {
   const today = useTodayData();
@@ -17,6 +18,7 @@ export default function CommandCenterPage() {
   const refreshStatus = useRefreshStatus("today", true, { auto: true });
   const data = today.data;
   const brief = data?.command_brief;
+  const trust = data?.readiness?.trust_level;
   const tradeDate = brief?.trade_date || data?.expected_trade_date || data?.trade_date || "-";
 
   return (
@@ -46,6 +48,8 @@ export default function CommandCenterPage() {
             </button>
           </div>
         </header>
+
+        {trust ? <TrustBanner trust={trust} className="mb-4" /> : null}
 
         {today.isError ? (
           <div className="war-error">

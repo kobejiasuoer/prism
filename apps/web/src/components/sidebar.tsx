@@ -14,8 +14,9 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { useTheme, type ThemeMode } from "@/components/theme-provider";
+import { TrustBanner } from "@/components/trust-banner";
 import { useOverview, useTodayData } from "@/lib/hooks";
-import { cn } from "@/lib/utils";
+import { cn, toneColor } from "@/lib/utils";
 
 export const navItems = [
   { href: "/", label: "指挥中心", mark: "01" },
@@ -122,8 +123,11 @@ export function Sidebar({
   const pathname = usePathname();
   const overview = useOverview();
   const today = useTodayData();
-  const statusOk = !overview.isError;
+  const daemonOk = !overview.isError;
   const readiness = today.data?.readiness;
+  const trust = readiness?.trust_level;
+  const trustTone = trust?.tone || "warning";
+  const trustColor = toneColor(trustTone);
   const watchlistSource =
     readiness?.source_freshness?.find((source) => source.key === "watchlist")
     || overview.data?.freshness?.find((source) => source.label.includes("自选") || source.key?.includes("watch"));
@@ -185,15 +189,37 @@ export function Sidebar({
       </Link>
 
       <div className="prism-side-status">
+        {trust ? (
+          <Link
+            href="/settings#recovery"
+            className="focus-ring -mx-1 mb-1 flex flex-col gap-1 rounded-md border px-2 py-1.5 text-left no-underline"
+            style={{
+              borderColor: `color-mix(in srgb, ${trustColor} 24%, transparent)`,
+              backgroundColor: `color-mix(in srgb, ${trustColor} 6%, transparent)`,
+            }}
+            title={trust.headline}
+          >
+            <span className="flex items-center justify-between gap-2">
+              <span className="text-[10px] uppercase tracking-wide text-[var(--text-tertiary)]">今日可信度</span>
+              <TrustBanner trust={trust} compact />
+            </span>
+            <span className="line-clamp-2 text-[11px] leading-4 text-[var(--text-secondary)]">
+              {trust.headline}
+            </span>
+            {trust.next_step_label && trust.level !== "trusted" ? (
+              <span className="text-[10px] text-[var(--text-tertiary)]">下一步：{trust.next_step_label}</span>
+            ) : null}
+          </Link>
+        ) : null}
         <div className="prism-status-line">
           <span>daemon</span>
-          <span className={cn("flex items-center gap-1.5", statusOk ? "buy-text" : "sell-text")}>
+          <span className={cn("flex items-center gap-1.5", daemonOk ? "buy-text" : "sell-text")}>
             <Circle
               size={7}
-              fill={statusOk ? "var(--positive)" : "var(--negative)"}
-              className={statusOk ? "text-[var(--positive)]" : "text-[var(--negative)]"}
+              fill={daemonOk ? "var(--positive)" : "var(--negative)"}
+              className={daemonOk ? "text-[var(--positive)]" : "text-[var(--negative)]"}
             />
-            {statusOk ? "online" : "offline"}
+            {daemonOk ? "已连接" : "未连接"}
           </span>
         </div>
         <div className="prism-status-line">
@@ -210,11 +236,11 @@ export function Sidebar({
           <span className="prism-status-copy">
             <Circle
               size={8}
-              fill={statusOk ? "var(--positive)" : "var(--negative)"}
-              className={statusOk ? "text-[var(--positive)]" : "text-[var(--negative)]"}
+              fill={daemonOk ? "var(--positive)" : "var(--negative)"}
+              className={daemonOk ? "text-[var(--positive)]" : "text-[var(--negative)]"}
             />
             <span className="truncate">
-              {statusOk ? "系统正常" : "后端未连接"}
+              {daemonOk ? "后端已连接" : "后端未连接"}
               {overview.data?.generated_at ? ` · ${overview.data.generated_at.slice(11, 16)}` : ""}
             </span>
           </span>

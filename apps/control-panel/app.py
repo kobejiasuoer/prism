@@ -934,6 +934,54 @@ def _latest_audit_event(*, state: dict[str, Any], trigger_type: str | None = Non
     return None
 
 
+_RECOVERY_TASK_METADATA: dict[str, dict[str, Any]] = {
+    "watchlist_refresh": {
+        "purpose": "刷新自选股快照，后续观察池与持仓复核都依赖它。",
+        "writes_to_ledger": False,
+        "estimated_seconds": 60,
+    },
+    "aggressive": {
+        "purpose": "重跑进攻型选股，决定今天有没有新的候选股。",
+        "writes_to_ledger": False,
+        "estimated_seconds": 120,
+    },
+    "screening": {
+        "purpose": "重跑进攻型选股，决定今天有没有新的候选股。",
+        "writes_to_ledger": False,
+        "estimated_seconds": 120,
+    },
+    "midday_confirmation": {
+        "purpose": "重跑午盘承接确认，决定哪些观察项继续保留。",
+        "writes_to_ledger": False,
+        "estimated_seconds": 90,
+    },
+    "command_brief": {
+        "purpose": "重新生成投资总控简报，把当日判断串成一条链。",
+        "writes_to_ledger": False,
+        "estimated_seconds": 30,
+    },
+    "portfolio_cash": {
+        "purpose": "修复账户现金口径，避免真钱执行误判。",
+        "writes_to_ledger": True,
+        "estimated_seconds": 30,
+    },
+    "account_reconcile": {
+        "purpose": "完成账户对账，让真钱执行重新有依据。",
+        "writes_to_ledger": True,
+        "estimated_seconds": 60,
+    },
+}
+
+
+def _recovery_metadata(task_name: str) -> dict[str, Any]:
+    base = _RECOVERY_TASK_METADATA.get(task_name) or {}
+    return {
+        "purpose": base.get("purpose") or "运行此任务以恢复对应数据源。",
+        "writes_to_ledger": bool(base.get("writes_to_ledger", False)),
+        "estimated_seconds": int(base.get("estimated_seconds") or 60),
+    }
+
+
 def _build_readiness_recovery_steps(
     *,
     page: str,
@@ -988,6 +1036,7 @@ def _build_readiness_recovery_steps(
             status = "running"
         elif cooldown_remaining > 0:
             status = "cooldown"
+        metadata = _recovery_metadata(task_name)
         steps.append(
             {
                 "step": index,
@@ -1006,6 +1055,9 @@ def _build_readiness_recovery_steps(
                     }
                     for item in issues[:3]
                 ],
+                "purpose": metadata["purpose"],
+                "writes_to_ledger": metadata["writes_to_ledger"],
+                "estimated_seconds": metadata["estimated_seconds"],
             }
         )
     return steps
@@ -1747,6 +1799,8 @@ async def api_capabilities() -> JSONResponse:
         {
             "checked_at": readiness.get("checked_at"),
             "session": readiness.get("session"),
+            "readiness_mode": readiness.get("readiness_mode"),
+            "trust_level": readiness.get("trust_level"),
             "capabilities": readiness.get("capabilities", {}),
         }
     )
@@ -1782,6 +1836,7 @@ async def api_readiness_live() -> JSONResponse:
             "recommended_tasks": readiness.get("recommended_tasks", []),
             "source_states": readiness.get("source_states", {}),
             "capabilities": readiness.get("capabilities", {}),
+            "trust_level": readiness.get("trust_level"),
             "data_capability_summary": {
                 **matrix_payload["summary"],
                 "registry_issues": matrix_payload["registry_issues"],

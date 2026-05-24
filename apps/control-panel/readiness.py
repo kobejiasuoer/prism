@@ -39,7 +39,7 @@ from trading_calendar import (
 )
 
 from freshness_state import FreshnessState, classify_source_row
-from capability_matrix import evaluate_capabilities
+from capability_matrix import evaluate_capabilities, evaluate_trust_level
 
 
 __all__ = [
@@ -861,6 +861,12 @@ def compute_readiness(
     )
     capabilities_payload = {key: report.as_dict() for key, report in capability_reports.items()}
 
+    trust_level_payload = evaluate_trust_level(
+        readiness_payload=base_payload_for_caps,
+        capabilities=capabilities_payload,
+        now=current,
+    ).as_dict()
+
     return {
         "expected_trade_date": expected,
         "data_trade_date": data_trade_date,
@@ -884,6 +890,7 @@ def compute_readiness(
         "dataset_freshness": dataset_rows,
         "dataset_states": dataset_state_map,
         "capabilities": capabilities_payload,
+        "trust_level": trust_level_payload,
     }
 
 

@@ -642,6 +642,18 @@ function ReadinessStatusPanel({ status }: { status?: RefreshStatus }) {
   );
 }
 
+function formatDuration(seconds?: number) {
+  const value = Math.max(0, Math.round(Number(seconds || 0)));
+  if (!value) {
+    return "约 1 分钟";
+  }
+  if (value < 60) {
+    return `约 ${value} 秒`;
+  }
+  const minutes = Math.round(value / 60);
+  return `约 ${minutes} 分钟`;
+}
+
 function SafeRefreshPanel({
   status,
   tasks,
@@ -667,9 +679,13 @@ function SafeRefreshPanel({
       next_allowed_at: "",
       issue_count: 0,
       issues: [],
+      purpose: copy.summary,
+      writes_to_ledger: false,
+      estimated_seconds: 60,
     };
   });
   const rows = recoverySteps.length ? recoverySteps : fallbackRows;
+  const trust = status?.readiness?.trust_level;
 
   function startRefresh(taskName?: string) {
     const normalized = normalizeTaskName(taskName || status?.recommended_task?.task_name);
@@ -690,69 +706,97 @@ function SafeRefreshPanel({
   }
 
   return (
-    <Panel title="日常安全刷新" eyebrow="Safe Refresh">
-      <div className="surface-card p-4">
-        <div className="mb-4 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="positive">安全区</Badge>
-            <span className="text-[12px] text-[var(--text-secondary)]">
-              这些入口只触发数据刷新或简报生成；不会写真实账本，不会提交成交，不会自动下单。
-            </span>
-          </div>
-          {feedback ? <div className="mt-2 text-[12px] text-[var(--text-secondary)]">{feedback}</div> : null}
-          {advancedRecoveryCount > 0 ? (
-            <div className="mt-2 text-[12px] text-[var(--text-tertiary)]">
-              另有 {advancedRecoveryCount} 个高级恢复任务已放在右侧高级任务区，避免和日常刷新混用。
+    <section id="recovery" className="scroll-mt-6">
+      <Panel title="数据恢复向导" eyebrow="Recovery Wizard">
+        <div className="surface-card p-4">
+          <div className="mb-4 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone="positive">安全区</Badge>
+              <span className="text-[12px] text-[var(--text-secondary)]">
+                按下方顺序逐步恢复今天的数据链路。带「写账本」标记的步骤会影响真实账本，其他步骤只刷新数据或重生成简报。
+              </span>
             </div>
-          ) : null}
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          {rows.map((row) => {
-            const taskName = normalizeTaskName(row.task_name);
-            const copy = refreshTaskCopy(taskName);
-            const cooling = Number(row.cooldown_remaining_seconds || 0) > 0;
-            const running = row.status === "running";
-            const disabled = trigger.isPending || running || cooling || !row.can_trigger;
-            return (
-              <div key={`${row.step}-${taskName}`} className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-4">
-                <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-[var(--text-primary)]">{row.title || copy.title}</div>
-                    <div className="mono mt-1 text-[11px] text-[var(--text-tertiary)]">{taskName}</div>
-                  </div>
-                  <Badge tone={running ? "watch" : cooling ? "warning" : "positive"}>
-                    {running ? "运行中" : cooling ? `冷却 ${formatCooldown(row.cooldown_remaining_seconds)}` : "可运行"}
-                  </Badge>
-                </div>
-                <p className="text-[12px] leading-5 text-[var(--text-secondary)]">{copy.summary}</p>
-                <p className="mt-1 text-[11px] leading-4 text-[var(--text-tertiary)]">{copy.impact}</p>
-                {row.issues?.length ? (
-                  <div className="mt-3 space-y-1">
-                    {row.issues.slice(0, 2).map((issue) => (
-                      <div key={`${issue.code}-${issue.label}`} className="text-[11px] leading-4 text-[var(--text-tertiary)]">
-                        <span className="font-medium text-[var(--text-secondary)]">{issue.label}：</span>
-                        {issue.message}
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-                <button
-                  type="button"
-                  className="focus-ring prism-btn prism-btn-primary mt-3"
-                  onClick={() => startRefresh(taskName)}
-                  disabled={disabled}
-                >
-                  {trigger.isPending ? <LoaderCircle size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-                  运行安全刷新
-                </button>
+            {trust ? (
+              <div className="mt-2 text-[12px] leading-5 text-[var(--text-secondary)]">
+                <span className="font-medium text-[var(--text-primary)]">当前可信度：</span>
+                {trust.label} · {trust.headline}
               </div>
-            );
-          })}
-          {!rows.length ? <EmptyState>暂无可推荐的安全刷新任务。</EmptyState> : null}
+            ) : null}
+            {feedback ? <div className="mt-2 text-[12px] text-[var(--text-secondary)]">{feedback}</div> : null}
+            {advancedRecoveryCount > 0 ? (
+              <div className="mt-2 text-[12px] text-[var(--text-tertiary)]">
+                另有 {advancedRecoveryCount} 个高级恢复任务已放在右侧高级任务区，避免和日常刷新混用。
+              </div>
+            ) : null}
+          </div>
+
+          <ol className="flex flex-col gap-3">
+            {rows.map((row, index) => {
+              const taskName = normalizeTaskName(row.task_name);
+              const copy = refreshTaskCopy(taskName);
+              const cooling = Number(row.cooldown_remaining_seconds || 0) > 0;
+              const running = row.status === "running";
+              const disabled = trigger.isPending || running || cooling || !row.can_trigger;
+              const stepNumber = row.step || index + 1;
+              const writesToLedger = Boolean(row.writes_to_ledger);
+              const purpose = row.purpose || copy.summary;
+              const passed = !running && !cooling && row.can_trigger && (row.issue_count || 0) === 0;
+              return (
+                <li
+                  key={`${stepNumber}-${taskName}`}
+                  className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--bg-tertiary)] text-[12px] font-medium text-[var(--text-primary)]">
+                        {stepNumber}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-medium text-[var(--text-primary)]">{row.title || copy.title}</span>
+                          <Badge tone={running ? "watch" : cooling ? "warning" : passed ? "positive" : "info"}>
+                            {running ? "运行中" : cooling ? `冷却 ${formatCooldown(row.cooldown_remaining_seconds)}` : passed ? "当前通过" : "待运行"}
+                          </Badge>
+                          {writesToLedger ? <Badge tone="risk">写账本</Badge> : <Badge tone="info">不写账本</Badge>}
+                          <span className="text-[11px] text-[var(--text-tertiary)]">{formatDuration(row.estimated_seconds)}</span>
+                        </div>
+                        <p className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">
+                          <span className="text-[var(--text-tertiary)]">为什么：</span>
+                          {purpose}
+                        </p>
+                        <p className="mt-1 text-[11px] leading-4 text-[var(--text-tertiary)]">
+                          {copy.impact}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="focus-ring prism-btn prism-btn-primary"
+                      onClick={() => startRefresh(taskName)}
+                      disabled={disabled}
+                    >
+                      {trigger.isPending ? <LoaderCircle size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                      运行此步
+                    </button>
+                  </div>
+                  {row.issues?.length ? (
+                    <div className="mt-3 space-y-1 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-3 py-2">
+                      {row.issues.slice(0, 2).map((issue) => (
+                        <div key={`${issue.code}-${issue.label}`} className="text-[11px] leading-4 text-[var(--text-tertiary)]">
+                          <span className="font-medium text-[var(--text-secondary)]">{issue.label}：</span>
+                          {issue.message}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+            {!rows.length ? <EmptyState>当前没有待恢复的步骤。</EmptyState> : null}
+          </ol>
         </div>
-      </div>
-    </Panel>
+      </Panel>
+    </section>
   );
 }
 
