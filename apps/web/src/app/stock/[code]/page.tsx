@@ -827,6 +827,41 @@ function FormalDataSnapshotPanel({ data }: { data?: StockFormalData }) {
           ))}
         </div>
 
+        {data.factor_profile && (
+          <div className="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] uppercase text-[var(--text-tertiary)]">Tushare 因子评分</span>
+              <Badge tone={typeof data.factor_profile.tushare_score === "number" ? "positive" : "stale"}>
+                {typeof data.factor_profile.tushare_score === "number"
+                  ? `${Math.round(data.factor_profile.tushare_score)} 分`
+                  : "数据缺失/不可用"}
+              </Badge>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {(data.factor_profile.factor_tags ?? []).map((t) => <Badge key={t} tone="info">{t}</Badge>)}
+              {(data.factor_profile.risk_flags ?? []).map((t) => <Badge key={t} tone="risk">{t}</Badge>)}
+            </div>
+            {data.factor_profile.explanation?.entry_reason && (
+              <p className="mt-2 text-[13px] text-[var(--text-primary)]">{data.factor_profile.explanation.entry_reason}</p>
+            )}
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {([
+                ["基本面", data.factor_profile.explanation?.evidence?.fundamental],
+                ["资金面", data.factor_profile.explanation?.evidence?.capital],
+                ["交易异动", data.factor_profile.explanation?.evidence?.trading_anomaly],
+                ["指数权重", data.factor_profile.explanation?.evidence?.index_weight],
+              ] as const).map(([label, block]) => (
+                <div key={label} className="rounded-md border border-[var(--border-subtle)] px-3 py-2">
+                  <div className="text-[11px] text-[var(--text-tertiary)]">{label}</div>
+                  <div className="text-[13px] text-[var(--text-primary)]">
+                    {block?.available ? block?.interpretation : "数据缺失/不可用"}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
           <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
             <div className="mb-2 flex items-center justify-between gap-2">
