@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import statistics
 from pathlib import Path
 from typing import Any
 
@@ -72,6 +73,10 @@ def _safe_float(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return None if math.isnan(number) or math.isinf(number) else number
+
+
+def _fmt_num(value, digits: int = 2) -> str:
+    return "—" if value is None else f"{round(value, digits)}"
 
 
 def _normalize_code(value: Any) -> str:
@@ -179,7 +184,7 @@ DIMENSION_WEIGHTS = {
 
 
 def _band(value: float | None, points: list[tuple[float, float]]) -> float | None:
-    """points: ascending (threshold, score); return score for first threshold >= value, else last."""
+    """points: ascending (threshold, score). Bands are upper-inclusive — a value equal to a threshold gets that threshold's score; values above the last threshold get the last score."""
     if value is None:
         return None
     for threshold, score in points:
@@ -212,7 +217,7 @@ def _score_capital_flow(v, pool_stats):
     if pool_stats and pool_stats.get("five_day_main_net_yi_median") is not None and five is not None:
         score += 10.0 if five >= pool_stats["five_day_main_net_yi_median"] else -5.0
     score = max(0.0, min(100.0, score))
-    return score, f"当日主力 {main if main is None else round(main,2)} 亿，5日 {five if five is None else round(five,2)} 亿"
+    return score, f"当日主力 {_fmt_num(main)} 亿，5日 {_fmt_num(five)} 亿"
 
 
 def _score_valuation(v):
@@ -238,7 +243,7 @@ def _score_liquidity(v, pool_stats):
         score += 20.0 if 0.3 <= tr <= 8 else -10.0
     if vr is not None:
         score += 15.0 if vr >= 1.0 else -5.0
-    return max(0.0, min(100.0, score)), f"换手 {tr if tr is None else round(tr,2)}%，量比 {vr if vr is None else round(vr,2)}"
+    return max(0.0, min(100.0, score)), f"换手 {_fmt_num(tr)}%，量比 {_fmt_num(vr)}"
 
 
 def _score_index(v):
@@ -257,6 +262,8 @@ def _score_dragon_tiger(v):
     net = v.get("top_inst_net_buy")
     if hits == 0 and net is None:
         return None, "近窗口无龙虎榜记录"
+    # NOTE: institutional net-buy intentionally both lifts this score and raises the
+    # 短线脉冲风险 flag in _derive_risk_flags — bullish but pump-prone. Not a contradiction.
     score = 50.0 + (15.0 if net and net > 0 else (-10.0 if net and net < 0 else 0.0))
     return max(0.0, min(100.0, score)), f"龙虎榜命中 {hits} 次" + ("，机构净买入" if net and net > 0 else ("，机构净卖出" if net and net < 0 else ""))
 
@@ -359,8 +366,6 @@ def _build_explanation(v, scored, tags, risk_flags) -> dict[str, Any]:
         },
     }
 
-
-import statistics
 
 _POOL_FIELDS = ("five_day_main_net_yi", "turnover_rate", "roe")
 
