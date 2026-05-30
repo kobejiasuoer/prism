@@ -870,6 +870,10 @@ export interface StockListCard {
   priority_label?: string | number;
   persistence_label?: string;
   action_key?: string;
+  tushare_score?: number | null;
+  factor_tags?: string[];
+  factor_risk_flags?: string[];
+  factor_explanation?: TushareFactorExplanation;
 }
 
 export interface CardGroup<T = StockListCard> {
@@ -1907,6 +1911,42 @@ export interface DataAssetsStatus {
   } | null;
 }
 
+export interface TushareFactorEvidenceBlock {
+  values?: Record<string, number | string | null | Array<Record<string, unknown>>>;
+  interpretation?: string;
+  available?: boolean;
+}
+
+export interface TushareFactorExplanation {
+  entry_reason?: string;
+  upgrade_condition?: string;
+  abandon_condition?: string;
+  supporting_evidence?: string[];
+  counter_risks?: string[];
+  evidence?: {
+    fundamental?: TushareFactorEvidenceBlock;
+    capital?: TushareFactorEvidenceBlock;
+    trading_anomaly?: TushareFactorEvidenceBlock;
+    index_weight?: TushareFactorEvidenceBlock;
+  };
+}
+
+export interface TushareFactorProfile {
+  tushare_score?: number | null;
+  data_completeness?: number;
+  tushare_score_breakdown?: Record<string, {
+    score?: number | null;
+    weight?: number;
+    contribution?: number;
+    detail?: string;
+    available?: boolean;
+  }>;
+  factor_tags?: string[];
+  risk_flags?: string[];
+  explanation?: TushareFactorExplanation;
+  trade_date_used?: string | null;
+}
+
 export interface StockFormalData {
   available: boolean;
   code: string;
@@ -1926,6 +1966,7 @@ export interface StockFormalData {
   dividends?: Array<Record<string, unknown>>;
   shareholders?: Array<Record<string, unknown>>;
   source_cards?: SourceCardData[];
+  factor_profile?: TushareFactorProfile;
 }
 
 export interface ScheduledRunState {
