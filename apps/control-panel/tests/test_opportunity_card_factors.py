@@ -23,8 +23,8 @@ def test_screening_card_includes_factor_fields():
 
 def test_candidate_detail_carries_full_factor_bundle(monkeypatch):
     # build_candidate_detail_view sources candidate via find_candidate_detail; stub it.
-    import prism_canonical
-    monkeypatch.setattr(prism_canonical, "find_candidate_detail", lambda code, trade_date=None: {
+    # dashboard_data imports find_candidate_detail by name, so patch it on dashboard_data.
+    monkeypatch.setattr(dashboard_data, "find_candidate_detail", lambda code, trade_date=None: {
         "code": "600519", "name": "贵州茅台",
         "tushare_factors": {"tushare_score": 72.0, "tushare_score_breakdown": {"quality": {"score": 90}},
                             "factor_tags": ["高ROE"], "risk_flags": [], "explanation": {"entry_reason": "x"}},

@@ -9202,6 +9202,11 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
             },
         ],
         "artifacts": [item for item in artifacts if item],
+        "tushare_factors": (candidate.get("tushare_factors") or {}),
+        "tushare_score": candidate.get("tushare_score"),
+        "factor_tags": candidate.get("factor_tags") or [],
+        "factor_risk_flags": candidate.get("factor_risk_flags") or [],
+        "factor_explanation": candidate.get("factor_explanation") or {},
         "links": {
             **today_nav_links(),
             "self": today_candidate_detail_url(candidate.get("code")),
