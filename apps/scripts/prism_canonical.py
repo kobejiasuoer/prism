@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from datetime import datetime
@@ -218,6 +219,74 @@ def latest_matching(pattern: Path, exclude_tokens: tuple[str, ...] = ()) -> Path
 
     files.sort(key=_path_sort_key, reverse=True)
     return files[0] if files else None
+
+
+def _date_prefix(value: Any) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    compact = re.match(r"^(\d{4})(\d{2})(\d{2})$", text)
+    if compact:
+        year, month, day = compact.groups()
+        return f"{year}-{month}-{day}"
+    dashed = re.match(r"^(\d{4}-\d{2}-\d{2})", text)
+    return dashed.group(1) if dashed else None
+
+
+def _quality_payload_trade_date(data: dict[str, Any]) -> str | None:
+    for key in ("checked_trade_date", "trade_date", "expected_trade_date"):
+        normalized = _date_prefix(data.get(key))
+        if normalized:
+            return normalized
+    return None
+
+
+def _expected_quality_trade_date() -> str | None:
+    for env_key in ("PRISM_EXPECTED_TRADE_DATE", "TRADE_DATE", "RUN_DATE"):
+        normalized = _date_prefix(os.environ.get(env_key))
+        if normalized:
+            return normalized
+
+    control_panel_root = BASE_DIR / "control-panel"
+    if control_panel_root.exists() and str(control_panel_root) not in sys.path:
+        sys.path.insert(0, str(control_panel_root))
+    try:
+        from readiness import expected_trade_date as readiness_expected_trade_date  # type: ignore
+
+        return _date_prefix(readiness_expected_trade_date())
+    except Exception:
+        return None
+
+
+def latest_quality_matching(
+    pattern: Path,
+    exclude_tokens: tuple[str, ...] = (),
+    expected_trade_date: str | None = None,
+) -> Path | None:
+    files = list(pattern.parent.glob(pattern.name))
+    if exclude_tokens:
+        files = [path for path in files if not any(token in path.name for token in exclude_tokens)]
+    if not files:
+        return None
+
+    payloads = [(path, load_json(path)) for path in files]
+    if expected_trade_date:
+        matching = [
+            path
+            for path, data in payloads
+            if _quality_payload_trade_date(data) == expected_trade_date
+        ]
+        if matching:
+            matching.sort(key=lambda path: (path.stat().st_mtime, _path_sort_key(path)), reverse=True)
+            return matching[0]
+
+    explicit = [path for path, data in payloads if _quality_payload_trade_date(data)]
+    if explicit:
+        explicit.sort(key=lambda path: (path.stat().st_mtime, _path_sort_key(path)), reverse=True)
+        return explicit[0]
+
+    files.sort(key=_path_sort_key, reverse=True)
+    return files[0]
 
 
 def resolve_watchlist_snapshot_path(path: str | None = None, trade_date: str | None = None) -> Path | None:
@@ -681,6 +750,12 @@ def normalize_candidate(raw: dict[str, Any], batch_id: str) -> dict[str, Any]:
         "consistency": raw.get("consistency") or {},
         "execution_quality": raw.get("execution_quality") or {},
         "capital_flow": capital_flow,
+        "tushare_score": (raw.get("tushare_factors") or {}).get("tushare_score"),
+        "tushare_score_breakdown": (raw.get("tushare_factors") or {}).get("tushare_score_breakdown") or {},
+        "factor_tags": (raw.get("tushare_factors") or {}).get("factor_tags") or [],
+        "factor_risk_flags": (raw.get("tushare_factors") or {}).get("risk_flags") or [],
+        "factor_explanation": (raw.get("tushare_factors") or {}).get("explanation") or {},
+        "tushare_factors": raw.get("tushare_factors") or {},
     }
 
 
@@ -939,15 +1014,20 @@ def find_candidate_detail(code: str, path: str | None = None, trade_date: str | 
 
 
 def load_quality_status(lane: str | None = None) -> dict[str, Any]:
+    expected = _expected_quality_trade_date()
+
     def load_lane(target_lane: str) -> dict[str, Any]:
         pattern = QUALITY_PATTERNS[target_lane]
         exclude = ("midday_",) if target_lane == "aggressive" else ()
-        path = latest_matching(pattern, exclude_tokens=exclude)
+        path = latest_quality_matching(pattern, exclude_tokens=exclude, expected_trade_date=expected)
         data = load_json(path)
         return {
             "lane": target_lane,
             "checked_at": data.get("checked_at") if data else None,
             "validation_status": data.get("validation_status") if data else None,
+            "trade_date": data.get("trade_date") if data else None,
+            "checked_trade_date": data.get("checked_trade_date") if data else None,
+            "expected_trade_date": data.get("expected_trade_date") if data else None,
             "expected_timestamp": data.get("expected_timestamp") if data else None,
             "errors": data.get("errors") or [],
             "warnings": data.get("warnings") or [],
@@ -972,7 +1052,14 @@ def lifecycle_activity_count(summary: dict[str, Any] | None) -> int:
     counts = summary or {}
     return sum(
         int(counts.get(key) or 0)
-        for key in ("entered_count", "upgraded_count", "downgraded_count", "exited_count", "handed_off_count")
+        for key in (
+            "entered_count",
+            "upgraded_count",
+            "downgraded_count",
+            "continued_count",
+            "exited_count",
+            "handed_off_count",
+        )
     )
 
 
@@ -1027,6 +1114,7 @@ def normalize_lifecycle_item(raw: dict[str, Any]) -> dict[str, Any]:
         "current_tier",
         "current_screening_status",
         "in_current_shortlist",
+        "persistence_label",
     ):
         if key not in raw:
             continue
@@ -1062,6 +1150,7 @@ def load_lifecycle(path: str | None = None, require_activity: bool = False) -> d
             "entered_count": int(summary.get("entered_count") or 0),
             "upgraded_count": int(summary.get("upgraded_count") or 0),
             "downgraded_count": int(summary.get("downgraded_count") or 0),
+            "continued_count": int(summary.get("continued_count") or 0),
             "exited_count": int(summary.get("exited_count") or 0),
             "handed_off_count": int(summary.get("handed_off_count") or 0),
             "current_pool_size": int(summary.get("current_pool_size") or 0),
@@ -1072,6 +1161,7 @@ def load_lifecycle(path: str | None = None, require_activity: bool = False) -> d
             "entered": [normalize_lifecycle_item(item or {}) for item in (raw.get("entered") or [])],
             "upgraded": [normalize_lifecycle_item(item or {}) for item in (raw.get("upgraded") or [])],
             "downgraded": [normalize_lifecycle_item(item or {}) for item in (raw.get("downgraded") or [])],
+            "continued": [normalize_lifecycle_item(item or {}) for item in (raw.get("continued") or [])],
             "exited": [normalize_lifecycle_item(item or {}) for item in (raw.get("exited") or [])],
             "handed_off": [normalize_lifecycle_item(item or {}) for item in (raw.get("handed_off") or [])],
         },
