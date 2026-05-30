@@ -2961,6 +2961,7 @@ async def api_decision_ledger_learning_loop(request: Request) -> JSONResponse:
     as_of = request.query_params.get("as_of") or None
     records, errors = decision_ledger.scan_all_decisions()
     payload = decision_ledger.build_rule_learning_loop(records, errors=errors, as_of=as_of)
+    payload["factor_learning_loop"] = decision_ledger.build_factor_learning_loop(records)
     return JSONResponse(payload)
 
 

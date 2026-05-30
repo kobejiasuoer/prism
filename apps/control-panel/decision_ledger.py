@@ -2354,6 +2354,75 @@ _LEARNING_REVIEW_LABELS = {
 }
 
 
+def _factor_returns(records, predicate):
+    by_window: dict[str, list[float]] = {}
+    mature = 0
+    for rec in records:
+        snap = ((rec.get("factor_snapshot") or {}).get("factor_snapshot")) or {}
+        if not predicate(snap):
+            continue
+        outcomes = [o for o in (rec.get("outcome_events") or []) if isinstance(o, Mapping)]
+        if not outcomes:
+            continue
+        mature += 1
+        for o in outcomes:
+            window = o.get("window")
+            ret = (o.get("market_data") or {}).get("relative_return_pct")
+            if window and isinstance(ret, (int, float)):
+                by_window.setdefault(window, []).append(float(ret))
+    avg = {w: round(sum(v) / len(v), 3) for w, v in by_window.items()}
+    win = {w: round(sum(1 for x in v if x > 0) / len(v), 3) for w, v in by_window.items()}
+    return {"mature_count": mature, "sample_count": mature,
+            "avg_return_by_window": avg, "win_rate_by_window": win}
+
+
+def build_factor_learning_loop(records) -> dict[str, Any]:
+    """Per-factor forward-return bucketing (research-only learning statistic).
+
+    Buckets matured decision records by a handful of factor dimensions
+    captured in ``factor_snapshot`` and reports average / win-rate of the
+    relative forward return per outcome window.  This never feeds an
+    execution or readiness gate; it is a read-only feedback view.
+    """
+
+    def roe(snap): return (snap.get("fundamentals") or {}).get("roe")
+    def pb(snap): return (snap.get("valuation") or {}).get("pb")
+    def inst(snap): return (snap.get("top_inst_activity") or {}).get("net_buy")
+    def north(snap): return (snap.get("market_context") or {}).get("north_money")
+    def member(snap): return bool(snap.get("index_membership"))
+    return {
+        "learning_loop_version": LEARNING_LOOP_VERSION,
+        "outcome_windows": list(OUTCOME_WINDOWS),
+        "buckets": {
+            "roe": {
+                "high": _factor_returns(records, lambda s: isinstance(roe(s), (int, float)) and roe(s) >= 12),
+                "low": _factor_returns(records, lambda s: isinstance(roe(s), (int, float)) and roe(s) < 12),
+                "label": "高ROE(≥12%) vs 低ROE",
+            },
+            "pb": {
+                "low": _factor_returns(records, lambda s: isinstance(pb(s), (int, float)) and pb(s) <= 2),
+                "high": _factor_returns(records, lambda s: isinstance(pb(s), (int, float)) and pb(s) > 2),
+                "label": "低PB(≤2) vs 高PB",
+            },
+            "dragon_tiger_inst_net_buy": {
+                "yes": _factor_returns(records, lambda s: isinstance(inst(s), (int, float)) and inst(s) > 0),
+                "no": _factor_returns(records, lambda s: not (isinstance(inst(s), (int, float)) and inst(s) > 0)),
+                "label": "龙虎榜机构净买 vs 否",
+            },
+            "northbound": {
+                "strong": _factor_returns(records, lambda s: isinstance(north(s), (int, float)) and north(s) > 0),
+                "weak": _factor_returns(records, lambda s: isinstance(north(s), (int, float)) and north(s) <= 0),
+                "label": "北向偏强 vs 偏弱",
+            },
+            "index_membership": {
+                "member": _factor_returns(records, member),
+                "non_member": _factor_returns(records, lambda s: not member(s)),
+                "label": "指数成分 vs 非成分",
+            },
+        },
+    }
+
+
 def build_rule_learning_loop(
     records: Iterable[Mapping[str, Any]] | None = None,
     *,
