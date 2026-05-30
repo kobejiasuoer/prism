@@ -50,6 +50,7 @@ from typing import Any, Iterable, Iterator, Mapping, Protocol
 # tmp+replace.  packages/prism_storage is appended onto prism_storage by
 # the top-level __init__ shim.
 from prism_storage.json_store import atomic_write_json  # type: ignore
+from prism_storage.paths import RUNTIME_ROOT  # type: ignore
 
 # Reuse the existing market-prefix inference so a "watchlist:600690" queue
 # key maps to the same canonical sh/sz code that account_book and the
@@ -73,8 +74,12 @@ __all__ = [
     "OUTCOME_WINDOWS",
     "ACTION_ENUM",
     "STATUS_KINDS",
+    "DECISION_RULESET_VERSION",
+    "LEARNING_LOOP_VERSION",
     "DecisionLedgerError",
     "default_ledger_root",
+    "legacy_ledger_root",
+    "ledger_storage_status",
     "make_decision_id",
     "normalize_today_action",
     "build_decision_record",
@@ -114,10 +119,13 @@ __all__ = [
     "write_status",
     "load_status",
     "build_ledger_health",
+    "build_rule_learning_loop",
 ]
 
 
 SCHEMA_VERSION = 1
+DECISION_RULESET_VERSION = "prism-decision-rules.v1"
+LEARNING_LOOP_VERSION = "decision-learning-loop.v1"
 
 EXECUTION_STATUSES = ("filled", "no_fill", "watch", "skip", "manual_note")
 OUTCOME_WINDOWS = ("T+1", "T+3", "T+5")
@@ -162,7 +170,8 @@ _GROUP_KEY_FALLBACK = {
 CONTROL_PANEL_ROOT = Path(__file__).resolve().parent
 INVEST_FLOW_ROOT = CONTROL_PANEL_ROOT.parent
 WORKSPACE_ROOT = CONTROL_PANEL_ROOT.parents[1]
-DEFAULT_LEDGER_DIR = INVEST_FLOW_ROOT / "data" / "decision_ledger"
+LEGACY_LEDGER_DIR = INVEST_FLOW_ROOT / "data" / "decision_ledger"
+DEFAULT_LEDGER_DIR = RUNTIME_ROOT / "decision_ledger"
 SHADOW_REPLAY_ROOT = WORKSPACE_ROOT / "data" / "quant" / "shadow_replay"
 
 
@@ -279,10 +288,13 @@ _SAMPLE_STAGE_LABELS = {
 
 
 def default_ledger_root() -> Path:
-    """Resolve the on-disk ledger root, honoring the test override env var.
+    """Resolve the canonical on-disk ledger root.
 
     Production callers never need to set ``PRISM_DECISION_LEDGER_PATH``;
-    tests use it to redirect writes into a temporary directory.
+    tests use it to redirect writes into a temporary directory.  The
+    default has moved from ``apps/data/decision_ledger`` to
+    ``data/runtime/decision_ledger``; readers still consult the legacy
+    root so old audit files stay visible during migration.
     """
 
     override = os.environ.get("PRISM_DECISION_LEDGER_PATH", "").strip()
@@ -291,12 +303,62 @@ def default_ledger_root() -> Path:
     return DEFAULT_LEDGER_DIR
 
 
+def legacy_ledger_root() -> Path:
+    """Return the pre-storage-redesign ledger root."""
+
+    override = os.environ.get("PRISM_DECISION_LEDGER_LEGACY_PATH", "").strip()
+    if override:
+        return Path(override).expanduser()
+    return LEGACY_LEDGER_DIR
+
+
+def _ledger_read_roots() -> list[Path]:
+    roots = [default_ledger_root()]
+    if os.environ.get("PRISM_DECISION_LEDGER_PATH") and not os.environ.get("PRISM_DECISION_LEDGER_LEGACY_PATH"):
+        return roots
+    legacy = legacy_ledger_root()
+    if legacy != roots[0]:
+        roots.append(legacy)
+    return roots
+
+
 def _decisions_path(trade_date: str) -> Path:
     return default_ledger_root() / "decisions" / f"{_normalize_trade_date(trade_date)}.json"
 
 
+def _decision_read_paths(trade_date: str) -> list[Path]:
+    filename = f"{_normalize_trade_date(trade_date)}.json"
+    return [root / "decisions" / filename for root in _ledger_read_roots()]
+
+
 def _review_cases_path() -> Path:
     return default_ledger_root() / "review_cases.json"
+
+
+def _review_case_read_paths() -> list[Path]:
+    return [root / "review_cases.json" for root in _ledger_read_roots()]
+
+
+def ledger_storage_status() -> dict[str, Any]:
+    """Expose the ledger storage migration state to health surfaces."""
+
+    primary = default_ledger_root()
+    legacy = legacy_ledger_root()
+    primary_decisions = primary / "decisions"
+    legacy_decisions = legacy / "decisions"
+    primary_count = len(list(primary_decisions.glob("*.json"))) if primary_decisions.exists() else 0
+    legacy_count = len(list(legacy_decisions.glob("*.json"))) if legacy_decisions.exists() else 0
+    return {
+        "mode": "runtime_primary_legacy_read",
+        "primary_root": str(primary),
+        "legacy_root": str(legacy),
+        "primary_exists": primary.exists(),
+        "legacy_exists": legacy.exists(),
+        "primary_decision_files": primary_count,
+        "legacy_decision_files": legacy_count,
+        "writes_to": str(primary),
+        "reads_from": [str(root) for root in _ledger_read_roots()],
+    }
 
 
 # ----------------------------------------------------------------- normalization
@@ -463,6 +525,7 @@ def build_decision_record(
     parameter_path: str | None = None,
     parameter_sha256: str | None = None,
     parameter_summary: Mapping[str, Any] | None = None,
+    decision_contract: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble a DecisionRecord dict ready for :func:`upsert_decision`.
 
@@ -528,6 +591,13 @@ def build_decision_record(
             "sha256": parameter_sha256,
             "summary": dict(parameter_summary) if parameter_summary else None,
         },
+        "decision_contract": dict(decision_contract) if decision_contract else None,
+        "rule_snapshot": {
+            "ruleset_version": DECISION_RULESET_VERSION,
+            "learning_loop_version": LEARNING_LOOP_VERSION,
+            "contract_schema_version": str((decision_contract or {}).get("schema_version") or ""),
+            "outcome_windows": list(OUTCOME_WINDOWS),
+        },
         "status": {
             "state": "open",
             "superseded_by": None,
@@ -580,9 +650,26 @@ def _write_decisions_file(path: Path, records: list[dict[str, Any]]) -> None:
 
 
 def load_decisions(trade_date: str) -> list[dict[str, Any]]:
-    """Return all DecisionRecords for ``trade_date`` (empty when missing)."""
+    """Return all DecisionRecords for ``trade_date`` (empty when missing).
 
-    return _read_decisions_file(_decisions_path(trade_date))
+    During the storage migration, the canonical runtime root wins over the
+    legacy ``apps/data`` root when both contain the same ``decision_id``.
+    A write to the canonical root will naturally backfill the merged file.
+    """
+
+    records: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for path in _decision_read_paths(trade_date):
+        if not path.exists():
+            continue
+        for record in _read_decisions_file(path):
+            decision_id = str(record.get("decision_id") or "")
+            if decision_id and decision_id in seen:
+                continue
+            if decision_id:
+                seen.add(decision_id)
+            records.append(record)
+    return records
 
 
 def load_decision(decision_id: str) -> dict[str, Any] | None:
@@ -611,14 +698,11 @@ def list_decisions_for_stock(code: str) -> list[dict[str, Any]]:
     canonical = _canonical_code(code)
     if not canonical:
         return []
-    root = default_ledger_root() / "decisions"
-    if not root.exists():
-        return []
     out: list[dict[str, Any]] = []
-    for path in sorted(root.glob("*.json")):
-        for record in _read_decisions_file(path):
-            if (record.get("stock") or {}).get("code") == canonical:
-                out.append(record)
+    records, _errors = scan_all_decisions()
+    for record in records:
+        if (record.get("stock") or {}).get("code") == canonical:
+            out.append(record)
     return out
 
 
@@ -663,7 +747,7 @@ def upsert_decision(record: Mapping[str, Any]) -> dict[str, Any]:
         )
 
     path = _decisions_path(trade_date)
-    records = _read_decisions_file(path)
+    records = load_decisions(trade_date)
     for existing in records:
         if existing.get("decision_id") == decision_id:
             return existing
@@ -685,7 +769,7 @@ def _locate_decision(decision_id: str) -> tuple[Path, list[dict[str, Any]], dict
     except DecisionLedgerError as exc:
         raise DecisionLedgerError(f"no such decision: {decision_id!r}") from exc
     path = _decisions_path(trade_date)
-    records = _read_decisions_file(path)
+    records = load_decisions(trade_date)
     for record in records:
         if record.get("decision_id") == decision_id:
             return path, records, record
@@ -961,6 +1045,7 @@ def build_decision_record_from_today_item(
         parameter_path=None,
         parameter_sha256=None,
         parameter_summary=None,
+        decision_contract=item.get("decision_contract") if isinstance(item.get("decision_contract"), Mapping) else None,
     )
 
 
@@ -2032,14 +2117,22 @@ def scan_all_decisions() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
 
     records: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
-    root = default_ledger_root() / "decisions"
-    if not root.exists():
-        return records, errors
-    for path in sorted(root.glob("*.json")):
-        try:
-            records.extend(_read_decisions_file(path))
-        except DecisionLedgerError as exc:
-            errors.append({"file": str(path), "error": str(exc)})
+    seen: set[str] = set()
+    for root in _ledger_read_roots():
+        decisions_root = root / "decisions"
+        if not decisions_root.exists():
+            continue
+        for path in sorted(decisions_root.glob("*.json")):
+            try:
+                for record in _read_decisions_file(path):
+                    decision_id = str(record.get("decision_id") or "")
+                    if decision_id and decision_id in seen:
+                        continue
+                    if decision_id:
+                        seen.add(decision_id)
+                    records.append(record)
+            except DecisionLedgerError as exc:
+                errors.append({"file": str(path), "error": str(exc)})
     return records, errors
 
 
@@ -2092,6 +2185,7 @@ def _decision_summary_card(record: Mapping[str, Any]) -> dict[str, Any]:
     source = record.get("source") or {}
     recommendation = record.get("recommendation") or {}
     status = record.get("status") or {}
+    rule_snapshot = record.get("rule_snapshot") or {}
 
     execution_events = list(record.get("execution_events") or [])
     outcome_events = list(record.get("outcome_events") or [])
@@ -2132,6 +2226,7 @@ def _decision_summary_card(record: Mapping[str, Any]) -> dict[str, Any]:
         "action_label": recommendation.get("action_label"),
         "lane": source.get("lane"),
         "surface": source.get("surface"),
+        "ruleset_version": rule_snapshot.get("ruleset_version") or "legacy_unversioned",
         "status": status.get("state"),
         "main_conclusion": recommendation.get("main_conclusion"),
         "execution_events_count": len(execution_events),
@@ -2225,6 +2320,152 @@ def summarize_window(
         "outcome_events_total": outcome_events_total,
         "errors": errors,
     }
+
+
+_LEARNING_REVIEW_LABELS = {
+    "invalidated",
+    "missed_opportunity",
+    "execution_gap",
+    "data_issue",
+}
+
+
+def build_rule_learning_loop(
+    records: Iterable[Mapping[str, Any]] | None = None,
+    *,
+    errors: Iterable[Mapping[str, Any]] | None = None,
+    as_of: str | None = None,
+) -> dict[str, Any]:
+    """Aggregate outcome feedback by explicit decision-rule version.
+
+    This is deliberately not an optimizer.  It is the small closed loop the
+    operator needs before changing rules: every sample is tied to the
+    ruleset that produced it, then bucketed by lane/action/outcome so rule
+    changes can be reviewed with versioned evidence instead of anecdotes.
+    """
+
+    if records is None:
+        loaded, loaded_errors = scan_all_decisions()
+        records = loaded
+        errors = loaded_errors if errors is None else errors
+
+    buckets: dict[tuple[str, str, str], dict[str, Any]] = {}
+    suggestions: list[dict[str, Any]] = []
+    pending_review_count = 0
+    samples_total = 0
+    mature_samples = 0
+    ruleset_versions: set[str] = set()
+
+    for record in records:
+        if not isinstance(record, Mapping):
+            continue
+        samples_total += 1
+        rule_snapshot = record.get("rule_snapshot") or {}
+        ruleset_version = str(rule_snapshot.get("ruleset_version") or "legacy_unversioned")
+        ruleset_versions.add(ruleset_version)
+        source = record.get("source") or {}
+        recommendation = record.get("recommendation") or {}
+        lane = str(source.get("lane") or "unknown")
+        action = str(recommendation.get("action") or "unknown")
+        key = (ruleset_version, lane, action)
+        bucket = buckets.setdefault(
+            key,
+            {
+                "ruleset_version": ruleset_version,
+                "lane": lane,
+                "action": action,
+                "samples": 0,
+                "mature_samples": 0,
+                "outcomes": {},
+                "execution_events": 0,
+                "pending_outcome": 0,
+                "needs_review": 0,
+                "decision_ids": [],
+            },
+        )
+        bucket["samples"] += 1
+        bucket["execution_events"] += len(record.get("execution_events") or [])
+        decision_id = str(record.get("decision_id") or "")
+        if decision_id:
+            bucket["decision_ids"].append(decision_id)
+
+        latest_outcome = _latest_outcome_event(record.get("outcome_events") or [])
+        if latest_outcome is None:
+            bucket["pending_outcome"] += 1
+            continue
+        mature_samples += 1
+        bucket["mature_samples"] += 1
+        label = str((latest_outcome.get("classification") or {}).get("label") or "unknown")
+        outcomes = bucket["outcomes"]
+        outcomes[label] = int(outcomes.get(label) or 0) + 1
+        if label in _LEARNING_REVIEW_LABELS:
+            bucket["needs_review"] += 1
+            pending_review_count += 1
+
+    for bucket in buckets.values():
+        mature = int(bucket.get("mature_samples") or 0)
+        needs_review = int(bucket.get("needs_review") or 0)
+        outcomes = bucket.get("outcomes") or {}
+        review_rate = (needs_review / mature) if mature else 0.0
+        suggested_action = ""
+        reason = ""
+        if int(outcomes.get("data_issue") or 0) >= 2:
+            suggested_action = "fix_data_pipeline"
+            reason = "同一规则桶反复出现数据问题，先修数据再评价规则。"
+        elif int(outcomes.get("execution_gap") or 0) >= 2:
+            suggested_action = "fix_execution_pipeline"
+            reason = "同一规则桶反复出现执行落差，先检查动作到成交的链路。"
+        elif mature >= 3 and review_rate >= 0.4:
+            suggested_action = "review_rule_threshold"
+            reason = "成熟样本里需要复盘的比例偏高，建议检查该 lane/action 的阈值。"
+
+        bucket["review_rate"] = round(review_rate, 4)
+        bucket["sample_stage"] = _learning_sample_stage(mature)
+        if suggested_action:
+            suggestions.append({
+                "ruleset_version": bucket["ruleset_version"],
+                "lane": bucket["lane"],
+                "action": bucket["action"],
+                "suggested_action": suggested_action,
+                "reason": reason,
+                "mature_samples": mature,
+                "needs_review": needs_review,
+                "review_rate": bucket["review_rate"],
+            })
+
+    ordered_buckets = sorted(
+        buckets.values(),
+        key=lambda item: (
+            str(item.get("ruleset_version") or ""),
+            str(item.get("lane") or ""),
+            str(item.get("action") or ""),
+        ),
+    )
+    for bucket in ordered_buckets:
+        bucket["decision_ids"] = list(bucket.get("decision_ids") or [])[:12]
+
+    return {
+        "version": LEARNING_LOOP_VERSION,
+        "generated_at": _now(),
+        "as_of": _resolve_as_of(as_of),
+        "ruleset_versions": sorted(ruleset_versions),
+        "samples_total": samples_total,
+        "mature_samples": mature_samples,
+        "pending_review_count": pending_review_count,
+        "buckets": ordered_buckets,
+        "suggestions": suggestions,
+        "errors": [dict(error) for error in (errors or [])],
+    }
+
+
+def _learning_sample_stage(mature_samples: int) -> str:
+    if mature_samples >= 10:
+        return "pattern_formed"
+    if mature_samples >= 3:
+        return "validating_pattern"
+    if mature_samples > 0:
+        return "observation_hypothesis"
+    return "pending_outcome"
 
 
 _REVIEW_LABELS = {
@@ -2388,27 +2629,33 @@ def _latest_outcome_tone(latest_outcome: Mapping[str, Any] | None) -> str:
 
 
 def _read_review_cases_file() -> list[dict[str, Any]]:
-    path = _review_cases_path()
-    if not path.exists():
-        return []
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise DecisionLedgerError(
-            f"corrupt review case file {path}: {exc.msg}"
-        ) from exc
-    if not isinstance(raw, list):
-        raise DecisionLedgerError(
-            f"corrupt review case file {path}: expected list payload"
-        )
     cases: list[dict[str, Any]] = []
-    for index, item in enumerate(raw):
-        if not isinstance(item, Mapping):
+    seen: set[str] = set()
+    for path in _review_case_read_paths():
+        if not path.exists():
+            continue
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
             raise DecisionLedgerError(
-                f"corrupt review case file {path}: record at index {index} "
-                f"is not an object (got {type(item).__name__})"
+                f"corrupt review case file {path}: {exc.msg}"
+            ) from exc
+        if not isinstance(raw, list):
+            raise DecisionLedgerError(
+                f"corrupt review case file {path}: expected list payload"
             )
-        cases.append(dict(item))
+        for index, item in enumerate(raw):
+            if not isinstance(item, Mapping):
+                raise DecisionLedgerError(
+                    f"corrupt review case file {path}: record at index {index} "
+                    f"is not an object (got {type(item).__name__})"
+                )
+            review_case_id = str(item.get("review_case_id") or item.get("decision_id") or "")
+            if review_case_id and review_case_id in seen:
+                continue
+            if review_case_id:
+                seen.add(review_case_id)
+            cases.append(dict(item))
     return cases
 
 
@@ -2464,15 +2711,17 @@ def read_review_cases_revision() -> str:
     Returns the empty-revision sentinel when the file is missing,
     unreadable, or empty.
     """
-    path = _review_cases_path()
-    try:
-        raw = path.read_bytes()
-    except FileNotFoundError:
-        return _EMPTY_REVIEW_CASES_REVISION
-    except OSError:
-        # Mirror the silent-empty behaviour for missing files; a transient
-        # permission error should not poison a cache key.
-        return _EMPTY_REVIEW_CASES_REVISION
+    raw = b""
+    for path in _review_case_read_paths():
+        try:
+            raw = path.read_bytes()
+            break
+        except FileNotFoundError:
+            continue
+        except OSError:
+            # Mirror the silent-empty behaviour for missing files; a transient
+            # permission error should not poison a cache key.
+            return _EMPTY_REVIEW_CASES_REVISION
     if not raw:
         return _EMPTY_REVIEW_CASES_REVISION
     try:
@@ -5197,7 +5446,8 @@ def status_path(kind: str) -> Path:
 
     The kind is whitelisted (see :data:`STATUS_KINDS`) so a typo at a
     write site cannot stash an unreachable status file in the ledger
-    root.  The directory is *not* created here -- writers call
+    root.  This path is the canonical runtime location.  The directory
+    is *not* created here -- writers call
     :func:`write_status`, readers handle missing files.
     """
 
@@ -5207,6 +5457,15 @@ def status_path(kind: str) -> Path:
             f"unknown status kind: {kind!r}; expected one of {STATUS_KINDS}"
         )
     return default_ledger_root() / "status" / f"{key}_latest.json"
+
+
+def _status_read_paths(kind: str) -> list[Path]:
+    key = str(kind or "").strip().lower()
+    if key not in STATUS_KINDS:
+        raise DecisionLedgerError(
+            f"unknown status kind: {kind!r}; expected one of {STATUS_KINDS}"
+        )
+    return [root / "status" / f"{key}_latest.json" for root in _ledger_read_roots()]
 
 
 def write_status(kind: str, payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -5238,16 +5497,17 @@ def load_status(kind: str) -> dict[str, Any] | None:
     Settings dashboard.
     """
 
-    path = status_path(kind)
-    if not path.exists():
-        return None
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    if not isinstance(raw, Mapping):
-        return None
-    return dict(raw)
+    for path in _status_read_paths(kind):
+        if not path.exists():
+            continue
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        if not isinstance(raw, Mapping):
+            return None
+        return dict(raw)
+    return None
 
 
 def build_ledger_health() -> dict[str, Any]:
@@ -5305,24 +5565,24 @@ def build_ledger_health() -> dict[str, Any]:
     # one is present, the operator deserves to know.
     status_errors: list[dict[str, Any]] = []
     for kind in STATUS_KINDS:
-        path = status_path(kind)
-        if not path.exists():
-            continue
-        try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            status_errors.append({
-                "kind": kind,
-                "file": str(path),
-                "error": str(exc),
-            })
-            continue
-        if not isinstance(raw, Mapping):
-            status_errors.append({
-                "kind": kind,
-                "file": str(path),
-                "error": "status payload is not an object",
-            })
+        for path in _status_read_paths(kind):
+            if not path.exists():
+                continue
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                status_errors.append({
+                    "kind": kind,
+                    "file": str(path),
+                    "error": str(exc),
+                })
+                continue
+            if not isinstance(raw, Mapping):
+                status_errors.append({
+                    "kind": kind,
+                    "file": str(path),
+                    "error": "status payload is not an object",
+                })
 
     return {
         "generated_at": _now(),
@@ -5336,6 +5596,8 @@ def build_ledger_health() -> dict[str, Any]:
         "last_outcome_evaluation": outcome,
         "corrupt_files": errors,
         "status_errors": status_errors,
+        "storage": ledger_storage_status(),
+        "learning_loop": build_rule_learning_loop(records, errors=errors, as_of=today_str),
     }
 
 
