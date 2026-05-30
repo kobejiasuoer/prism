@@ -280,6 +280,11 @@ function ObservationWorkbench({
                     <td className="max-w-[260px] px-3 py-3 leading-5 text-[var(--text-primary)]">{stockInstruction(stock)}</td>
                     <td className="max-w-[180px] px-3 py-3 leading-5 text-[var(--text-secondary)]">
                       {stock.reason || stock.detail || "等待更多确认"}
+                      {stock.factor_explanation?.entry_reason && (
+                        <div className="mt-1 text-[12px] text-[var(--text-tertiary)]">
+                          {stock.factor_explanation.entry_reason}
+                        </div>
+                      )}
                     </td>
                     <td className="max-w-[180px] px-3 py-3 leading-5 text-[var(--text-secondary)]">
                       {stock.upgrade_condition || stock.setup_label || "等待触发条件"}
@@ -296,6 +301,15 @@ function ObservationWorkbench({
                         {persistenceLabel(stock) ? <Badge tone={persistenceTone(stock)}>{persistenceLabel(stock)}</Badge> : null}
                         {stock.score !== undefined ? <Badge tone="positive">{stock.score} 分</Badge> : null}
                         {stock.change_pct !== undefined ? <Badge tone="watch">涨幅 {formatChange(stock.change_pct)}</Badge> : null}
+                        {typeof stock.tushare_score === "number" && (
+                          <Badge tone="info">因子 {Math.round(stock.tushare_score)}</Badge>
+                        )}
+                        {(stock.factor_tags ?? []).slice(0, 2).map((t) => (
+                          <Badge key={`ft-${t}`} tone="positive">{t}</Badge>
+                        ))}
+                        {(stock.factor_risk_flags ?? []).slice(0, 1).map((t) => (
+                          <Badge key={`fr-${t}`} tone="risk">{t}</Badge>
+                        ))}
                       </div>
                     </td>
                     <td className="px-3 py-3">
@@ -331,6 +345,11 @@ function ObservationWorkbench({
                   <div><span className="text-[var(--text-tertiary)]">入池：</span>{stock.reason || stock.detail || "等待更多确认"}</div>
                   <div><span className="text-[var(--text-tertiary)]">升级：</span>{stock.upgrade_condition || stock.setup_label || "等待触发条件"}</div>
                   <div><span className="text-[var(--text-tertiary)]">失效：</span>{stock.invalid_condition || stock.foot || stock.risk || "触发失效则剔除"}</div>
+                  {typeof stock.tushare_score === "number" && (
+                    <div className="text-[12px] text-[var(--text-secondary)]">
+                      因子 {Math.round(stock.tushare_score)} · {(stock.factor_tags ?? []).slice(0, 2).join(" / ") || "—"}
+                    </div>
+                  )}
                 </div>
                 <div className="mt-3">
                   <ObservationActions
