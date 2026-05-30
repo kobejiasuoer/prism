@@ -21,6 +21,19 @@ def test_screening_card_includes_factor_fields():
     assert card["factor_explanation"]["entry_reason"].startswith("综合因子评分")
 
 
+def test_confirmation_card_includes_factor_fields():
+    candidate = {
+        "code": "600519", "name": "贵州茅台", "status": "caution",
+        "tushare_score": 72.0, "factor_tags": ["高ROE"], "factor_risk_flags": ["短线脉冲风险(龙虎榜机构净买)"],
+        "factor_explanation": {"entry_reason": "综合因子评分 72"},
+    }
+    card = dashboard_data.build_confirmation_candidate_card(candidate)
+    assert card["tushare_score"] == 72.0
+    assert card["factor_tags"] == ["高ROE"]
+    assert card["factor_risk_flags"] == ["短线脉冲风险(龙虎榜机构净买)"]
+    assert card["factor_explanation"]["entry_reason"].startswith("综合因子评分")
+
+
 def test_candidate_detail_carries_full_factor_bundle(monkeypatch):
     # build_candidate_detail_view sources candidate via find_candidate_detail; stub it.
     # dashboard_data imports find_candidate_detail by name, so patch it on dashboard_data.
@@ -32,4 +45,5 @@ def test_candidate_detail_carries_full_factor_bundle(monkeypatch):
         "factor_explanation": {"entry_reason": "x"},
     })
     view = dashboard_data.build_candidate_detail_view("sh600519")
-    assert view.get("tushare_factors", {}).get("tushare_score") == 72.0 or view.get("tushare_score") == 72.0
+    assert view["tushare_factors"]["tushare_score"] == 72.0
+    assert view["tushare_score"] == 72.0
