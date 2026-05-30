@@ -217,6 +217,34 @@ class TodayActionCaptureTests(unittest.TestCase):
         self.assertEqual(rb["recommendation"]["action"], "hold")
         self.assertEqual(ra["decision_id"], rb["decision_id"])
 
+    def test_build_decision_record_carries_factor_snapshot(self) -> None:
+        record = self.ledger.build_decision_record(
+            trade_date="2026-05-15",
+            code="sh600519",
+            name="贵州茅台",
+            lane="screening",
+            surface="today_action",
+            action_key="screening:600519",
+            action="observe",
+            factor_snapshot={
+                "tushare_score": 72.0,
+                "factor_snapshot": {"valuation": {"pe_ttm": 28.0}},
+            },
+        )
+        self.assertEqual(record["factor_snapshot"]["tushare_score"], 72.0)
+
+    def test_build_decision_record_factor_snapshot_defaults_none(self) -> None:
+        record = self.ledger.build_decision_record(
+            trade_date="2026-05-15",
+            code="sh600519",
+            name="贵州茅台",
+            lane="screening",
+            surface="today_action",
+            action_key="screening:600519",
+            action="observe",
+        )
+        self.assertIsNone(record["factor_snapshot"])
+
     def test_build_decision_record_from_today_item_basic_fields(self) -> None:
         item = _make_action_item(
             key="watchlist:600690",

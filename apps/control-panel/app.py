@@ -21,6 +21,10 @@ for import_path in (str(PACKAGES_ROOT), str(SCRIPTS_ROOT)):
     if import_path not in sys.path:
         sys.path.insert(0, import_path)
 
+from prism_data.env import load_project_env, project_env_path
+
+load_project_env(root=REPO_ROOT)
+
 import stock_parameter_config as parameter_config
 
 from control_panel.dashboard_data import (
@@ -70,7 +74,12 @@ from stock_name_backfill import (
     stop_worker as _stop_stock_name_backfill_worker,
 )
 from source_budget import build_source_budget_payload
-from dataset_manifests import build_dataset_freshness_rows  # type: ignore  # local module
+from dataset_manifests import (  # type: ignore  # local module
+    FORMAL_FRESHNESS_DATASETS,
+    build_dataset_freshness_rows,
+    build_formal_freshness_rows,
+)
+from data_assets import build_data_assets_status
 from refresh_policy import (
     CRON_POLICIES,
     PAGE_POLICIES,
@@ -99,17 +108,20 @@ from scheduled_run_state import (
 )
 from trading_calendar import calendar_status
 from prism_data.data_capability_matrix import data_capability_matrix_as_dict
+from prism_data.providers.tushare import TushareProvider
 
 import decision_ledger
-
 
 TASK_RUNNER = INVEST_FLOW_ROOT / "scripts" / "control_panel_task_runner.py"
 PREVIEW_MAX_BYTES = 220_000
 WATCHLIST_REFRESH_COMMAND = ["bash", "apps/scripts/run_watchlist_refresh.sh"]
 LIGHTWEIGHT_REFRESH_COMMAND = [sys.executable, "apps/scripts/refresh_lightweight_data.py"]
 MORNING_WARMUP_COMMAND = [sys.executable, "apps/scripts/run_morning_warmup.py"]
+FORMAL_DATA_REFRESH_COMMAND = [sys.executable, "apps/scripts/refresh_formal_data.py"]
 PARAMETERS_PATH = STOCK_ANALYZER_ROOT / "config" / "stocks.json"
 WEB_ORIGIN = os.environ.get("PRISM_WEB_ORIGIN", "http://127.0.0.1:8000").rstrip("/")
+SCHEDULER_REQUIRED_TASKS = ("morning_warmup", "watchlist_refresh", "aggressive")
+SCHEDULER_SAFETY_GRACE_MINUTES = 2
 TASK_NAME_ALIASES = {
     "watchlist": "watchlist_refresh",
 }
@@ -118,6 +130,50 @@ app = FastAPI(title="Prism Control", version="0.1.0")
 
 
 from contextlib import asynccontextmanager
+
+
+FORMAL_SOURCE_PLAN: dict[str, dict[str, Any]] = {
+    "trade_calendar": {
+        "provider": "tushare",
+        "source_apis": ["trade_cal"],
+        "required_permission": "Tushare Pro token；交易日历接口。",
+        "docs": ["https://tushare.pro/document/2?doc_id=26"],
+    },
+    "bars.daily": {
+        "provider": "tushare",
+        "source_apis": ["daily"],
+        "required_permission": "Tushare Pro token；A 股历史日线接口和对应流控额度。",
+        "docs": ["https://tushare.pro/document/2?doc_id=27"],
+    },
+    "adjustment.factor": {
+        "provider": "tushare",
+        "source_apis": ["adj_factor"],
+        "required_permission": "Tushare Pro token；复权因子接口通常需要积分权限。",
+        "docs": ["https://tushare.pro/document/2?doc_id=28"],
+    },
+    "benchmark.index_daily": {
+        "provider": "tushare",
+        "source_apis": ["index_daily"],
+        "required_permission": "Tushare Pro token；指数日线接口通常需要积分权限。",
+        "docs": ["https://tushare.pro/document/2?doc_id=95"],
+    },
+    "price_limit.daily": {
+        "provider": "tushare",
+        "source_apis": ["stk_limit"],
+        "required_permission": "Tushare Pro token；每日涨跌停价格接口通常需要积分权限。",
+        "docs": ["https://tushare.pro/document/2?doc_id=183"],
+    },
+    "execution.flags": {
+        "provider": "tushare",
+        "source_apis": ["stk_limit", "suspend_d", "stock_st"],
+        "required_permission": "Tushare Pro token；涨跌停、每日停复牌、ST 股票列表接口权限。",
+        "docs": [
+            "https://tushare.pro/document/2?doc_id=183",
+            "https://tushare.pro/document/2?doc_id=214",
+            "https://tushare.pro/document/2?doc_id=397",
+        ],
+    },
+}
 
 
 @asynccontextmanager
@@ -675,6 +731,18 @@ def normalize_refresh_page(value: Any) -> str:
     return page
 
 
+def _cron_daily_minute(expr: str) -> int | None:
+    try:
+        minute_s, hour_s, day_s, month_s, _weekday_s = str(expr or "").split()
+        if day_s != "*" or month_s != "*":
+            return None
+        if any(mark in minute_s or mark in hour_s for mark in ("*", ",", "-", "/")):
+            return None
+        return int(hour_s) * 60 + int(minute_s)
+    except Exception:
+        return None
+
+
 def age_label(seconds: int | None) -> str:
     if seconds is None:
         return "-"
@@ -725,6 +793,15 @@ def resolve_refresh_task(task_name: str) -> dict[str, Any]:
             "task_name": normalized,
             "title": policy.title if policy else ("轻量行情补刷" if kind == "quotes" else "轻量资金流补刷"),
             "command": [*LIGHTWEIGHT_REFRESH_COMMAND, "--kind", kind],
+            "cwd": str(WORKSPACE_ROOT),
+            "send_to_feishu": False,
+        }
+
+    if normalized == "formal_data_refresh":
+        return {
+            "task_name": normalized,
+            "title": policy.title if policy else "正式口径数据刷新",
+            "command": FORMAL_DATA_REFRESH_COMMAND,
             "cwd": str(WORKSPACE_ROOT),
             "send_to_feishu": False,
         }
@@ -814,6 +891,7 @@ def build_running_refresh_tasks(page: str) -> list[dict[str, Any]]:
     related = {normalize_task_name(item) for item in (cfg.related_tasks if cfg else ())}
     related_families = {task_family(item) for item in related}
     rows: list[dict[str, Any]] = []
+    seen_families: set[str] = set()
     for item in list_runs(limit=80):
         if str(item.get("status") or "") != "running":
             continue
@@ -821,6 +899,7 @@ def build_running_refresh_tasks(page: str) -> list[dict[str, Any]]:
         family = task_family(task_name)
         if task_name not in related and family not in related_families:
             continue
+        seen_families.add(family)
         policy = task_policy(task_name)
         rows.append(
             {
@@ -833,7 +912,161 @@ def build_running_refresh_tasks(page: str) -> list[dict[str, Any]]:
                 "summary": str(item.get("summary") or "后台执行中"),
             }
         )
+    for task_name in sorted(related):
+        family = task_family(task_name)
+        if family in seen_families:
+            continue
+        scheduled_state = run_state_for_task(task_name)
+        if not scheduled_state.get("running"):
+            continue
+        policy = task_policy(task_name)
+        rows.append(
+            {
+                "task_name": task_name,
+                "title": str(scheduled_state.get("title") or (policy.title if policy else task_name)),
+                "task_kind": policy.kind if policy else "unknown",
+                "task_family": family,
+                "status": "running",
+                "started_at": str(scheduled_state.get("started_at") or ""),
+                "summary": "Prism 调度器正在执行",
+                "run_id": str(scheduled_state.get("run_id") or ""),
+                "source": "scheduler",
+            }
+        )
+        seen_families.add(family)
     return rows
+
+
+def _latest_run_for_task_name(task_name: str) -> dict[str, Any] | None:
+    expected = normalize_task_name(task_name)
+    for item in list_runs(limit=80):
+        if normalize_task_name(str(item.get("task_name") or "")) == expected:
+            return item
+    return None
+
+
+def _formal_row_state(row: dict[str, Any], *, token_configured: bool) -> str:
+    flags = {str(item or "").strip() for item in row.get("quality_flags") or []}
+    reasons = {str(item or "").strip() for item in row.get("stale_reasons") or []}
+    target = str(row.get("target_authority_provider") or row.get("authority_provider") or "")
+    if row.get("formal_decision_allowed") and not row.get("stale"):
+        return "ready"
+    if "provider_token_invalid" in flags:
+        return "token_invalid"
+    if "provider_rate_limited" in flags:
+        return "rate_limited"
+    if "provider_permission_or_points_blocked" in flags:
+        return "permission_or_points_blocked"
+    if "execution_flags_price_limit_missing" in flags or "execution_flags_code_coverage_mismatch" in flags:
+        return "coverage_incomplete"
+    if target == "tushare" and not token_configured:
+        return "token_missing"
+    if "manifest_missing" in reasons:
+        return "manifest_missing"
+    if row.get("error"):
+        return "provider_error"
+    if row.get("stale"):
+        return "stale_or_misaligned"
+    return "formal_not_allowed"
+
+
+def _formal_action_for_state(state: str) -> str:
+    return {
+        "ready": "无需处理",
+        "token_missing": "运行 apps/scripts/configure_tushare_token.py 写入本机 .env，然后重启后端并刷新正式口径。",
+        "token_invalid": "更换或重新确认 Tushare token，不要写入仓库或日志。",
+        "rate_limited": "Tushare 触发接口流控；当前刷新脚本会复用已接入数据，等待流控窗口后只补缺口。",
+        "permission_or_points_blocked": "在 Tushare 账号里开通或补足对应接口权限/积分，或改用同等级授权源。",
+        "provider_adapter_missing": "接入 RiceQuant 或 JoinQuant 执行约束 adapter，并配置对应授权。",
+        "coverage_incomplete": "正式源已返回，但覆盖不完整；检查自选股代码、交易日和对应 Tushare 接口返回。",
+        "manifest_missing": "运行正式口径数据刷新。",
+        "provider_error": "查看最近 formal_data_refresh 日志，按接口错误处理。",
+        "stale_or_misaligned": "重新运行正式口径数据刷新并确认交易日对齐。",
+        "formal_not_allowed": "检查 provider、target authority 和 manifest flags。",
+    }.get(state, "查看 manifest 和最近任务日志。")
+
+
+def build_formal_data_status_payload() -> dict[str, Any]:
+    load_project_env(root=REPO_ROOT)
+    current = datetime.now()
+    expected_date = readiness_expected_trade_date(current)
+    configured_token_names = TushareProvider.configured_token_env_names()
+    token_configured = bool(configured_token_names)
+    env_file = project_env_path(REPO_ROOT)
+    rows = build_formal_freshness_rows(
+        expected_date=expected_date,
+        now=current,
+        datasets=FORMAL_FRESHNESS_DATASETS,
+    )
+    enriched_rows: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        plan = FORMAL_SOURCE_PLAN.get(str(item.get("dataset") or item.get("key") or ""), {})
+        state = _formal_row_state(item, token_configured=token_configured)
+        item["setup_state"] = state
+        item["next_action"] = _formal_action_for_state(state)
+        item["source_apis"] = list(plan.get("source_apis") or [])
+        item["required_permission"] = plan.get("required_permission")
+        item["docs"] = list(plan.get("docs") or [])
+        enriched_rows.append(item)
+
+    ready_rows = [item for item in enriched_rows if item.get("setup_state") == "ready"]
+    blockers = [
+        {
+            "dataset": item.get("dataset"),
+            "label": item.get("label"),
+            "state": item.get("setup_state"),
+            "next_action": item.get("next_action"),
+            "error": item.get("error"),
+            "quality_flags": item.get("quality_flags") or [],
+            "source_apis": item.get("source_apis") or [],
+            "required_permission": item.get("required_permission"),
+            "docs": item.get("docs") or [],
+            "required_request_keys": item.get("required_request_keys") or [],
+            "missing_request_keys": item.get("missing_request_keys") or [],
+            "blocked_request_keys": item.get("blocked_request_keys") or [],
+        }
+        for item in enriched_rows
+        if item.get("setup_state") != "ready"
+    ]
+    last_run = _latest_run_for_task_name("formal_data_refresh")
+    running = bool(last_run and last_run.get("status") == "running")
+    return {
+        "generated_at": current.strftime("%Y-%m-%d %H:%M:%S"),
+        "expected_trade_date": expected_date,
+        "provider": {
+            "name": "tushare",
+            "token_configured": token_configured,
+            "token_env_names": list(TushareProvider.token_env_names()),
+            "configured_token_env_names": configured_token_names,
+            "api_url": os.environ.get("PRISM_TUSHARE_API_URL", "http://api.tushare.pro"),
+            "token_value_visible": False,
+            "local_env_path": str(env_file),
+            "local_env_file_exists": env_file.exists(),
+        },
+        "source_plan": [
+            {"dataset": dataset, **dict(plan)}
+            for dataset, plan in FORMAL_SOURCE_PLAN.items()
+        ],
+        "setup_steps": [
+            "申请或确认 Tushare Pro 账号 token。",
+            "确认 token 具备 trade_cal、daily、adj_factor、index_daily、stk_limit、suspend_d、stock_st 接口权限。",
+            "运行 apps/scripts/configure_tushare_token.py，把 token 写入本机 .env；不要把 token 写进代码、文档或聊天。",
+            "在设置页触发 formal_data_refresh，或运行 apps/scripts/refresh_formal_data.py。",
+        ],
+        "ready": len(ready_rows) == len(enriched_rows) and bool(enriched_rows),
+        "ready_count": len(ready_rows),
+        "total_count": len(enriched_rows),
+        "blocked_count": len(blockers),
+        "datasets": enriched_rows,
+        "blockers": blockers,
+        "last_run": last_run,
+        "running": running,
+        "recommended_task": {
+            "task_name": "formal_data_refresh",
+            "title": "正式口径数据刷新",
+        },
+    }
 
 
 def _readiness_freshness_rows(
@@ -1071,6 +1304,9 @@ def _public_run_state(task_name: str, *, now: datetime) -> dict[str, Any]:
         "same_day": bool(state.get("same_day")),
         "today_success": bool(state.get("today_success")),
         "running": bool(state.get("running")),
+        "orphaned": bool(state.get("orphaned")),
+        "pid_alive": bool(state.get("pid_alive")),
+        "running_age_seconds": state.get("running_age_seconds"),
         "failed_today": bool(state.get("failed_today")),
         "missing": bool(state.get("missing")),
         "stale_latest": bool(state.get("stale_latest")),
@@ -1141,6 +1377,7 @@ def build_scheduler_status_payload(*, now: datetime | None = None) -> dict[str, 
             "state_path": str(SCHEDULER_STATE_PATH),
             "send_to_feishu": bool(state.get("send_to_feishu")),
             "fire_on_start": bool(state.get("fire_on_start")),
+            "freshness_guardian": state.get("freshness_guardian") if isinstance(state.get("freshness_guardian"), dict) else {},
         },
         "summary": counts,
         "jobs": jobs,
@@ -1302,6 +1539,21 @@ def build_refresh_status_payload(
     }
     signature_seed = json.dumps(signature_payload, ensure_ascii=False, sort_keys=True)
     snapshot_signature = hashlib.sha1(signature_seed.encode("utf-8")).hexdigest()[:16]
+    scheduler_status = build_scheduler_status_payload(now=current)
+    scheduler_safety_refresh: dict[str, Any] | None = None
+    if auto and not skip_auto and not auto_decision.get("triggered"):
+        scheduler_safety_refresh = maybe_trigger_scheduler_safety_refresh(
+            page=page,
+            scheduler_status=scheduler_status,
+            running=running,
+            current=current,
+            state=state,
+        )
+        if scheduler_safety_refresh:
+            state = load_refresh_state()
+            running = build_running_refresh_tasks(page)
+            scheduler_status = build_scheduler_status_payload(now=current)
+            suggested_poll_seconds = min(suggested_poll_seconds, 25)
 
     payload = {
         "page": page,
@@ -1331,7 +1583,8 @@ def build_refresh_status_payload(
             "task": policy.as_dict() if policy else {},
         },
         "policy_catalog": build_policy_payload(),
-        "scheduler_status": build_scheduler_status_payload(now=current),
+        "scheduler_status": scheduler_status,
+        "scheduler_safety_refresh": scheduler_safety_refresh,
         "active_auto_windows": active_auto_windows(current),
         "snapshot_signature": snapshot_signature,
     }
@@ -1454,6 +1707,118 @@ def trigger_refresh_task(
     return result
 
 
+def _scheduler_safety_task(status: dict[str, Any], *, now: datetime) -> str:
+    scheduler = status.get("scheduler") if isinstance(status.get("scheduler"), dict) else {}
+    calendar = status.get("calendar") if isinstance(status.get("calendar"), dict) else {}
+    if calendar.get("status") != "trading":
+        return ""
+    jobs = status.get("jobs") if isinstance(status.get("jobs"), list) else []
+    by_task = {
+        str(job.get("task_name") or ""): job
+        for job in jobs
+        if isinstance(job, dict)
+    }
+    for task_name in SCHEDULER_REQUIRED_TASKS:
+        job = by_task.get(task_name) or {}
+        due_minute = _cron_daily_minute(str(job.get("cron_expr") or ""))
+        if due_minute is not None and now.hour * 60 + now.minute < due_minute + SCHEDULER_SAFETY_GRACE_MINUTES:
+            continue
+        run = job.get("run") if isinstance(job.get("run"), dict) else {}
+        if run.get("running"):
+            return ""
+        if not run.get("today_success") and not _control_panel_task_success_today(task_name, now=now):
+            return task_name
+    return ""
+
+
+def _control_panel_task_success_today(task_name: str, *, now: datetime) -> bool:
+    family = task_family(task_name)
+    today = now.strftime("%Y-%m-%d")
+    for item in list_runs(limit=120):
+        item_task = normalize_task_name(str(item.get("task_name") or ""))
+        if task_family(item_task) != family:
+            continue
+        if str(item.get("status") or "") != "success":
+            continue
+        for timestamp in (item.get("finished_at"), item.get("started_at")):
+            text = str(timestamp or "")
+            if text.startswith(today):
+                return True
+    return False
+
+
+def _scheduler_recovery_running(running: list[dict[str, Any]]) -> bool:
+    for item in running:
+        task_name = normalize_task_name(str(item.get("task_name") or ""))
+        if task_name in SCHEDULER_REQUIRED_TASKS:
+            return True
+    return False
+
+
+def maybe_trigger_scheduler_safety_refresh(
+    *,
+    page: str,
+    scheduler_status: dict[str, Any],
+    running: list[dict[str, Any]],
+    current: datetime,
+    state: dict[str, Any],
+) -> dict[str, Any] | None:
+    if page != "today":
+        return None
+    if _scheduler_recovery_running(running):
+        return None
+    task_name = _scheduler_safety_task(scheduler_status, now=current)
+    if not task_name:
+        return None
+
+    cooldown = page_cooldown_state(page=page, task_name=task_name, state=state, now=current)
+    if int(cooldown.get("remaining_seconds") or 0) > 0:
+        return None
+
+    scheduler = scheduler_status.get("scheduler") if isinstance(scheduler_status.get("scheduler"), dict) else {}
+    scheduler_alive_flag = bool(scheduler.get("alive"))
+    reason_codes = [
+        "morning_required_task_missing",
+        "scheduler_due_task_missing" if scheduler_alive_flag else "scheduler_offline",
+    ]
+    reason = "scheduler_due_required_task_missing" if scheduler_alive_flag else "scheduler_offline_required_task_missing"
+    summary_reason = "今日早盘关键任务到点后仍未成功" if scheduler_alive_flag else "Scheduler 不在线且今日关键任务缺跑"
+    decision = {
+        "enabled": True,
+        "allowed": True,
+        "should_trigger": True,
+        "force": False,
+        "page": page,
+        "task_name": task_name,
+        "task_kind": (task_policy(task_name).kind if task_policy(task_name) else "lightweight"),
+        "reason_codes": reason_codes,
+        "blocked_reasons": [],
+        "active_windows": active_auto_windows(current),
+        "required_windows": ["premarket", "morning"],
+        "manifest_reasons": ["trade_date_mismatch"],
+        "stale_count": 1,
+        "cooldown_remaining_seconds": 0,
+        "next_allowed_at": "",
+        "calendar_status": scheduler_status.get("calendar") or calendar_status(current),
+        "summary": f"{summary_reason}，自动触发 {task_policy(task_name).title if task_policy(task_name) else task_name}。",
+    }
+    result = trigger_refresh_task(
+        page=page,
+        task_name=task_name,
+        force=False,
+        trigger_type="scheduler_safety",
+        reason=reason,
+        decision=decision,
+        freshness=[],
+    )
+    return {
+        "triggered": True,
+        "task_name": task_name,
+        "reason": reason,
+        "trigger": result,
+    }
+
+
 @app.get("/", include_in_schema=False)
 async def index(request: Request) -> RedirectResponse:
     return web_redirect("/", query=request.url.query)
@@ -1471,7 +1836,11 @@ async def today(request: Request) -> RedirectResponse:
 
 @app.get("/api/today")
 async def api_today() -> JSONResponse:
-    return JSONResponse(build_today_view())
+    today_view = build_today_view()
+    readiness = today_view.get("readiness")
+    if isinstance(readiness, dict):
+        readiness["formal_data_status"] = build_formal_data_status_payload()
+    return JSONResponse(today_view)
 
 
 @app.get("/ask", include_in_schema=False)
@@ -1785,6 +2154,16 @@ async def api_data_capability_matrix() -> JSONResponse:
     return JSONResponse(data_capability_matrix_as_dict())
 
 
+@app.get("/api/formal-data/status")
+async def api_formal_data_status() -> JSONResponse:
+    return JSONResponse(build_formal_data_status_payload())
+
+
+@app.get("/api/data-assets/status")
+async def api_data_assets_status() -> JSONResponse:
+    return JSONResponse(build_data_assets_status(readiness_expected_trade_date()))
+
+
 @app.get("/api/capabilities")
 async def api_capabilities() -> JSONResponse:
     """Read-only capability matrix for the current readiness payload.
@@ -1818,6 +2197,7 @@ async def api_readiness_live() -> JSONResponse:
     today_view = build_today_view()
     readiness = today_view.get("readiness") or {}
     matrix_payload = data_capability_matrix_as_dict()
+    formal_status = build_formal_data_status_payload()
     return JSONResponse(
         {
             "generated_at": today_view.get("generated_at"),
@@ -1831,12 +2211,21 @@ async def api_readiness_live() -> JSONResponse:
             "stale_count": readiness.get("stale_count", 0),
             "blockers": readiness.get("blockers", []),
             "warnings": readiness.get("warnings", []),
+            "formal_ready": readiness.get("formal_ready", False),
+            "formal_base_ready": readiness.get("formal_base_ready", False),
+            "pipeline_formal_ready": readiness.get("pipeline_formal_ready", False),
+            "formal_blockers": readiness.get("formal_blockers", []),
+            "formal_base_blockers": readiness.get("formal_base_blockers", []),
+            "pipeline_formal_blockers": readiness.get("pipeline_formal_blockers", []),
             "source_freshness": readiness.get("source_freshness", []),
             "quality_freshness": readiness.get("quality_freshness", []),
+            "dataset_freshness": readiness.get("dataset_freshness", []),
+            "formal_freshness": readiness.get("formal_freshness", []),
             "recommended_tasks": readiness.get("recommended_tasks", []),
             "source_states": readiness.get("source_states", {}),
             "capabilities": readiness.get("capabilities", {}),
             "trust_level": readiness.get("trust_level"),
+            "formal_data_status": formal_status,
             "data_capability_summary": {
                 **matrix_payload["summary"],
                 "registry_issues": matrix_payload["registry_issues"],
@@ -2562,6 +2951,17 @@ async def api_decision_ledger_calibration(request: Request) -> JSONResponse:
         as_of=as_of,
         limit=limit,
     )
+    return JSONResponse(payload)
+
+
+@app.get("/api/decision-ledger/learning-loop")
+async def api_decision_ledger_learning_loop(request: Request) -> JSONResponse:
+    """Rule-versioned learning loop for Decision Ledger outcomes."""
+
+    as_of = request.query_params.get("as_of") or None
+    records, errors = decision_ledger.scan_all_decisions()
+    payload = decision_ledger.build_rule_learning_loop(records, errors=errors, as_of=as_of)
+    payload["factor_learning_loop"] = decision_ledger.build_factor_learning_loop(records)
     return JSONResponse(payload)
 
 

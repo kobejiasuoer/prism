@@ -62,6 +62,48 @@ function formatChange(value: StockListCard["change_pct"]) {
   return text.includes("%") ? text : `${text}%`;
 }
 
+function persistenceTone(stock: StockListCard) {
+  const text = `${stock.persistence_label || ""} ${stock.priority_label || ""} ${stock.status || ""} ${stock.invalid_condition || ""}`;
+  if (text.includes("非一日脉冲") || text.includes("延续升级")) {
+    return "persistent";
+  }
+  if (text.includes("一日脉冲") || text.includes("退出") || text.includes("降级")) {
+    return "risk";
+  }
+  if (text.includes("延续")) {
+    return "watch";
+  }
+  return "";
+}
+
+function persistenceLabel(stock: StockListCard) {
+  const tone = persistenceTone(stock);
+  if (tone === "persistent") {
+    return stock.status?.includes("延续升级") ? "非一日脉冲·升级" : "非一日脉冲";
+  }
+  if (tone === "risk") {
+    return "一日脉冲风险";
+  }
+  if (tone === "watch") {
+    return stock.persistence_label || "延续待确认";
+  }
+  return "";
+}
+
+function lifecycleGroupPulseMeta(group: CardGroup<StockListCard>) {
+  const text = `${group.title || ""} ${group.key || ""}`;
+  if (text.includes("非一日脉冲") || text.includes("upgraded")) {
+    return { label: text.includes("upgraded") ? "非一日脉冲·升级" : "非一日脉冲", tone: "persistent" };
+  }
+  if (text.includes("降级") || text.includes("退出") || text.includes("downgraded") || text.includes("exited")) {
+    return { label: "一日脉冲风险", tone: "risk" };
+  }
+  if (text.includes("新增") || text.includes("entered") || text.includes("交接") || text.includes("handoff")) {
+    return { label: "延续待确认", tone: "watch" };
+  }
+  return null;
+}
+
 function strategyLine(data?: OpportunitiesData) {
   const gate =
     data?.topline?.meta_pills?.find((item) => item.label.includes("阀门"))?.value ||
@@ -230,11 +272,19 @@ function ObservationWorkbench({
                       {stock.theme ? <div className="mt-2 text-[11px] text-[var(--text-tertiary)]">{stock.theme}</div> : null}
                     </td>
                     <td className="px-3 py-3">
-                      <Badge tone={stock.tone}>{stock.status || stock.action || group?.title || "观察"}</Badge>
+                      <div className="flex max-w-[160px] flex-wrap gap-1.5">
+                        <Badge tone={stock.tone}>{stock.status || stock.action || group?.title || "观察"}</Badge>
+                        {persistenceLabel(stock) ? <Badge tone={persistenceTone(stock)}>{persistenceLabel(stock)}</Badge> : null}
+                      </div>
                     </td>
                     <td className="max-w-[260px] px-3 py-3 leading-5 text-[var(--text-primary)]">{stockInstruction(stock)}</td>
                     <td className="max-w-[180px] px-3 py-3 leading-5 text-[var(--text-secondary)]">
                       {stock.reason || stock.detail || "等待更多确认"}
+                      {stock.factor_explanation?.entry_reason && (
+                        <div className="mt-1 text-[12px] text-[var(--text-tertiary)]">
+                          {stock.factor_explanation.entry_reason}
+                        </div>
+                      )}
                     </td>
                     <td className="max-w-[180px] px-3 py-3 leading-5 text-[var(--text-secondary)]">
                       {stock.upgrade_condition || stock.setup_label || "等待触发条件"}
@@ -248,8 +298,18 @@ function ObservationWorkbench({
                           <Badge key={String(item)} tone="risk">{String(item)}</Badge>
                         ))}
                         {stock.priority_label ? <Badge tone="info">{stock.priority_label}</Badge> : null}
+                        {persistenceLabel(stock) ? <Badge tone={persistenceTone(stock)}>{persistenceLabel(stock)}</Badge> : null}
                         {stock.score !== undefined ? <Badge tone="positive">{stock.score} 分</Badge> : null}
                         {stock.change_pct !== undefined ? <Badge tone="watch">涨幅 {formatChange(stock.change_pct)}</Badge> : null}
+                        {typeof stock.tushare_score === "number" && (
+                          <Badge tone="info">因子 {Math.round(stock.tushare_score)}</Badge>
+                        )}
+                        {(stock.factor_tags ?? []).slice(0, 2).map((t) => (
+                          <Badge key={`ft-${t}`} tone="positive">{t}</Badge>
+                        ))}
+                        {(stock.factor_risk_flags ?? []).slice(0, 1).map((t) => (
+                          <Badge key={`fr-${t}`} tone="risk">{t}</Badge>
+                        ))}
                       </div>
                     </td>
                     <td className="px-3 py-3">
@@ -275,13 +335,21 @@ function ObservationWorkbench({
                     <div className="text-sm font-medium text-[var(--text-primary)]">{stock.name || "未知股票"}</div>
                     <div className="mono mt-0.5 text-[11px] text-[var(--text-tertiary)]">{stock.code}</div>
                   </div>
-                  <Badge tone={stock.tone}>{stock.status || group?.title || "观察"}</Badge>
+                  <div className="flex flex-col items-end gap-1">
+                    <Badge tone={stock.tone}>{stock.status || group?.title || "观察"}</Badge>
+                    {persistenceLabel(stock) ? <Badge tone={persistenceTone(stock)}>{persistenceLabel(stock)}</Badge> : null}
+                  </div>
                 </div>
                 <p className="text-[12px] leading-5 text-[var(--text-primary)]">{stockInstruction(stock)}</p>
                 <div className="mt-3 grid grid-cols-1 gap-2 text-[12px] leading-5 text-[var(--text-secondary)]">
                   <div><span className="text-[var(--text-tertiary)]">入池：</span>{stock.reason || stock.detail || "等待更多确认"}</div>
                   <div><span className="text-[var(--text-tertiary)]">升级：</span>{stock.upgrade_condition || stock.setup_label || "等待触发条件"}</div>
                   <div><span className="text-[var(--text-tertiary)]">失效：</span>{stock.invalid_condition || stock.foot || stock.risk || "触发失效则剔除"}</div>
+                  {typeof stock.tushare_score === "number" && (
+                    <div className="text-[12px] text-[var(--text-secondary)]">
+                      因子 {Math.round(stock.tushare_score)} · {(stock.factor_tags ?? []).slice(0, 2).join(" / ") || "—"}
+                    </div>
+                  )}
                 </div>
                 <div className="mt-3">
                   <ObservationActions
@@ -328,6 +396,82 @@ function ThemeRadar({ cards }: { cards?: BasicCard[] }) {
           <EmptyState>暂无主线热力。</EmptyState>
         )}
       </div>
+    </Panel>
+  );
+}
+
+function LifecycleTracker({ data }: { data?: OpportunitiesData }) {
+  const groups = data?.lifecycle_groups || [];
+  const activeGroups = groups.filter((group) => groupCount(group) > 0);
+  const cards = data?.lifecycle_cards || [];
+
+  return (
+    <Panel title="延续追踪" eyebrow="Lifecycle">
+      {cards.length ? (
+        <div className="mb-3 grid grid-cols-3 gap-2">
+          {cards.slice(0, 3).map((card) => (
+            <div key={card.label} className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-2.5 py-2">
+              <div className="text-[11px] text-[var(--text-tertiary)]">{card.label}</div>
+              <div className="mono mt-1 text-sm font-semibold text-[var(--text-primary)]">{card.value}</div>
+              <div className="mt-1 truncate text-[10px] text-[var(--text-tertiary)]">{card.detail}</div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {data?.lifecycle_note ? (
+        <p className="mb-3 text-[12px] leading-5 text-[var(--text-secondary)]">{data.lifecycle_note}</p>
+      ) : null}
+
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        <Badge tone="persistent">非一日脉冲</Badge>
+        <Badge tone="watch">延续待确认</Badge>
+        <Badge tone="risk">一日脉冲风险</Badge>
+      </div>
+
+      {activeGroups.length ? (
+        <div className="flex flex-col gap-2">
+          {activeGroups.slice(0, 4).map((group) => {
+            const pulseMeta = lifecycleGroupPulseMeta(group);
+            return (
+              <div key={group.key || group.title} className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="text-[13px] font-medium text-[var(--text-primary)]">{displayGroupTitle(group.title)}</div>
+                  <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                    {pulseMeta ? <Badge tone={pulseMeta.tone}>{pulseMeta.label}</Badge> : null}
+                    <Badge tone="info">{groupCount(group)} 只</Badge>
+                  </div>
+                </div>
+              <div className="flex flex-col gap-2">
+                {(group.cards || []).slice(0, 3).map((stock) => (
+                  <Link
+                    key={`${group.key || group.title}-${stock.code}`}
+                    href={cardHref(stock)}
+                    className="focus-ring rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-2.5 py-2 hover:border-[var(--border-default)]"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-[12px] font-medium text-[var(--text-primary)]">{stock.name || stock.code}</div>
+                        <div className="mono mt-0.5 text-[10px] text-[var(--text-tertiary)]">{stock.code}</div>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <Badge tone={stock.tone}>{stock.status || group.title}</Badge>
+                        {persistenceLabel(stock) ? <Badge tone={persistenceTone(stock)}>{persistenceLabel(stock)}</Badge> : null}
+                      </div>
+                    </div>
+                    <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-[var(--text-secondary)]">
+                      {stock.detail || stock.observation_instruction || "等待下一轮追踪。"}
+                    </p>
+                  </Link>
+                ))}
+              </div>
+            </div>
+            );
+          })}
+        </div>
+      ) : (
+        <EmptyState>暂无跨天变化。今天没有出现，不等于历史观察被删除。</EmptyState>
+      )}
     </Panel>
   );
 }
@@ -412,7 +556,7 @@ export default function DiscoveryPage() {
         />
 
         {trust && trust.level !== "trusted" ? (
-          <TrustBanner trust={trust} className="mb-4" />
+          <TrustBanner trust={trust} readiness={today.data?.readiness} className="mb-4" />
         ) : null}
 
         {opportunities.isError ? (
@@ -467,6 +611,8 @@ export default function DiscoveryPage() {
                 <LearningMemoryPreview memories={learningMemories} limit={3} />
               </Panel>
             ) : null}
+
+            <LifecycleTracker data={data} />
 
             <ThemeRadar cards={data?.theme_cards} />
 

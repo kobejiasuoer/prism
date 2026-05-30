@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, ClipboardList, FileSearch, LoaderCircle, Plus, RefreshCw, RotateCcw, SendHorizontal } from "lucide-react";
+import { Archive, ClipboardList, Database, FileSearch, LoaderCircle, Plus, RefreshCw, RotateCcw, SendHorizontal } from "lucide-react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -27,6 +27,7 @@ import type {
   AskFollowupResponse,
   DecisionLedgerCompactRecord,
   StockDetailData,
+  StockFormalData,
   StockProfileData,
   WatchlistManagerItem,
 } from "@/lib/types";
@@ -773,6 +774,162 @@ function ObservationDecisionBlocks({
   );
 }
 
+function recordField(row: Record<string, unknown> | undefined, keys: string[], fallback = "-") {
+  if (!row) {
+    return fallback;
+  }
+  for (const key of keys) {
+    const value = row[key];
+    if (hasDisplayValue(value)) {
+      return String(value);
+    }
+  }
+  return fallback;
+}
+
+function FormalDataSnapshotPanel({ data }: { data?: StockFormalData }) {
+  if (!data?.available) {
+    return null;
+  }
+  const cards = data.metric_cards || [];
+  const indexRows = data.index_memberships || [];
+  const topRows = data.top_list || [];
+  const holderRows = data.shareholders || [];
+  const dividendRows = data.dividends || [];
+
+  return (
+    <Panel
+      title="Tushare 档案"
+      eyebrow="Formal Data"
+      action={
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge tone="positive">{data.provider || "tushare/tinyshare"}</Badge>
+          {data.trade_date ? <Badge tone="info">交易日 {data.trade_date}</Badge> : null}
+        </div>
+      }
+    >
+      <div className="surface-card p-4">
+        <div className="mb-4 flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)]">
+            <Database size={17} className="text-[var(--positive)]" />
+          </div>
+          <div>
+            <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">{data.headline || "Tushare 数据已接入个股档案"}</h2>
+            <p className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">
+              {data.summary || "估值、资金流、财务、股东、分红和指数权重以只读研究证据展示。"}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {cards.slice(0, 8).map((card, index) => (
+            <MetricCard key={`${card.label}-${index}`} {...card} tone={card.tone || (index < 2 ? "info" : "watch")} />
+          ))}
+        </div>
+
+        {data.factor_profile && (
+          <div className="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] uppercase text-[var(--text-tertiary)]">Tushare 因子评分</span>
+              <Badge tone={typeof data.factor_profile.tushare_score === "number" ? "positive" : "stale"}>
+                {typeof data.factor_profile.tushare_score === "number"
+                  ? `${Math.round(data.factor_profile.tushare_score)} 分`
+                  : "数据缺失/不可用"}
+              </Badge>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {(data.factor_profile.factor_tags ?? []).map((t) => <Badge key={t} tone="info">{t}</Badge>)}
+              {(data.factor_profile.risk_flags ?? []).map((t) => <Badge key={t} tone="risk">{t}</Badge>)}
+            </div>
+            {data.factor_profile.explanation?.entry_reason && (
+              <p className="mt-2 text-[13px] text-[var(--text-primary)]">{data.factor_profile.explanation.entry_reason}</p>
+            )}
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {([
+                ["基本面", data.factor_profile.explanation?.evidence?.fundamental],
+                ["资金面", data.factor_profile.explanation?.evidence?.capital],
+                ["交易异动", data.factor_profile.explanation?.evidence?.trading_anomaly],
+                ["指数权重", data.factor_profile.explanation?.evidence?.index_weight],
+              ] as const).map(([label, block]) => (
+                <div key={label} className="rounded-md border border-[var(--border-subtle)] px-3 py-2">
+                  <div className="text-[11px] text-[var(--text-tertiary)]">{label}</div>
+                  <div className="text-[13px] text-[var(--text-primary)]">
+                    {block?.available ? block?.interpretation : "数据缺失/不可用"}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[12px] font-medium text-[var(--text-primary)]">指数权重</span>
+              <Badge tone={indexRows.length ? "positive" : "info"}>{indexRows.length} 个指数</Badge>
+            </div>
+            <div className="grid gap-1.5">
+              {indexRows.slice(0, 4).map((row, index) => (
+                <div key={`${recordField(row, ["index_code"])}-${index}`} className="flex items-center justify-between gap-2 text-[12px]">
+                  <span className="mono text-[var(--text-secondary)]">{recordField(row, ["index_code"])}</span>
+                  <span className="text-[var(--text-primary)]">{recordField(row, ["weight"])}%</span>
+                </div>
+              ))}
+              {!indexRows.length ? <span className="text-[12px] text-[var(--text-tertiary)]">未命中已补采指数。</span> : null}
+            </div>
+          </div>
+
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[12px] font-medium text-[var(--text-primary)]">龙虎榜</span>
+              <Badge tone={topRows.length ? "watch" : "info"}>{topRows.length} 次</Badge>
+            </div>
+            <div className="grid gap-1.5">
+              {topRows.slice(0, 3).map((row, index) => (
+                <div key={`${recordField(row, ["trade_date"])}-${index}`} className="text-[12px] leading-5 text-[var(--text-secondary)]">
+                  {recordField(row, ["trade_date"])} · 涨跌 {recordField(row, ["pct_change"])} · 净买 {recordField(row, ["net_amount", "net_buy"])}
+                </div>
+              ))}
+              {!topRows.length ? <span className="text-[12px] text-[var(--text-tertiary)]">近窗口没有龙虎榜命中。</span> : null}
+            </div>
+          </div>
+
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[12px] font-medium text-[var(--text-primary)]">前十大股东</span>
+              <Badge tone={holderRows.length ? "info" : "warning"}>{holderRows.length} 条</Badge>
+            </div>
+            <div className="grid gap-1.5">
+              {holderRows.slice(0, 4).map((row, index) => (
+                <div key={`${recordField(row, ["holder_name"])}-${index}`} className="flex items-start justify-between gap-2 text-[12px]">
+                  <span className="line-clamp-1 text-[var(--text-secondary)]">{recordField(row, ["holder_name"])}</span>
+                  <span className="shrink-0 text-[var(--text-primary)]">{recordField(row, ["hold_ratio"])}%</span>
+                </div>
+              ))}
+              {!holderRows.length ? <span className="text-[12px] text-[var(--text-tertiary)]">暂无股东结构命中。</span> : null}
+            </div>
+          </div>
+
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[12px] font-medium text-[var(--text-primary)]">分红送配</span>
+              <Badge tone={dividendRows.length ? "info" : "warning"}>{dividendRows.length} 条</Badge>
+            </div>
+            <div className="grid gap-1.5">
+              {dividendRows.slice(0, 3).map((row, index) => (
+                <div key={`${recordField(row, ["end_date", "ann_date"])}-${index}`} className="text-[12px] leading-5 text-[var(--text-secondary)]">
+                  {recordField(row, ["end_date", "ann_date"])} · 派息 {recordField(row, ["cash_div_tax", "cash_div"])} · 进度 {recordField(row, ["div_proc"])}
+                </div>
+              ))}
+              {!dividendRows.length ? <span className="text-[12px] text-[var(--text-tertiary)]">暂无分红记录命中。</span> : null}
+            </div>
+          </div>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 function DecisionSummary({
   canonical,
   sourceLabel,
@@ -1143,7 +1300,7 @@ export default function StockProfilePage() {
         />
 
         {trustLevel && trustLevel.level !== "trusted" ? (
-          <TrustBanner trust={trustLevel} className="mb-4" />
+          <TrustBanner trust={trustLevel} readiness={profileData?.readiness} className="mb-4" />
         ) : null}
 
         {profile.isError ? <ErrorState message="个股详情暂不可用" onRetry={() => void profile.refetch()} /> : null}
@@ -1169,6 +1326,12 @@ export default function StockProfilePage() {
                 ? "当前链路只作为证据来源保留，不进入今天的交易判断。"
                 : "当前页只展示已有链路能回源的纪律参考；目标价、收益预测和完整财报研判暂不进入结果页。"}
             </p>
+          </div>
+        ) : null}
+
+        {profileData?.formal_data?.available ? (
+          <div className="mb-6">
+            <FormalDataSnapshotPanel data={profileData.formal_data} />
           </div>
         ) : null}
 

@@ -75,6 +75,8 @@ def extract_shortlist(data: dict) -> dict[str, dict]:
                 "entry_reason": s.get("entry_reason", ""),
                 "main_risk": s.get("main_risk", ""),
                 "watch_condition": s.get("watch_condition", ""),
+                "tushare_score": (s.get("tushare_factors") or {}).get("tushare_score"),
+                "factor_tags": (s.get("tushare_factors") or {}).get("factor_tags") or [],
                 "timestamp": data.get("timestamp", ""),
             }
         return stocks
@@ -104,6 +106,8 @@ def extract_shortlist(data: dict) -> dict[str, dict]:
                 "entry_reason": s.get("entry_reason", ""),
                 "main_risk": s.get("main_risk", ""),
                 "watch_condition": s.get("watch_condition", ""),
+                "tushare_score": (s.get("tushare_factors") or {}).get("tushare_score"),
+                "factor_tags": (s.get("tushare_factors") or {}).get("factor_tags") or [],
                 "timestamp": data.get("timestamp", ""),
             }
     return stocks
@@ -254,6 +258,7 @@ def compute_lifecycle(
     exited = []
     upgraded = []
     downgraded = []
+    continued = []
     handed_off = []
 
     # Entered: in current but not in previous
@@ -346,6 +351,17 @@ def compute_lifecycle(
             upgraded.append(detail)
         elif is_downgrade:
             downgraded.append(detail)
+        else:
+            continued.append(
+                {
+                    **detail,
+                    "tier": curr.get("tier", ""),
+                    "screening_status": curr.get("screening_status", ""),
+                    "score": curr_score,
+                    "persistence_label": "非一日脉冲",
+                    "reason": "连续两轮仍在候选池，先按延续观察处理",
+                }
+            )
 
     # Midday downgraded: supplement downgrade funnel (and avoid malformed empty objects)
     downgraded_codes = {item["code"] for item in downgraded}
@@ -390,12 +406,14 @@ def compute_lifecycle(
         "entered": entered,
         "upgraded": upgraded,
         "downgraded": downgraded,
+        "continued": continued,
         "exited": exited,
         "handed_off": handed_off,
         "summary": {
             "entered_count": len(entered),
             "upgraded_count": len(upgraded),
             "downgraded_count": len(downgraded),
+            "continued_count": len(continued),
             "exited_count": len(exited),
             "handed_off_count": len(handed_off),
             "current_pool_size": len(current_codes),
@@ -422,6 +440,7 @@ def generate_markdown(lifecycle: dict, now_str: str) -> str:
     lines.append(f"| 🆕 新入选 | {s['entered_count']} |")
     lines.append(f"| ⬆️ 升级 | {s['upgraded_count']} |")
     lines.append(f"| ⬇️ 降级 | {s['downgraded_count']} |")
+    lines.append(f"| ✅ 非一日脉冲 | {s.get('continued_count', 0)} |")
     lines.append(f"| 🚪 退出 | {s['exited_count']} |")
     lines.append(f"| 🔄 已移交 analyzer | {s['handed_off_count']} |")
     lines.append("")
@@ -467,6 +486,19 @@ def generate_markdown(lifecycle: dict, now_str: str) -> str:
                 lines.append("  - 来源：盘中验证")
         lines.append("")
 
+    # Continued
+    if lifecycle.get("continued"):
+        lines.append("## ✅ 非一日脉冲 (continued)")
+        lines.append("")
+        for c in lifecycle["continued"]:
+            delta = c["score_delta"]
+            delta_str = f"+{delta}" if delta > 0 else str(delta)
+            lines.append(
+                f"- **{c['name']}({c['code']})** | Tier {c.get('tier', '')}/{c.get('screening_status', '')} | "
+                f"评分 {c['prev_score']}→{c['curr_score']} ({delta_str}) | {c.get('theme', '')}"
+            )
+        lines.append("")
+
     # Exited
     if lifecycle["exited"]:
         lines.append("## 🚪 退出 (exited)")
@@ -488,7 +520,7 @@ def generate_markdown(lifecycle: dict, now_str: str) -> str:
                 lines.append(f"  - 确认理由：{h['reason']}")
         lines.append("")
 
-    if not any(lifecycle[k] for k in ["entered", "upgraded", "downgraded", "exited", "handed_off"]):
+    if not any(lifecycle.get(k) for k in ["entered", "upgraded", "downgraded", "continued", "exited", "handed_off"]):
         lines.append("## 无变动")
         lines.append("")
         lines.append("与上一期候选池相比，未检测到状态变化。")
@@ -576,6 +608,7 @@ def main():
     print(f"  🆕 entered:    {s['entered_count']}")
     print(f"  ⬆️ upgraded:   {s['upgraded_count']}")
     print(f"  ⬇️ downgraded: {s['downgraded_count']}")
+    print(f"  ✅ continued:  {s.get('continued_count', 0)}")
     print(f"  🚪 exited:     {s['exited_count']}")
     print(f"  🔄 handed_off: {s['handed_off_count']}")
     print(f"")
