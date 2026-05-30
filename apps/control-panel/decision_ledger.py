@@ -525,6 +525,7 @@ def build_decision_record(
     parameter_path: str | None = None,
     parameter_sha256: str | None = None,
     parameter_summary: Mapping[str, Any] | None = None,
+    factor_snapshot: Mapping[str, Any] | None = None,
     decision_contract: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble a DecisionRecord dict ready for :func:`upsert_decision`.
@@ -591,6 +592,7 @@ def build_decision_record(
             "sha256": parameter_sha256,
             "summary": dict(parameter_summary) if parameter_summary else None,
         },
+        "factor_snapshot": dict(factor_snapshot) if factor_snapshot else None,
         "decision_contract": dict(decision_contract) if decision_contract else None,
         "rule_snapshot": {
             "ruleset_version": DECISION_RULESET_VERSION,
@@ -974,6 +976,7 @@ def build_decision_record_from_today_item(
     data_trade_date: str,
     readiness_mode: str,
     readiness_ready: bool,
+    factor_snapshot: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Convert a single Today action queue entry into a DecisionRecord.
 
@@ -1045,8 +1048,28 @@ def build_decision_record_from_today_item(
         parameter_path=None,
         parameter_sha256=None,
         parameter_summary=None,
+        factor_snapshot=factor_snapshot,
         decision_contract=item.get("decision_contract") if isinstance(item.get("decision_contract"), Mapping) else None,
     )
+
+
+def _factor_snapshot_for_item(item: Mapping[str, Any], data_trade_date: str) -> dict[str, Any] | None:
+    """Best-effort factor snapshot for a today-action item.
+
+    Research-only: never fatal, never feeds an execution/readiness gate.
+    Returns ``None`` on any failure (missing factor module, unparsable
+    key, bad data) so capture continues unaffected.
+    """
+
+    try:
+        from screener.tushare_factors import build_factor_snapshot
+
+        _, plain_code = _parse_today_action_key(str(item.get("key") or ""))
+        if not plain_code:
+            return None
+        return build_factor_snapshot(plain_code, data_trade_date)
+    except Exception:
+        return None
 
 
 def capture_today_action_queue(today_view: Mapping[str, Any]) -> dict[str, Any]:
@@ -1119,6 +1142,7 @@ def capture_today_action_queue(today_view: Mapping[str, Any]) -> dict[str, Any]:
                     readiness_mode if readiness_mode != "live_ready" else "shadow_only"
                 ),
                 readiness_ready=per_item_ready and queue_level_ready,
+                factor_snapshot=_factor_snapshot_for_item(item, data_trade_date),
             )
         except DecisionLedgerError:
             skipped += 1
