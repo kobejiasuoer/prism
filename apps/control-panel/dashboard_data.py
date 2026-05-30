@@ -4990,6 +4990,10 @@ def build_screening_candidate_card(
         "action_key": f"screening:{item.get('code')}",
         "updated_at": item.get("updated_at") or item.get("snapshot_time"),
         "detail_url": today_candidate_detail_url(item.get("code")),
+        "tushare_score": item.get("tushare_score") if item.get("tushare_score") is not None else (item.get("tushare_factors") or {}).get("tushare_score"),
+        "factor_tags": item.get("factor_tags") or (item.get("tushare_factors") or {}).get("factor_tags") or [],
+        "factor_risk_flags": item.get("factor_risk_flags") or (item.get("tushare_factors") or {}).get("risk_flags") or [],
+        "factor_explanation": item.get("factor_explanation") or (item.get("tushare_factors") or {}).get("explanation") or {},
     }
     memories = candidate_learning_memories(item, lane="aggressive", learning_index=learning_index)
     if memories:
@@ -5033,6 +5037,10 @@ def build_confirmation_candidate_card(
         "action_key": f"confirmation:{item.get('code')}",
         "updated_at": item.get("updated_at") or item.get("snapshot_time"),
         "detail_url": today_candidate_detail_url(item.get("code")),
+        "tushare_score": item.get("tushare_score") if item.get("tushare_score") is not None else (item.get("tushare_factors") or {}).get("tushare_score"),
+        "factor_tags": item.get("factor_tags") or (item.get("tushare_factors") or {}).get("factor_tags") or [],
+        "factor_risk_flags": item.get("factor_risk_flags") or (item.get("tushare_factors") or {}).get("risk_flags") or [],
+        "factor_explanation": item.get("factor_explanation") or (item.get("tushare_factors") or {}).get("explanation") or {},
     }
     memories = candidate_learning_memories(item, lane="midday_confirmation", learning_index=learning_index)
     if memories:
