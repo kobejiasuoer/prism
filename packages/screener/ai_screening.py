@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -44,6 +45,30 @@ except ModuleNotFoundError:
         SETUP_THRESHOLDS,
         build_execution_gate,
     )
+
+try:
+    from screener.tushare_factors import (
+        PRIORITY_ADJUSTMENT_CAP,
+        PRIORITY_ADJUSTMENT_K,
+        RISK_FLAG_PENALTY,
+    )
+except ModuleNotFoundError:
+    from tushare_factors import (
+        PRIORITY_ADJUSTMENT_CAP,
+        PRIORITY_ADJUSTMENT_K,
+        RISK_FLAG_PENALTY,
+    )
+
+
+def _tushare_priority_adjustment(item) -> float:
+    fb = item.get("tushare_factors") or {}
+    score = fb.get("tushare_score")
+    adj = 0.0
+    if isinstance(score, (int, float)):
+        adj = max(-PRIORITY_ADJUSTMENT_CAP, min(PRIORITY_ADJUSTMENT_CAP, (score - 50.0) * PRIORITY_ADJUSTMENT_K))
+    adj -= min(len(fb.get("risk_flags") or []), 3) * RISK_FLAG_PENALTY
+    return round(adj, 2)
+
 
 BASE = Path(__file__).resolve().parents[1]
 DEFAULT_SCAN_PATH = BASE / "data" / "scan_result.json"
@@ -95,6 +120,30 @@ def ingress_summary(manifest: dict | None, manifest_path: Path | None) -> dict[s
         "freshness_status": manifest.get("freshness_status"),
         "live_small_allowed": bool(manifest.get("live_small_allowed")),
     }
+
+
+def date_prefix(value) -> str:
+    text = str(value or "").strip()
+    if len(text) >= 10 and text[4:5] == "-" and text[7:8] == "-":
+        return text[:10]
+    digits = "".join(ch for ch in text if ch.isdigit())
+    if len(digits) >= 8:
+        return f"{digits[:4]}-{digits[4:6]}-{digits[6:8]}"
+    return ""
+
+
+def resolve_trade_date(scan_data: dict) -> str:
+    for value in (
+        scan_data.get("trade_date"),
+        os.environ.get("PRISM_EXPECTED_TRADE_DATE"),
+        os.environ.get("TRADE_DATE"),
+        os.environ.get("RUN_DATE"),
+        scan_data.get("timestamp"),
+    ):
+        resolved = date_prefix(value)
+        if resolved:
+            return resolved
+    return datetime.now().strftime("%Y-%m-%d")
 
 
 def safe_float(value, default=0.0):
@@ -786,6 +835,7 @@ def build_stock_entry(stock, strategy_name, decision, market_regime=None, market
             "net_profit": fundamentals.get("net_profit"),
         },
         "notice_risk_tags": stock.get("notice_risk_tags") or [],
+        "tushare_factors": stock.get("tushare_factors"),
     }
 
 
@@ -965,6 +1015,7 @@ def aggregate_shortlist(strategy_views, raw_strategies, market_regime=None):
                     "fundamentals": item["fundamentals"],
                     "consistency": item.get("consistency") or {},
                     "execution_quality": item.get("execution_quality") or {},
+                    "tushare_factors": item.get("tushare_factors"),
                     "variants": [],
                 }
 
@@ -1007,6 +1058,7 @@ def aggregate_shortlist(strategy_views, raw_strategies, market_regime=None):
                 agg["fundamentals"] = item["fundamentals"]
                 agg["consistency"] = current_consistency
                 agg["execution_quality"] = item.get("execution_quality") or {}
+                agg["tushare_factors"] = item.get("tushare_factors")
             elif current_consistency_score > agg_consistency_score:
                 agg["consistency"] = current_consistency
 
@@ -1033,6 +1085,10 @@ def aggregate_shortlist(strategy_views, raw_strategies, market_regime=None):
             + safe_float((item.get("consistency") or {}).get("score"), default=0) * 1.5,
             2,
         )
+
+        adjustment = _tushare_priority_adjustment(item)
+        item["tushare_priority_adjustment"] = adjustment
+        item["priority_score"] = round(item["priority_score"] + adjustment, 2)
 
         if item["screening_status"] == "approved" and quality_score < 4:
             item["screening_status"] = "caution"
@@ -1179,6 +1235,7 @@ def run_screening(scan_data):
 
     return {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "trade_date": resolve_trade_date(scan_data),
         "source_scan_timestamp": scan_data.get("timestamp"),
         "pool": scan_data.get("pool"),
         "pool_label": scan_data.get("pool_label"),
@@ -1215,7 +1272,7 @@ def main():
         upstream_manifests.append(scan_manifest)
     ingress_manifest = build_pipeline_manifest(
         dataset="screening.batch",
-        trade_date=result["timestamp"][:10],
+        trade_date=result.get("trade_date") or result["timestamp"][:10],
         payload=result,
         upstream_manifests=upstream_manifests,
         ttl_seconds=900,

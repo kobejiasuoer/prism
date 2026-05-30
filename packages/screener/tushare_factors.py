@@ -182,6 +182,11 @@ DIMENSION_WEIGHTS = {
     "liquidity": 15.0, "index": 10.0, "dragon_tiger": 5.0,
 }
 
+PRIORITY_ADJUSTMENT_CAP = 6.0
+PRIORITY_ADJUSTMENT_K = 0.12
+RISK_FLAG_PENALTY = 1.5
+
+
 
 def _band(value: float | None, points: list[tuple[float, float]]) -> float | None:
     """points: ascending (threshold, score). Bands are upper-inclusive — a value equal to a threshold gets that threshold's score; values above the last threshold get the last score."""
