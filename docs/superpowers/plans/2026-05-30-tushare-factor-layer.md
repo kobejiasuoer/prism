@@ -1036,8 +1036,8 @@ git commit -m "feat(screening): carry factors + bounded priority re-rank (no sta
 # apps/control-panel/tests/test_prism_canonical_factors.py
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "apps" / "scripts"))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "apps" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
 
 import prism_canonical
 
@@ -1163,7 +1163,7 @@ git commit -m "feat(lifecycle): keep slim factor summary across snapshots"
 import json, sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
 
 
 def _seed(root, dataset, date, key, payload):
@@ -1253,8 +1253,8 @@ git commit -m "feat(api): add factor_profile to formal_data with graceful missin
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "apps" / "scripts"))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "apps" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
 
 import dashboard_data
 
