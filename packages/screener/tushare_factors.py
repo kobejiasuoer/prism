@@ -317,3 +317,44 @@ def _derive_risk_flags(v: dict[str, Any]) -> list[str]:
     core = [v.get("pe_ttm"), v.get("roe"), v.get("main_net_yi"), v.get("turnover_rate")]
     if sum(1 for x in core if x is None) >= 3: flags.append("数据缺失")
     return flags
+
+
+def _evidence_block(available: bool, values: dict[str, Any], interpretation: str) -> dict[str, Any]:
+    return {"values": values, "interpretation": interpretation if available else "数据缺失/不可用", "available": available}
+
+
+def _build_explanation(v, scored, tags, risk_flags) -> dict[str, Any]:
+    bd = scored["tushare_score_breakdown"]
+    supporting = [bd[d]["detail"] for d in ("quality", "valuation", "capital_flow", "index") if bd[d]["available"]]
+    roe = v.get("roe") if v.get("roe") is not None else v.get("roe_waa")
+    fundamental = _evidence_block(
+        roe is not None or v.get("pe_ttm") is not None,
+        {"pe_ttm": v.get("pe_ttm"), "pb": v.get("pb"), "roe": roe, "debt_to_assets": v.get("debt_to_assets")},
+        bd["quality"]["detail"] if bd["quality"]["available"] else bd["valuation"]["detail"],
+    )
+    capital = _evidence_block(
+        v.get("main_net_yi") is not None or v.get("five_day_main_net_yi") is not None,
+        {"main_net_yi": v.get("main_net_yi"), "five_day_main_net_yi": v.get("five_day_main_net_yi")},
+        bd["capital_flow"]["detail"],
+    )
+    trading = _evidence_block(
+        (v.get("top_list_hits_60d") or 0) > 0 or v.get("top_inst_net_buy") is not None,
+        {"top_list_hits_60d": v.get("top_list_hits_60d"), "top_inst_net_buy": v.get("top_inst_net_buy")},
+        bd["dragon_tiger"]["detail"],
+    )
+    members = v.get("index_memberships") or []
+    index_block = _evidence_block(bool(members), {"index_memberships": members}, bd["index"]["detail"])
+    score = scored["tushare_score"]
+    return {
+        "entry_reason": (f"综合因子评分 {score}，" + ("、".join(tags[:3]) if tags else "基础面达标")) if score is not None else "因子数据不足，仅作观察",
+        "upgrade_condition": "资金面持续净流入且执行质量确认（盘中放量站稳关键位）后再考虑升级。",
+        "abandon_condition": "出现资金净流出、跌破关键支撑或基本面恶化（ROE 下滑/负债攀升）则放弃。",
+        "supporting_evidence": supporting,
+        "counter_risks": list(risk_flags),
+        "evidence": {
+            "fundamental": fundamental,
+            "capital": capital,
+            "trading_anomaly": trading,
+            "index_weight": index_block,
+        },
+    }

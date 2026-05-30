@@ -110,3 +110,24 @@ def test_risk_flag_for_missing_data(dataset_root):
     from screener import tushare_factors as tf
     v = tf.extract_factor_values("000333", "2026-05-29")   # nothing seeded
     assert "数据缺失" in tf._derive_risk_flags(v)
+
+
+def test_explanation_is_structured_and_data_grounded(dataset_root):
+    from screener import tushare_factors as tf
+    _seed_full_stock(dataset_root)
+    v = tf.extract_factor_values("600519", "2026-05-29")
+    scored = tf.score_factor_values(v)
+    exp = tf._build_explanation(v, scored, tf._derive_tags(v), tf._derive_risk_flags(v))
+    assert exp["entry_reason"] and exp["upgrade_condition"] and exp["abandon_condition"]
+    assert set(exp["evidence"]) == {"fundamental", "capital", "trading_anomaly", "index_weight"}
+    assert exp["evidence"]["fundamental"]["available"] is True
+    assert "ROE" in exp["evidence"]["fundamental"]["interpretation"]
+    assert any("ROE" in s or "PE" in s for s in exp["supporting_evidence"])
+
+
+def test_explanation_missing_data_marked_unavailable(dataset_root):
+    from screener import tushare_factors as tf
+    v = tf.extract_factor_values("000004", "2026-05-29")   # nothing seeded
+    exp = tf._build_explanation(v, tf.score_factor_values(v), [], tf._derive_risk_flags(v))
+    assert exp["evidence"]["fundamental"]["available"] is False
+    assert exp["evidence"]["fundamental"]["interpretation"] == "数据缺失/不可用"
