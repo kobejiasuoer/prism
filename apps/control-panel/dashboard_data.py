@@ -57,7 +57,8 @@ from readiness import (  # type: ignore  # local module under apps/control-panel
     current_session,
     expected_trade_date,
 )
-from dataset_manifests import build_dataset_freshness_rows  # type: ignore  # local module under apps/control-panel
+from dataset_manifests import build_dataset_freshness_rows, build_formal_freshness_rows  # type: ignore  # local module under apps/control-panel
+from data_assets import build_stock_formal_data  # type: ignore  # local module under apps/control-panel
 from account_book import (  # type: ignore  # local module under apps/control-panel
     ACCOUNT_MODES,
     AccountBookError,
@@ -93,6 +94,7 @@ from decision_ledger import (  # type: ignore
     _provider_config,
 )
 from command_brief import build_today_command_brief  # type: ignore  # local module under apps/control-panel
+from decision_contract import attach_decision_contracts  # type: ignore  # local module under apps/control-panel
 
 RESEARCH_REPORTS_DIR = STOCK_SCREENER_ROOT / "data" / "research_backfill" / "reports"
 SHADOW_REPLAY_ROOT = WORKSPACE_ROOT / "data" / "quant" / "shadow_replay"
@@ -293,6 +295,13 @@ TASK_DEFINITIONS = {
         "command": [sys.executable, "apps/scripts/evaluate_decision_ledger.py"],
         "cwd": str(WORKSPACE_ROOT),
         "description": "补跑已成熟决策样本的 T+1/T+3/T+5 outcome，并把结果写回 Decision Ledger。",
+    },
+    "formal_data_refresh": {
+        "title": "正式口径数据刷新",
+        "lane": "formal_data",
+        "command": [sys.executable, "apps/scripts/refresh_formal_data.py"],
+        "cwd": str(WORKSPACE_ROOT),
+        "description": "通过已配置授权源刷新交易日历、日线、复权因子、基准指数、涨跌停和执行约束口径。",
     },
 }
 
@@ -6719,6 +6728,7 @@ def lifecycle_group_tone(group_key: str) -> str:
     return {
         "entered": "positive",
         "upgraded": "positive",
+        "continued": "info",
         "downgraded": "risk",
         "exited": "risk",
         "handed_off": "watch",
@@ -6729,6 +6739,7 @@ def lifecycle_group_title(group_key: str) -> str:
     return {
         "entered": "新进入",
         "upgraded": "升级",
+        "continued": "非一日脉冲",
         "downgraded": "降级",
         "exited": "退出",
         "handed_off": "午盘交接",
@@ -6758,6 +6769,12 @@ def lifecycle_item_metrics(item: dict[str, Any], group_key: str) -> list[str]:
             f"当前状态 {candidate_status_label(item.get('curr_screening_status'))}",
             f"分数变化 {detail_value(item.get('score_delta'))}",
         ]
+    if group_key == "continued":
+        return [
+            f"层级 {detail_value(item.get('tier') or item.get('curr_tier'))}",
+            f"状态 {candidate_status_label(item.get('screening_status') or item.get('curr_screening_status'))}",
+            f"分数变化 {detail_value(item.get('score_delta'))}",
+        ]
     if group_key == "exited":
         return [
             f"最后分数 {detail_value(item.get('score'))}",
@@ -6778,6 +6795,8 @@ def lifecycle_item_copy(item: dict[str, Any], group_key: str) -> str:
         return detail_value(item.get("theme"), "升级原因待补")
     if group_key == "downgraded":
         return detail_value(item.get("reason") or item.get("theme"), "降级原因待补")
+    if group_key == "continued":
+        return detail_value(item.get("reason") or item.get("theme"), "连续两轮仍在候选池，先按延续观察处理。")
     if group_key == "exited":
         return "已从当前 shortlist 退出，后续只保留历史留痕。"
     return detail_value(item.get("reason"), "已进入午盘承接观察。")
@@ -6790,6 +6809,8 @@ def lifecycle_item_foot(item: dict[str, Any], group_key: str) -> str:
         return detail_value(item.get("theme"), "强度正在抬升")
     if group_key == "downgraded":
         return detail_value(item.get("reason"), "需要重新评估承接")
+    if group_key == "continued":
+        return detail_value(item.get("persistence_label"), "非一日脉冲")
     if group_key == "exited":
         return detail_value(item.get("theme"), "不再进入当前执行名单")
     return detail_value(item.get("current_screening_status"), "已完成午盘交接")
@@ -6816,12 +6837,91 @@ def build_lifecycle_group(group_key: str, lifecycle: dict[str, Any] | None) -> d
             "entered": "新增进入当前观察池的名字",
             "upgraded": "同一批次里强度或状态更好的名字",
             "downgraded": "盘中承接变弱，需要降级对待",
+            "continued": "连续两轮仍在候选池，不按一日脉冲处理",
             "exited": "已经从当前 shortlist 离开的名字",
             "handed_off": "从早盘进入午盘承接观察的名字",
         }.get(group_key, "最近变化"),
         "count": len(cards),
         "cards": cards,
         "empty": f"当前没有{lifecycle_group_title(group_key)}记录。",
+    }
+
+
+def build_discovery_lifecycle_card(item: dict[str, Any], group_key: str) -> dict[str, Any]:
+    score = item.get("curr_score") if item.get("curr_score") is not None else item.get("score")
+    status = lifecycle_group_title(group_key)
+    if group_key == "entered":
+        upgrade_condition = "后续若继续留在 shortlist 且分数/题材延续，再进入午盘确认。"
+        invalid_condition = "次日掉出 shortlist 或主线退潮，就只保留历史留痕。"
+    elif group_key == "upgraded":
+        upgrade_condition = "强度已抬升，下一步只等午盘承接和总控阀门。"
+        invalid_condition = "若分数回落或状态降级，重新放回观察。"
+    elif group_key == "downgraded":
+        upgrade_condition = "重新进入当前池且承接恢复后再评估。"
+        invalid_condition = detail_value(item.get("reason"), "当前按降级处理。")
+    elif group_key == "continued":
+        upgrade_condition = "明天继续留在 shortlist，且午盘承接不破，再看升级。"
+        invalid_condition = "后续掉出 shortlist 或分数明显回落，就改成一日脉冲风险。"
+    elif group_key == "exited":
+        upgrade_condition = "重新进入当日 shortlist 后再观察。"
+        invalid_condition = "已退出当前观察池，不再占用今日复核任务。"
+    else:
+        upgrade_condition = "午盘承接继续成立后再看升级。"
+        invalid_condition = detail_value(item.get("reason"), "承接失败则降级。")
+
+    return {
+        "code": item.get("code"),
+        "name": item.get("name") or item.get("code"),
+        "status": status,
+        "tone": lifecycle_group_tone(group_key),
+        "setup_label": detail_value(item.get("theme"), "跨天追踪"),
+        "score": score,
+        "theme": detail_value(item.get("theme"), ""),
+        "detail": lifecycle_item_copy(item, group_key),
+        "foot": lifecycle_item_foot(item, group_key),
+        "observation_instruction": build_observation_instruction(
+            name=item.get("name") or item.get("code"),
+            action=f"{status}：只作为跨天追踪，不直接执行",
+            upgrade=upgrade_condition,
+            invalid=invalid_condition,
+        ),
+        "upgrade_condition": upgrade_condition,
+        "invalid_condition": invalid_condition,
+        "risk_tags": opportunity_risk_tags(item.get("reason"), item.get("main_risk"), item.get("theme")),
+        "priority_label": detail_value(item.get("persistence_label"), "Lifecycle"),
+        "persistence_label": detail_value(item.get("persistence_label"), ""),
+        "action_key": f"lifecycle:{group_key}:{item.get('code')}",
+        "updated_at": item.get("last_seen") or item.get("current_timestamp"),
+        "detail_url": today_candidate_detail_url(item.get("code")),
+    }
+
+
+def build_discovery_lifecycle_group(group_key: str, lifecycle: dict[str, Any] | None) -> dict[str, Any]:
+    items = (((lifecycle or {}).get("groups") or {}).get(group_key) or [])
+    cards = [build_discovery_lifecycle_card(item, group_key) for item in items if item.get("code")]
+    titles = {
+        "entered": "延续新增",
+        "upgraded": "延续升级",
+        "continued": "非一日脉冲",
+        "downgraded": "延续降级",
+        "exited": "延续退出",
+        "handed_off": "午盘交接",
+    }
+    empties = {
+        "entered": "跨天追踪里暂无新增进入。",
+        "upgraded": "跨天追踪里暂无升级。",
+        "continued": "跨天追踪里暂无非一日脉冲。",
+        "downgraded": "跨天追踪里暂无降级。",
+        "exited": "跨天追踪里暂无退出。",
+        "handed_off": "跨天追踪里暂无午盘交接。",
+    }
+    return {
+        "key": f"lifecycle_{group_key}",
+        "title": titles.get(group_key, lifecycle_group_title(group_key)),
+        "subtitle": "连续两轮仍在池里的票会打上非一日脉冲标记。",
+        "count": len(cards),
+        "cards": cards,
+        "empty": empties.get(group_key, f"跨天追踪里暂无{lifecycle_group_title(group_key)}。"),
     }
 
 
@@ -6880,7 +6980,7 @@ def build_today_change_view(lifecycle: dict[str, Any] | None, *, links: dict[str
     handoff_total = len((((lifecycle or {}).get("groups") or {}).get("handed_off") or []))
 
     groups = []
-    for key in ("downgraded", "entered", "upgraded", "handed_off", "exited"):
+    for key in ("downgraded", "continued", "entered", "upgraded", "handed_off", "exited"):
         group = build_today_change_group(key, lifecycle)
         if group["count"]:
             groups.append(group)
@@ -7758,6 +7858,10 @@ def build_watchlist_page_view() -> dict[str, Any]:
             expected_date=trade_date_hint,
             now=datetime.now(),
         ),
+        formal_freshness=build_formal_freshness_rows(
+            expected_date=trade_date_hint,
+            now=datetime.now(),
+        ),
     )
     expected_date_w = readiness_for_page["expected_trade_date"]
     trade_date = readiness_for_page["data_trade_date"] or current_trade_date(watchlist, screening_batch, decision_brief)
@@ -7981,6 +8085,9 @@ def build_opportunities_view() -> dict[str, Any]:
     aggressive_quality = safe_canonical_load(load_quality_status, lane="aggressive")
     midday_quality = safe_canonical_load(load_quality_status, lane="midday_confirmation")
     learning_index = build_review_learning_memory_index()
+    lifecycle_context = resolve_lifecycle_context()
+    display_lifecycle = lifecycle_context["display_lifecycle"]
+    lifecycle_note = lifecycle_context["lifecycle_note"]
 
     readiness_for_opps = compute_readiness(
         watchlist=watchlist,
@@ -7991,6 +8098,10 @@ def build_opportunities_view() -> dict[str, Any]:
         account_book=load_account_book(),
         today_action_decisions=load_today_action_decision_store(),
         dataset_freshness=build_dataset_freshness_rows(
+            expected_date=trade_date_hint,
+            now=datetime.now(),
+        ),
+        formal_freshness=build_formal_freshness_rows(
             expected_date=trade_date_hint,
             now=datetime.now(),
         ),
@@ -8094,6 +8205,15 @@ def build_opportunities_view() -> dict[str, Any]:
             "empty": "当前没有需要剔除的候选。",
         },
     ]
+    lifecycle_groups = [
+        build_discovery_lifecycle_group("continued", display_lifecycle),
+        build_discovery_lifecycle_group("upgraded", display_lifecycle),
+        build_discovery_lifecycle_group("downgraded", display_lifecycle),
+        build_discovery_lifecycle_group("entered", display_lifecycle),
+        build_discovery_lifecycle_group("exited", display_lifecycle),
+        build_discovery_lifecycle_group("handed_off", display_lifecycle),
+    ]
+    lifecycle_activity_count = sum(int(group.get("count") or 0) for group in lifecycle_groups)
     quality_cards = [
         lane_quality_card("早盘质检", aggressive_quality),
         lane_quality_card("午盘质检", midday_quality),
@@ -8148,6 +8268,12 @@ def build_opportunities_view() -> dict[str, Any]:
             "note": f"交易日 {trade_date}",
             "tone": "good" if screening_batch.get("generated_at") else "warn",
         },
+        {
+            "label": "延续追踪",
+            "value": f"{lifecycle_activity_count} 条",
+            "note": detail_value((display_lifecycle or {}).get("current_timestamp"), lifecycle_note),
+            "tone": "good" if lifecycle_activity_count else "warn",
+        },
     )
     secondary_groups = [
         {
@@ -8175,6 +8301,16 @@ def build_opportunities_view() -> dict[str, Any]:
             "empty": groups[4]["empty"],
         },
     ]
+    active_lifecycle_groups = [group for group in lifecycle_groups if int(group.get("count") or 0) > 0]
+    secondary_groups.extend(
+        {
+            "title": group["title"],
+            "count": group["count"],
+            "rows": compress_opportunity_group(group, limit=3, fallback_freshness=(display_lifecycle or {}).get("current_timestamp") or "-"),
+            "empty": group["empty"],
+        }
+        for group in active_lifecycle_groups[:3]
+    )
     links = {
         **today_nav_links(),
         "self": opportunities_page_url(),
@@ -8241,6 +8377,7 @@ def build_opportunities_view() -> dict[str, Any]:
                 {"label": "交易日", "value": trade_date},
                 {"label": "进攻阀门", "value": gate.get("label") or "实时判断"},
                 {"label": "早盘候选", "value": str(len(groups[0].get("cards") or []))},
+                {"label": "延续追踪", "value": str(lifecycle_activity_count)},
             ],
             "cta_links": [
                 {"label": "去看其余观察", "href": "#opportunities-secondary"},
@@ -8259,6 +8396,25 @@ def build_opportunities_view() -> dict[str, Any]:
         },
         "secondary_groups": secondary_groups,
         "secondary_total": sum(int(item.get("count") or 0) for item in secondary_groups),
+        "lifecycle_note": lifecycle_note,
+        "lifecycle_groups": lifecycle_groups,
+        "lifecycle_cards": [
+            {
+                "label": "追踪变动",
+                "value": str(lifecycle_activity_count),
+                "detail": detail_value((display_lifecycle or {}).get("current_timestamp"), "暂无生命周期快照"),
+            },
+            {
+                "label": "当前池",
+                "value": str((((display_lifecycle or {}).get("summary") or {}).get("current_pool_size")) or 0),
+                "detail": "当前 shortlist 大小",
+            },
+            {
+                "label": "上一池",
+                "value": str((((display_lifecycle or {}).get("summary") or {}).get("previous_pool_size")) or 0),
+                "detail": "上一轮对照快照",
+            },
+        ],
         "theme_cards": build_theme_cards(screening_batch, limit=4),
         "groups": groups,
         "focus_tags": text_items(focus),
@@ -8439,6 +8595,7 @@ def build_review_view(baseline_id: str | None = None, window_id: str | None = No
         build_lifecycle_group("entered", display_lifecycle),
         build_lifecycle_group("upgraded", display_lifecycle),
         build_lifecycle_group("downgraded", display_lifecycle),
+        build_lifecycle_group("continued", display_lifecycle),
         build_lifecycle_group("exited", display_lifecycle),
         build_lifecycle_group("handed_off", display_lifecycle),
     ]
@@ -9072,6 +9229,10 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
             expected_date=trade_date_hint,
             now=datetime.now(),
         ),
+        formal_freshness=build_formal_freshness_rows(
+            expected_date=trade_date_hint,
+            now=datetime.now(),
+        ),
     )
     action_groups = build_today_action_groups(
         watchlist,
@@ -9129,6 +9290,10 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
         (load_ask_case_cache(normalized_code) or {}).get("name"),
     )
     today_action = build_today_action_context(normalized_code, today=today_context, account_book=account_book)
+    formal_data = build_stock_formal_data(
+        normalized_code,
+        trade_date=str(readiness.get("expected_trade_date") or profile_trade_date or ""),
+    )
     available_sources = [
         key
         for key, detail in (
@@ -9155,6 +9320,7 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
         "available_sources": available_sources,
         "watchlist": watchlist_detail,
         "opportunity": opportunity_detail,
+        "formal_data": formal_data,
         "today_action": today_action,
         "errors": errors,
         "links": {
@@ -9340,6 +9506,10 @@ def build_today_view() -> dict[str, Any]:
             expected_date=trade_date_hint,
             now=datetime.now(),
         ),
+        formal_freshness=build_formal_freshness_rows(
+            expected_date=trade_date_hint,
+            now=datetime.now(),
+        ),
     )
 
     expected_date = readiness["expected_trade_date"]
@@ -9511,6 +9681,15 @@ def build_today_view() -> dict[str, Any]:
             "label": "午盘确认",
         },
     }
+    action_queue, decision_contracts = attach_decision_contracts(
+        action_queue,
+        trade_date=trade_date,
+        expected_trade_date=expected_date,
+        data_trade_date=data_trade_date,
+        readiness=readiness,
+        source_cards=source_cards,
+        artifacts=artifacts,
+    )
     links = today_nav_links()
     next_steps = build_today_next_steps(action_groups, links=links)
     top_rows = compress_today_actions(action_queue)
@@ -9611,6 +9790,7 @@ def build_today_view() -> dict[str, Any]:
         "evidence_hint": evidence_hint,
         "action_groups": action_groups,
         "action_queue": action_queue,
+        "decision_contracts": decision_contracts,
         "next_steps": next_steps,
         "top_rows": top_rows,
         "primary_actions": primary_actions,
@@ -11381,6 +11561,10 @@ def build_portfolio_account_view(*, refresh_quotes: bool = False) -> dict[str, A
         account_book=account_book,
         today_action_decisions=today_action_decisions,
         dataset_freshness=build_dataset_freshness_rows(
+            expected_date=trade_date_hint,
+            now=datetime.now(),
+        ),
+        formal_freshness=build_formal_freshness_rows(
             expected_date=trade_date_hint,
             now=datetime.now(),
         ),
