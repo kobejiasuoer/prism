@@ -145,3 +145,29 @@ def test_pool_stats_and_standing():
     standing = tf._pool_standing(values[2], stats)
     assert standing["five_day_main_net_yi"] in {"top_quartile", "above_median"}
     assert tf._pool_standing(values[0], stats)["five_day_main_net_yi"] == "below_median"
+
+
+def test_compute_factor_bundle_full(dataset_root):
+    from screener import tushare_factors as tf
+    _seed_full_stock(dataset_root)
+    b = tf.compute_factor_bundle("sh600519", "2026-05-29")
+    assert set(b) >= {"tushare_score", "data_completeness", "tushare_score_breakdown", "factor_tags",
+                      "risk_flags", "explanation", "factor_snapshot", "trade_date_used"}
+    assert b["tushare_score"] >= 60
+    assert b["factor_snapshot"]["valuation"]["pe_ttm"] == 28.0
+    assert b["trade_date_used"] == "2026-05-29"
+
+
+def test_compute_factor_bundle_never_raises_on_empty(dataset_root):
+    from screener import tushare_factors as tf
+    b = tf.compute_factor_bundle("sh999999", "2026-05-29")   # nothing seeded
+    assert b["tushare_score"] is None and b["data_completeness"] == 0.0
+    assert "数据缺失" in b["risk_flags"]
+
+
+def test_build_factor_snapshot_subset(dataset_root):
+    from screener import tushare_factors as tf
+    _seed_full_stock(dataset_root)
+    snap = tf.build_factor_snapshot("600519", "2026-05-29")
+    assert set(snap) == {"tushare_score", "data_completeness", "factor_tags", "risk_flags", "factor_snapshot", "trade_date_used"}
+    assert snap["factor_snapshot"]["capital_flow"]["main_net_yi"] == 5.0

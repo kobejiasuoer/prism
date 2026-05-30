@@ -385,3 +385,41 @@ def _pool_standing(values: dict[str, Any], pool_stats: dict[str, Any] | None) ->
             continue
         out[field] = "top_quartile" if (p75 is not None and val >= p75) else ("above_median" if val >= med else "below_median")
     return out
+
+
+def _snapshot_from_values(v: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "valuation": {"pe_ttm": v.get("pe_ttm"), "pb": v.get("pb"), "total_mv_yi": v.get("total_mv_yi")},
+        "liquidity": {"turnover_rate": v.get("turnover_rate"), "volume_ratio": v.get("volume_ratio")},
+        "capital_flow": {"main_net_yi": v.get("main_net_yi"), "five_day_main_net_yi": v.get("five_day_main_net_yi")},
+        "fundamentals": {"roe": v.get("roe"), "roe_waa": v.get("roe_waa"), "debt_to_assets": v.get("debt_to_assets"),
+                         "grossprofit_margin": v.get("grossprofit_margin"), "netprofit_margin": v.get("netprofit_margin")},
+        "index_membership": v.get("index_memberships") or [],
+        "top_list_activity": {"hits_20d": v.get("top_list_hits_20d"), "hits_60d": v.get("top_list_hits_60d")},
+        "top_inst_activity": {"net_buy": v.get("top_inst_net_buy")},
+        "market_context": {"north_money": v.get("north_money"), "margin_balance": v.get("margin_balance")},
+    }
+
+
+def compute_factor_bundle(code: str, trade_date: str | None, *, pool_stats: dict | None = None,
+                          values: dict | None = None) -> dict[str, Any]:
+    v = values if values is not None else extract_factor_values(code, trade_date)
+    scored = score_factor_values(v, pool_stats)
+    tags = _derive_tags(v)
+    risk_flags = _derive_risk_flags(v)
+    return {
+        "tushare_score": scored["tushare_score"],
+        "data_completeness": scored["data_completeness"],
+        "tushare_score_breakdown": scored["tushare_score_breakdown"],
+        "factor_tags": tags,
+        "risk_flags": risk_flags,
+        "explanation": _build_explanation(v, scored, tags, risk_flags),
+        "factor_snapshot": _snapshot_from_values(v),
+        "trade_date_used": v.get("trade_date_used"),
+        "pool_standing": _pool_standing(v, pool_stats),
+    }
+
+
+def build_factor_snapshot(code: str, trade_date: str | None) -> dict[str, Any]:
+    b = compute_factor_bundle(code, trade_date)
+    return {k: b[k] for k in ("tushare_score", "data_completeness", "factor_tags", "risk_flags", "factor_snapshot", "trade_date_used")}
