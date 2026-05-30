@@ -342,6 +342,18 @@ def _load_index_memberships(trade_date: str, code: str) -> tuple[list[dict[str, 
     return memberships, manifests
 
 
+def _factor_profile(code: str, trade_date: str) -> dict[str, Any]:
+    try:
+        from screener.tushare_factors import compute_factor_bundle
+        b = compute_factor_bundle(code, trade_date)
+        return {k: b.get(k) for k in (
+            "tushare_score", "data_completeness", "tushare_score_breakdown",
+            "factor_tags", "risk_flags", "explanation", "trade_date_used")}
+    except Exception:
+        return {"tushare_score": None, "data_completeness": 0.0, "tushare_score_breakdown": {},
+                "factor_tags": [], "risk_flags": ["数据缺失"], "explanation": {}, "trade_date_used": None}
+
+
 def build_stock_formal_data(code: str, trade_date: str | None = None) -> dict[str, Any]:
     normalized_code = _normalize_code(code)
     target_date = trade_date or ""
@@ -433,6 +445,7 @@ def build_stock_formal_data(code: str, trade_date: str | None = None) -> dict[st
         "top_inst": top_inst_rows[:8],
         "dividends": latest_dividends,
         "shareholders": holder_rows,
+        "factor_profile": _factor_profile(normalized_code, target_date),
         "source_cards": source_cards,
     }
     return _json_clean(payload)
