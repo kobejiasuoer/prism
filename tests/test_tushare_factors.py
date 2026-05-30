@@ -72,3 +72,25 @@ def test_extract_factor_values_missing_returns_none(dataset_root):
     v = tf.extract_factor_values("sh000001", "2026-05-29")   # nothing seeded
     assert v["pe_ttm"] is None and v["roe"] is None and v["main_net_yi"] is None
     assert v["index_memberships"] == [] and v["top_list_hits_20d"] == 0
+
+
+def test_score_high_quality_stock_scores_well(dataset_root):
+    from screener import tushare_factors as tf
+    _seed_full_stock(dataset_root)
+    v = tf.extract_factor_values("600519", "2026-05-29")
+    scored = tf.score_factor_values(v)
+    assert 0 <= scored["tushare_score"] <= 100
+    assert scored["tushare_score"] >= 60          # strong ROE + inflow + index member
+    assert scored["data_completeness"] == 1.0
+    bd = scored["tushare_score_breakdown"]
+    assert set(bd) == {"quality", "capital_flow", "valuation", "liquidity", "index", "dragon_tiger"}
+    assert all("contribution" in d and "available" in d for d in bd.values())
+
+
+def test_score_missing_dimensions_reweights_and_lowers_completeness(dataset_root):
+    from screener import tushare_factors as tf
+    v = tf.extract_factor_values("000002", "2026-05-29")   # nothing seeded
+    scored = tf.score_factor_values(v)
+    assert scored["tushare_score"] is None                 # zero usable dimensions
+    assert scored["data_completeness"] == 0.0
+    assert scored["tushare_score_breakdown"]["quality"]["available"] is False
