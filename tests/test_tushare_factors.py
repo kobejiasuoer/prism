@@ -94,3 +94,19 @@ def test_score_missing_dimensions_reweights_and_lowers_completeness(dataset_root
     assert scored["tushare_score"] is None                 # zero usable dimensions
     assert scored["data_completeness"] == 0.0
     assert scored["tushare_score_breakdown"]["quality"]["available"] is False
+
+
+def test_tags_and_risk_flags_from_values(dataset_root):
+    from screener import tushare_factors as tf
+    _seed_full_stock(dataset_root)
+    v = tf.extract_factor_values("600519", "2026-05-29")
+    tags = tf._derive_tags(v)
+    flags = tf._derive_risk_flags(v)
+    assert "高ROE" in tags and "主力净流入" in tags and "沪深300成分" in tags
+    assert "短线脉冲风险(龙虎榜机构净买)" in flags          # inst net buy present
+
+
+def test_risk_flag_for_missing_data(dataset_root):
+    from screener import tushare_factors as tf
+    v = tf.extract_factor_values("000333", "2026-05-29")   # nothing seeded
+    assert "数据缺失" in tf._derive_risk_flags(v)

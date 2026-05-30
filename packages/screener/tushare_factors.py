@@ -291,3 +291,29 @@ def score_factor_values(values: dict[str, Any], pool_stats: dict[str, Any] | Non
         "data_completeness": round(total_weight / sum(DIMENSION_WEIGHTS.values()), 2),
         "tushare_score_breakdown": breakdown,
     }
+
+
+def _derive_tags(v: dict[str, Any]) -> list[str]:
+    tags = []
+    if (v.get("pe_ttm") or 0) and 0 < v["pe_ttm"] <= 20: tags.append("低PE")
+    roe = v.get("roe") if v.get("roe") is not None else v.get("roe_waa")
+    if roe is not None and roe >= 15: tags.append("高ROE")
+    if (v.get("main_net_yi") or 0) > 0: tags.append("主力净流入")
+    if (v.get("five_day_main_net_yi") or 0) > 0: tags.append("5日资金净流入")
+    for m in (v.get("index_memberships") or []):
+        tags.append({"000300.SH": "沪深300成分", "000905.SH": "中证500成分", "000852.SH": "中证1000成分"}.get(m["index"], "指数成分"))
+    if (v.get("top_list_hits_60d") or 0) > 0: tags.append("龙虎榜活跃")
+    if (v.get("north_money") or 0) > 0: tags.append("北向偏强")
+    return tags
+
+
+def _derive_risk_flags(v: dict[str, Any]) -> list[str]:
+    flags = []
+    if (v.get("top_inst_net_buy") or 0) > 0: flags.append("短线脉冲风险(龙虎榜机构净买)")
+    if v.get("pe_ttm") is not None and (v["pe_ttm"] > 60 or v["pe_ttm"] <= 0): flags.append("估值偏高")
+    if v.get("debt_to_assets") is not None and v["debt_to_assets"] >= 70: flags.append("高负债")
+    if (v.get("main_net_yi") or 0) < 0 and (v.get("five_day_main_net_yi") or 0) < 0: flags.append("资金净流出")
+    if v.get("turnover_rate") is not None and v["turnover_rate"] < 0.3: flags.append("流动性偏弱")
+    core = [v.get("pe_ttm"), v.get("roe"), v.get("main_net_yi"), v.get("turnover_rate")]
+    if sum(1 for x in core if x is None) >= 3: flags.append("数据缺失")
+    return flags
