@@ -317,6 +317,7 @@ def extract_factor_values(code: str, trade_date: str | None) -> dict[str, Any]:
         "main_net_yi": _safe_float(capital.get("main_net_yi")),
         "five_day_main_net_yi": _five_day_main_net(c, trade_date),
         "index_memberships": _index_memberships(trade_date, c),
+        "index_data_available": _resolve_trade_date("index.weight", trade_date) is not None,
         "top_list_hits_20d": len(top_list),
         "top_list_hits_60d": len(top_list),
         "top_inst_net_buy": inst_net,
@@ -451,11 +452,13 @@ def _score_liquidity(v, pool_stats):
 
 def _score_index(v):
     members = v.get("index_memberships") or []
-    if not members:
-        return 30.0, "非主要指数成分"   # available but weak (membership knowable = absence is informative)
-    weight = sum((m.get("weight") or 0.0) for m in members)
-    names = "/".join(m["index"] for m in members)
-    return min(100.0, 60.0 + weight * 4.0), f"{names} 成分，权重合计 {weight:.2f}%"
+    if members:
+        weight = sum((m.get("weight") or 0.0) for m in members)
+        names = "/".join(m["index"] for m in members)
+        return min(100.0, 60.0 + weight * 4.0), f"{names} 成分，权重合计 {weight:.2f}%"
+    if v.get("index_data_available"):
+        return 30.0, "非主要指数成分"     # index data present, stock genuinely not a member → weak but real signal
+    return None, "指数数据缺失"            # no index.weight data at all → dimension unavailable (never fabricate)
 
 
 def _score_dragon_tiger(v):
