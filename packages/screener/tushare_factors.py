@@ -358,3 +358,30 @@ def _build_explanation(v, scored, tags, risk_flags) -> dict[str, Any]:
             "index_weight": index_block,
         },
     }
+
+
+import statistics
+
+_POOL_FIELDS = ("five_day_main_net_yi", "turnover_rate", "roe")
+
+
+def compute_pool_stats(values_list: list[dict[str, Any]]) -> dict[str, Any]:
+    stats: dict[str, Any] = {}
+    for field in _POOL_FIELDS:
+        nums = sorted(x[field] for x in values_list if isinstance(x.get(field), (int, float)))
+        if nums:
+            stats[f"{field}_median"] = statistics.median(nums)
+            stats[f"{field}_p75"] = nums[min(len(nums) - 1, int(len(nums) * 0.75))]
+    return stats
+
+
+def _pool_standing(values: dict[str, Any], pool_stats: dict[str, Any] | None) -> dict[str, str] | None:
+    if not pool_stats:
+        return None
+    out: dict[str, str] = {}
+    for field in _POOL_FIELDS:
+        val, med, p75 = values.get(field), pool_stats.get(f"{field}_median"), pool_stats.get(f"{field}_p75")
+        if val is None or med is None:
+            continue
+        out[field] = "top_quartile" if (p75 is not None and val >= p75) else ("above_median" if val >= med else "below_median")
+    return out

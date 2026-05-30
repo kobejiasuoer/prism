@@ -131,3 +131,17 @@ def test_explanation_missing_data_marked_unavailable(dataset_root):
     exp = tf._build_explanation(v, tf.score_factor_values(v), [], tf._derive_risk_flags(v))
     assert exp["evidence"]["fundamental"]["available"] is False
     assert exp["evidence"]["fundamental"]["interpretation"] == "数据缺失/不可用"
+
+
+def test_pool_stats_and_standing():
+    from screener import tushare_factors as tf
+    values = [
+        {"five_day_main_net_yi": 1.0, "turnover_rate": 0.5, "roe": 10.0},
+        {"five_day_main_net_yi": 3.0, "turnover_rate": 1.0, "roe": 20.0},
+        {"five_day_main_net_yi": 5.0, "turnover_rate": 1.5, "roe": 30.0},
+    ]
+    stats = tf.compute_pool_stats(values)
+    assert stats["five_day_main_net_yi_median"] == 3.0
+    standing = tf._pool_standing(values[2], stats)
+    assert standing["five_day_main_net_yi"] in {"top_quartile", "above_median"}
+    assert tf._pool_standing(values[0], stats)["five_day_main_net_yi"] == "below_median"
