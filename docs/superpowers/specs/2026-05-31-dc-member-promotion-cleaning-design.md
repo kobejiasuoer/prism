@@ -66,17 +66,14 @@
 - 将 `enrich_rows(unique_rows(dc_rows, (...错误键...)))` 替换为 `collapse_current_membership(dc_rows)`。
 - `promote_one("reference.dc_member", "hs300-zz500", rows, "dc_member", dc_paths, params=..., extra_fields=..., quality_flags=...)`（见 §4.3）。
 
-### 4.3 元数据透传（小幅扩展签名）
+### 4.3 元数据透传（小幅扩展 save_dataset / promote_one）
 
-当前 `save_dataset` 把 `quality_flags=[]` 与 `extra={...}` 写死（[promote_tinyshare_reference_data.py:240-249](../../../apps/scripts/promote_tinyshare_reference_data.py#L240-L249)）。扩展为可选透传：
+当前 `save_dataset` 把 `quality_flags=[]` 与 `ProviderResult.extra={...}` 写死（[promote_tinyshare_reference_data.py:240-249](../../../apps/scripts/promote_tinyshare_reference_data.py#L240-L249)）。扩展为可选透传，但**两者落地路径不同（已实测核实）**：
 
-- `save_dataset(..., extra_fields: dict | None = None, quality_flags: list[str] | None = None)`：
-  - `extra={...原有四项..., **(extra_fields or {})}`
-  - `quality_flags=list(quality_flags or [])`
-- `promote_one(..., extra_fields=None, quality_flags=None)`：原样转发。
-- **仅 dc_member 调用传入这两个参数；其余所有 promote_one 调用保持默认 → 行为不变。**
+- **`quality_flags`** —— 经 `ProviderResult.quality_flags` 传入，`manifest_from_provider_result` 原样写进 manifest（[manifest.py:1149](../../../packages/prism_data/manifest.py#L1149)）。安全：dc_member 走非 pipeline 的 `_authority_metadata`（[manifest.py:1018-1076](../../../packages/prism_data/manifest.py#L1018-L1076)），该函数**不读 quality_flags**，只返回固定 authority 字段；会因 quality_flags 翻转 `source_authority_ready` 的派生只存在于 `_pipeline_authority_metadata`（[manifest.py:1104](../../../packages/prism_data/manifest.py#L1104)），与 reference 数据集无关。且 `live_small_allowed=False` 已锁死正式/权威布尔。
+- **`extra_fields`** —— ⚠️ **不能走 `ProviderResult.extra`**：`_authority_metadata` 只消费其中的 `authority_provider_override`，`manifest_from_provider_result` 组装的 manifest dict **没有 `extra` 键**（[manifest.py:1134-1169](../../../packages/prism_data/manifest.py#L1134-L1169)）→ 其余字段被丢弃。**正确做法**：在 `save_dataset` 内、`manifest = manifest_from_provider_result(...)` 之后、`repository.save_dataset(...)` 之前**直接注入** `manifest["extra"] = {**manifest.get("extra", {}), **extra_fields}`。`DatasetRepository.save_dataset` 把 manifest dict **原样 `json.dumps` 落盘**（[repositories.py:44-47](../../../packages/prism_data/repositories.py#L44-L47)），`load_manifest` 原样读回（[repositories.py:63-70](../../../packages/prism_data/repositories.py#L63-L70)）→ 可查询；`DataManifest.from_dict` 忽略未知键 → 不影响既有消费者。
 
-安全性已核实：dc_member 走非 pipeline 的 `_authority_metadata`（[manifest.py:1125](../../../packages/prism_data/manifest.py#L1125)），`quality_flags` 在该路径仅原样透传进 manifest（[manifest.py:1149](../../../packages/prism_data/manifest.py#L1149)），不参与门控派生；且 `live_small_allowed=False` 已将正式/权威布尔锁死。会影响 `source_authority_ready` 的 `quality_flags` 派生只存在于 `_pipeline_authority_metadata`（[manifest.py:1104](../../../packages/prism_data/manifest.py#L1104)），与 dc_member 无关。
+签名：`save_dataset(..., extra_fields=None, quality_flags=None)`、`promote_one(..., extra_fields=None, quality_flags=None)` 原样转发。**仅 dc_member 调用传入这两个参数；其余 promote_one 调用保持默认 → 行为不变。** 仍只改 promote 脚本，不动核心 manifest.py。✅
 
 ### 4.4 诚实的覆盖元数据（Stage 1 核心）
 
