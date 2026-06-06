@@ -5,6 +5,7 @@ import json
 import os
 import re
 import sys
+import time
 from collections.abc import Mapping
 from copy import deepcopy
 from datetime import datetime
@@ -53,12 +54,14 @@ from prism_canonical import (  # type: ignore
     resolve_previous_watchlist_snapshot_path,
 )
 from readiness import (  # type: ignore  # local module under apps/control-panel
+    MIDDAY_CONFIRMATION_DUE_MINUTES,
+    MIDDAY_CONFIRMATION_DEFER_REASON,
     compute_readiness,
     current_session,
     expected_trade_date,
 )
 from dataset_manifests import build_dataset_freshness_rows, build_formal_freshness_rows  # type: ignore  # local module under apps/control-panel
-from data_assets import build_stock_formal_data  # type: ignore  # local module under apps/control-panel
+from data_assets import build_stock_formal_data, build_stock_formal_data_summary  # type: ignore  # local module under apps/control-panel
 from account_book import (  # type: ignore  # local module under apps/control-panel
     ACCOUNT_MODES,
     AccountBookError,
@@ -92,6 +95,8 @@ from decision_ledger import (  # type: ignore
     _chat_completions_url,
     _extract_json_object,
     _provider_config,
+    list_decisions_for_stock as ledger_list_decisions_for_stock,
+    normalize_stock_code as ledger_normalize_stock_code,
 )
 from command_brief import build_today_command_brief  # type: ignore  # local module under apps/control-panel
 from decision_contract import attach_decision_contracts  # type: ignore  # local module under apps/control-panel
@@ -121,6 +126,11 @@ TASK_NAME_ALIASES = {
 APP_STATE_REPOSITORY = AppStateRepository()
 ARTIFACT_REPOSITORY = ArtifactRepository()
 TASK_RUN_REPOSITORY = TaskRunRepository()
+STOCK_PROFILE_CACHE_TTL_SECONDS = max(
+    0,
+    int(os.environ.get("PRISM_STOCK_PROFILE_CACHE_TTL_SECONDS", "120") or "120"),
+)
+_STOCK_PROFILE_CACHE: dict[tuple[str, str, str], tuple[float, dict[str, Any]]] = {}
 
 ACTION_DECISION_LABELS = {
     "pending": "待确认",
@@ -157,6 +167,22 @@ ACTION_TIER_LABELS = {
     "wait_trigger": "等触发",
     "observe": "仅观察",
     "avoid": "明确回避",
+}
+
+V2_ACTION_ORDER = {
+    "observe": 0,
+    "review": 1,
+    "shadow": 2,
+    "trial": 3,
+    "actionable": 4,
+}
+
+V2_ACTION_LABELS = {
+    "observe": "只观察",
+    "review": "人工复核",
+    "shadow": "影子跟踪",
+    "trial": "试错待触发",
+    "actionable": "可执行待复核",
 }
 
 QUALITY_PATTERNS = {
@@ -294,7 +320,7 @@ TASK_DEFINITIONS = {
         "lane": "decision_ledger",
         "command": [sys.executable, "apps/scripts/evaluate_decision_ledger.py"],
         "cwd": str(WORKSPACE_ROOT),
-        "description": "补跑已成熟决策样本的 T+1/T+3/T+5 outcome，并把结果写回 Decision Ledger。",
+        "description": "补跑已成熟决策样本的 T+1/T+3/T+5/T+10 outcome，并把结果写回 Decision Ledger。",
     },
     "formal_data_refresh": {
         "title": "正式口径数据刷新",
@@ -880,7 +906,7 @@ def latest_midday_info() -> dict[str, Any]:
     return {
         "label": "午盘确认",
         "value": data.get("verified_against_scan_timestamp") or data.get("timestamp") or fmt_mtime(path),
-        "detail": data.get("validation_status") or "-",
+        "detail": midday_validation_status_label(data.get("validation_status")),
     }
 
 
@@ -1437,8 +1463,13 @@ def candidate_status_label(status: str | None) -> str:
 
 
 def candidate_tone(item: dict[str, Any]) -> str:
+    v2_action = v2_suggested_action(item)
+    if v2_action:
+        return v2_task_tone(item)
     quality_score = safe_float((item.get("execution_quality") or {}).get("score"), default=0)
     status = item.get("screening_status") or item.get("status")
+    if item.get("risk_level") == "block" or item.get("block_reason"):
+        return "risk"
     if status == "approved" and quality_score >= 6:
         return "positive"
     if status in {"confirmed", "fresh_candidate"}:
@@ -1959,6 +1990,18 @@ _STOCK_FETCH_MODULE: Any | None = None
 _ASK_CASE_CACHE: dict[str, dict[str, Any]] = {}
 ASK_CASE_CACHE_TTL_SECONDS = 300
 ASK_FOLLOWUP_HISTORY_LIMIT = 6
+ASK_FOLLOWUP_INTENT_LABELS = {
+    "decision": "结论追问",
+    "plan": "操作追问",
+    "levels": "关键位追问",
+    "risk": "风险追问",
+    "events": "事件追问",
+    "flow": "资金追问",
+    "tech": "技术追问",
+    "fundamentals": "基本面追问",
+    "confidence": "可信度追问",
+    "cross": "系统位置追问",
+}
 
 
 def load_stock_fetch_module() -> Any:
@@ -3170,19 +3213,44 @@ def ask_followup_model_config() -> dict[str, Any] | None:
     if disabled in {"1", "true", "yes", "on"}:
         return None
 
-    api_key = first_text(os.environ.get("PRISM_ASK_FOLLOWUP_API_KEY"), os.environ.get("OPENAI_API_KEY"))
-    model = first_text(os.environ.get("PRISM_ASK_FOLLOWUP_MODEL"), os.environ.get("OPENAI_MODEL"))
-    if not api_key or not model:
-        return None
-
+    provider = str(
+        first_text(
+            os.environ.get("PRISM_ASK_FOLLOWUP_PROVIDER"),
+            os.environ.get("PRISM_AI_PROVIDER"),
+            "openai" if os.environ.get("OPENAI_API_KEY") else "compatible",
+        )
+        or "compatible"
+    ).strip().lower()
+    api_key = first_text(
+        os.environ.get("PRISM_ASK_FOLLOWUP_API_KEY"),
+        os.environ.get("PRISM_AI_API_KEY"),
+        os.environ.get("OPENAI_API_KEY"),
+    )
+    model = first_text(
+        os.environ.get("PRISM_ASK_FOLLOWUP_MODEL"),
+        os.environ.get("PRISM_AI_MODEL"),
+        os.environ.get("OPENAI_MODEL"),
+    )
     base_url = first_text(
         os.environ.get("PRISM_ASK_FOLLOWUP_BASE_URL"),
+        os.environ.get("PRISM_AI_BASE_URL"),
         os.environ.get("OPENAI_BASE_URL"),
         os.environ.get("OPENAI_API_BASE"),
-        "https://api.openai.com/v1",
-    ) or "https://api.openai.com/v1"
+    )
+    if not base_url and provider == "deepseek":
+        base_url = "https://api.deepseek.com"
+        model = model or "deepseek-v4-flash"
+    elif not base_url and (provider == "openai" or os.environ.get("OPENAI_API_KEY")):
+        base_url = "https://api.openai.com"
+
+    if not api_key or not model or not base_url:
+        return None
+
     endpoint = base_url.rstrip("/")
-    if endpoint.endswith("/chat/completions"):
+    if provider == "deepseek":
+        if not endpoint.endswith("/chat/completions"):
+            endpoint = f"{endpoint}/chat/completions"
+    elif endpoint.endswith("/chat/completions"):
         pass
     elif endpoint.endswith("/v1"):
         endpoint = f"{endpoint}/chat/completions"
@@ -3191,7 +3259,11 @@ def ask_followup_model_config() -> dict[str, Any] | None:
     else:
         endpoint = f"{endpoint}/v1/chat/completions"
 
-    timeout_raw = str(os.environ.get("PRISM_ASK_FOLLOWUP_TIMEOUT_SECONDS") or "8").strip()
+    timeout_raw = str(
+        os.environ.get("PRISM_ASK_FOLLOWUP_TIMEOUT_SECONDS")
+        or os.environ.get("PRISM_AI_TIMEOUT_SECONDS")
+        or "8"
+    ).strip()
     try:
         timeout = max(2.0, min(float(timeout_raw), 30.0))
     except ValueError:
@@ -3202,19 +3274,20 @@ def ask_followup_model_config() -> dict[str, Any] | None:
         "model": model,
         "endpoint": endpoint,
         "timeout": timeout,
+        "provider": provider,
     }
 
 
 def ask_followup_engine_badge() -> dict[str, str]:
     if ask_followup_model_config():
         return {
-            "label": "模型增强可用",
-            "detail": "规则先托底，回答可结合最近几轮追问上下文继续补强。",
+            "label": "AI 增强可用",
+            "detail": "先用纪律规则控风险，再让模型结合最近几轮追问补强表达。",
             "tone": "positive",
         }
     return {
-        "label": "规则托底",
-        "detail": "当前先基于页面分析和最近追问上下文回答，后续接入模型时会自动增强。",
+        "label": "规则风控",
+        "detail": "当前基于页面结论、关键位和最近追问直接回答；配置 Prism AI 后会自动增强。",
         "tone": "watch",
     }
 
@@ -3276,11 +3349,17 @@ def build_ask_followup_prompt_payload(
         "question": question,
         "rule_answer": {
             "intent": base_answer.get("intent"),
+            "intent_label": base_answer.get("intent_label"),
             "title": normalize_ask_followup_copy(base_answer.get("title")),
             "summary": normalize_ask_followup_copy(base_answer.get("summary")),
             "bullets": [normalize_ask_followup_copy(item) for item in list(base_answer.get("bullets") or [])[:6]],
             "references": [normalize_ask_followup_copy(item) for item in list(base_answer.get("references") or [])[:6]],
             "followups": list(base_answer.get("followups") or [])[:3],
+        },
+        "answer_contract": {
+            "must_answer_user_intent_first": True,
+            "style": "先给结论，再给触发条件、失效条件和证据，不要复读模板句。",
+            "forbidden": ["强投资建议", "收益承诺", "外部事实", "没有证据的目标价"],
         },
     }
 
@@ -3428,19 +3507,19 @@ def merge_ask_followup_answer(
         if enhancement.get("followups"):
             answer["followups"] = list(enhancement.get("followups") or [])[:3]
         answer["engine"] = "hybrid"
-        answer["engine_label"] = "规则托底 + 模型增强"
-        answer["engine_note"] = "先按当前页分析托底，再结合最近几轮追问做补强表述。"
+        answer["engine_label"] = "AI 增强 + 规则风控"
+        answer["engine_note"] = "先按当前页纪律规则控风险，再结合最近几轮追问补强表达。"
     else:
         answer["engine"] = "rule"
-        answer["engine_label"] = "规则托底"
-        answer["engine_note"] = "当前基于页面分析和最近几轮追问直接回答。"
+        answer["engine_label"] = "规则风控"
+        answer["engine_note"] = "当前基于页面结论、关键位和最近几轮追问直接回答。"
     answer["history_used"] = len(history)
     return normalize_ask_followup_answer(answer)
 
 
 def normalize_ask_followup_answer(answer: dict[str, Any]) -> dict[str, Any]:
     normalized = deepcopy(answer)
-    for key in ("title", "summary", "engine_note"):
+    for key in ("title", "summary", "engine_note", "intent_label"):
         if key in normalized:
             normalized[key] = normalize_ask_followup_copy(normalized.get(key))
     if isinstance(normalized.get("bullets"), list):
@@ -3478,25 +3557,57 @@ def ask_find_cross_card(case: dict[str, Any], label: str) -> dict[str, Any] | No
 
 
 def ask_followup_presets(case: dict[str, Any]) -> list[dict[str, str]]:
+    hero = case.get("hero") or {}
+    decision_label = normalize_ask_followup_copy(hero.get("decision_label")) or "当前结论"
     presets = [
-        {"label": "为什么这样判断", "question": "为什么当前是这个结论？"},
-        {"label": "今天怎么做", "question": "今天怎么按纪律处理更合适？"},
-        {"label": "关键位", "question": "支撑位、压力位和止损位怎么看？"},
-        {"label": "主要风险", "question": "这只股票现在最主要的风险是什么？"},
-        {"label": "公告新闻", "question": "最近公告和新闻里有什么值得注意？"},
+        {"label": "今天动不动", "question": "这只今天到底要不要动？如果动，什么条件才动？"},
+        {"label": "关键位怎么用", "question": "支撑位、压力位和止损位分别怎么处理？"},
+        {"label": "为什么这样定", "question": f"为什么当前是{decision_label}，不是升级动作？"},
+        {"label": "反向风险", "question": "什么情况说明这次观察错了？"},
+        {"label": "公告影响", "question": "最近公告和新闻会改变今天动作吗？"},
     ]
     if str(((case.get("watchlist_action") or {}).get("kind") or "")).strip() in {"add", "restore"}:
-        presets.append({"label": "要不要进自选", "question": "现在适合加入自选股吗？"})
+        presets.append({"label": "是否进自选", "question": "它现在值得加入自选股继续跟踪吗？"})
     return presets
 
 
 def detect_ask_followup_intent(question: str, history: list[dict[str, Any]] | None = None) -> str:
     text = str(question or "").strip().lower()
+    if any(token in text for token in ("自选股", "观察池", "机会池", "午盘", "执行队列", "链路", "系统里")):
+        return "cross"
     if any(token in text for token in ("支撑", "压力", "止损", "关键位", "价位", "位置")):
         return "levels"
-    if any(token in text for token in ("怎么操作", "怎么做", "怎么办", "执行", "仓位", "买还是卖", "该怎么", "高开", "低开", "冲高", "回落", "跌破", "破位")):
+    if any(
+        token in text
+        for token in (
+            "要不要动",
+            "动不动",
+            "怎么动",
+            "什么条件才动",
+            "怎么操作",
+            "怎么做",
+            "怎么办",
+            "按纪律",
+            "处理",
+            "执行",
+            "仓位",
+            "买还是卖",
+            "要不要买",
+            "能不能买",
+            "该不该",
+            "该怎么",
+            "高开",
+            "低开",
+            "冲高",
+            "回落",
+            "跌破",
+            "破位",
+            "站上",
+            "放量",
+        )
+    ):
         return "plan"
-    if any(token in text for token in ("风险", "回避", "失效", "注意", "担心", "雷")):
+    if any(token in text for token in ("风险", "回避", "失效", "注意", "担心", "雷", "错了", "反向")):
         return "risk"
     if any(token in text for token in ("公告", "新闻", "事件", "催化", "消息")):
         return "events"
@@ -3508,8 +3619,6 @@ def detect_ask_followup_intent(question: str, history: list[dict[str, Any]] | No
         return "fundamentals"
     if any(token in text for token in ("可信", "置信", "靠谱吗", "数据完整", "完整")):
         return "confidence"
-    if any(token in text for token in ("自选股", "观察池", "机会池", "午盘", "执行队列", "链路", "系统里")):
-        return "cross"
     for item in reversed(history or []):
         if str(item.get("role") or "").strip() != "assistant":
             continue
@@ -3531,12 +3640,128 @@ def ask_followup_references(case: dict[str, Any], items: list[str]) -> list[str]
     return refs[:6]
 
 
+def ask_followup_intent_label(intent: str) -> str:
+    return ASK_FOLLOWUP_INTENT_LABELS.get(intent, "追问")
+
+
+def ask_followup_row_value(rows: list[dict[str, Any]], label: str) -> str:
+    for item in rows:
+        if str(item.get("label") or "").strip() == label:
+            return normalize_ask_followup_copy(item.get("value"))
+    return ""
+
+
+def ask_followup_group(case: dict[str, Any], title: str) -> dict[str, Any]:
+    return ask_find_analysis_group(case, title) or {}
+
+
+def ask_followup_group_items(case: dict[str, Any], title: str, limit: int = 4) -> list[str]:
+    group = ask_followup_group(case, title)
+    return [normalize_ask_followup_copy(item) for item in list(group.get("items") or [])[:limit] if normalize_ask_followup_copy(item)]
+
+
+def ask_followup_group_metric(case: dict[str, Any], title: str) -> str:
+    return normalize_ask_followup_copy((ask_followup_group(case, title) or {}).get("metric"))
+
+
+def ask_followup_metric_value(case: dict[str, Any], label: str) -> str:
+    for item in case.get("metric_cards") or []:
+        if str(item.get("label") or "").strip() == label:
+            value = normalize_ask_followup_copy(item.get("value"))
+            detail = normalize_ask_followup_copy(item.get("detail"))
+            return "；".join(part for part in (value, detail) if part)
+    return ""
+
+
+def ask_followup_level_value(level_cards: list[dict[str, Any]], label: str) -> str:
+    for item in level_cards:
+        if str(item.get("label") or "").strip() == label:
+            return normalize_ask_followup_copy(item.get("value")) or "-"
+    return "-"
+
+
+def ask_followup_level_detail(level_cards: list[dict[str, Any]], label: str) -> str:
+    for item in level_cards:
+        if str(item.get("label") or "").strip() == label:
+            return normalize_ask_followup_copy(item.get("detail"))
+    return ""
+
+
+def ask_followup_float(value: Any) -> float | None:
+    if value in (None, "", "-"):
+        return None
+    match = re.search(r"-?\d+(?:\.\d+)?", str(value))
+    if not match:
+        return None
+    try:
+        return float(match.group(0))
+    except ValueError:
+        return None
+
+
+def ask_followup_price_context(case: dict[str, Any], level_cards: list[dict[str, Any]]) -> str:
+    latest = ask_followup_metric_value(case, "最新价")
+    support_label = ask_followup_level_value(level_cards, "支撑位")
+    resistance_label = ask_followup_level_value(level_cards, "压力位")
+    stop_label = ask_followup_level_value(level_cards, "止损位")
+    current = ask_followup_float(latest)
+    support = ask_followup_float(support_label)
+    resistance = ask_followup_float(resistance_label)
+    stop_loss = ask_followup_float(stop_label)
+    latest_label = normalize_ask_followup_copy((latest.split("；", 1)[0] if latest else ""))
+    if current is None or not latest_label:
+        return ""
+
+    parts: list[str] = []
+    if support:
+        parts.append(f"较支撑 {support_label} 高约 {(current / support - 1) * 100:.1f}%")
+    if resistance:
+        parts.append(f"较压力 {resistance_label} 低约 {(1 - current / resistance) * 100:.1f}%")
+    if stop_loss and stop_loss != support:
+        parts.append(f"较止损 {stop_label} 高约 {(current / stop_loss - 1) * 100:.1f}%")
+    return f"当前价 {latest_label}" + (f"：{'，'.join(parts)}。" if parts else "。")
+
+
+def ask_followup_trigger_line(case: dict[str, Any], keywords: tuple[str, ...]) -> str:
+    for item in case.get("triggers") or []:
+        text = " ".join(str(item.get(key) or "") for key in ("name", "condition", "action"))
+        if any(keyword in text for keyword in keywords):
+            condition = normalize_ask_followup_copy(item.get("condition"))
+            action = normalize_ask_followup_copy(item.get("action"))
+            return " / ".join(part for part in (condition, action) if part)
+    return ""
+
+
+def ask_followup_cross_summary(cross_cards: list[dict[str, Any]]) -> str:
+    items = [
+        f"{normalize_ask_followup_copy(item.get('label'))}{normalize_ask_followup_copy(item.get('value'))}"
+        for item in cross_cards
+        if normalize_ask_followup_copy(item.get("label")) and normalize_ask_followup_copy(item.get("value"))
+    ]
+    if not items:
+        return ""
+    return "、".join(items[:4])
+
+
+def ask_followup_unique(items: list[str]) -> list[str]:
+    output: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        text = normalize_ask_followup_copy(item)
+        if not text or text == "-" or text in seen:
+            continue
+        seen.add(text)
+        output.append(text)
+    return output
+
+
 def build_ask_followup_answer(
     case: dict[str, Any],
     question: str,
     history: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     hero = case.get("hero") or {}
+    canonical = case.get("canonical_decision") or {}
     watchlist_action = case.get("watchlist_action") or {}
     plan_rows = case.get("plan_rows") or []
     plan_levels = case.get("plan_levels") or []
@@ -3545,119 +3770,165 @@ def build_ask_followup_answer(
     cross_cards = case.get("cross_cards") or []
     context_tags = case.get("context_tags") or []
 
-    def level_value(label: str) -> str:
-        for item in level_cards:
-            if str(item.get("label") or "").strip() == label:
-                return str(item.get("value") or "-").strip() or "-"
-        return "-"
-
-    def row_value(label: str) -> str:
-        for item in plan_rows:
-            if str(item.get("label") or "").strip() == label:
-                return str(item.get("value") or "-").strip() or "-"
-        return "-"
-
     sanitized_history = sanitize_ask_followup_history(history)
     intent = detect_ask_followup_intent(question, sanitized_history)
     tone = str(case.get("tone") or "watch")
+    intent_label = ask_followup_intent_label(intent)
+
+    decision_label = normalize_ask_followup_copy(hero.get("decision_label")) or normalize_ask_followup_copy(canonical.get("main_conclusion")) or "当前结论"
+    position = normalize_position_guidance(hero.get("position") or canonical.get("position_guidance"), "待定")
+    why_now = normalize_ask_followup_copy(canonical.get("why_now") or hero.get("summary") or "当前证据还不支持升级动作")
+    action = ask_followup_row_value(plan_rows, "动作") or normalize_ask_followup_copy(canonical.get("next_step")) or decision_label
+    trigger = ask_followup_row_value(plan_rows, "触发") or normalize_ask_followup_copy(canonical.get("trigger_condition")) or "等待触发条件明确"
+    avoid = ask_followup_row_value(plan_rows, "回避") or normalize_ask_followup_copy(canonical.get("avoid_action")) or why_now
+    invalid = ask_followup_row_value(plan_rows, "失效") or normalize_ask_followup_copy(canonical.get("stop_condition") or canonical.get("risk_boundary")) or "等待风险边界明确"
+    support = ask_followup_level_value(level_cards, "支撑位")
+    resistance = ask_followup_level_value(level_cards, "压力位")
+    stop_loss = ask_followup_level_value(level_cards, "止损位")
+    support_detail = ask_followup_level_detail(level_cards, "支撑位")
+    resistance_detail = ask_followup_level_detail(level_cards, "压力位")
+    stop_detail = ask_followup_level_detail(level_cards, "止损位")
+    price_context = ask_followup_price_context(case, level_cards)
+    flow_metric = ask_followup_group_metric(case, "资金面") or ask_followup_metric_value(case, "资金信号")
+    tech_metric = ask_followup_group_metric(case, "技术面")
+    risk_items = ask_followup_group_items(case, "风险", 4)
+    fundamentals_items = ask_followup_group_items(case, "基本面", 4)
+    event_items = ask_followup_group_items(case, "事件面", 3)
+    cross_summary = ask_followup_cross_summary(cross_cards)
+    breakout_line = ask_followup_trigger_line(case, ("突破", "站上", "压力"))
+    defense_line = ask_followup_trigger_line(case, ("防守", "跌破", "止损"))
+    confirm_line = ask_followup_trigger_line(case, ("确认", "回踩", "资金"))
+
+    default_hold = any(token in f"{decision_label} {action}" for token in ("观察", "观望", "不新增", "等待"))
     title = "继续拆这只股票"
-    summary = str(hero.get("summary") or "继续围绕当前结论拆问题。").strip()
+    summary = normalize_ask_followup_copy(hero.get("summary") or "继续围绕当前结论拆问题。")
     bullets: list[str] = []
     references: list[str] = []
 
     if intent == "levels":
-        support = level_value("支撑位")
-        resistance = level_value("压力位")
-        stop_loss = level_value("止损位")
-        title = "关键位怎么看"
-        summary = f"当前先盯支撑 {support}、压力 {resistance}、止损 {stop_loss}，这三档基本决定今天还能不能继续拿。"
-        bullets = [
-            f"{item.get('label')}：{item.get('value')}；{item.get('detail')}"
-            for item in level_cards
-            if item.get("value")
-        ]
-        bullets.extend(
+        title = f"{support} 是防守线，{resistance} 才是升级线"
+        same_support_stop = ask_followup_float(support) is not None and ask_followup_float(support) == ask_followup_float(stop_loss)
+        defense_copy = (
+            f"{support} 同时承担支撑/止损参考，跌破就不能再按原观察剧本"
+            if same_support_stop
+            else f"{support} 是支撑参考，{stop_loss} 是止损/失效参考"
+        )
+        summary = f"这轮问的是关键位怎么用：{defense_copy}；{resistance} 是压力和动作升级位，只有放量站上才谈下一步。"
+        bullets = ask_followup_unique(
             [
-                f"{item.get('label')}：{item.get('value')}"
-                for item in plan_levels
-                if str(item.get("value") or "").strip() not in {"", "-"}
+                price_context,
+                f"支撑位 {support}（{support_detail or '防守参考'}）：回踩不破，观察剧本才还成立。",
+                f"压力位 {resistance}（{resistance_detail or '上方观察'}）：必须放量站上，不能把摸到压力当成触发。",
+                f"止损位 {stop_loss}（{stop_detail or '失效参考'}）：{invalid}。",
+                f"{support}-{resistance} 区间：更像观察带，资金没有确认时，不把反弹当反转。",
+                confirm_line,
             ]
         )
-        references = ask_followup_references(case, [f"仓位参考 {hero.get('position')}", f"当前结论 {hero.get('decision_label')}"])
+        references = ask_followup_references(case, [f"当前结论 {decision_label}", f"仓位参考 {position}", f"触发 {trigger}", f"失效 {invalid}"])
     elif intent == "plan":
-        title = "今天怎么按纪律处理"
-        summary = f"当前更像是按“{normalize_ask_followup_copy(row_value('动作'))}”去处理，先看触发，再看回避和失效，不要把盘中噪音当成新结论。"
-        bullets = [
-            f"{item.get('label')}：{normalize_ask_followup_copy(item.get('value'))}"
-            for item in plan_rows
-            if str(item.get("value") or "").strip()
-        ]
-        references = ask_followup_references(case, [f"仓位参考 {hero.get('position')}"] + [f"{item.get('label')} {normalize_ask_followup_copy(item.get('value'))}" for item in plan_levels])
+        title = f"今天先按“{action}”处理"
+        if default_hold:
+            summary = (
+                f"你问的是今天到底要不要动：按纪律当前答案是先不主动动，除非出现“{trigger}”。"
+                f"反过来，只要触发“{invalid}”，这轮观察就先失效。"
+            )
+        else:
+            summary = f"你问的是操作，不是原因复述：当前按“{action}”执行，先看触发和失效两条线，不因为盘中噪音改口径。"
+        bullets = ask_followup_unique(
+            [
+                f"默认动作：{action}；当前结论 {decision_label}，仓位参考 {position}。",
+                f"动的条件：{trigger}。触发后也先按{position}验证，不放大仓位。",
+                f"不动的理由：{avoid}；{flow_metric or '资金确认不足'}；{cross_summary or '系统优先级未抬升'}。",
+                f"失效处理：{invalid}；触发后先停止原计划，别继续用原结论解释。",
+                price_context,
+                confirm_line,
+            ]
+        )
+        references = ask_followup_references(
+            case,
+            [f"动作 {action}", f"触发 {trigger}", f"失效 {invalid}", f"仓位参考 {position}"]
+            + [f"{item.get('label')} {normalize_ask_followup_copy(item.get('value'))}" for item in plan_levels],
+        )
     elif intent == "risk":
-        risk_group = ask_find_analysis_group(case, "风险") or {}
-        title = "主要风险在哪"
-        summary = first_text(*(risk_group.get("items") or []), hero.get("summary")) or "当前没有额外风险提示。"
-        bullets = list(risk_group.get("items") or [])[:5] or ["当前没有额外风险提示。"]
-        references = ask_followup_references(case, [f"止损位 {level_value('止损位')}", f"当前结论 {hero.get('decision_label')}"])
+        title = "最大的风险是误把观察当动作"
+        summary = f"主要风险不是一句“{why_now}”而已，而是价格靠近防守线、资金确认不足时，仍然把它当成今天可切到动作的标的。"
+        bullets = ask_followup_unique(
+            [
+                f"价格风险：{invalid}。",
+                f"资金风险：{flow_metric or '资金面没有给出明确正反馈'}。",
+                f"质量风险：{'；'.join(risk_items or [why_now])}。",
+                f"优先级风险：{cross_summary or '当前没有进入更高优先级队列'}。",
+                f"纠错条件：只有 {trigger}，才重新评估是否进入下一步动作。",
+            ]
+        )
+        references = ask_followup_references(case, [f"止损位 {stop_loss}", f"回避 {avoid}", f"当前结论 {decision_label}"])
     elif intent == "events":
         title = "公告和新闻怎么看"
         ann_group = event_groups[0] if len(event_groups) > 0 else {"items": []}
         news_group = event_groups[1] if len(event_groups) > 1 else {"items": []}
-        summary = f"当前抓到公告 {len(ann_group.get('items') or [])} 条、新闻 {len(news_group.get('items') or [])} 条，先看会不会直接改动作。"
+        summary = f"当前抓到公告 {len(ann_group.get('items') or [])} 条、新闻 {len(news_group.get('items') or [])} 条；它们可以解释关注度，但要改变今天动作，仍要回到 {trigger} 和 {invalid}。"
         bullets = [
-            f"{item.get('title')} | {item.get('meta')}"
+            normalize_ask_followup_copy(f"{item.get('title')} | {item.get('meta')}")
             for group in (ann_group, news_group)
             for item in (group.get("items") or [])[:3]
-        ] or ["当前没有抓到新的公告或新闻。"]
+        ] or event_items or ["当前没有抓到新的公告或新闻。"]
+        bullets = ask_followup_unique([*bullets, f"动作判断仍看：{trigger} / {invalid}。"])[:6]
         references = ask_followup_references(case, [f"事件标签 {' / '.join(context_tags)}"])
     elif intent == "flow":
-        group = ask_find_analysis_group(case, "资金面") or {}
         title = "资金面怎么看"
-        summary = first_text(*(group.get("items") or []), hero.get("summary")) or "当前没有足够的资金线索。"
-        bullets = list(group.get("items") or [])[:5] or ["当前没有足够的资金线索。"]
-        references = ask_followup_references(case, [f"资金信号 {(case.get('metric_cards') or [{}, {}, {}, {}])[3].get('value') if len(case.get('metric_cards') or []) >= 4 else '-'}"])
+        flow_items = ask_followup_group_items(case, "资金面", 5)
+        summary = f"资金面现在没有给“主动升级”的理由：{flow_metric or first_text(flow_items) or '资金线索不足'}。所以它只能作为观察，不适合脱离关键位单独行动。"
+        bullets = ask_followup_unique([*flow_items, f"资金要改变结论，至少要配合 {trigger}。", confirm_line]) or ["当前没有足够的资金线索。"]
+        references = ask_followup_references(case, [f"资金信号 {flow_metric}", f"当前结论 {decision_label}"])
     elif intent == "tech":
-        group = ask_find_analysis_group(case, "技术面") or {}
         title = "技术面怎么看"
-        summary = first_text(*(group.get("items") or []), hero.get("summary")) or "当前技术证据还不够完整。"
-        bullets = list(group.get("items") or [])[:5] or ["当前技术证据还不够完整。"]
-        references = ask_followup_references(case, [f"规则分 {(case.get('metric_cards') or [{}, {}, {}, {}])[2].get('value') if len(case.get('metric_cards') or []) >= 3 else '-'}"])
+        tech_items = ask_followup_group_items(case, "技术面", 5)
+        summary = f"技术面现在更像中性观察，不是动作信号；真正改变口径的是 {resistance} 上方的放量确认，失效线在 {stop_loss}。"
+        bullets = ask_followup_unique([price_context, *tech_items, breakout_line, defense_line]) or ["当前技术证据还不够完整。"]
+        references = ask_followup_references(case, [f"技术面 {tech_metric}", f"触发 {trigger}", f"失效 {invalid}"])
     elif intent == "fundamentals":
-        group = ask_find_analysis_group(case, "基本面") or {}
         title = "基本面怎么看"
-        summary = first_text(*(group.get("items") or []), "先看估值和盈利质量，再决定这票值不值得更长拿。")
-        bullets = list(group.get("items") or [])[:5] or ["当前基本面数据还不完整。"]
-        references = ask_followup_references(case, [f"当前结论 {hero.get('decision_label')}"])
+        summary = f"基本面这轮的作用是限制动作升级：{why_now}。它能解释为什么仓位只给到 {position}，但不能替代盘面触发。"
+        bullets = ask_followup_unique([*fundamentals_items, f"基本面不足时，只有 {trigger} 才重新评估动作。"]) or ["当前基本面数据还不完整。"]
+        references = ask_followup_references(case, [f"当前结论 {decision_label}", f"仓位参考 {position}"])
     elif intent == "confidence":
         title = "这个结论有多可靠"
-        summary = f"当前是 {hero.get('confidence_label')} 可信度，原因是 {hero.get('confidence_note')}。"
-        bullets = [
-            f"可信度：{hero.get('confidence_label')}",
-            f"说明：{hero.get('confidence_note')}",
+        summary = f"这里的可信度说的是数据链路和上下文完整度，不等于方向很强；当前仍然要按 {trigger} / {invalid} 校验。"
+        bullets = ask_followup_unique(
+            [
+            f"可信度：{normalize_ask_followup_copy(hero.get('confidence_label'))}",
+            f"说明：{normalize_ask_followup_copy(hero.get('confidence_note'))}",
             f"上下文标签：{' / '.join(context_tags) if context_tags else '仅临时分析'}",
-        ]
-        references = ask_followup_references(case, [f"当前结论 {hero.get('decision_label')}", f"仓位参考 {hero.get('position')}"])
+            f"纪律边界：{trigger} / {invalid}",
+            ]
+        )
+        references = ask_followup_references(case, [f"当前结论 {decision_label}", f"仓位参考 {position}"])
     elif intent == "cross":
         title = "这只票在系统里的位置"
-        summary = "先看它是不是已进入自选股、观察池、午盘确认或今日动作队列，再决定优先级。"
+        summary = f"系统位置决定优先级：{cross_summary or '当前没有进入核心队列'}。这解释了为什么回答先落在观察和纪律边界上。"
         bullets = [
-            f"{item.get('label')}：{item.get('value')}；{item.get('detail')}"
+            normalize_ask_followup_copy(f"{item.get('label')}：{item.get('value')}；{item.get('detail')}")
             for item in cross_cards
         ]
-        references = ask_followup_references(case, [f"自选股动作 {watchlist_action.get('label')}"])
+        bullets = ask_followup_unique([*bullets, f"若要提高优先级，先看 {trigger}。"])
+        references = ask_followup_references(case, [f"自选股动作 {watchlist_action.get('label')}", f"当前结论 {decision_label}"])
     else:
-        tech_group = ask_find_analysis_group(case, "技术面") or {}
-        flow_group = ask_find_analysis_group(case, "资金面") or {}
-        risk_group = ask_find_analysis_group(case, "风险") or {}
-        title = f"为什么当前是 {hero.get('decision_label')}"
-        summary = f"当前统一结论是 {hero.get('decision_label')}，核心原因还是 {str(hero.get('summary') or '当前结论来自多维度合并判断。').strip()}。"
-        bullets = [
-            f"纪律与仓位：{hero.get('decision_label')}；仓位参考 {hero.get('position')}",
-            f"技术面：{first_text(*(tech_group.get('items') or []), tech_group.get('metric')) or '暂无明确技术线索'}",
-            f"资金面：{first_text(*(flow_group.get('items') or []), flow_group.get('metric')) or '暂无明确资金线索'}",
-            f"风险面：{first_text(*(risk_group.get('items') or []), '当前没有额外风险提示。')}",
-        ]
-        references = ask_followup_references(case, [f"可信度 {hero.get('confidence_label')}", f"上下文 {' / '.join(context_tags)}"])
+        title = f"为什么只是{decision_label}"
+        summary = (
+            f"不是只因为“{why_now}”四个字：当前价格仍在 {support}-{resistance} 的观察带里，"
+            f"资金面是{flow_metric or '未确认'}，系统位置是{cross_summary or '未进入高优先级队列'}，所以先给出{decision_label}。"
+        )
+        bullets = ask_followup_unique(
+            [
+                f"纪律结论：{decision_label}；仓位参考 {position}。",
+                f"确认条件：{trigger}。没有这条，不把它从观察切到动作。",
+                f"防守条件：{invalid}。触发后先停止原计划。",
+                f"技术面：{tech_metric or '暂无明确技术线索'}；{price_context}",
+                f"资金/风险：{flow_metric or '资金未确认'}；{'；'.join(risk_items or [why_now])}。",
+                f"系统优先级：{cross_summary or '当前未进入自选/观察/今日动作队列'}。",
+            ]
+        )
+        references = ask_followup_references(case, [f"可信度 {hero.get('confidence_label')}", f"上下文 {' / '.join(context_tags)}", f"触发 {trigger}", f"失效 {invalid}"])
 
     asked_questions = {
         ask_followup_topic_key(question),
@@ -3667,17 +3938,28 @@ def build_ask_followup_answer(
             if str(item.get("role") or "").strip() == "user"
         ),
     }
+    asked_intents = {intent}
+    for item in sanitized_history:
+        if str(item.get("role") or "").strip() == "user":
+            asked_intents.add(detect_ask_followup_intent(str(item.get("summary") or ""), []))
+        elif str(item.get("role") or "").strip() == "assistant":
+            mapped = ask_followup_intent_from_title(str(item.get("title") or ""))
+            if mapped:
+                asked_intents.add(mapped)
     followups = [
         item["question"]
         for item in ask_followup_presets(case)
-        if item.get("question") and ask_followup_topic_key(item.get("question")) not in asked_questions
+        if item.get("question")
+        and ask_followup_topic_key(item.get("question")) not in asked_questions
+        and detect_ask_followup_intent(item.get("question") or "", []) not in asked_intents
     ][:3]
 
     return {
         "intent": intent,
+        "intent_label": intent_label,
         "title": title,
         "summary": summary,
-        "bullets": bullets[:6],
+        "bullets": ask_followup_unique(bullets)[:6],
         "references": references,
         "tone": tone,
         "followups": followups,
@@ -4270,6 +4552,21 @@ def quality_status_tone(status: Any) -> str:
     return "watch"
 
 
+def midday_validation_status_label(status: Any) -> str:
+    normalized = str(status or "unknown").strip().lower()
+    return {
+        "ok": "已确认",
+        "verify_failed": "执行失败",
+        "invalid": "链路无效",
+        "failed": "链路失败",
+        "workflow_failed": "链路失败",
+        "quality_blocked": "质检拦截",
+        "scan_failed": "扫描失败",
+        "missing": "暂无确认",
+        "unknown": "待核",
+    }.get(normalized, normalized or "待核")
+
+
 def quality_status_label(status: Any) -> str:
     normalized = str(status or "unknown").strip().lower()
     return {
@@ -4619,11 +4916,18 @@ def normalize_learning_stock_code(value: Any) -> str:
 
 
 def infer_learning_action(item: dict[str, Any], *, default: str = "observe") -> str:
+    v2_action = v2_suggested_action(item)
+    if v2_action in {"actionable", "trial"}:
+        return "trial_buy"
+    if v2_action in {"shadow", "review", "observe"}:
+        return "observe"
     entry_plan = item.get("entry_plan") or {}
     text = " ".join(
         str(value or "")
         for value in (
             entry_plan.get("action"),
+            entry_plan.get("sizing"),
+            entry_plan.get("trigger"),
             item.get("action"),
             item.get("status"),
             item.get("screening_status"),
@@ -4932,7 +5236,7 @@ def build_observation_instruction(
     upgrade_text = compact_observation_sentence(upgrade)
     invalid_text = compact_observation_sentence(invalid)
     if upgrade_text:
-        parts.append(f"升级：{upgrade_text}")
+        parts.append(f"还差确认：{upgrade_text}")
     if invalid_text:
         parts.append(f"失效：{invalid_text}")
     return f"{'；'.join(parts)}。"
@@ -4951,54 +5255,480 @@ def opportunity_risk_tags(*values: Any, limit: int = 3) -> list[str]:
     return tags
 
 
+def v2_action_rank(value: Any) -> int:
+    return V2_ACTION_ORDER.get(str(value or "").strip(), -1)
+
+
+def opportunity_v2_judgment(item: Mapping[str, Any]) -> dict[str, Any]:
+    judgment = item.get("opportunity_v2") if isinstance(item.get("opportunity_v2"), Mapping) else {}
+    return dict(judgment) if isinstance(judgment, Mapping) else {}
+
+
+def _v2_nested(judgment: Mapping[str, Any], key: str) -> dict[str, Any]:
+    value = judgment.get(key)
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _v2_text_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return text_items(value)
+    text = str(value or "").strip()
+    return [text] if text else []
+
+
+def v2_suggested_action(item: Mapping[str, Any]) -> str:
+    judgment = opportunity_v2_judgment(item)
+    action = str(item.get("suggested_action") or judgment.get("suggested_action") or "").strip()
+    return action if action in V2_ACTION_ORDER else ""
+
+
+def v2_suggested_action_label(item: Mapping[str, Any]) -> str:
+    judgment = opportunity_v2_judgment(item)
+    action = v2_suggested_action(item)
+    return (
+        str(item.get("suggested_action_label") or judgment.get("action_label") or "").strip()
+        or V2_ACTION_LABELS.get(action, "")
+    )
+
+
+def v2_hard_gate_max_action(item: Mapping[str, Any]) -> str:
+    judgment = opportunity_v2_judgment(item)
+    hard_gate = _v2_nested(judgment, "hard_gate")
+    value = str(item.get("hard_gate_max_action") or hard_gate.get("maximum_allowed_action") or "").strip()
+    return value if value in V2_ACTION_ORDER else ""
+
+
+def v2_hard_gate_block_reason(item: Mapping[str, Any]) -> str:
+    judgment = opportunity_v2_judgment(item)
+    hard_gate = _v2_nested(judgment, "hard_gate")
+    block_reasons = hard_gate.get("block_reasons") if isinstance(hard_gate.get("block_reasons"), list) else []
+    return str(item.get("hard_gate_block_reason") or "；".join(text_items(block_reasons)) or "").strip()
+
+
+def v2_hard_gate_blocks_action(item: Mapping[str, Any]) -> bool:
+    action = v2_suggested_action(item)
+    max_action = v2_hard_gate_max_action(item)
+    desired = str(opportunity_v2_judgment(item).get("desired_action") or "").strip()
+    return bool(
+        max_action
+        and action
+        and (
+            v2_action_rank(max_action) < v2_action_rank(desired or action)
+            or v2_hard_gate_block_reason(item)
+        )
+    )
+
+
+def opportunity_v2_payload(item: Mapping[str, Any]) -> dict[str, Any]:
+    judgment = opportunity_v2_judgment(item)
+    if not judgment and not v2_suggested_action(item):
+        return {}
+
+    market_phase = _v2_nested(judgment, "market_phase")
+    theme_phase = _v2_nested(judgment, "theme_phase")
+    stock_role = _v2_nested(judgment, "stock_role")
+    playbook = _v2_nested(judgment, "playbook")
+    crowding = _v2_nested(judgment, "crowding_risk")
+    fake_breakout = _v2_nested(judgment, "fake_breakout_risk")
+    hard_gate = _v2_nested(judgment, "hard_gate")
+    calibration = _v2_nested(judgment, "calibration")
+    mode_guard = _v2_nested(judgment, "mode_guard")
+    ai_summary = _v2_nested(judgment, "ai_summary")
+    ai_delta = _v2_nested(judgment, "ai_delta")
+    action = v2_suggested_action(item)
+    action_label = v2_suggested_action_label(item)
+    hard_gate_max = v2_hard_gate_max_action(item)
+    hard_gate_block = v2_hard_gate_block_reason(item)
+    missing = _v2_text_list(item.get("missing_confirmation") or judgment.get("missing_confirmation"))
+    positives = _v2_text_list(judgment.get("positive_confirmation"))
+
+    confidence = item.get("confidence") if item.get("confidence") is not None else judgment.get("confidence")
+    return {
+        "suggested_action": action,
+        "suggested_action_label": action_label,
+        "confidence": confidence,
+        "thesis": item.get("thesis") or judgment.get("thesis") or "",
+        "why_now": item.get("why_now") or judgment.get("why_now") or "",
+        "invalidation": item.get("invalidation") or judgment.get("invalidation") or "",
+        "upgrade_reason": judgment.get("upgrade_reason") or "",
+        "missing_confirmation": missing,
+        "positive_confirmation": positives,
+        "hard_gate_max_action": hard_gate_max,
+        "hard_gate_block_reason": hard_gate_block,
+        "hard_gate_blocks_action": v2_hard_gate_blocks_action(item),
+        "hard_gate_reasons": hard_gate.get("reasons") if isinstance(hard_gate.get("reasons"), list) else [],
+        "market_phase": market_phase.get("label") or market_phase.get("value") or "",
+        "market_phase_value": market_phase.get("value") or "",
+        "theme_phase": theme_phase.get("label") or theme_phase.get("value") or "",
+        "theme_phase_value": theme_phase.get("value") or "",
+        "theme_phase_theme": theme_phase.get("theme") or "",
+        "stock_role": stock_role.get("label") or stock_role.get("value") or "",
+        "stock_role_value": stock_role.get("value") or "",
+        "playbook": playbook.get("label") or playbook.get("value") or judgment.get("opportunity_type") or "",
+        "playbook_value": playbook.get("value") or judgment.get("opportunity_type") or "",
+        "opportunity_type": judgment.get("opportunity_type") or playbook.get("opportunity_type") or playbook.get("value") or "",
+        "crowding_risk": crowding.get("summary") or crowding.get("level") or "",
+        "crowding_risk_level": crowding.get("level") or "",
+        "fake_breakout_risk": fake_breakout.get("summary") or fake_breakout.get("level") or "",
+        "fake_breakout_risk_level": fake_breakout.get("level") or "",
+        "judge_source": judgment.get("judge_source") or "",
+        "ai_status": judgment.get("ai_status") or "",
+        "ai_status_label": ai_summary.get("label") or item.get("ai_status_label") or "",
+        "ai_summary": ai_summary,
+        "ai_delta": ai_delta,
+        "ai_provider": judgment.get("ai_provider") or ai_summary.get("provider") or "",
+        "ai_model": judgment.get("ai_model") or ai_summary.get("model") or "",
+        "v2_mode_requested": judgment.get("mode_requested") or mode_guard.get("requested_mode") or "",
+        "v2_mode_effective": judgment.get("mode_effective") or mode_guard.get("effective_mode") or judgment.get("mode") or "",
+        "v2_active_allowed": mode_guard.get("active_allowed") if "active_allowed" in mode_guard else calibration.get("active_allowed"),
+        "v2_calibration_stage": calibration.get("sample_stage") or mode_guard.get("sample_stage") or "",
+        "v2_calibration_guard_reason": calibration.get("guard_reason") or mode_guard.get("guard_reason") or "",
+        "v2_calibration_mature_samples": calibration.get("mature_samples") or mode_guard.get("mature_samples"),
+        "v2_calibration_threshold_adjustments": calibration.get("threshold_adjustments") if isinstance(calibration.get("threshold_adjustments"), Mapping) else {},
+        "v2_playbook_adjustment": calibration.get("playbook_adjustment") if isinstance(calibration.get("playbook_adjustment"), Mapping) else {},
+        "opportunity_v2": judgment,
+    }
+
+
+def v2_task_status(item: Mapping[str, Any], fallback: Any = "待看") -> str:
+    return v2_suggested_action_label(item) or str(detail_value(fallback, "待看"))
+
+
+def v2_task_tone(item: Mapping[str, Any], fallback: str = "watch") -> str:
+    action = v2_suggested_action(item)
+    if action == "actionable":
+        return "positive"
+    if action == "trial":
+        return "positive" if not v2_hard_gate_blocks_action(item) else "watch"
+    if action in {"review", "shadow"}:
+        return "watch"
+    if action == "observe":
+        return "risk" if v2_hard_gate_block_reason(item) else "watch"
+    return fallback
+
+
+def v2_candidate_sort_key(item: Mapping[str, Any]) -> tuple[int, float, float]:
+    return (
+        v2_action_rank(v2_suggested_action(item)),
+        safe_float(item.get("confidence"), default=safe_float(opportunity_v2_judgment(item).get("confidence"), default=0)),
+        opportunity_candidate_rank_value(item),
+    )
+
+
+def v2_candidate_action_lane(item: Mapping[str, Any], *, allow_new_positions: bool) -> str:
+    action = v2_suggested_action(item)
+    max_action = v2_hard_gate_max_action(item) or "actionable"
+    if action == "actionable" and allow_new_positions and v2_action_rank(max_action) >= v2_action_rank("actionable"):
+        return "do_now"
+    if action == "trial" and allow_new_positions and v2_action_rank(max_action) >= v2_action_rank("trial"):
+        return "conditional"
+    if action in {"review", "shadow", "observe", "trial", "actionable"}:
+        return "observe"
+    return ""
+
+
+def candidate_factor_payload(item: Mapping[str, Any], *, include_empty: bool = True) -> dict[str, Any]:
+    factors = item.get("tushare_factors") if isinstance(item.get("tushare_factors"), Mapping) else {}
+    raw_snapshot = item.get("factor_snapshot")
+    if not isinstance(raw_snapshot, Mapping) or not raw_snapshot:
+        raw_snapshot = factors.get("factor_snapshot") if isinstance(factors.get("factor_snapshot"), Mapping) else {}
+    has_raw_snapshot = isinstance(raw_snapshot, Mapping) and bool(raw_snapshot)
+
+    risk_flags = item.get("factor_risk_flags") or factors.get("risk_flags") or []
+    if not risk_flags and (item.get("tushare_score") is not None or item.get("factor_snapshot") is not None):
+        risk_flags = item.get("risk_flags") or []
+
+    payload = {
+        "tushare_score": item.get("tushare_score") if item.get("tushare_score") is not None else factors.get("tushare_score"),
+        "data_completeness": (
+            item.get("data_completeness")
+            if item.get("data_completeness") is not None
+            else factors.get("data_completeness")
+        ),
+        "factor_tags": item.get("factor_tags") or factors.get("factor_tags") or [],
+        "factor_risk_flags": risk_flags,
+        "risk_level": item.get("risk_level") or factors.get("risk_level") or ("warn" if risk_flags else "info"),
+        "risk_items": item.get("risk_items") or factors.get("risk_items") or [],
+        "degrade_reason": item.get("degrade_reason") or factors.get("degrade_reason") or "",
+        "block_reason": item.get("block_reason") or factors.get("block_reason") or "",
+        "risk_evidence_refs": item.get("risk_evidence_refs") or factors.get("risk_evidence_refs") or [],
+        "risk_source_cards": item.get("risk_source_cards") or factors.get("risk_source_cards") or [],
+        "tushare_score_breakdown": item.get("tushare_score_breakdown") or factors.get("tushare_score_breakdown") or {},
+        "factor_snapshot": dict(raw_snapshot) if isinstance(raw_snapshot, Mapping) else {},
+        "trade_date_used": item.get("trade_date_used") or factors.get("trade_date_used"),
+        "factor_explanation": item.get("factor_explanation") or factors.get("explanation") or {},
+        "tushare_positive_adjustment": item.get("tushare_positive_adjustment"),
+        "tushare_risk_penalty": item.get("tushare_risk_penalty"),
+        "tushare_priority_adjustment": item.get("tushare_priority_adjustment"),
+    }
+    if not include_empty and not any(
+        payload.get(key)
+        for key in (
+            "tushare_score",
+            "data_completeness",
+            "factor_tags",
+            "factor_risk_flags",
+            "risk_items",
+            "degrade_reason",
+            "block_reason",
+            "risk_evidence_refs",
+            "risk_source_cards",
+            "tushare_score_breakdown",
+            "factor_snapshot",
+            "trade_date_used",
+        )
+    ):
+        return {}
+    return payload
+
+
+def public_tushare_factor_summary(item: Mapping[str, Any]) -> dict[str, Any]:
+    factors = item.get("tushare_factors") if isinstance(item.get("tushare_factors"), Mapping) else {}
+    summary = {
+        "tushare_score": item.get("tushare_score") if item.get("tushare_score") is not None else factors.get("tushare_score"),
+        "data_completeness": (
+            item.get("data_completeness")
+            if item.get("data_completeness") is not None
+            else factors.get("data_completeness")
+        ),
+        "factor_tags": item.get("factor_tags") or factors.get("factor_tags") or [],
+        "risk_flags": item.get("factor_risk_flags") or factors.get("risk_flags") or [],
+        "explanation": item.get("factor_explanation") or factors.get("explanation") or {},
+        "trade_date_used": item.get("trade_date_used") or factors.get("trade_date_used"),
+    }
+    return {key: value for key, value in summary.items() if value not in (None, "", [], {})}
+
+
 def build_screening_candidate_card(
     item: dict[str, Any],
     *,
     learning_index: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     execution_quality = item.get("execution_quality") or {}
+    consistency = item.get("consistency") or {}
+    capital_flow = item.get("capital_flow") or {}
     entry_plan = item.get("entry_plan") or {}
+    action_intent = infer_learning_action(item)
     upgrade_condition = entry_plan.get("trigger") or item.get("watch_condition")
     invalid_condition = entry_plan.get("invalidate") or ((entry_plan.get("levels") or {}).get("invalidate")) or item.get("main_risk")
     action_text = entry_plan.get("action") or item.get("screening_note") or "只观察，不追"
+    factor_payload = candidate_factor_payload(item)
+    v2_payload = opportunity_v2_payload(item)
+    v2_missing = text_items(v2_payload.get("missing_confirmation"))
+    v2_status = v2_payload.get("suggested_action_label")
+    v2_risk = first_text(
+        v2_payload.get("hard_gate_block_reason"),
+        v2_payload.get("crowding_risk"),
+        v2_payload.get("fake_breakout_risk"),
+    )
+    primary_risk = factor_payload.get("block_reason") or factor_payload.get("degrade_reason") or item.get("main_risk")
     card = {
         "code": item.get("code"),
         "name": item.get("name"),
-        "status": candidate_status_label(item.get("screening_status") or "unknown"),
+        "status": v2_status or candidate_status_label(item.get("screening_status") or "unknown"),
         "tone": candidate_tone(item),
         "setup_label": item.get("setup_label") or item.get("setup_type") or "待确认",
         "score": item.get("priority_score"),
+        "priority_score": item.get("priority_score"),
+        "best_score": item.get("best_score"),
         "change_pct": item.get("change_pct"),
         "amount_yi": item.get("amount_yi"),
+        "flow_today_yi": item.get("flow_today_yi") or capital_flow.get("flow_today_yi") or capital_flow.get("today_yi"),
+        "capital_trend": item.get("capital_trend") or capital_flow.get("trend"),
         "theme": ", ".join(item.get("themes") or []) or "其他",
-        "detail": item.get("entry_reason") or item.get("screening_note") or item.get("main_risk") or "等待更多确认",
+        "detail": v2_payload.get("thesis") or item.get("entry_reason") or item.get("screening_note") or item.get("main_risk") or "等待更多确认",
         "foot": (
-            f"{execution_quality.get('label') or '未评级'}"
-            f" · {(item.get('main_risk') or ((item.get('risk_flags') or [None])[0]) or '等待更多确认')}"
+            first_text(
+                v2_risk,
+                f"还差：{'；'.join(v2_missing[:2])}" if v2_missing else "",
+                f"{execution_quality.get('label') or '未评级'} · {(primary_risk or ((item.get('risk_flags') or [None])[0]) or '等待更多确认')}",
+            )
+            or "等待更多确认"
         ),
         "observation_instruction": build_observation_instruction(
             name=item.get("name"),
-            action=action_text,
-            upgrade=upgrade_condition,
-            invalid=invalid_condition,
+            action=v2_status or action_text,
+            upgrade=upgrade_condition or ("；".join(v2_missing[:2]) if v2_missing else ""),
+            invalid=v2_payload.get("invalidation") or invalid_condition,
         ),
         "upgrade_condition": normalize_trigger_sentence(upgrade_condition, "等待触发条件明确。"),
-        "invalid_condition": normalize_stock_result_copy(invalid_condition, "触发失效条件就剔除。"),
-        "avoid_condition": normalize_avoid_sentence(entry_plan.get("avoid") or item.get("main_risk")),
-        "risk_tags": opportunity_risk_tags(item.get("risk_flags"), execution_quality.get("warnings"), item.get("main_risk")),
+        "invalid_condition": normalize_stock_result_copy(v2_payload.get("invalidation") or invalid_condition, "触发失效条件就剔除。"),
+        "avoid_condition": normalize_avoid_sentence(entry_plan.get("avoid") or v2_risk or primary_risk),
+        "risk_tags": opportunity_risk_tags(
+            v2_payload.get("hard_gate_block_reason"),
+            v2_payload.get("crowding_risk"),
+            v2_payload.get("fake_breakout_risk"),
+            factor_payload.get("block_reason"),
+            factor_payload.get("degrade_reason"),
+            factor_payload.get("factor_risk_flags"),
+            item.get("risk_flags"),
+            execution_quality.get("warnings"),
+            item.get("main_risk"),
+        ),
         "priority_label": detail_value(item.get("tier"), "观察"),
+        "execution_quality_score": execution_quality.get("score"),
+        "execution_quality_label": execution_quality.get("label"),
+        "consistency_score": consistency.get("score"),
+        "consistency_label": consistency.get("label"),
+        "action_intent": action_intent,
+        "position_guidance": entry_plan.get("sizing") or "",
+        "entry_plan": dict(entry_plan) if isinstance(entry_plan, dict) and entry_plan else None,
         "action_key": f"screening:{item.get('code')}",
         "updated_at": item.get("updated_at") or item.get("snapshot_time"),
         "detail_url": today_candidate_detail_url(item.get("code")),
-        "tushare_score": item.get("tushare_score") if item.get("tushare_score") is not None else (item.get("tushare_factors") or {}).get("tushare_score"),
-        "factor_tags": item.get("factor_tags") or (item.get("tushare_factors") or {}).get("factor_tags") or [],
-        "factor_risk_flags": item.get("factor_risk_flags") or (item.get("tushare_factors") or {}).get("risk_flags") or [],
-        "factor_explanation": item.get("factor_explanation") or (item.get("tushare_factors") or {}).get("explanation") or {},
+        **factor_payload,
+        **v2_payload,
     }
     memories = candidate_learning_memories(item, lane="aggressive", learning_index=learning_index)
     if memories:
         card["learning_memories"] = memories
     return card
+
+
+def merge_confirmation_with_screening_candidate(
+    confirmation_item: dict[str, Any],
+    screening_item: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if not screening_item:
+        return confirmation_item
+
+    merged = deepcopy(screening_item)
+    confirmation_plan = confirmation_item.get("entry_plan") if isinstance(confirmation_item.get("entry_plan"), dict) else {}
+    screening_plan = deepcopy(merged.get("entry_plan") or {})
+    if confirmation_plan.get("sizing"):
+        screening_plan["sizing"] = confirmation_plan.get("sizing")
+    for key in ("action", "trigger", "avoid", "invalidate", "levels"):
+        if not screening_plan.get(key) and confirmation_plan.get(key):
+            screening_plan[key] = confirmation_plan.get(key)
+
+    merged["status"] = confirmation_item.get("status")
+    merged["confirmation_status"] = confirmation_item.get("status")
+    merged["confirmation_entry_plan"] = dict(confirmation_plan) if confirmation_plan else {}
+    merged["confirmation_execution_quality"] = confirmation_item.get("execution_quality") or {}
+    merged["midday_batch_id"] = confirmation_item.get("midday_batch_id")
+    merged["morning_batch_id"] = confirmation_item.get("morning_batch_id")
+    merged["entry_plan"] = screening_plan
+
+    for key in (
+        "opportunity_v2",
+        "suggested_action",
+        "suggested_action_label",
+        "confidence",
+        "thesis",
+        "why_now",
+        "invalidation",
+        "missing_confirmation",
+        "hard_gate_max_action",
+        "hard_gate_block_reason",
+        "judge_source",
+        "ai_status",
+        "ai_status_label",
+        "ai_summary",
+        "ai_delta",
+        "ai_provider",
+        "ai_model",
+    ):
+        value = confirmation_item.get(key)
+        if value not in (None, "", [], {}):
+            merged[key] = value
+
+    for key in (
+        "code",
+        "name",
+        "theme",
+        "setup_type",
+        "setup_label",
+        "setup_summary",
+        "score",
+        "change_pct",
+        "amount_yi",
+        "flow_today_yi",
+        "capital_trend",
+        "entry_reason",
+        "main_risk",
+        "watch_condition",
+    ):
+        value = confirmation_item.get(key)
+        if value not in (None, "", [], {}) and merged.get(key) in (None, "", [], {}):
+            merged[key] = value
+
+    return merged
+
+
+def opportunity_candidate_rank_value(item: Mapping[str, Any]) -> float:
+    execution_quality = item.get("execution_quality") if isinstance(item.get("execution_quality"), Mapping) else {}
+    consistency = item.get("consistency") if isinstance(item.get("consistency"), Mapping) else {}
+    capital_flow = item.get("capital_flow") if isinstance(item.get("capital_flow"), Mapping) else {}
+    priority = safe_float(item.get("priority_score"), default=0) or 0
+    execution = safe_float(execution_quality.get("score"), default=0) or 0
+    consistency_score = safe_float(consistency.get("score"), default=0) or 0
+    amount = safe_float(item.get("amount_yi"), default=0) or 0
+    flow_today = safe_float(
+        item.get("flow_today_yi") or capital_flow.get("flow_today_yi") or capital_flow.get("today_yi"),
+        default=0,
+    ) or 0
+    change_pct = safe_float(item.get("change_pct"), default=0) or 0
+    return (
+        priority
+        + execution * 6
+        + consistency_score * 4
+        + min(amount, 150) * 0.08
+        + max(min(flow_today, 30), -30) * 2
+        + change_pct
+    )
+
+
+def annotate_opportunity_card_ranks(cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    labels = ("先看", "二号候补", "三号候补", "靠后")
+    annotated: list[dict[str, Any]] = []
+    for index, card in enumerate(cards, start=1):
+        copy_card = dict(card)
+        label = labels[index - 1] if index <= len(labels) else f"候补 {index}"
+        trigger = str(copy_card.get("upgrade_condition") or "").strip()
+        setup = str(copy_card.get("setup_label") or "").strip()
+        risk = str(copy_card.get("avoid_condition") or "").strip()
+        if not risk:
+            risk = str((copy_card.get("risk_tags") or [copy_card.get("foot") or ""])[0] or "").strip()
+        copy_card["decision_rank"] = index
+        copy_card["decision_rank_label"] = f"#{index} {label}"
+        copy_card["decision_summary"] = "；".join(
+            part
+            for part in (
+                f"{setup}优先" if setup and setup != "待确认" else "",
+                trigger,
+                f"卡点：{risk}" if risk else "",
+            )
+            if part
+        )
+        annotated.append(copy_card)
+    return annotated
+
+
+def annotate_opportunity_item_ranks(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    labels = ("先看", "二号候补", "三号候补", "靠后")
+    annotated: list[dict[str, Any]] = []
+    for index, item in enumerate(items, start=1):
+        copy_item = dict(item)
+        entry_plan = copy_item.get("entry_plan") if isinstance(copy_item.get("entry_plan"), dict) else {}
+        label = labels[index - 1] if index <= len(labels) else f"候补 {index}"
+        trigger = str(entry_plan.get("trigger") or copy_item.get("watch_condition") or "").strip()
+        setup = str(copy_item.get("setup_label") or copy_item.get("setup_type") or "").strip()
+        risk = str(entry_plan.get("avoid") or copy_item.get("main_risk") or "").strip()
+        if not risk:
+            risk = str(((copy_item.get("risk_flags") or []) + [""])[0] or "").strip()
+        copy_item["decision_rank"] = index
+        copy_item["decision_rank_label"] = f"#{index} {label}"
+        copy_item["decision_summary"] = "；".join(
+            part
+            for part in (
+                f"{setup}优先" if setup and setup != "待确认" else "",
+                trigger,
+                f"卡点：{risk}" if risk else "",
+            )
+            if part
+        )
+        annotated.append(copy_item)
+    return annotated
 
 
 def build_confirmation_candidate_card(
@@ -5007,40 +5737,82 @@ def build_confirmation_candidate_card(
     learning_index: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     execution_quality = item.get("execution_quality") or {}
+    consistency = item.get("consistency") or {}
+    capital_flow = item.get("capital_flow") or {}
     entry_plan = item.get("entry_plan") or {}
+    action_intent = infer_learning_action(item)
     upgrade_condition = entry_plan.get("trigger") or item.get("watch_condition")
     invalid_condition = entry_plan.get("invalidate") or ((entry_plan.get("levels") or {}).get("invalidate")) or item.get("main_risk")
     action_text = entry_plan.get("action") or item.get("watch_condition") or "只观察，不追"
+    factor_payload = candidate_factor_payload(item)
+    v2_payload = opportunity_v2_payload(item)
+    v2_missing = text_items(v2_payload.get("missing_confirmation"))
+    v2_status = v2_payload.get("suggested_action_label")
+    v2_risk = first_text(
+        v2_payload.get("hard_gate_block_reason"),
+        v2_payload.get("crowding_risk"),
+        v2_payload.get("fake_breakout_risk"),
+    )
+    primary_risk = factor_payload.get("block_reason") or factor_payload.get("degrade_reason") or item.get("main_risk")
+    status_label = candidate_status_label(item.get("status") or "unknown")
+    if item.get("status") == "confirmed" and action_intent == "trial_buy":
+        status_label = "试错待触发"
+    if v2_status:
+        status_label = str(v2_status)
     card = {
         "code": item.get("code"),
         "name": item.get("name"),
-        "status": candidate_status_label(item.get("status") or "unknown"),
+        "status": status_label,
         "tone": candidate_tone(item),
         "setup_label": item.get("setup_label") or "待确认",
-        "score": item.get("score"),
+        "score": item.get("priority_score") or item.get("score") or item.get("best_score"),
+        "priority_score": item.get("priority_score"),
+        "best_score": item.get("best_score"),
         "change_pct": item.get("change_pct"),
         "amount_yi": item.get("amount_yi"),
-        "theme": item.get("theme") or "其他",
-        "detail": item.get("entry_reason") or item.get("watch_condition") or item.get("main_risk") or "等待更多确认",
-        "foot": item.get("main_risk") or "等待更多确认",
+        "flow_today_yi": item.get("flow_today_yi") or capital_flow.get("flow_today_yi") or capital_flow.get("today_yi"),
+        "capital_trend": item.get("capital_trend") or capital_flow.get("trend"),
+        "theme": item.get("theme") or ", ".join(item.get("themes") or []) or "其他",
+        "detail": v2_payload.get("why_now") or item.get("entry_reason") or item.get("watch_condition") or item.get("main_risk") or "等待更多确认",
+        "foot": first_text(
+            v2_risk,
+            f"还差：{'；'.join(v2_missing[:2])}" if v2_missing else "",
+            primary_risk,
+        )
+        or "等待更多确认",
         "observation_instruction": build_observation_instruction(
             name=item.get("name"),
-            action=action_text,
-            upgrade=upgrade_condition,
-            invalid=invalid_condition,
+            action=status_label or action_text,
+            upgrade=upgrade_condition or ("；".join(v2_missing[:2]) if v2_missing else ""),
+            invalid=v2_payload.get("invalidation") or invalid_condition,
         ),
         "upgrade_condition": normalize_trigger_sentence(upgrade_condition, "等待触发条件明确。"),
-        "invalid_condition": normalize_stock_result_copy(invalid_condition, "触发失效条件就剔除。"),
-        "avoid_condition": normalize_avoid_sentence(entry_plan.get("avoid") or item.get("main_risk")),
-        "risk_tags": opportunity_risk_tags(item.get("risk_flags"), execution_quality.get("warnings"), item.get("main_risk")),
+        "invalid_condition": normalize_stock_result_copy(v2_payload.get("invalidation") or invalid_condition, "触发失效条件就剔除。"),
+        "avoid_condition": normalize_avoid_sentence(entry_plan.get("avoid") or v2_risk or primary_risk),
+        "risk_tags": opportunity_risk_tags(
+            v2_payload.get("hard_gate_block_reason"),
+            v2_payload.get("crowding_risk"),
+            v2_payload.get("fake_breakout_risk"),
+            factor_payload.get("block_reason"),
+            factor_payload.get("degrade_reason"),
+            factor_payload.get("factor_risk_flags"),
+            item.get("risk_flags"),
+            execution_quality.get("warnings"),
+            item.get("main_risk"),
+        ),
         "priority_label": detail_value(item.get("tier"), "观察"),
+        "execution_quality_score": execution_quality.get("score"),
+        "execution_quality_label": execution_quality.get("label"),
+        "consistency_score": consistency.get("score"),
+        "consistency_label": consistency.get("label"),
+        "action_intent": action_intent,
+        "position_guidance": entry_plan.get("sizing") or "",
+        "entry_plan": dict(entry_plan) if isinstance(entry_plan, dict) and entry_plan else None,
         "action_key": f"confirmation:{item.get('code')}",
         "updated_at": item.get("updated_at") or item.get("snapshot_time"),
         "detail_url": today_candidate_detail_url(item.get("code")),
-        "tushare_score": item.get("tushare_score") if item.get("tushare_score") is not None else (item.get("tushare_factors") or {}).get("tushare_score"),
-        "factor_tags": item.get("factor_tags") or (item.get("tushare_factors") or {}).get("factor_tags") or [],
-        "factor_risk_flags": item.get("factor_risk_flags") or (item.get("tushare_factors") or {}).get("risk_flags") or [],
-        "factor_explanation": item.get("factor_explanation") or (item.get("tushare_factors") or {}).get("explanation") or {},
+        **factor_payload,
+        **v2_payload,
     }
     memories = candidate_learning_memories(item, lane="midday_confirmation", learning_index=learning_index)
     if memories:
@@ -5222,7 +5994,14 @@ def build_today_watchlist_task_item(
 
 def build_today_screening_task_item(item: dict[str, Any], *, source: str) -> dict[str, Any]:
     execution_quality = item.get("execution_quality") or {}
+    factor_payload = candidate_factor_payload(item, include_empty=False)
+    v2_payload = opportunity_v2_payload(item)
+    entry_plan = item.get("entry_plan") if isinstance(item.get("entry_plan"), dict) else {}
+    missing = text_items(v2_payload.get("missing_confirmation"))
+    primary_risk = factor_payload.get("block_reason") or factor_payload.get("degrade_reason") or item.get("main_risk")
     metrics = [
+        f"动作 {v2_payload.get('suggested_action_label')}" if v2_payload.get("suggested_action_label") else "",
+        f"信心 {v2_payload.get('confidence')}" if v2_payload.get("confidence") not in (None, "", [], {}) else "",
         f"形态 {detail_value(item.get('setup_label') or item.get('setup_type'), '待确认')}",
         (
             f"优先分 {item.get('priority_score')}"
@@ -5230,22 +6009,27 @@ def build_today_screening_task_item(item: dict[str, Any], *, source: str) -> dic
             else ""
         ),
         f"执行 {detail_value(execution_quality.get('label'), '未评级')}",
+        f"还差 {missing[0]}" if missing else "",
     ]
-    return build_today_task_item(
+    task = build_today_task_item(
         key=f"screening:{detail_value(item.get('code'), '-')}",
         title=f"{detail_value(item.get('name'), '候选标的')} {detail_value(item.get('code'), '')}".strip(),
         source=source,
-        status=candidate_status_label(item.get("screening_status") or "unknown"),
-        tone=candidate_tone(item),
+        status=v2_task_status(item, candidate_status_label(item.get("screening_status") or "unknown")),
+        tone=v2_task_tone(item, candidate_tone(item)),
         detail=detail_value(
-            item.get("watch_condition")
+            v2_payload.get("why_now")
+            or v2_payload.get("thesis")
+            or item.get("watch_condition")
             or item.get("entry_reason")
             or item.get("screening_note")
             or item.get("main_risk"),
             "等待更多确认",
         ),
         foot=detail_value(
-            item.get("main_risk")
+            v2_payload.get("hard_gate_block_reason")
+            or ("还差：" + "；".join(missing[:2]) if missing else "")
+            or primary_risk
             or ((item.get("risk_flags") or [None])[0])
             or execution_quality.get("label"),
             "",
@@ -5253,34 +6037,107 @@ def build_today_screening_task_item(item: dict[str, Any], *, source: str) -> dic
         metrics=metrics,
         url=today_candidate_detail_url(item.get("code")),
     )
+    task.update(factor_payload)
+    task.update(v2_payload)
+    if entry_plan:
+        task["entry_plan"] = dict(entry_plan)
+    return task
 
 
 def build_today_confirmation_task_item(item: dict[str, Any], *, source: str) -> dict[str, Any]:
+    factor_payload = candidate_factor_payload(item, include_empty=False)
+    v2_payload = opportunity_v2_payload(item)
+    missing = text_items(v2_payload.get("missing_confirmation"))
+    primary_risk = factor_payload.get("block_reason") or factor_payload.get("degrade_reason") or item.get("main_risk")
+    entry_plan = item.get("entry_plan") if isinstance(item.get("entry_plan"), dict) else {}
+    execution_quality = item.get("execution_quality") if isinstance(item.get("execution_quality"), dict) else {}
+    capital_flow = item.get("capital_flow") if isinstance(item.get("capital_flow"), dict) else {}
+    flow_today_yi = item.get("flow_today_yi") or capital_flow.get("flow_today_yi") or capital_flow.get("today_yi")
+    capital_trend = item.get("capital_trend") or capital_flow.get("trend")
+    plan_text = " ".join(
+        str(value or "")
+        for value in (
+            entry_plan.get("action"),
+            entry_plan.get("sizing"),
+            entry_plan.get("trigger"),
+        )
+    )
+    raw_status = str(item.get("status") or "unknown").strip()
+    status_label = candidate_status_label(raw_status)
+    if raw_status == "confirmed" and any(token in plan_text for token in ("试错", "买入", "轻仓", "开仓")):
+        status_label = "试错待触发"
+    if v2_payload.get("suggested_action_label"):
+        status_label = str(v2_payload.get("suggested_action_label"))
     metrics = [
+        f"动作 {v2_payload.get('suggested_action_label')}" if v2_payload.get("suggested_action_label") else "",
+        f"信心 {v2_payload.get('confidence')}" if v2_payload.get("confidence") not in (None, "", [], {}) else "",
         f"状态 {candidate_status_label(item.get('status') or 'unknown')}",
+        f"仓位 {entry_plan.get('sizing')}" if entry_plan.get("sizing") else "",
         (
             f"涨幅 {item.get('change_pct')}%"
             if item.get("change_pct") not in (None, "", [], {})
             else ""
         ),
+        f"执行 {execution_quality.get('label')}" if execution_quality.get("label") else "",
+        (
+            f"资金 {capital_trend}/{round_money(flow_today_yi)}亿"
+            if capital_trend and flow_today_yi not in (None, "", [], {})
+            else f"资金 {capital_trend}"
+            if capital_trend
+            else ""
+        ),
         f"主题 {detail_value(item.get('theme'), '其他')}",
+        f"还差 {missing[0]}" if missing else "",
     ]
-    return build_today_task_item(
+    detail_text = (
+        v2_payload.get("why_now")
+        or v2_payload.get("thesis")
+        or (
+            entry_plan.get("trigger")
+            if status_label == "试错待触发"
+            else entry_plan.get("action")
+            or entry_plan.get("trigger")
+            or entry_plan.get("sizing")
+        )
+        or item.get("watch_condition")
+        or item.get("entry_reason")
+        or item.get("main_risk")
+    )
+    task = build_today_task_item(
         key=f"confirmation:{detail_value(item.get('code'), '-')}",
         title=f"{detail_value(item.get('name'), '午盘标的')} {detail_value(item.get('code'), '')}".strip(),
         source=source,
-        status=candidate_status_label(item.get("status") or "unknown"),
-        tone=candidate_tone(item),
-        detail=detail_value(
-            item.get("watch_condition")
-            or item.get("entry_reason")
-            or item.get("main_risk"),
-            "等待更多确认",
+        status=status_label,
+        tone=v2_task_tone(item, candidate_tone(item)),
+        detail=detail_value(detail_text, "等待更多确认"),
+        foot=detail_value(
+            v2_payload.get("hard_gate_block_reason")
+            or ("还差：" + "；".join(missing[:2]) if missing else "")
+            or primary_risk
+            or entry_plan.get("avoid")
+            or item.get("watch_condition")
+            or item.get("entry_reason"),
+            "",
         ),
-        foot=detail_value(item.get("main_risk"), ""),
         metrics=metrics,
         url=today_candidate_detail_url(item.get("code")),
     )
+    task.update(factor_payload)
+    task.update(v2_payload)
+    for key in (
+        "decision_rank",
+        "decision_rank_label",
+        "decision_summary",
+        "priority_score",
+        "best_score",
+        "flow_today_yi",
+        "capital_trend",
+    ):
+        if item.get(key) not in (None, "", [], {}):
+            task[key] = item.get(key)
+    if entry_plan:
+        task["entry_plan"] = dict(entry_plan)
+    return task
 
 
 def build_today_system_task_item(
@@ -5328,6 +6185,19 @@ def build_today_action_groups(
     approved = [item for item in candidates if item.get("screening_status") == "approved"]
     caution = [item for item in candidates if item.get("screening_status") == "caution"]
     confirmed = (confirmation or {}).get("confirmed") or []
+    ranked_confirmed = annotate_opportunity_item_ranks(
+        sorted(
+            (
+                merge_confirmation_with_screening_candidate(
+                    item,
+                    find_screening_candidate(screening_batch, str(item.get("code") or "")),
+                )
+                for item in confirmed
+            ),
+            key=opportunity_candidate_rank_value,
+            reverse=True,
+        )
+    )
     fresh_candidates = (confirmation or {}).get("fresh_candidates") or []
     downgraded = (confirmation or {}).get("downgraded") or []
     lanes = (quality_status or {}).get("lanes") or {}
@@ -5336,6 +6206,14 @@ def build_today_action_groups(
     watchlist_lane = lanes.get("watchlist") or {}
     aggressive_lane = lanes.get("aggressive") or {}
     confirmation_lane = lanes.get("midday_confirmation") or {}
+    has_v2_flow = any(
+        v2_suggested_action(item)
+        for item in [
+            *candidates,
+            *ranked_confirmed,
+            *fresh_candidates,
+        ]
+    )
 
     watchlist_context = build_today_task_context(
         lane_key="watchlist",
@@ -5382,8 +6260,35 @@ def build_today_action_groups(
             limit=3,
         )
 
-    if allow_new_positions:
-        for item in confirmed:
+    if has_v2_flow:
+        v2_rows: list[tuple[str, dict[str, Any], str, dict[str, Any]]] = [
+            ("confirmation", item, "午盘结构验证", confirmation_context)
+            for item in ranked_confirmed
+        ]
+        v2_rows.extend(
+            ("screening", item, "早盘结构候选", screening_context)
+            for item in approved
+        )
+        v2_rows.extend(
+            ("confirmation", item, "午盘新增结构", confirmation_context)
+            for item in fresh_candidates
+        )
+        v2_rows.extend(
+            ("screening", item, "观察池结构复核", screening_context)
+            for item in caution
+        )
+        for kind, item, source, context in sorted(v2_rows, key=lambda row: v2_candidate_sort_key(row[1]), reverse=True):
+            lane = v2_candidate_action_lane(item, allow_new_positions=allow_new_positions)
+            if not lane:
+                continue
+            builder = build_today_confirmation_task_item if kind == "confirmation" else build_today_screening_task_item
+            task = attach_today_task_context(builder(item, source=source), context)
+            if lane in {"do_now", "conditional"}:
+                append_today_task(do_now, do_now_seen, task, limit=3)
+            else:
+                append_today_task(observe, observe_seen, task, limit=3)
+    elif allow_new_positions:
+        for item in ranked_confirmed:
             append_today_task(
                 do_now,
                 do_now_seen,
@@ -5434,40 +6339,41 @@ def build_today_action_groups(
             ),
             limit=3,
         )
-    for item in fresh_candidates:
-        append_today_task(
-            observe,
-            observe_seen,
-            attach_today_task_context(
-                build_today_confirmation_task_item(item, source="午盘新增"),
-                confirmation_context,
-            ),
-            limit=3,
-        )
-    for item in caution:
-        append_today_task(
-            observe,
-            observe_seen,
-            attach_today_task_context(
-                build_today_screening_task_item(item, source="观察池观察"),
-                screening_context,
-            ),
-            limit=3,
-        )
-    if allow_new_positions:
-        for item in approved:
-            observe_item = attach_today_task_context(
-                build_today_screening_task_item(item, source="早盘进入候选"),
-                screening_context,
-            )
-            if observe_item.get("key") in do_now_seen:
-                continue
+    if not has_v2_flow:
+        for item in fresh_candidates:
             append_today_task(
                 observe,
                 observe_seen,
-                observe_item,
+                attach_today_task_context(
+                    build_today_confirmation_task_item(item, source="午盘新增"),
+                    confirmation_context,
+                ),
                 limit=3,
             )
+        for item in caution:
+            append_today_task(
+                observe,
+                observe_seen,
+                attach_today_task_context(
+                    build_today_screening_task_item(item, source="观察池观察"),
+                    screening_context,
+                ),
+                limit=3,
+            )
+        if allow_new_positions:
+            for item in approved:
+                observe_item = attach_today_task_context(
+                    build_today_screening_task_item(item, source="早盘进入候选"),
+                    screening_context,
+                )
+                if observe_item.get("key") in do_now_seen:
+                    continue
+                append_today_task(
+                    observe,
+                    observe_seen,
+                    observe_item,
+                    limit=3,
+                )
 
     if not allow_new_positions:
         append_today_task(
@@ -6112,16 +7018,36 @@ def compress_opportunity_group(
     rows: list[dict[str, Any]] = []
     for item in (group.get("cards") or [])[:limit]:
         freshness_raw = item.get("updated_at") or item.get("snapshot_time") or fallback_freshness
+        missing = text_items(item.get("missing_confirmation"))
+        entry_plan = item.get("entry_plan") if isinstance(item.get("entry_plan"), dict) else {}
+        levels = entry_plan.get("levels") if isinstance(entry_plan.get("levels"), dict) else {}
+        trigger = (
+            entry_plan.get("trigger")
+            or levels.get("trigger")
+            or item.get("upgrade_condition")
+            or item.get("why_now")
+            or item.get("setup_label")
+        )
+        risk = (
+            item.get("hard_gate_block_reason")
+            or ("还差：" + "；".join(missing[:2]) if missing else "")
+            or item.get("invalidation")
+            or item.get("foot")
+        )
         rows.append(
             {
                 "title": f"{detail_value(item.get('name'))} {detail_value(item.get('code'))}",
-                "action": detail_value(item.get("status"), "查看详情"),
+                "action": detail_value(item.get("suggested_action_label") or item.get("status"), "查看详情"),
                 "tier": action_tier_label(
-                    infer_action_tier(action=item.get("status"), tone=item.get("tone"), title=item.get("name"))
+                    infer_action_tier(
+                        action=item.get("suggested_action_label") or item.get("status"),
+                        tone=item.get("tone"),
+                        title=item.get("name"),
+                    )
                 ),
-                "trigger": detail_value(item.get("setup_label"), "查看详情"),
-                "reason": detail_value(item.get("detail"), "先看详情确认触发条件"),
-                "risk": detail_value(item.get("foot"), "继续复核"),
+                "trigger": detail_value(trigger, "查看详情"),
+                "reason": detail_value(item.get("thesis") or item.get("why_now") or item.get("detail"), "先看详情确认触发条件"),
+                "risk": detail_value(risk, "继续复核"),
                 "freshness": detail_value(fmt_dt(freshness_raw), "-"),
                 "url": item.get("detail_url"),
                 "tone": item.get("tone") or "watch",
@@ -6930,6 +7856,32 @@ def build_discovery_lifecycle_group(group_key: str, lifecycle: dict[str, Any] | 
         "count": len(cards),
         "cards": cards,
         "empty": empties.get(group_key, f"跨天追踪里暂无{lifecycle_group_title(group_key)}。"),
+    }
+
+
+def merge_opportunity_group_with_lifecycle(
+    primary_group: dict[str, Any],
+    *lifecycle_groups: dict[str, Any],
+) -> dict[str, Any]:
+    merged_cards = list(primary_group.get("cards") or [])
+    seen_codes = {item.get("code") for item in merged_cards if item.get("code")}
+
+    for lifecycle_group in lifecycle_groups:
+        for item in lifecycle_group.get("cards") or []:
+            code = item.get("code")
+            if code and code in seen_codes:
+                continue
+            merged_cards.append(item)
+            if code:
+                seen_codes.add(code)
+
+    if len(merged_cards) == len(primary_group.get("cards") or []):
+        return primary_group
+
+    return {
+        **primary_group,
+        "count": len(merged_cards),
+        "cards": merged_cards,
     }
 
 
@@ -8088,7 +9040,7 @@ def build_opportunities_view() -> dict[str, Any]:
     trade_date_hint = expected_trade_date()
     decision_brief = safe_canonical_load(load_decision_brief, trade_date=trade_date_hint)
     watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
-    screening_batch = load_screening_batch(trade_date=trade_date_hint)
+    screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint) or {}
     confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
     aggressive_quality = safe_canonical_load(load_quality_status, lane="aggressive")
     midday_quality = safe_canonical_load(load_quality_status, lane="midday_confirmation")
@@ -8128,6 +9080,20 @@ def build_opportunities_view() -> dict[str, Any]:
     confirmed = (confirmation or {}).get("confirmed") or []
     fresh_candidates = (confirmation or {}).get("fresh_candidates") or []
     downgraded = (confirmation or {}).get("downgraded") or []
+    confirmed_with_context = sorted(
+        (
+            merge_confirmation_with_screening_candidate(
+                item,
+                find_screening_candidate(screening_batch, str(item.get("code") or "")),
+            )
+            for item in confirmed
+        ),
+        key=opportunity_candidate_rank_value,
+        reverse=True,
+    )
+    confirmed_cards = annotate_opportunity_card_ranks(
+        [build_confirmation_candidate_card(item, learning_index=learning_index) for item in confirmed_with_context]
+    )
 
     if gate.get("allow_new_positions"):
         hero_title = "今天值得继续盯的名字"
@@ -8200,10 +9166,10 @@ def build_opportunities_view() -> dict[str, Any]:
         },
         {
             "key": "upgrade",
-            "title": "可升级",
+            "title": "结构验证/条件试错",
             "count": len(confirmed),
-            "cards": [build_confirmation_candidate_card(item, learning_index=learning_index) for item in confirmed],
-            "empty": "当前没有午盘仍可跟踪候选。",
+            "cards": confirmed_cards,
+            "empty": "当前没有需要结构验证或条件试错的候选。",
         },
         {
             "key": "eliminated",
@@ -8221,6 +9187,20 @@ def build_opportunities_view() -> dict[str, Any]:
         build_discovery_lifecycle_group("exited", display_lifecycle),
         build_discovery_lifecycle_group("handed_off", display_lifecycle),
     ]
+    lifecycle_group_map = {group.get("key"): group for group in lifecycle_groups}
+    groups[3] = merge_opportunity_group_with_lifecycle(
+        groups[3],
+        lifecycle_group_map.get("lifecycle_upgraded") or {},
+    )
+    groups[3] = {
+        **groups[3],
+        "cards": annotate_opportunity_card_ranks(groups[3].get("cards") or []),
+    }
+    groups[4] = merge_opportunity_group_with_lifecycle(
+        groups[4],
+        lifecycle_group_map.get("lifecycle_downgraded") or {},
+        lifecycle_group_map.get("lifecycle_exited") or {},
+    )
     lifecycle_activity_count = sum(int(group.get("count") or 0) for group in lifecycle_groups)
     quality_cards = [
         lane_quality_card("早盘质检", aggressive_quality),
@@ -8231,8 +9211,28 @@ def build_opportunities_view() -> dict[str, Any]:
     confirmation_freshness = (confirmation or {}).get("generated_at") or screening_freshness
     allow_new_positions = bool(gate.get("allow_new_positions"))
     top_rows = []
+    opportunity_cards = [
+        card
+        for group in groups[:4]
+        for card in (group.get("cards") or [])
+        if isinstance(card, dict)
+    ]
+    v2_cards = [card for card in opportunity_cards if v2_suggested_action(card)]
+    v2_action_counts = {
+        action: sum(1 for card in v2_cards if v2_suggested_action(card) == action)
+        for action in V2_ACTION_ORDER
+    }
+    v2_hard_blocked = sum(1 for card in v2_cards if v2_hard_gate_blocks_action(card))
     promote_watch = not allow_new_positions
-    if allow_new_positions:
+    if v2_cards:
+        top_source = {"cards": sorted(v2_cards, key=v2_candidate_sort_key, reverse=True)}
+        top_rows = compress_opportunity_group(
+            top_source,
+            limit=3,
+            fallback_freshness=confirmation_freshness,
+        )
+        promote_watch = not any(row.get("tone") == "positive" for row in top_rows)
+    elif allow_new_positions:
         top_rows = compress_opportunity_group(groups[0], limit=3, fallback_freshness=screening_freshness)
         promote_watch = len(top_rows) == 0
     if promote_watch:
@@ -8245,7 +9245,16 @@ def build_opportunities_view() -> dict[str, Any]:
         }
         top_rows = compress_opportunity_group(watch_mix, limit=3, fallback_freshness=confirmation_freshness)
 
-    if allow_new_positions and not promote_watch:
+    if v2_action_counts.get("actionable") and allow_new_positions:
+        verdict_title = f"V2 找到 {v2_action_counts['actionable']} 只可执行待复核，但仍按硬闸门裁决。"
+        verdict_summary = "先看结构假设、触发位、失效位和硬闸门封顶；公共分数只作为证据，不再单独决定买入。"
+    elif v2_action_counts.get("trial") and allow_new_positions:
+        verdict_title = f"V2 找到 {v2_action_counts['trial']} 只条件试错，未触发前不买。"
+        verdict_summary = "这些票有结构假设，但必须等承接/资金/价格触发，同时失效条件要写清楚。"
+    elif v2_cards:
+        verdict_title = "V2 只给出观察/影子/复核线索，今天没有直接买入候选。"
+        verdict_summary = "当前结构还缺确认，或被硬闸门封顶；先跟踪假设是否继续成立。"
+    elif allow_new_positions and not promote_watch:
         verdict_title = "今天继续看观察名单，如要动作也仅限轻仓试错。"
         verdict_summary = "先看最值得继续观察的三只名字，再决定是否扩展到其余观察与午盘承接。"
     elif allow_new_positions:
@@ -8357,24 +9366,24 @@ def build_opportunities_view() -> dict[str, Any]:
         "source_cards": source_cards,
         "summary_cards": [
             {
-                "label": "必须复核",
-                "value": str(len(caution) + len(fresh_candidates) + len(confirmed)),
-                "detail": "今天需要看完的观察任务",
+                "label": "可执行待复核",
+                "value": str(v2_action_counts.get("actionable") or 0),
+                "detail": "仍需硬闸门和账户权限最终放行",
             },
             {
-                "label": "午盘新增",
-                "value": str((confirmation or {}).get("counts", {}).get("fresh_candidates") or len(fresh_candidates)),
-                "detail": "午盘新进入观察视野",
+                "label": "条件试错",
+                "value": str(v2_action_counts.get("trial") or 0),
+                "detail": "触发和失效都明确后才允许动作",
             },
             {
-                "label": "可升级",
-                "value": str((confirmation or {}).get("counts", {}).get("confirmed") or len(confirmed)),
-                "detail": "承接仍成立，等待阀门",
+                "label": "硬闸门封顶",
+                "value": str(v2_hard_blocked),
+                "detail": "结构可以看，但最大允许动作被风控压低",
             },
             {
                 "label": "应剔除",
-                "value": str((confirmation or {}).get("counts", {}).get("downgraded") or len(downgraded)),
-                "detail": "失效或降级的观察项",
+                "value": str(len(groups[4].get("cards") or [])),
+                "detail": "原假设失效或午盘确认失败",
             },
         ],
         "topline": {
@@ -8385,6 +9394,7 @@ def build_opportunities_view() -> dict[str, Any]:
                 {"label": "交易日", "value": trade_date},
                 {"label": "进攻阀门", "value": gate.get("label") or "实时判断"},
                 {"label": "早盘候选", "value": str(len(groups[0].get("cards") or []))},
+                {"label": "V2 可执行/试错", "value": f"{v2_action_counts.get('actionable') or 0}/{v2_action_counts.get('trial') or 0}"},
                 {"label": "延续追踪", "value": str(lifecycle_activity_count)},
             ],
             "cta_links": [
@@ -8787,8 +9797,8 @@ def build_review_view(baseline_id: str | None = None, window_id: str | None = No
     }
 
 
-def build_watchlist_detail_view(code: str) -> dict[str, Any]:
-    trade_date_hint = expected_trade_date()
+def build_watchlist_detail_view(code: str, trade_date: str | None = None) -> dict[str, Any]:
+    trade_date_hint = str(trade_date or "").strip() or expected_trade_date()
     snapshot = load_watchlist_snapshot(code=code, trade_date=trade_date_hint)
     stocks = snapshot.get("stocks") or []
     if not stocks:
@@ -8980,8 +9990,8 @@ def build_watchlist_detail_view(code: str) -> dict[str, Any]:
     }
 
 
-def build_candidate_detail_view(code: str) -> dict[str, Any]:
-    trade_date_hint = expected_trade_date()
+def build_candidate_detail_view(code: str, trade_date: str | None = None) -> dict[str, Any]:
+    trade_date_hint = str(trade_date or "").strip() or expected_trade_date()
     candidate = find_candidate_detail(code=code, trade_date=trade_date_hint)
     screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint)
     confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
@@ -8994,11 +10004,13 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
     consistency = candidate.get("consistency") or {}
     capital_flow = candidate.get("capital_flow") or {}
     entry_plan = candidate.get("entry_plan") or {}
+    factor_payload = candidate_factor_payload(candidate)
+    primary_risk = factor_payload.get("block_reason") or factor_payload.get("degrade_reason") or candidate.get("main_risk")
     in_screening = any(item.get("code") == candidate.get("code") for item in ((screening_batch or {}).get("candidates") or []))
     summary = (
         candidate.get("entry_reason")
         or candidate.get("screening_note")
-        or candidate.get("main_risk")
+        or primary_risk
         or candidate.get("watch_condition")
         or "等待更多确认"
     )
@@ -9025,13 +10037,13 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
             title=candidate.get("name"),
         ),
         position_guidance=entry_plan.get("sizing") or (watchlist_stock or {}).get("position") or "轻仓试错",
-        risk_boundary=(entry_plan.get("invalidate") or ((entry_plan.get("levels") or {}).get("invalidate")) or candidate.get("main_risk")),
+        risk_boundary=(entry_plan.get("invalidate") or ((entry_plan.get("levels") or {}).get("invalidate")) or primary_risk),
         why_now=summary,
         continue_condition=entry_plan.get("trigger") or candidate.get("watch_condition"),
-        stop_condition=entry_plan.get("invalidate") or ((entry_plan.get("levels") or {}).get("invalidate")) or candidate.get("main_risk"),
+        stop_condition=entry_plan.get("invalidate") or ((entry_plan.get("levels") or {}).get("invalidate")) or primary_risk,
         next_step=entry_plan.get("action") or entry_plan.get("trigger") or "先观察，不急着执行",
         trigger_condition=entry_plan.get("trigger") or candidate.get("watch_condition"),
-        avoid_action=entry_plan.get("avoid") or candidate.get("main_risk"),
+        avoid_action=entry_plan.get("avoid") or primary_risk,
         evidence_entry="看动作计划与原始文件",
         confidence_note="先用入选主因判断今天值不值得继续跟。",
         updated_at=(screening_batch or {}).get("generated_at") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -9084,15 +10096,15 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
             conclusion_detail=summary,
             position=(entry_plan.get("sizing") or (watchlist_stock or {}).get("position") or "轻仓试错"),
             position_detail="按动作计划控仓，没进持仓前默认以试错仓参考。",
-            risk_boundary=(entry_plan.get("invalidate") or ((entry_plan.get("levels") or {}).get("invalidate")) or candidate.get("main_risk")),
-            risk_detail=(entry_plan.get("avoid") or candidate.get("main_risk") or "触发回避条件后，取消这次执行计划。"),
+            risk_boundary=(entry_plan.get("invalidate") or ((entry_plan.get("levels") or {}).get("invalidate")) or primary_risk),
+            risk_detail=(entry_plan.get("avoid") or primary_risk or "触发回避条件后，取消这次执行计划。"),
             next_step=entry_plan.get("action") or entry_plan.get("trigger") or "先观察，不急着执行",
             next_step_detail=entry_plan.get("trigger") or candidate.get("watch_condition") or "先等触发条件更清晰，再决定是否执行。",
         ),
         "decision_explanation": build_detail_explanation_block(
             why=summary,
-            risk=entry_plan.get("avoid") or candidate.get("main_risk"),
-            invalid=entry_plan.get("invalidate") or ((entry_plan.get("levels") or {}).get("invalidate")) or candidate.get("main_risk"),
+            risk=entry_plan.get("avoid") or primary_risk,
+            invalid=entry_plan.get("invalidate") or ((entry_plan.get("levels") or {}).get("invalidate")) or primary_risk,
         ),
         "execution_loop": build_execution_loop(
             action_now=entry_plan.get("action") or "先观察，不急着执行",
@@ -9100,8 +10112,8 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
             why_now=summary,
             why_detail="先用入选主因判断今天值不值得继续跟。",
             trigger=entry_plan.get("trigger") or candidate.get("watch_condition"),
-            trigger_detail="满足触发条件后，再把观察升级成下一步动作。",
-            avoid=entry_plan.get("avoid") or candidate.get("main_risk"),
+            trigger_detail="满足触发条件后，再评估是否进入下一步动作。",
+            avoid=entry_plan.get("avoid") or primary_risk,
             avoid_detail="这些情况先不做，避免把候选误当成直接推荐。",
             evidence="看动作计划与原始文件",
             evidence_detail="先看动作计划和资金承接，需要时回到批次、自选股或午盘确认原件。",
@@ -9122,6 +10134,18 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
                 "value": detail_value((watchlist_stock or {}).get("action"), "未进入"),
                 "detail": detail_value((watchlist_stock or {}).get("position"), "当前不在自选股快照"),
             },
+        ] + [
+            {
+                "label": card.get("label") or card.get("dataset") or "风险证据",
+                "value": card.get("risk_level") or card.get("risk_label") or "-",
+                "detail": card.get("detail") or card.get("decision_use") or "",
+                "dataset": card.get("dataset"),
+                "decision_use": card.get("decision_use"),
+                "live_permission": card.get("live_permission"),
+                "available": True,
+            }
+            for card in (factor_payload.get("risk_source_cards") or [])[:4]
+            if isinstance(card, Mapping)
         ],
         "metric_cards": [
             {
@@ -9148,7 +10172,7 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
         "plan_rows": [
             {"label": "动作", "value": detail_value(entry_plan.get("action"), "当前没有单独动作计划")},
             {"label": "触发", "value": detail_value(entry_plan.get("trigger"), candidate.get("watch_condition"))},
-            {"label": "回避", "value": detail_value(entry_plan.get("avoid"), candidate.get("main_risk"))},
+            {"label": "回避", "value": detail_value(entry_plan.get("avoid"), primary_risk)},
             {"label": "失效", "value": detail_value(entry_plan.get("invalidate"))},
             {"label": "仓位", "value": detail_value(entry_plan.get("sizing"))},
         ],
@@ -9170,7 +10194,13 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
             },
             {
                 "title": "风险提示",
-                "items": text_items(candidate.get("risk_flags")),
+                "items": opportunity_risk_tags(
+                    factor_payload.get("block_reason"),
+                    factor_payload.get("degrade_reason"),
+                    factor_payload.get("factor_risk_flags"),
+                    candidate.get("risk_flags"),
+                    limit=6,
+                ),
                 "empty": "当前没有额外风险提示。",
             },
             {
@@ -9202,11 +10232,17 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
             },
         ],
         "artifacts": [item for item in artifacts if item],
-        "tushare_factors": (candidate.get("tushare_factors") or {}),
+        "tushare_factors": public_tushare_factor_summary(candidate),
         "tushare_score": candidate.get("tushare_score"),
         "factor_tags": candidate.get("factor_tags") or [],
         "factor_risk_flags": candidate.get("factor_risk_flags") or [],
         "factor_explanation": candidate.get("factor_explanation") or {},
+        "risk_level": factor_payload.get("risk_level"),
+        "risk_items": factor_payload.get("risk_items") or [],
+        "degrade_reason": factor_payload.get("degrade_reason") or "",
+        "block_reason": factor_payload.get("block_reason") or "",
+        "risk_evidence_refs": factor_payload.get("risk_evidence_refs") or [],
+        "risk_source_cards": factor_payload.get("risk_source_cards") or [],
         "links": {
             **today_nav_links(),
             "self": today_candidate_detail_url(candidate.get("code")),
@@ -9217,12 +10253,85 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
     }
 
 
-def build_stock_profile_view(code: str) -> dict[str, Any]:
+def clear_stock_profile_cache(code: str | None = None) -> None:
+    normalized_code = str(code or "").strip()
+    if not normalized_code:
+        _STOCK_PROFILE_CACHE.clear()
+        return
+    for key in list(_STOCK_PROFILE_CACHE):
+        if key[1] == normalized_code:
+            _STOCK_PROFILE_CACHE.pop(key, None)
+
+
+def stock_profile_cache_stats() -> dict[str, Any]:
+    return {
+        "enabled": STOCK_PROFILE_CACHE_TTL_SECONDS > 0,
+        "ttl_seconds": STOCK_PROFILE_CACHE_TTL_SECONDS,
+        "items": len(_STOCK_PROFILE_CACHE),
+    }
+
+
+def _stock_profile_trade_date_hint(trade_date: str | None = None) -> str:
+    normalized = str(trade_date or "").strip()
+    return normalized or expected_trade_date()
+
+
+def _stock_profile_cache_key(section: str, code: str, trade_date: str) -> tuple[str, str, str]:
+    return (str(section or "").strip(), str(code or "").strip(), str(trade_date or "").strip())
+
+
+def _get_stock_profile_cache(section: str, code: str, trade_date: str) -> dict[str, Any] | None:
+    if STOCK_PROFILE_CACHE_TTL_SECONDS <= 0:
+        return None
+    key = _stock_profile_cache_key(section, code, trade_date)
+    cached = _STOCK_PROFILE_CACHE.get(key)
+    if not cached:
+        return None
+    stored_at, payload = cached
+    if time.monotonic() - stored_at > STOCK_PROFILE_CACHE_TTL_SECONDS:
+        _STOCK_PROFILE_CACHE.pop(key, None)
+        return None
+    return deepcopy(payload)
+
+
+def _set_stock_profile_cache(section: str, code: str, trade_date: str, payload: dict[str, Any]) -> dict[str, Any]:
+    if STOCK_PROFILE_CACHE_TTL_SECONDS > 0:
+        _STOCK_PROFILE_CACHE[_stock_profile_cache_key(section, code, trade_date)] = (
+            time.monotonic(),
+            deepcopy(payload),
+        )
+    return payload
+
+
+def _cached_stock_profile_payload(
+    section: str,
+    code: str,
+    trade_date: str | None,
+    builder,
+) -> dict[str, Any]:
+    normalized_code = str(code or "").strip()
+    if not normalized_code:
+        raise KeyError("stock code missing")
+    trade_date_hint = _stock_profile_trade_date_hint(trade_date)
+    cached = _get_stock_profile_cache(section, normalized_code, trade_date_hint)
+    if cached is not None:
+        return cached
+    return _set_stock_profile_cache(
+        section,
+        normalized_code,
+        trade_date_hint,
+        builder(normalized_code, trade_date_hint),
+    )
+
+
+def _stock_profile_base_context(code: str, trade_date: str | None = None) -> dict[str, Any]:
     normalized_code = str(code or "").strip()
     if not normalized_code:
         raise KeyError("stock code missing")
 
-    trade_date_hint = expected_trade_date()
+    trade_date_hint = _stock_profile_trade_date_hint(trade_date)
+    now = datetime.now()
+    readiness_expected_date = expected_trade_date(now)
     decision_brief = safe_canonical_load(load_decision_brief, trade_date=trade_date_hint)
     watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
     screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint)
@@ -9239,13 +10348,15 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
         account_book=account_book,
         today_action_decisions=today_action_decisions,
         dataset_freshness=build_dataset_freshness_rows(
-            expected_date=trade_date_hint,
-            now=datetime.now(),
+            expected_date=readiness_expected_date,
+            now=now,
         ),
         formal_freshness=build_formal_freshness_rows(
-            expected_date=trade_date_hint,
-            now=datetime.now(),
+            expected_date=readiness_expected_date,
+            now=now,
         ),
+        now=now,
+        expected_date=readiness_expected_date,
     )
     action_groups = build_today_action_groups(
         watchlist,
@@ -9270,23 +10381,6 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
         ),
         "action_groups": action_groups,
     }
-
-    errors: dict[str, str] = {}
-    watchlist_detail: dict[str, Any] | None = None
-    opportunity_detail: dict[str, Any] | None = None
-
-    try:
-        watchlist_detail = build_watchlist_detail_view(normalized_code)
-    except Exception as exc:
-        errors["watchlist"] = str(exc)
-
-    try:
-        opportunity_detail = build_candidate_detail_view(normalized_code)
-    except Exception as exc:
-        errors["opportunity"] = str(exc)
-
-    primary_source = "watchlist" if watchlist_detail else ("opportunity" if opportunity_detail else None)
-    primary_detail = watchlist_detail or opportunity_detail
     catalog_entry = (build_stock_catalog(watchlist, screening_batch, confirmation).get(normalized_code) or {})
     recent_entry = next(
         (
@@ -9296,16 +10390,71 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
         ),
         {},
     )
-    profile_name = first_text(
+
+    return {
+        "code": normalized_code,
+        "trade_date_hint": trade_date_hint,
+        "generated_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "decision_brief": decision_brief,
+        "watchlist": watchlist,
+        "screening_batch": screening_batch,
+        "confirmation": confirmation,
+        "quality_status": quality_status,
+        "account_book": account_book,
+        "readiness": readiness,
+        "action_groups": action_groups,
+        "profile_trade_date": profile_trade_date,
+        "today_context": today_context,
+        "catalog_entry": catalog_entry,
+        "recent_entry": recent_entry,
+    }
+
+
+def _stock_profile_name(
+    normalized_code: str,
+    *,
+    primary_detail: dict[str, Any] | None,
+    watchlist_stock: dict[str, Any] | None = None,
+    opportunity_stock: dict[str, Any] | None = None,
+    catalog_entry: dict[str, Any] | None = None,
+    recent_entry: dict[str, Any] | None = None,
+) -> str | None:
+    return first_text(
         (primary_detail or {}).get("name"),
-        catalog_entry.get("name") if catalog_entry.get("name") != normalized_code else None,
-        recent_entry.get("name") if recent_entry.get("name") != normalized_code else None,
+        (watchlist_stock or {}).get("name"),
+        (opportunity_stock or {}).get("name"),
+        (catalog_entry or {}).get("name") if (catalog_entry or {}).get("name") != normalized_code else None,
+        (recent_entry or {}).get("name") if (recent_entry or {}).get("name") != normalized_code else None,
         (load_ask_case_cache(normalized_code) or {}).get("name"),
     )
-    today_action = build_today_action_context(normalized_code, today=today_context, account_book=account_book)
-    formal_data = build_stock_formal_data(
+
+
+def _stock_profile_detail_payload(normalized_code: str, trade_date_hint: str) -> dict[str, Any]:
+    context = _stock_profile_base_context(normalized_code, trade_date_hint)
+    generated_at = str(context["generated_at"])
+    readiness = context["readiness"]
+
+    errors: dict[str, str] = {}
+    watchlist_detail: dict[str, Any] | None = None
+    opportunity_detail: dict[str, Any] | None = None
+
+    try:
+        watchlist_detail = build_watchlist_detail_view(normalized_code, trade_date=trade_date_hint)
+    except Exception as exc:
+        errors["watchlist"] = str(exc)
+
+    try:
+        opportunity_detail = build_candidate_detail_view(normalized_code, trade_date=trade_date_hint)
+    except Exception as exc:
+        errors["opportunity"] = str(exc)
+
+    primary_source = "watchlist" if watchlist_detail else ("opportunity" if opportunity_detail else None)
+    primary_detail = watchlist_detail or opportunity_detail
+    profile_name = _stock_profile_name(
         normalized_code,
-        trade_date=str(readiness.get("expected_trade_date") or profile_trade_date or ""),
+        primary_detail=primary_detail,
+        catalog_entry=context["catalog_entry"],
+        recent_entry=context["recent_entry"],
     )
     available_sources = [
         key
@@ -9317,7 +10466,7 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
     ]
 
     return {
-        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "generated_at": generated_at,
         "code": normalized_code,
         "name": profile_name,
         "trade_date": (primary_detail or {}).get("trade_date"),
@@ -9333,17 +10482,418 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
         "available_sources": available_sources,
         "watchlist": watchlist_detail,
         "opportunity": opportunity_detail,
-        "formal_data": formal_data,
-        "today_action": today_action,
         "errors": errors,
         "links": {
             "self": f"/stock/{normalized_code}",
             "api_self": f"/api/stock/{normalized_code}",
+            "api_full": f"/api/stock/{normalized_code}/full",
+            "api_detail": f"/api/stock/{normalized_code}/detail",
+            "api_formal_data": f"/api/stock/{normalized_code}/formal-data",
+            "api_formal_data_summary": f"/api/stock/{normalized_code}/formal-data/summary",
+            "api_today_action": f"/api/stock/{normalized_code}/today-action",
+            "api_learning_scorecard": f"/api/stock/{normalized_code}/learning-scorecard",
             "watchlist_detail": today_watchlist_detail_url(normalized_code) if watchlist_detail else None,
             "opportunity_detail": today_candidate_detail_url(normalized_code) if opportunity_detail else None,
             "ask": ask_page_url(normalized_code),
         },
     }
+
+
+def build_stock_profile_detail_view(code: str, trade_date: str | None = None) -> dict[str, Any]:
+    return _cached_stock_profile_payload("detail", code, trade_date, _stock_profile_detail_payload)
+
+
+def _stock_profile_summary_payload(normalized_code: str, trade_date_hint: str) -> dict[str, Any]:
+    context = _stock_profile_base_context(normalized_code, trade_date_hint)
+    readiness = context["readiness"]
+    watchlist = context["watchlist"]
+    screening_batch = context["screening_batch"]
+    confirmation = context["confirmation"]
+    decision_brief = context["decision_brief"]
+    watchlist_stock = find_watchlist_stock(watchlist, normalized_code)
+    screening_candidate = find_screening_candidate(screening_batch, normalized_code)
+    confirmation_match = find_confirmation_match(confirmation, normalized_code)
+    opportunity_stock = screening_candidate or ((confirmation_match or {}).get("item") if confirmation_match else None)
+    primary_source = "watchlist" if watchlist_stock else ("opportunity" if opportunity_stock else None)
+    profile_name = _stock_profile_name(
+        normalized_code,
+        primary_detail=None,
+        watchlist_stock=watchlist_stock,
+        opportunity_stock=opportunity_stock,
+        catalog_entry=context["catalog_entry"],
+        recent_entry=context["recent_entry"],
+    )
+    available_sources = [
+        key
+        for key, detail in (
+            ("watchlist", watchlist_stock),
+            ("opportunity", opportunity_stock),
+        )
+        if detail
+    ]
+    profile_trade_date = readiness.get("data_trade_date") or current_trade_date(watchlist, screening_batch, decision_brief)
+
+    return {
+        "generated_at": context["generated_at"],
+        "summary_only": True,
+        "code": normalized_code,
+        "name": profile_name,
+        "trade_date": (watchlist if watchlist_stock else screening_batch or {}).get("trade_date"),
+        "expected_trade_date": readiness.get("expected_trade_date"),
+        "data_trade_date": readiness.get("data_trade_date"),
+        "readiness": readiness,
+        "primary_source": primary_source,
+        "primary_source_label": {
+            "watchlist": "自选股链路",
+            "opportunity": "观察池链路",
+        }.get(str(primary_source or ""), "未命中详情"),
+        "available_sources": available_sources,
+        "links": {
+            "self": f"/stock/{normalized_code}",
+            "api_self": f"/api/stock/{normalized_code}",
+            "api_full": f"/api/stock/{normalized_code}/full",
+            "api_summary": f"/api/stock/{normalized_code}/summary",
+            "api_detail": f"/api/stock/{normalized_code}/detail",
+            "api_formal_data": f"/api/stock/{normalized_code}/formal-data",
+            "api_formal_data_summary": f"/api/stock/{normalized_code}/formal-data/summary",
+            "api_today_action": f"/api/stock/{normalized_code}/today-action",
+            "api_learning_scorecard": f"/api/stock/{normalized_code}/learning-scorecard",
+            "watchlist_detail": today_watchlist_detail_url(normalized_code) if watchlist_stock else None,
+            "opportunity_detail": today_candidate_detail_url(normalized_code) if opportunity_stock else None,
+            "ask": ask_page_url(normalized_code),
+        },
+    }
+
+
+def build_stock_profile_summary_view(code: str, trade_date: str | None = None) -> dict[str, Any]:
+    return _cached_stock_profile_payload("summary", code, trade_date, _stock_profile_summary_payload)
+
+
+def _stock_profile_formal_data_payload(normalized_code: str, trade_date_hint: str) -> dict[str, Any]:
+    context = _stock_profile_base_context(normalized_code, trade_date_hint)
+    readiness = context["readiness"]
+    return {
+        "generated_at": context["generated_at"],
+        "code": normalized_code,
+        "trade_date": context["profile_trade_date"],
+        "expected_trade_date": readiness.get("expected_trade_date"),
+        "data_trade_date": readiness.get("data_trade_date"),
+        "formal_data": build_stock_formal_data(
+            normalized_code,
+            trade_date=str(readiness.get("expected_trade_date") or context["profile_trade_date"] or ""),
+        ),
+        "links": {
+            "self": f"/stock/{normalized_code}",
+            "api_self": f"/api/stock/{normalized_code}/formal-data",
+        },
+    }
+
+
+def build_stock_profile_formal_data_view(code: str, trade_date: str | None = None) -> dict[str, Any]:
+    return _cached_stock_profile_payload("formal-data", code, trade_date, _stock_profile_formal_data_payload)
+
+
+def _formal_data_section_payload(normalized_code: str, trade_date_hint: str, section: str) -> dict[str, Any]:
+    normalized_section = str(section or "summary").strip().lower()
+    context = _stock_profile_base_context(normalized_code, trade_date_hint)
+    readiness = context["readiness"]
+    if normalized_section == "summary":
+        formal_data = build_stock_formal_data_summary(
+            normalized_code,
+            trade_date=str(readiness.get("expected_trade_date") or context["profile_trade_date"] or ""),
+        )
+    else:
+        formal_data = build_stock_profile_formal_data_view(normalized_code, trade_date=trade_date_hint).get("formal_data") or {}
+        if normalized_section == "profile":
+            formal_data = {
+                key: formal_data.get(key)
+                for key in (
+                    "available",
+                    "code",
+                    "trade_date",
+                    "requested_trade_date",
+                    "data_trade_date",
+                    "stale",
+                    "freshness_status",
+                    "provider",
+                    "headline",
+                    "summary",
+                    "profile",
+                    "themes",
+                    "business_breakdown",
+                    "source_cards",
+                )
+            }
+        elif normalized_section == "risk":
+            formal_data = {
+                key: formal_data.get(key)
+                for key in (
+                    "available",
+                    "code",
+                    "trade_date",
+                    "requested_trade_date",
+                    "data_trade_date",
+                    "stale",
+                    "freshness_status",
+                    "provider",
+                    "headline",
+                    "summary",
+                    "event_risks",
+                    "market_activity",
+                    "technical_chips",
+                    "factor_profile",
+                    "source_cards",
+                )
+            }
+        elif normalized_section == "sources":
+            formal_data = {
+                key: formal_data.get(key)
+                for key in (
+                    "available",
+                    "code",
+                    "trade_date",
+                    "requested_trade_date",
+                    "data_trade_date",
+                    "stale",
+                    "freshness_status",
+                    "provider",
+                    "headline",
+                    "summary",
+                    "source_cards",
+                )
+            }
+        elif normalized_section != "full":
+            raise KeyError(f"unknown formal-data section: {section}")
+
+    return {
+        "generated_at": context["generated_at"],
+        "code": normalized_code,
+        "section": normalized_section,
+        "trade_date": context["profile_trade_date"],
+        "expected_trade_date": readiness.get("expected_trade_date"),
+        "data_trade_date": readiness.get("data_trade_date"),
+        "formal_data": formal_data,
+        "links": {
+            "self": f"/stock/{normalized_code}",
+            "api_self": f"/api/stock/{normalized_code}/formal-data/{normalized_section}",
+            "api_summary": f"/api/stock/{normalized_code}/formal-data/summary",
+            "api_full": f"/api/stock/{normalized_code}/formal-data",
+        },
+    }
+
+
+def build_stock_profile_formal_data_section_view(
+    code: str,
+    section: str,
+    trade_date: str | None = None,
+) -> dict[str, Any]:
+    normalized_section = str(section or "summary").strip().lower()
+    if normalized_section not in {"summary", "profile", "risk", "sources", "full"}:
+        raise KeyError(f"unknown formal-data section: {section}")
+    return _cached_stock_profile_payload(
+        f"formal-data:{normalized_section}",
+        code,
+        trade_date,
+        lambda normalized_code, trade_date_hint: _formal_data_section_payload(normalized_code, trade_date_hint, normalized_section),
+    )
+
+
+def _ledger_outcome_tone(record: dict[str, Any]) -> str:
+    outcomes = record.get("outcome_events") or []
+    if not outcomes:
+        return "pending"
+    latest = max(
+        [event for event in outcomes if isinstance(event, dict)],
+        key=lambda event: str(event.get("evaluated_at") or event.get("as_of_trade_date") or ""),
+        default={},
+    )
+    classification = latest.get("classification") if isinstance(latest.get("classification"), dict) else {}
+    return str(classification.get("tone") or classification.get("label") or "evaluated")
+
+
+def build_stock_profile_learning_scorecard(code: str, trade_date: str | None = None) -> dict[str, Any]:
+    normalized_code = str(code or "").strip()
+    canonical = ledger_normalize_stock_code(normalized_code)
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if not canonical:
+        return {
+            "generated_at": generated_at,
+            "code": normalized_code,
+            "canonical_code": "",
+            "stage": "research",
+            "feeds_execution": False,
+            "confidence_label": "代码不可识别",
+            "headline": "历史可信度暂不可用",
+            "reason": "Decision Ledger 无法识别该股票代码。",
+            "sample_count": 0,
+            "evaluated_count": 0,
+            "validated_count": 0,
+            "missed_opportunity_count": 0,
+            "execution_gap_count": 0,
+            "pending_count": 0,
+            "scorecards": [],
+            "failure_patterns": [],
+            "similar_edge": None,
+        }
+
+    records = ledger_list_decisions_for_stock(canonical)
+    records.sort(
+        key=lambda item: (
+            str(item.get("trade_date") or ""),
+            str(item.get("decision_id") or ""),
+        ),
+        reverse=True,
+    )
+    evaluated = [item for item in records if item.get("outcome_events")]
+    executed = [item for item in records if item.get("execution_events")]
+    pending = [item for item in records if not item.get("outcome_events")]
+
+    def _classification_text(item: dict[str, Any]) -> str:
+        latest = max(
+            [event for event in (item.get("outcome_events") or []) if isinstance(event, dict)],
+            key=lambda event: str(event.get("evaluated_at") or event.get("as_of_trade_date") or ""),
+            default={},
+        )
+        classification = latest.get("classification") if isinstance(latest.get("classification"), dict) else {}
+        return " ".join(str(classification.get(key) or "") for key in ("label", "tone", "reason")).lower()
+
+    validated = [
+        item for item in evaluated
+        if any(token in _classification_text(item) for token in ("valid", "positive", "命中", "有效", "成功", "good"))
+    ]
+    missed = [
+        item for item in evaluated
+        if any(token in _classification_text(item) for token in ("miss", "错过", "missed_opportunity", "missed"))
+    ]
+    execution_gap = [
+        item for item in records
+        if not item.get("execution_events") and str(((item.get("recommendation") or {}).get("action") or "")) not in {"observe", "skip", "forbid"}
+    ]
+    if len(evaluated) >= 8:
+        confidence_label = "样本初步可读"
+    elif len(evaluated) >= 3:
+        confidence_label = "样本偏少"
+    elif records:
+        confidence_label = "只有跟踪痕迹"
+    else:
+        confidence_label = "暂无样本"
+
+    scorecards = [
+        {"label": "Ledger 样本", "value": len(records), "detail": "同票历史建议", "tone": "info"},
+        {"label": "已评估", "value": len(evaluated), "detail": "已有 T+N outcome", "tone": "positive" if evaluated else "watch"},
+        {"label": "已执行/记录", "value": len(executed), "detail": "已有执行事件", "tone": "info" if executed else "watch"},
+        {"label": "执行缺口", "value": len(execution_gap), "detail": "建议后未见执行记录", "tone": "risk" if execution_gap else "positive"},
+    ]
+    failure_patterns = []
+    if execution_gap:
+        failure_patterns.append({
+            "label": "执行闭环缺口",
+            "detail": f"{len(execution_gap)} 条非观察建议没有执行事件，先别把系统建议当成已验证能力。",
+            "tone": "risk",
+        })
+    if missed:
+        failure_patterns.append({
+            "label": "错过机会样本",
+            "detail": f"{len(missed)} 条 outcome 标记为错过/疑似错过，需要回 Review 做归因。",
+            "tone": "warning",
+        })
+    if len(evaluated) < 5:
+        failure_patterns.append({
+            "label": "样本不足",
+            "detail": "同票成熟样本少，不能把当前 scorecard 当作胜率证明。",
+            "tone": "watch",
+        })
+
+    try:
+        from screener.historical_edge import build_historical_edge_snapshot  # type: ignore
+
+        similar_edge = build_historical_edge_snapshot(
+            normalized_code,
+            trade_date or expected_trade_date(),
+            sample_pool=None,
+        )
+    except Exception as exc:
+        similar_edge = {
+            "stage": "research",
+            "feeds_execution": False,
+            "similar_count": 0,
+            "coverage_quality": "unavailable",
+            "reason": str(exc),
+        }
+
+    return {
+        "generated_at": generated_at,
+        "code": normalized_code,
+        "canonical_code": canonical,
+        "trade_date": trade_date or expected_trade_date(),
+        "stage": "research",
+        "feeds_execution": False,
+        "confidence_label": confidence_label,
+        "headline": "历史可信度只作学习参考",
+        "reason": "这里统计的是 Prism 自己的同票历史建议、执行记录和 outcome，不能作为买卖胜率承诺。",
+        "sample_count": len(records),
+        "evaluated_count": len(evaluated),
+        "validated_count": len(validated),
+        "missed_opportunity_count": len(missed),
+        "execution_gap_count": len(execution_gap),
+        "pending_count": len(pending),
+        "scorecards": scorecards,
+        "failure_patterns": failure_patterns,
+        "recent_decisions": [
+            {
+                "decision_id": item.get("decision_id"),
+                "trade_date": item.get("trade_date"),
+                "action": (item.get("recommendation") or {}).get("action"),
+                "action_label": (item.get("recommendation") or {}).get("action_label"),
+                "main_conclusion": (item.get("recommendation") or {}).get("main_conclusion"),
+                "outcome_tone": _ledger_outcome_tone(item),
+                "execution_events_count": len(item.get("execution_events") or []),
+                "outcome_events_count": len(item.get("outcome_events") or []),
+            }
+            for item in records[:5]
+        ],
+        "similar_edge": similar_edge,
+    }
+
+
+def _stock_profile_today_action_payload(normalized_code: str, trade_date_hint: str) -> dict[str, Any]:
+    context = _stock_profile_base_context(normalized_code, trade_date_hint)
+    readiness = context["readiness"]
+    return {
+        "generated_at": context["generated_at"],
+        "code": normalized_code,
+        "trade_date": context["profile_trade_date"],
+        "expected_trade_date": readiness.get("expected_trade_date"),
+        "data_trade_date": readiness.get("data_trade_date"),
+        "today_action": build_today_action_context(
+            normalized_code,
+            today=context["today_context"],
+            account_book=context["account_book"],
+        ),
+        "links": {
+            "self": f"/stock/{normalized_code}",
+            "api_self": f"/api/stock/{normalized_code}/today-action",
+        },
+    }
+
+
+def build_stock_profile_today_action_view(code: str, trade_date: str | None = None) -> dict[str, Any]:
+    return _cached_stock_profile_payload("today-action", code, trade_date, _stock_profile_today_action_payload)
+
+
+def _stock_profile_full_payload(normalized_code: str, trade_date_hint: str) -> dict[str, Any]:
+    detail = build_stock_profile_detail_view(normalized_code, trade_date=trade_date_hint)
+    formal_data = build_stock_profile_formal_data_view(normalized_code, trade_date=trade_date_hint)
+    today_action = build_stock_profile_today_action_view(normalized_code, trade_date=trade_date_hint)
+    return {
+        **detail,
+        "formal_data": formal_data.get("formal_data"),
+        "today_action": today_action.get("today_action"),
+    }
+
+
+def build_stock_profile_view(code: str, trade_date: str | None = None) -> dict[str, Any]:
+    return _cached_stock_profile_payload("full", code, trade_date, _stock_profile_full_payload)
 
 
 def build_screening_batch_view() -> dict[str, Any]:
@@ -9436,7 +10986,7 @@ def build_confirmation_view() -> dict[str, Any]:
             "eyebrow": "午盘确认",
             "title": "午盘确认详情",
             "summary": "以早盘基线为锚，检查承接、降级和新增观察。",
-            "status_label": detail_value(confirmation.get("validation_status"), "unknown"),
+            "status_label": midday_validation_status_label(confirmation.get("validation_status")),
         },
         "meta_cards": [
             {
@@ -9492,6 +11042,638 @@ def build_confirmation_view() -> dict[str, Any]:
             "checked_at": detail_value((quality or {}).get("checked_at")),
             "expected_timestamp": detail_value((quality or {}).get("expected_timestamp")),
         },
+    }
+
+
+def _today_base_inputs() -> dict[str, Any]:
+    ensure_runtime_dirs()
+    trade_date_hint = expected_trade_date()
+    now = datetime.now()
+    decision_brief = safe_canonical_load(load_decision_brief, trade_date=trade_date_hint)
+    watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
+    screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint)
+    confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
+    quality_status = safe_canonical_load(load_quality_status, lane="all")
+    account_book = load_account_book()
+    today_action_decisions = load_today_action_decision_store()
+    readiness = compute_readiness(
+        watchlist=watchlist,
+        screening_batch=screening_batch,
+        confirmation=confirmation,
+        decision_brief=decision_brief,
+        quality_status=quality_status,
+        account_book=account_book,
+        today_action_decisions=today_action_decisions,
+        dataset_freshness=build_dataset_freshness_rows(
+            expected_date=trade_date_hint,
+            now=now,
+        ),
+        formal_freshness=build_formal_freshness_rows(
+            expected_date=trade_date_hint,
+            now=now,
+        ),
+    )
+    expected_date = readiness["expected_trade_date"]
+    data_trade_date = readiness["data_trade_date"]
+    trade_date = data_trade_date or current_trade_date(watchlist, screening_batch, decision_brief)
+    brief_is_live = bool(readiness["brief_is_live"])
+    gate = (((screening_batch or {}).get("market_regime") or {}).get("execution_gate") or {})
+    return {
+        "now": now,
+        "generated_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "trade_date_hint": trade_date_hint,
+        "expected_date": expected_date,
+        "data_trade_date": data_trade_date,
+        "trade_date": trade_date,
+        "brief_is_live": brief_is_live,
+        "gate": gate,
+        "decision_brief": decision_brief,
+        "watchlist": watchlist,
+        "screening_batch": screening_batch,
+        "confirmation": confirmation,
+        "quality_status": quality_status,
+        "account_book": account_book,
+        "readiness": readiness,
+    }
+
+
+def _today_hero_projection(
+    *,
+    decision_brief: dict[str, Any] | None,
+    screening_batch: dict[str, Any] | None,
+    watchlist: dict[str, Any] | None,
+    readiness: dict[str, Any],
+    gate: dict[str, Any],
+    brief_is_live: bool,
+) -> dict[str, Any]:
+    brief_summary = (decision_brief or {}).get("summary") or {}
+    main_theme = (
+        brief_summary.get("main_theme")
+        or (((screening_batch or {}).get("market_themes") or [{}])[0] or {}).get("theme")
+        or (screening_batch or {}).get("top_theme")
+        or "暂无主线"
+    )
+    brief_trade_date = (decision_brief or {}).get("trade_date")
+    expected_date = readiness["expected_trade_date"]
+
+    if brief_is_live:
+        hero_title = normalize_stock_ui_copy(brief_summary.get("open_new_positions")) or (
+            "今天先处理旧仓，再决定是否看新仓" if gate.get("allow_new_positions") else "今天先观察，不急着开新仓"
+        )
+        hero_summary = normalize_stock_ui_copy(brief_summary.get("gate_summary")) or "当前判断已由总控层收束。"
+        hero_gate_label = brief_summary.get("gate_label") or gate.get("label") or "总控已更新"
+        position_cap = brief_summary.get("position_cap") or gate.get("position_cap") or "-"
+        context_note = f"当前页面基于 {(decision_brief or {}).get('generated_at') or '-'} 的总控简报。"
+    else:
+        if readiness["readiness_mode"] == "blocked":
+            hero_title = "数据未就绪：请先把核心链路刷新到当日"
+        elif gate.get("allow_new_positions"):
+            hero_title = "可以继续看新仓，但先只保留少量观察名单"
+        else:
+            hero_title = "先观察，不急着开新仓"
+        hero_summary = normalize_stock_ui_copy(gate.get("summary")) or "当前页面已回退到实时链路数据。"
+        hero_gate_label = gate.get("label") or "实时链路判断"
+        position_cap = gate.get("position_cap") or "-"
+        if readiness["readiness_mode"] == "blocked":
+            top_blocker = (readiness["blockers"] or [{}])[0]
+            blocker_msg = top_blocker.get("message") or "请回到任务列表刷新当日链路。"
+            context_note = f"当前数据未就绪：{blocker_msg}（应为 {expected_date}）。在恢复实盘前不要按页面建议执行真钱操作。"
+        elif readiness["readiness_mode"] == "shadow_only":
+            context_note = (
+                f"当前页面仅作影子盘观察：{(readiness['warnings'] or [{}])[0].get('message') or '关键链路尚未完全到位'}。"
+            )
+        elif decision_brief:
+            context_note = f"最新总控简报停留在 {brief_trade_date}，页面主判断已回退到实时自选股 / 早盘扫描 / 午盘确认数据。"
+        else:
+            context_note = "尚未生成总控简报，当前页面完全基于实时链路数据。"
+
+    return {
+        "hero": {
+            "title": hero_title,
+            "summary": hero_summary,
+            "gate_label": hero_gate_label,
+            "position_cap": position_cap,
+            "main_theme": main_theme,
+            "context_note": context_note,
+        },
+        "position_cap": position_cap,
+        "main_theme": main_theme,
+    }
+
+
+def _today_source_cards(
+    *,
+    watchlist: dict[str, Any] | None,
+    screening_batch: dict[str, Any] | None,
+    confirmation: dict[str, Any] | None,
+    decision_brief: dict[str, Any] | None,
+    readiness: dict[str, Any],
+    brief_is_live: bool,
+) -> list[dict[str, Any]]:
+    source_freshness_map = {item["key"]: item for item in readiness["source_freshness"]}
+    midday_due_label = f"{MIDDAY_CONFIRMATION_DUE_MINUTES // 60:02d}:{MIDDAY_CONFIRMATION_DUE_MINUTES % 60:02d}"
+
+    def _augment_source(card: dict[str, Any], freshness_key: str) -> dict[str, Any]:
+        freshness = source_freshness_map.get(freshness_key) or {}
+        merged = dict(card)
+        merged.setdefault("key", freshness_key)
+        merged["available"] = freshness.get("available", merged.get("value") not in (None, "", "-"))
+        merged["stale"] = bool(freshness.get("stale", False))
+        merged["age_seconds"] = freshness.get("age_seconds")
+        merged["age_label"] = freshness.get("age_label", "-")
+        merged["stale_after_seconds"] = freshness.get("stale_after_seconds")
+        merged["trade_date"] = freshness.get("trade_date")
+        merged["stale_reasons"] = freshness.get("stale_reasons", [])
+        merged["deferred"] = bool(freshness.get("deferred"))
+        merged["deferred_reason"] = freshness.get("deferred_reason")
+        if merged["deferred"] and freshness.get("deferred_reason") == MIDDAY_CONFIRMATION_DEFER_REASON:
+            merged["detail"] = f"等待 {midday_due_label} 午盘确认"
+        return merged
+
+    return [
+        _augment_source(
+            {
+                "label": "自选股",
+                "value": (watchlist or {}).get("generated_at") or "-",
+                "detail": (watchlist or {}).get("trade_date") or "暂无快照",
+            },
+            "watchlist",
+        ),
+        _augment_source(
+            {
+                "label": "观察池基线",
+                "value": (screening_batch or {}).get("generated_at") or "-",
+                "detail": ((screening_batch or {}).get("pool_label") or (screening_batch or {}).get("pool") or "暂无批次"),
+            },
+            "screening",
+        ),
+        _augment_source(
+            {
+                "label": "午盘确认",
+                "value": (confirmation or {}).get("generated_at") or "-",
+                "detail": midday_validation_status_label((confirmation or {}).get("validation_status") or "missing"),
+            },
+            "confirmation",
+        ),
+        _augment_source(
+            {
+                "label": "总控简报",
+                "value": (decision_brief or {}).get("generated_at") or "-",
+                "detail": "已同步" if brief_is_live else "数据偏旧",
+            },
+            "decision_brief",
+        ),
+    ]
+
+
+def _today_summary_cards(
+    *,
+    watchlist: dict[str, Any] | None,
+    screening_batch: dict[str, Any] | None,
+    confirmation: dict[str, Any] | None,
+    quality_status: dict[str, Any] | None,
+    readiness: dict[str, Any],
+    gate: dict[str, Any],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    watchlist_priority = len((watchlist or {}).get("priority_codes") or [])
+    screening_summary = (screening_batch or {}).get("screening_summary") or {}
+    quality_lanes = (quality_status or {}).get("lanes") or {}
+    quality_ok = sum(1 for lane in quality_lanes.values() if lane.get("validation_status") == "ok")
+    quality_timely = sum(1 for item in readiness["quality_freshness"] if item.get("timely"))
+    quality_total = len(readiness["quality_freshness"]) or 3
+    confirmation_counts = (confirmation or {}).get("counts") or {}
+    cards = [
+        {
+            "label": "持仓先处理",
+            "value": str(watchlist_priority),
+            "detail": "来自自选股页面",
+        },
+        {
+            "label": "观察池候选",
+            "value": str(screening_summary.get("approved_count") or screening_summary.get("shortlisted_count") or 0),
+            "detail": (gate.get("label") or "来自观察池"),
+        },
+        {
+            "label": "午盘新增观察",
+            "value": str(confirmation_counts.get("fresh_candidates") or 0),
+            "detail": "来自午盘确认",
+        },
+        {
+            "label": "质检就绪",
+            "value": f"{quality_timely}/{quality_total}",
+            "detail": "核心链路状态",
+            "tone": "positive" if quality_timely == quality_total else "warning",
+        },
+    ]
+    return cards, {
+        "watchlist_priority": watchlist_priority,
+        "quality_ok": quality_ok,
+        "quality_timely": quality_timely,
+        "quality_total": quality_total,
+        "confirmation_counts": confirmation_counts,
+    }
+
+
+def _today_quality_cards(quality_status: dict[str, Any] | None, readiness: dict[str, Any]) -> list[dict[str, Any]]:
+    quality_freshness_map = {item["key"]: item for item in readiness["quality_freshness"]}
+    quality_cards = []
+    for card in quality_lane_cards(quality_status):
+        title = card.get("title") or ""
+        match_key = next(
+            (k for k, t in (("watchlist", "自选股"), ("aggressive", "进攻型早盘"), ("midday_confirmation", "午盘确认")) if t == title),
+            "",
+        )
+        merged = dict(card)
+        meta = quality_freshness_map.get(match_key) or {}
+        merged["key"] = match_key or card.get("key") or title
+        merged["timely"] = bool(meta.get("timely", card.get("status") == "ok"))
+        merged["stale_reasons"] = meta.get("stale_reasons", [])
+        merged["age_label"] = meta.get("age_label", "-")
+        if not merged["timely"] and card.get("tone") == "positive":
+            merged["tone"] = "watch"
+        quality_cards.append(merged)
+    return quality_cards
+
+
+def _today_artifacts(
+    *,
+    decision_brief: dict[str, Any] | None,
+    watchlist: dict[str, Any] | None,
+    screening_batch: dict[str, Any] | None,
+    confirmation: dict[str, Any] | None,
+) -> dict[str, dict[str, Any]]:
+    return {
+        "decision_brief": {
+            "path": ((decision_brief or {}).get("paths") or {}).get("source_json"),
+            "url": artifact_url(((decision_brief or {}).get("paths") or {}).get("source_json")),
+            "label": "总控 JSON",
+        },
+        "watchlist_snapshot": {
+            "path": ((decision_brief or {}).get("paths") or {}).get("watchlist_snapshot") or (watchlist or {}).get("snapshot_path"),
+            "url": artifact_url(((decision_brief or {}).get("paths") or {}).get("watchlist_snapshot") or (watchlist or {}).get("snapshot_path")),
+            "label": "自选股快照",
+        },
+        "screening_batch": {
+            "path": ((decision_brief or {}).get("paths") or {}).get("screening_batch") or (screening_batch or {}).get("path"),
+            "url": artifact_url(((decision_brief or {}).get("paths") or {}).get("screening_batch") or (screening_batch or {}).get("path")),
+            "label": "早盘批次",
+        },
+        "confirmation": {
+            "path": ((decision_brief or {}).get("paths") or {}).get("confirmation") or (confirmation or {}).get("path"),
+            "url": artifact_url(((decision_brief or {}).get("paths") or {}).get("confirmation") or (confirmation or {}).get("path")),
+            "label": "午盘确认",
+        },
+        "opportunity_v2_tracking": {
+            "path": ((screening_batch or {}).get("opportunity_v2_tracking") or {}).get("path"),
+            "url": artifact_url(((screening_batch or {}).get("opportunity_v2_tracking") or {}).get("path")),
+            "label": "V2 机会跟踪",
+        },
+    }
+
+
+def _action_register_code(item: dict[str, Any]) -> str:
+    code = str(item.get("code") or "").strip()
+    if code:
+        return code
+    key = str(item.get("key") or "").strip()
+    match = re.search(r"(\d{6})", key)
+    return match.group(1) if match else ""
+
+
+def _action_register_entry(
+    item: dict[str, Any],
+    *,
+    lane: str,
+    source: str,
+    writeback_status: str,
+    writeback_reason: str,
+) -> dict[str, Any]:
+    code = _action_register_code(item)
+    title = str(item.get("title") or item.get("name") or code or "动作线索").strip()
+    action_label = str(
+        item.get("action_type")
+        or item.get("status")
+        or ((item.get("decision") or {}).get("label") if isinstance(item.get("decision"), dict) else "")
+        or "观察"
+    ).strip()
+    intent_key = str(item.get("key") or "").strip() or f"{source}:{lane}:{title}"
+    return {
+        "intent_key": intent_key,
+        "title": title,
+        "code": code,
+        "name": str(item.get("name") or "").strip(),
+        "lane": lane,
+        "source": source,
+        "action_label": action_label,
+        "writeback_status": writeback_status,
+        "writeback_reason": writeback_reason,
+        "url": str(item.get("url") or (f"/stock/{code}" if code else "")).strip(),
+        "tone": str(item.get("tone") or "watch"),
+        "detail": str(item.get("reason") or item.get("detail") or item.get("trigger") or "").strip(),
+    }
+
+
+def build_today_action_register(
+    *,
+    command_brief: dict[str, Any] | None,
+    action_queue: dict[str, Any] | None,
+    readiness: dict[str, Any],
+) -> dict[str, Any]:
+    entries: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(entry: dict[str, Any]) -> None:
+        key = (str(entry.get("intent_key") or ""), str(entry.get("source") or ""))
+        if key in seen:
+            return
+        seen.add(key)
+        entries.append(entry)
+
+    queue_items = (action_queue or {}).get("items") or []
+    stale_items = (action_queue or {}).get("stale_items") or []
+    queue_key_status: dict[str, str] = {}
+    for item in queue_items:
+        queue_key_status[str(item.get("key") or "")] = "writable"
+        add(_action_register_entry(
+            item,
+            lane=str(item.get("group_key") or "queue"),
+            source="action_queue",
+            writeback_status="writable",
+            writeback_reason="readiness 与交易日均通过，可记录处理结果。",
+        ))
+    for item in stale_items:
+        queue_key_status[str(item.get("key") or "")] = "stale"
+        reason = ((item.get("confidence") or {}).get("note") if isinstance(item.get("confidence"), dict) else "") or "旧线索不可作为今天写回动作。"
+        add(_action_register_entry(
+            item,
+            lane=str(item.get("group_key") or "stale"),
+            source="action_queue",
+            writeback_status="stale",
+            writeback_reason=str(reason),
+        ))
+
+    for lane in (command_brief or {}).get("action_lanes") or []:
+        lane_key = str(lane.get("key") or "").strip()
+        for item in lane.get("items") or []:
+            if not isinstance(item, dict):
+                continue
+            intent_key = str(item.get("key") or "").strip()
+            status = queue_key_status.get(intent_key)
+            if status == "writable":
+                writeback_status = "writable"
+                reason = "这条命令建议已进入今日可写回动作队列。"
+            elif status == "stale":
+                writeback_status = "stale"
+                reason = "命令建议对应旧线索，只能复核，不能作为今天写回动作。"
+            else:
+                writeback_status = "read_only"
+                reason = "这是命令建议或观察线索，不等于可写回动作。"
+                if readiness.get("readiness_mode") != "live_ready":
+                    reason = "readiness 未到 live_ready，只能观察复核。"
+            add(_action_register_entry(
+                item,
+                lane=lane_key,
+                source="command_brief",
+                writeback_status=writeback_status,
+                writeback_reason=reason,
+            ))
+
+    counts = {
+        "total": len(entries),
+        "writable": sum(1 for item in entries if item.get("writeback_status") == "writable"),
+        "read_only": sum(1 for item in entries if item.get("writeback_status") == "read_only"),
+        "stale": sum(1 for item in entries if item.get("writeback_status") == "stale"),
+    }
+    return {
+        "title": "今日动作语义表",
+        "subtitle": "命令建议、可写回队列、只读旧线索分开看，避免把建议误当成实盘动作。",
+        "items": entries[:12],
+        "counts": counts,
+        "readiness_mode": readiness.get("readiness_mode"),
+    }
+
+
+def build_today_summary_view() -> dict[str, Any]:
+    base = _today_base_inputs()
+    decision_brief = base["decision_brief"]
+    watchlist = base["watchlist"]
+    screening_batch = base["screening_batch"]
+    confirmation = base["confirmation"]
+    quality_status = base["quality_status"]
+    readiness = base["readiness"]
+    gate = base["gate"]
+    brief_is_live = bool(base["brief_is_live"])
+    hero = _today_hero_projection(
+        decision_brief=decision_brief,
+        screening_batch=screening_batch,
+        watchlist=watchlist,
+        readiness=readiness,
+        gate=gate,
+        brief_is_live=brief_is_live,
+    )
+    source_cards = _today_source_cards(
+        watchlist=watchlist,
+        screening_batch=screening_batch,
+        confirmation=confirmation,
+        decision_brief=decision_brief,
+        readiness=readiness,
+        brief_is_live=brief_is_live,
+    )
+    summary_cards, summary_meta = _today_summary_cards(
+        watchlist=watchlist,
+        screening_batch=screening_batch,
+        confirmation=confirmation,
+        quality_status=quality_status,
+        readiness=readiness,
+        gate=gate,
+    )
+    action_groups = build_today_action_groups(
+        watchlist,
+        screening_batch,
+        confirmation,
+        decision_brief,
+        quality_status,
+        brief_is_live=brief_is_live,
+        gate=gate,
+    )
+    action_queue_stub = {
+        "title": "今日动作队列",
+        "items": [],
+        "stale_items": [],
+        "counts": {"total": 0, "pending": 0, "done": 0, "watch": 0, "skip": 0, "no_fill": 0, "stale": 0},
+    }
+    command_brief_error: str | None = None
+    try:
+        command_brief = build_today_command_brief(
+            trade_date=base["trade_date"],
+            readiness=readiness,
+            gate=gate,
+            decision_brief=decision_brief,
+            watchlist=watchlist,
+            screening_batch=screening_batch,
+            confirmation=confirmation,
+            action_groups=action_groups,
+            action_queue=action_queue_stub,
+            refresh_status=None,
+        )
+    except Exception as exc:
+        command_brief = None
+        command_brief_error = str(exc)
+
+    top_rows = compress_today_actions({"items": (action_groups[0].get("items") if action_groups else []) or []})
+    command_hero = build_today_command_hero(
+        trade_date=base["trade_date"],
+        hero=hero["hero"],
+        top_rows=top_rows,
+        brief_is_live=brief_is_live,
+        readiness_mode=str(readiness.get("readiness_mode") or "blocked"),
+    )
+    links = today_nav_links()
+    return {
+        "generated_at": base["generated_at"],
+        "display_date": current_display_date(),
+        "trade_date": base["trade_date"],
+        "expected_trade_date": base["expected_date"],
+        "data_trade_date": base["data_trade_date"],
+        "brief_is_live": brief_is_live,
+        "summary_only": True,
+        "readiness": readiness,
+        "hero": hero["hero"],
+        "command_hero": command_hero,
+        "command_brief": command_brief,
+        "command_brief_error": command_brief_error,
+        "action_register": build_today_action_register(
+            command_brief=command_brief,
+            action_queue=action_queue_stub,
+            readiness=readiness,
+        ),
+        "radar_cards": build_today_radar_cards(
+            position_cap=str(hero["position_cap"]),
+            main_theme=str(hero["main_theme"]),
+            quality_ok=int(summary_meta["quality_timely"]),
+            confirmation_counts=summary_meta["confirmation_counts"],
+            brief_is_live=brief_is_live,
+        ),
+        "evidence_hint": build_today_evidence_hint(
+            brief_is_live=brief_is_live,
+            source_cards=source_cards,
+        ),
+        "source_cards": source_cards,
+        "summary_cards": summary_cards,
+        "quality_cards": _today_quality_cards(quality_status, readiness),
+        "links": links,
+        "counts": {
+            "watchlist_priority": int(summary_meta["watchlist_priority"]),
+            "watchlist_total": (watchlist or {}).get("stock_count") or 0,
+            "candidate_total": (screening_batch or {}).get("candidate_count") or 0,
+            "confirmed": (summary_meta["confirmation_counts"] or {}).get("confirmed") or 0,
+            "downgraded": (summary_meta["confirmation_counts"] or {}).get("downgraded") or 0,
+            "fresh_candidates": (summary_meta["confirmation_counts"] or {}).get("fresh_candidates") or 0,
+        },
+        "links_lazy": {
+            "actions": "/api/today/actions",
+            "full": "/api/today",
+        },
+    }
+
+
+def build_today_actions_view() -> dict[str, Any]:
+    base = _today_base_inputs()
+    decision_brief = base["decision_brief"]
+    watchlist = base["watchlist"]
+    screening_batch = base["screening_batch"]
+    confirmation = base["confirmation"]
+    quality_status = base["quality_status"]
+    readiness = base["readiness"]
+    gate = base["gate"]
+    brief_is_live = bool(base["brief_is_live"])
+    action_groups = build_today_action_groups(
+        watchlist,
+        screening_batch,
+        confirmation,
+        decision_brief,
+        quality_status,
+        brief_is_live=brief_is_live,
+        gate=gate,
+    )
+    action_queue = build_today_action_queue(
+        action_groups,
+        base["trade_date"],
+        account_book=base["account_book"],
+        expected_trade_date=base["expected_date"],
+        readiness_mode=str(readiness.get("readiness_mode") or "blocked"),
+        readiness_ready=bool(readiness.get("ready")),
+    )
+    source_cards = _today_source_cards(
+        watchlist=watchlist,
+        screening_batch=screening_batch,
+        confirmation=confirmation,
+        decision_brief=decision_brief,
+        readiness=readiness,
+        brief_is_live=brief_is_live,
+    )
+    artifacts = _today_artifacts(
+        decision_brief=decision_brief,
+        watchlist=watchlist,
+        screening_batch=screening_batch,
+        confirmation=confirmation,
+    )
+    action_queue, decision_contracts = attach_decision_contracts(
+        action_queue,
+        trade_date=base["trade_date"],
+        expected_trade_date=base["expected_date"],
+        data_trade_date=base["data_trade_date"],
+        readiness=readiness,
+        source_cards=source_cards,
+        artifacts=artifacts,
+    )
+    try:
+        command_brief = build_today_command_brief(
+            trade_date=base["trade_date"],
+            readiness=readiness,
+            gate=gate,
+            decision_brief=decision_brief,
+            watchlist=watchlist,
+            screening_batch=screening_batch,
+            confirmation=confirmation,
+            action_groups=action_groups,
+            action_queue=action_queue,
+            refresh_status=None,
+        )
+    except Exception:
+        command_brief = None
+    links = today_nav_links()
+    lifecycle_context = resolve_lifecycle_context()
+    change_view = build_today_change_view(
+        lifecycle_context["display_lifecycle"],
+        links=links,
+        note=lifecycle_context["lifecycle_note"],
+    )
+    top_rows = compress_today_actions(action_queue)
+    return {
+        "generated_at": base["generated_at"],
+        "trade_date": base["trade_date"],
+        "expected_trade_date": base["expected_date"],
+        "data_trade_date": base["data_trade_date"],
+        "readiness_mode": readiness.get("readiness_mode"),
+        "action_groups": action_groups,
+        "action_queue": action_queue,
+        "decision_contracts": decision_contracts,
+        "action_register": build_today_action_register(
+            command_brief=command_brief,
+            action_queue=action_queue,
+            readiness=readiness,
+        ),
+        "next_steps": build_today_next_steps(action_groups, links=links),
+        "top_rows": top_rows,
+        "primary_actions": build_today_primary_actions(top_rows),
+        "holdings_rows": build_today_trusted_group_rows(action_queue, "do-now", ("watchlist:",)),
+        "opportunity_rows": build_today_trusted_group_rows(action_queue, "watch", ("screening:", "confirmation:")),
+        "risk_rows": build_today_risk_rows(change_view, action_groups),
+        "evidence_rows": build_today_evidence_rows(source_cards),
+        "source_cards": source_cards,
+        "artifacts": artifacts,
+        "links": links,
     }
 
 
@@ -9599,6 +11781,7 @@ def build_today_view() -> dict[str, Any]:
     )
 
     source_freshness_map = {item["key"]: item for item in readiness["source_freshness"]}
+    midday_due_label = f"{MIDDAY_CONFIRMATION_DUE_MINUTES // 60:02d}:{MIDDAY_CONFIRMATION_DUE_MINUTES % 60:02d}"
 
     def _augment_source(card: dict[str, Any], freshness_key: str) -> dict[str, Any]:
         freshness = source_freshness_map.get(freshness_key) or {}
@@ -9611,6 +11794,10 @@ def build_today_view() -> dict[str, Any]:
         merged["stale_after_seconds"] = freshness.get("stale_after_seconds")
         merged["trade_date"] = freshness.get("trade_date")
         merged["stale_reasons"] = freshness.get("stale_reasons", [])
+        merged["deferred"] = bool(freshness.get("deferred"))
+        merged["deferred_reason"] = freshness.get("deferred_reason")
+        if merged["deferred"] and freshness.get("deferred_reason") == MIDDAY_CONFIRMATION_DEFER_REASON:
+            merged["detail"] = f"等待 {midday_due_label} 午盘确认"
         return merged
 
     source_cards = [
@@ -9634,7 +11821,7 @@ def build_today_view() -> dict[str, Any]:
             {
                 "label": "午盘确认",
                 "value": (confirmation or {}).get("generated_at") or "-",
-                "detail": (confirmation or {}).get("validation_status") or "暂无确认",
+                "detail": midday_validation_status_label((confirmation or {}).get("validation_status") or "missing"),
             },
             "confirmation",
         ),
@@ -9692,6 +11879,11 @@ def build_today_view() -> dict[str, Any]:
             "path": ((decision_brief or {}).get("paths") or {}).get("confirmation") or (confirmation or {}).get("path"),
             "url": artifact_url(((decision_brief or {}).get("paths") or {}).get("confirmation") or (confirmation or {}).get("path")),
             "label": "午盘确认",
+        },
+        "opportunity_v2_tracking": {
+            "path": ((screening_batch or {}).get("opportunity_v2_tracking") or {}).get("path"),
+            "url": artifact_url(((screening_batch or {}).get("opportunity_v2_tracking") or {}).get("path")),
+            "label": "V2 机会跟踪",
         },
     }
     action_queue, decision_contracts = attach_decision_contracts(
@@ -9803,6 +11995,7 @@ def build_today_view() -> dict[str, Any]:
         "evidence_hint": evidence_hint,
         "action_groups": action_groups,
         "action_queue": action_queue,
+        "opportunity_v2_tracking": (screening_batch or {}).get("opportunity_v2_tracking") or {},
         "decision_contracts": decision_contracts,
         "next_steps": next_steps,
         "top_rows": top_rows,
@@ -10024,7 +12217,7 @@ def _portfolio_latest_execution(events: list[dict[str, Any]]) -> dict[str, Any] 
 def _portfolio_latest_outcome(events: list[dict[str, Any]]) -> dict[str, Any] | None:
     if not events:
         return None
-    rank = {"T+5": 3, "T+3": 2, "T+1": 1}
+    rank = {"T+10": 4, "T+5": 3, "T+3": 2, "T+1": 1}
     event = max(
         events,
         key=lambda item: (

@@ -4,9 +4,11 @@ import type {
   AskResponse,
   AskSuggestResponse,
   DecisionLedgerAttributionDraftResponse,
+  DecisionLedgerAutoReviewResponse,
   DecisionLedgerCalibrationResponse,
   DecisionLedgerDetailResponse,
   DecisionLedgerHealthResponse,
+  DecisionLedgerLearningLoopResponse,
   DecisionLedgerRecentResponse,
   DecisionLedgerReviewCaseSavePayload,
   DecisionLedgerReviewCaseSaveResponse,
@@ -14,7 +16,9 @@ import type {
   DecisionLedgerReviewCasesResponse,
   DecisionLedgerStockResponse,
   DecisionLedgerSummaryResponse,
+  DataAssetsStatus,
   DecisionValue,
+  FormalDataStatus,
   HealthResponse,
   OpportunitiesData,
   OverviewData,
@@ -28,9 +32,16 @@ import type {
   ReviewDetailData,
   RunItem,
   SchedulerStatus,
+  StockProfileDetailData,
+  StockProfileFormalDataResponse,
+  StockLearningScorecard,
+  StockProfileSummaryData,
+  StockProfileTodayActionResponse,
   StockProfileData,
   TaskRunResponse,
+  TodayActionsData,
   TodayData,
+  TodaySummaryData,
   WatchlistData,
   WatchlistManageResponse,
   WatchlistManagerResponse,
@@ -137,6 +148,12 @@ export const api = {
   getToday() {
     return fetchJson<TodayData>("/api/today");
   },
+  getTodaySummary() {
+    return fetchJson<TodaySummaryData>("/api/today/summary");
+  },
+  getTodayActions() {
+    return fetchJson<TodayActionsData>("/api/today/actions");
+  },
   getOverview() {
     return fetchJson<OverviewData>("/api/overview");
   },
@@ -175,6 +192,29 @@ export const api = {
   },
   getStockProfile(code: string) {
     return fetchJson<StockProfileData>(`/api/stock/${encodeURIComponent(code)}`);
+  },
+  getStockProfileSummary(code: string) {
+    return fetchJson<StockProfileSummaryData>(`/api/stock/${encodeURIComponent(code)}/summary`);
+  },
+  getStockProfileDetail(code: string) {
+    return fetchJson<StockProfileDetailData>(`/api/stock/${encodeURIComponent(code)}/detail`);
+  },
+  getStockProfileFormalData(code: string) {
+    return fetchJson<StockProfileFormalDataResponse>(`/api/stock/${encodeURIComponent(code)}/formal-data`);
+  },
+  getStockProfileFormalDataSection(code: string, section: string) {
+    return fetchJson<StockProfileFormalDataResponse>(
+      `/api/stock/${encodeURIComponent(code)}/formal-data/${encodeURIComponent(section)}`,
+    );
+  },
+  getStockProfileTodayAction(code: string) {
+    return fetchJson<StockProfileTodayActionResponse>(`/api/stock/${encodeURIComponent(code)}/today-action`);
+  },
+  getStockProfileLearningScorecard(code: string) {
+    return fetchJson<StockLearningScorecard>(`/api/stock/${encodeURIComponent(code)}/learning-scorecard`);
+  },
+  getStockProfileFull(code: string) {
+    return fetchJson<StockProfileData>(`/api/stock/${encodeURIComponent(code)}/full`);
   },
   getReview(params: { baseline?: string; window?: string } = {}) {
     const query = new URLSearchParams();
@@ -269,6 +309,12 @@ export const api = {
     return fetchJson<ReadinessPayload & { generated_at?: string; trade_date?: string }>(
       "/api/readiness/live",
     );
+  },
+  getFormalDataStatus() {
+    return fetchJson<FormalDataStatus>("/api/formal-data/status");
+  },
+  getDataAssetsStatus() {
+    return fetchJson<DataAssetsStatus>("/api/data-assets/status");
   },
   triggerRefresh(payload: { page: string; task_name?: string; force?: boolean; reason?: string }) {
     return fetchJson<RefreshTriggerResponse>("/api/refresh/trigger", {
@@ -382,6 +428,14 @@ export const api = {
     const suffix = query.toString() ? `?${query.toString()}` : "";
     return fetchJson<DecisionLedgerCalibrationResponse>(`/api/decision-ledger/calibration${suffix}`);
   },
+  getDecisionLedgerLearningLoop(params: { as_of?: string } = {}) {
+    const query = new URLSearchParams();
+    if (params.as_of) {
+      query.set("as_of", params.as_of);
+    }
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return fetchJson<DecisionLedgerLearningLoopResponse>(`/api/decision-ledger/learning-loop${suffix}`);
+  },
   getDecisionLedgerReviewCases() {
     return fetchJson<DecisionLedgerReviewCasesResponse>("/api/decision-ledger/review-cases");
   },
@@ -393,6 +447,14 @@ export const api = {
   generateDecisionLedgerAttributionDraft(decisionId: string) {
     return fetchJson<DecisionLedgerAttributionDraftResponse>(
       `/api/decision-ledger/review-case/${encodeURIComponent(decisionId)}/attribution-draft`,
+      {
+        method: "POST",
+      },
+    );
+  },
+  autoReviewDecisionLedgerCase(decisionId: string) {
+    return fetchJson<DecisionLedgerAutoReviewResponse>(
+      `/api/decision-ledger/review-case/${encodeURIComponent(decisionId)}/auto-review`,
       {
         method: "POST",
       },

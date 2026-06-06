@@ -22,6 +22,7 @@ export function ActionRow({
   const name = stockNameFromTitle(item.title);
   const href = code ? `/stock/${code}` : item.url || "#";
   const nextDecision: DecisionValue = checked ? "pending" : "done";
+  const detail = item.decision_summary || item.detail || item.entry_plan?.trigger || item.foot || item.status;
 
   return (
     <div className="grid grid-cols-[auto_3px_minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-[var(--border-subtle)] py-3 last:border-b-0">
@@ -53,9 +54,14 @@ export function ActionRow({
             {name}
           </span>
           {code ? <span className="mono shrink-0 text-[11px] text-[var(--text-tertiary)]">{code}</span> : null}
+          {item.decision_rank_label ? (
+            <Badge tone={item.decision_rank === 1 ? "positive" : "info"} className="shrink-0">
+              {item.decision_rank_label}
+            </Badge>
+          ) : null}
         </div>
         <div className="mt-0.5 line-clamp-1 text-[12px] text-[var(--text-tertiary)]">
-          {asText(item.detail || item.foot || item.status)}
+          {asText(detail)}
         </div>
       </Link>
 

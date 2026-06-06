@@ -39,6 +39,7 @@ export function toneColor(tone?: Tone | string) {
       return "var(--tone-sell)";
     case "hold":
     case "info":
+    case "persistent":
       return "var(--tone-hold)";
     case "avoid":
     case "stale":

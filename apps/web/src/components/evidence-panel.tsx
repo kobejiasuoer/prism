@@ -72,7 +72,7 @@ export function EvidencePanel({
   const firstReasonDetail = firstReason ? refreshReasonCopy(firstReason).detail : "";
   const staleCount =
     refresh.data?.stale_count ??
-    mergedSources.filter((source) => source.stale || source.available === false).length;
+    mergedSources.filter((source) => source.stale || (!source.deferred && source.available === false)).length;
   const healthTitle = staleCount ? "数据有降级" : "数据可用";
   const healthDetail = refresh.data
     ? [

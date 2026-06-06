@@ -25,6 +25,7 @@ EMOTION_SCORE_RULES = THRESHOLD_SETS["emotion_score"]
 FUNDAMENTAL_SCORE_RULES = THRESHOLD_SETS["fundamental_score"]
 MISSING_DATA_PENALTIES = THRESHOLD_SETS["missing_data_penalties"]
 OVERHEAT_PENALTY_RULES = THRESHOLD_SETS["overheat_penalty"]
+OPPORTUNITY_V2_RULES = THRESHOLD_SETS.get("opportunity_v2", {})
 
 
 def _apply_tiered_score(value: float, rules: list[dict]) -> int:

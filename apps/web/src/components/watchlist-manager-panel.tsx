@@ -5,7 +5,7 @@ import type { FormEvent, ReactNode } from "react";
 import { useMemo, useState } from "react";
 
 import { Badge } from "./badge";
-import { EmptyState, ErrorState, Panel } from "./data-card";
+import { EmptyState, ErrorState, Panel, SkeletonBlock } from "./data-card";
 import { MetricCard } from "./metric-card";
 import { PreviewDrawer, type PreviewDrawerState } from "./preview-drawer";
 import { api } from "@/lib/api";
@@ -90,6 +90,7 @@ export function WatchlistManagerPanel() {
 
   const manager = managerQuery.data?.manager;
   const busy = addStock.isPending || archiveStock.isPending || restoreStock.isPending;
+  const managerLoading = managerQuery.isLoading && !manager;
   const normalizedCode = useMemo(() => normalizeCode(code), [code]);
 
   function onAdd(event: FormEvent<HTMLFormElement>) {
@@ -181,8 +182,9 @@ export function WatchlistManagerPanel() {
             type="button"
             className="focus-ring rounded-md border border-[var(--border-subtle)] px-3 py-1.5 text-[12px] text-[var(--text-secondary)]"
             onClick={() => void managerQuery.refetch()}
+            disabled={managerQuery.isFetching}
           >
-            刷新名单
+            {managerQuery.isFetching ? "读取中" : "刷新名单"}
           </button>
         }
       >
@@ -190,9 +192,11 @@ export function WatchlistManagerPanel() {
 
         <div className="surface-card p-4">
           <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {(manager?.summary_cards || []).map((card) => (
-              <MetricCard key={card.label} {...card} tone={card.tone || "info"} />
-            ))}
+            {managerLoading
+              ? Array.from({ length: 3 }).map((_, index) => <SkeletonBlock key={index} className="h-24 w-full" />)
+              : (manager?.summary_cards || []).map((card) => (
+                  <MetricCard key={card.label} {...card} tone={card.tone || "info"} />
+                ))}
           </div>
 
           <form className="mb-4 grid grid-cols-1 gap-3 lg:grid-cols-[160px_minmax(0,1fr)_auto]" onSubmit={onAdd}>
@@ -242,7 +246,7 @@ export function WatchlistManagerPanel() {
                   {manager?.refresh_status?.label || "刷新状态"}
                 </div>
                 <div className="mt-1 text-[12px] text-[var(--text-tertiary)]">
-                  {manager?.refresh_status?.detail || manager?.feedback_hint || "等待刷新状态。"}
+                  {managerLoading ? "正在读取名单和最近刷新记录。" : manager?.refresh_status?.detail || manager?.feedback_hint || "等待刷新状态。"}
                 </div>
               </div>
               {manager?.refresh_status?.log_path ? (
@@ -257,7 +261,9 @@ export function WatchlistManagerPanel() {
               ) : null}
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {(manager?.refresh_status?.steps || []).map((step, index) => (
+              {managerLoading
+                ? Array.from({ length: 3 }).map((_, index) => <SkeletonBlock key={index} className="h-16 w-full" />)
+                : (manager?.refresh_status?.steps || []).map((step, index) => (
                 <div key={`${step.label}-${index}`} className="rounded-md border border-[var(--border-subtle)] px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-[12px] text-[var(--text-primary)]">{step.label || `步骤 ${index + 1}`}</span>
@@ -275,7 +281,12 @@ export function WatchlistManagerPanel() {
             <div>
               <div className="mb-2 text-[12px] font-medium text-[var(--text-primary)]">活跃持仓池</div>
               <div className="flex flex-col gap-2">
-                {(manager?.active_items || []).map((item) => (
+                {managerLoading ? (
+                  <>
+                    <SkeletonBlock className="h-16 w-full" />
+                    <SkeletonBlock className="h-16 w-full" />
+                  </>
+                ) : (manager?.active_items || []).map((item) => (
                   <ManagerItemRow
                     key={item.code}
                     item={item}
@@ -285,14 +296,16 @@ export function WatchlistManagerPanel() {
                     onAction={() => archive(item.code)}
                   />
                 ))}
-                {!manager?.active_items?.length ? <EmptyState>{manager?.empty_active || "暂无活跃自选股。"}</EmptyState> : null}
+                {!managerLoading && !manager?.active_items?.length ? <EmptyState>{manager?.empty_active || "暂无活跃自选股。"}</EmptyState> : null}
               </div>
             </div>
 
             <div>
               <div className="mb-2 text-[12px] font-medium text-[var(--text-primary)]">归档列表</div>
               <div className="flex flex-col gap-2">
-                {(manager?.archived_items || []).map((item) => (
+                {managerLoading ? (
+                  <SkeletonBlock className="h-16 w-full" />
+                ) : (manager?.archived_items || []).map((item) => (
                   <ManagerItemRow
                     key={item.code}
                     item={item}
@@ -302,7 +315,7 @@ export function WatchlistManagerPanel() {
                     onAction={() => restore(item.code)}
                   />
                 ))}
-                {!manager?.archived_items?.length ? <EmptyState>{manager?.empty_archived || "暂无归档股票。"}</EmptyState> : null}
+                {!managerLoading && !manager?.archived_items?.length ? <EmptyState>{manager?.empty_archived || "暂无归档股票。"}</EmptyState> : null}
               </div>
             </div>
           </div>

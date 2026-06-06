@@ -1,6 +1,6 @@
 """Phase 4 -- OutcomeEvent evaluator tests.
 
-The evaluator computes T+1 / T+3 / T+5 post-decision market metrics
+The evaluator computes T+1 / T+3 / T+5 / T+10 post-decision market metrics
 from a pluggable price provider and appends a conservative
 classification onto each DecisionRecord.  These tests cover:
 
@@ -179,7 +179,7 @@ class FindDueOutcomesTests(unittest.TestCase):
         due = list(self.ledger.find_due_outcomes(as_of_date="2026-05-22"))
         older_windows = sorted({w for d, w in due if d["decision_id"] == older["decision_id"]})
         younger_windows = sorted({w for d, w in due if d["decision_id"] == younger["decision_id"]})
-        self.assertEqual(older_windows, ["T+1", "T+3", "T+5"])
+        self.assertEqual(older_windows, ["T+1", "T+10", "T+3", "T+5"])
         self.assertEqual(younger_windows, ["T+1", "T+3", "T+5"])
 
 
@@ -655,6 +655,46 @@ class EvaluateDueOutcomesEndToEndTests(unittest.TestCase):
         outcome = stored["outcome_events"][0]
         self.assertEqual(outcome["classification"]["label"], "data_issue")
         self.assertFalse(outcome["quality"]["usable_for_decision_quality"])
+
+    def test_evaluator_summary_includes_factor_learning_payload(self) -> None:
+        factor_record = self.ledger.upsert_decision(
+            self.ledger.build_decision_record(
+                **_sample_decision_inputs(
+                    code="sh600691",
+                    action_key="watchlist:600691",
+                    factor_snapshot={
+                        "tushare_score": 72.0,
+                        "data_completeness": 0.9,
+                        "factor_tags": ["高ROE"],
+                        "risk_flags": [],
+                        "tushare_score_breakdown": {"quality": {"score": 90}},
+                        "factor_snapshot": {"fundamentals": {"roe": 18.0}},
+                        "trade_date_used": "2026-05-15",
+                    },
+                )
+            )
+        )
+        provider = FakePriceProvider(
+            prices={
+                "sh600690": self.provider.prices["sh600690"],
+                "sh600691": self.provider.prices["sh600690"],
+                "000300": self.provider.prices["000300"],
+            }
+        )
+
+        summary = self.ledger.evaluate_due_outcomes(
+            as_of_date="2026-05-18",
+            price_provider=provider,
+        )
+
+        self.assertGreaterEqual(summary["evaluated"], 1)
+        learning = summary["learning_summary"]
+        self.assertEqual(learning["version"], "decision-factor-learning.v1")
+        self.assertEqual(learning["sample_count"], 1)
+        self.assertEqual(learning["factor_record_count"], 1)
+        self.assertEqual(learning["sample_window"]["outcome_windows"], ["T+1", "T+3", "T+5", "T+10"])
+        stored = self.ledger.load_decision(factor_record["decision_id"])
+        self.assertTrue(stored["outcome_events"])
 
 
 if __name__ == "__main__":

@@ -106,9 +106,23 @@ class ReadinessLiveExtensionTests(unittest.TestCase):
         self.assertIn("source_states", body)
         self.assertIn("capabilities", body)
         self.assertIn("trust_level", body)
+        self.assertIn("formal_ready", body)
+        self.assertIn("formal_base_ready", body)
+        self.assertIn("pipeline_formal_ready", body)
+        self.assertIn("formal_base_blockers", body)
+        self.assertIn("pipeline_formal_blockers", body)
         self.assertIsInstance(body["source_states"], dict)
         self.assertIsInstance(body["capabilities"], dict)
         self.assertIsInstance(body["trust_level"], dict)
+        self.assertIsInstance(body["formal_base_ready"], bool)
+        self.assertIsInstance(body["pipeline_formal_ready"], bool)
+        self.assertIsInstance(body["formal_base_blockers"], list)
+        self.assertIsInstance(body["pipeline_formal_blockers"], list)
+
+    def test_readiness_live_warning_copy_does_not_claim_formal_source_missing(self) -> None:
+        body = self.client.get("/api/readiness/live").json()
+        warning_text = " ".join(str(item.get("message") or "") for item in body.get("warnings") or [])
+        self.assertNotIn("正式数据口径未通过", warning_text)
 
     def test_data_capability_summary_embedded(self) -> None:
         body = self.client.get("/api/readiness/live").json()

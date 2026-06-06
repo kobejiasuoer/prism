@@ -32,10 +32,28 @@ export interface MetricCardData {
   tone?: Tone | string;
   detail_url?: string;
   detail_link_text?: string;
+  deferred?: boolean;
+  deferred_reason?: string | null;
 }
 
 export interface SourceCardData {
   key?: string;
+  dataset?: string;
+  usage?: {
+    dataset?: string;
+    label?: string;
+    group?: string;
+    decision_use?: string;
+    live_permission?: string;
+    intended_surfaces?: string[];
+    explanation?: string;
+  };
+  feature_group?: string;
+  decision_use?: string;
+  live_permission?: string;
+  intended_surfaces?: string[];
+  usage_explanation?: string;
+  stock_profile_use?: string;
   label: string;
   value: string;
   detail?: string;
@@ -46,6 +64,8 @@ export interface SourceCardData {
   stale_after_seconds?: number;
   trade_date?: string | null;
   stale_reasons?: string[];
+  deferred?: boolean;
+  deferred_reason?: string | null;
   source_lane?: string;
   decision_scope?: string;
   authority_provider?: string;
@@ -85,6 +105,8 @@ export interface ReadinessSourceFreshness {
   stale: boolean;
   stale_after_seconds: number;
   stale_reasons: string[];
+  deferred?: boolean;
+  deferred_reason?: string | null;
   provider?: string;
   provider_role?: string;
   freshness_status?: string;
@@ -109,6 +131,32 @@ export type FreshnessState =
   | "DEGRADED"
   | "INVALID"
   | "BLOCKED";
+
+export type RiskLevel = "info" | "warn" | "degrade" | "block" | string;
+
+export interface RiskEvidenceRef {
+  kind?: string;
+  dataset?: string;
+  label?: string;
+  risk_label?: string;
+  level?: RiskLevel;
+  reason?: string;
+  display_only?: boolean;
+  hard_block?: boolean;
+}
+
+export interface RiskItem {
+  code?: string;
+  label?: string;
+  level?: RiskLevel;
+  level_label?: string;
+  reason?: string;
+  dataset?: string;
+  dataset_label?: string;
+  value?: string | number | boolean | null;
+  hard_block?: boolean;
+  display_only?: boolean;
+}
 
 export type CapabilityKey =
   | "observe"
@@ -804,6 +852,12 @@ export interface ReviewDetailData {
   summary_cards?: MetricCardData[];
   comparison_panels?: ReviewComparisonPanel[];
   artifacts?: BasicCard[];
+  risk_level?: RiskLevel;
+  risk_items?: RiskItem[];
+  degrade_reason?: string;
+  block_reason?: string;
+  risk_evidence_refs?: RiskEvidenceRef[];
+  risk_source_cards?: SourceCardData[];
   links?: LinkMap;
 }
 
@@ -850,8 +904,16 @@ export interface StockListCard {
   risk?: string;
   setup_label?: string;
   score?: string | number;
+  priority_score?: string | number;
+  best_score?: string | number;
   change_pct?: string | number;
   amount_yi?: string | number;
+  flow_today_yi?: string | number;
+  capital_trend?: string;
+  execution_quality_score?: string | number;
+  execution_quality_label?: string;
+  consistency_score?: string | number;
+  consistency_label?: string;
   theme?: string;
   signal?: string;
   support?: string | number;
@@ -866,14 +928,84 @@ export interface StockListCard {
   upgrade_condition?: string;
   invalid_condition?: string;
   avoid_condition?: string;
+  action_intent?: string;
+  position_guidance?: string;
+  suggested_action?: string;
+  suggested_action_label?: string;
+  confidence?: string | number | null;
+  thesis?: string;
+  why_now?: string;
+  invalidation?: string;
+  upgrade_reason?: string;
+  missing_confirmation?: string[];
+  positive_confirmation?: string[];
+  hard_gate_max_action?: string;
+  hard_gate_block_reason?: string;
+  hard_gate_blocks_action?: boolean;
+  hard_gate_reasons?: Array<Record<string, unknown>>;
+  market_phase?: string;
+  market_phase_value?: string;
+  theme_phase?: string;
+  theme_phase_value?: string;
+  theme_phase_theme?: string;
+  stock_role?: string;
+  stock_role_value?: string;
+  playbook?: string;
+  playbook_value?: string;
+  opportunity_type?: string;
+  crowding_risk?: string;
+  crowding_risk_level?: string;
+  fake_breakout_risk?: string;
+  fake_breakout_risk_level?: string;
+  judge_source?: string;
+  ai_status?: string;
+  ai_status_label?: string;
+  ai_summary?: Record<string, unknown>;
+  ai_delta?: Record<string, unknown>;
+  ai_provider?: string;
+  ai_model?: string;
+  v2_mode_requested?: string;
+  v2_mode_effective?: string;
+  v2_active_allowed?: boolean;
+  v2_calibration_stage?: string;
+  v2_calibration_guard_reason?: string;
+  v2_calibration_mature_samples?: string | number | null;
+  v2_calibration_threshold_adjustments?: Record<string, unknown>;
+  v2_playbook_adjustment?: Record<string, unknown>;
+  opportunity_v2?: Record<string, unknown>;
+  entry_plan?: {
+    action?: string;
+    trigger?: string;
+    avoid?: string;
+    invalidate?: string;
+    sizing?: string;
+    levels?: Record<string, string | number | null | undefined>;
+    [key: string]: unknown;
+  } | null;
   risk_tags?: string[];
   priority_label?: string | number;
   persistence_label?: string;
+  decision_rank?: number;
+  decision_rank_label?: string;
+  decision_summary?: string;
   action_key?: string;
   tushare_score?: number | null;
+  data_completeness?: number | null;
   factor_tags?: string[];
   factor_risk_flags?: string[];
+  risk_level?: RiskLevel;
+  risk_items?: RiskItem[];
+  degrade_reason?: string;
+  block_reason?: string;
+  risk_evidence_refs?: RiskEvidenceRef[];
+  risk_source_cards?: SourceCardData[];
+  tushare_score_breakdown?: Record<string, unknown>;
+  factor_snapshot?: Record<string, unknown>;
+  trade_date_used?: string | null;
   factor_explanation?: TushareFactorExplanation;
+  tushare_positive_adjustment?: number;
+  tushare_risk_penalty?: number;
+  tushare_priority_adjustment?: number;
 }
 
 export interface CardGroup<T = StockListCard> {
@@ -1042,6 +1174,22 @@ export interface TodayActionItem {
   group_key?: string;
   group_title?: string;
   group_index?: number;
+  entry_plan?: {
+    action?: string;
+    trigger?: string;
+    avoid?: string;
+    invalidate?: string;
+    sizing?: string;
+    levels?: Record<string, string | number | null | undefined>;
+    [key: string]: unknown;
+  } | null;
+  decision_rank?: number;
+  decision_rank_label?: string;
+  decision_summary?: string;
+  priority_score?: string | number;
+  best_score?: string | number;
+  flow_today_yi?: string | number;
+  capital_trend?: string;
   decision: TodayActionDecision;
   display_state?: TodayActionDisplayState;
   freshness?: TodayActionContext;
@@ -1057,6 +1205,23 @@ export interface TodayActionItem {
   decision_contract?: DecisionContract;
   allowed_for_real_money?: boolean;
   execution_constraints?: DecisionContractConstraint[];
+  tushare_score?: number | null;
+  data_completeness?: number | null;
+  factor_tags?: string[];
+  factor_risk_flags?: string[];
+  risk_level?: RiskLevel;
+  risk_items?: RiskItem[];
+  degrade_reason?: string;
+  block_reason?: string;
+  risk_evidence_refs?: RiskEvidenceRef[];
+  risk_source_cards?: SourceCardData[];
+  tushare_score_breakdown?: Record<string, unknown>;
+  factor_snapshot?: Record<string, unknown>;
+  trade_date_used?: string | null;
+  factor_explanation?: TushareFactorExplanation;
+  tushare_positive_adjustment?: number;
+  tushare_risk_penalty?: number;
+  tushare_priority_adjustment?: number;
 }
 
 export interface TodayActionQueue {
@@ -1078,6 +1243,36 @@ export interface TodayActionQueue {
     last_updated?: string;
   };
   decision_contracts?: DecisionContractPayload;
+}
+
+export type ActionRegisterWritebackStatus = "writable" | "read_only" | "stale" | string;
+
+export interface TodayActionRegisterItem {
+  intent_key: string;
+  title: string;
+  code?: string;
+  name?: string;
+  lane?: string;
+  source?: "command_brief" | "action_queue" | string;
+  action_label?: string;
+  writeback_status: ActionRegisterWritebackStatus;
+  writeback_reason?: string;
+  url?: string;
+  tone?: Tone | string;
+  detail?: string;
+}
+
+export interface TodayActionRegister {
+  title?: string;
+  subtitle?: string;
+  items: TodayActionRegisterItem[];
+  counts?: {
+    total?: number;
+    writable?: number;
+    read_only?: number;
+    stale?: number;
+  };
+  readiness_mode?: ReadinessMode | string;
 }
 
 export interface RiskRow {
@@ -1132,7 +1327,7 @@ export interface TodayCounts {
 
 export type CommandBriefModeValue = "defense" | "observe" | "probe" | "offense";
 export type CommandBriefPermitValue =
-  | "on" | "off" | "shadow" | "limited" | "none" | "observe" | "conditional" | "actionable";
+  | "on" | "off" | "shadow" | "limited" | "none" | "observe" | "review" | "conditional" | "actionable";
 
 export interface CommandBriefPermit {
   value: CommandBriefPermitValue;
@@ -1199,6 +1394,9 @@ export interface CommandBriefLaneItem {
   source: string;
   url?: string | null;
   tone: string;
+  decision_rank?: number | null;
+  decision_rank_label?: string | null;
+  decision_summary?: string | null;
 }
 
 export interface CommandBriefLane {
@@ -1275,8 +1473,44 @@ export interface TodayData {
   command_brief?: TodayCommandBrief;
   command_brief_error?: string | null;
   decision_contracts?: DecisionContractPayload;
+  action_register?: TodayActionRegister;
   links: LinkMap;
   counts: TodayCounts;
+}
+
+export type TodaySummaryData = Omit<
+  TodayData,
+  "action_queue" | "decision_contracts" | "risk_rows"
+> & {
+  summary_only: true;
+  action_queue?: never;
+  decision_contracts?: never;
+  links_lazy?: {
+    actions?: string;
+    full?: string;
+  };
+};
+
+export interface TodayActionsData {
+  generated_at: string;
+  trade_date: string;
+  expected_trade_date?: string;
+  data_trade_date?: string | null;
+  readiness_mode?: ReadinessMode | string;
+  action_groups?: Array<Record<string, unknown>>;
+  action_queue: TodayActionQueue;
+  decision_contracts?: DecisionContractPayload;
+  action_register?: TodayActionRegister;
+  next_steps?: Record<string, unknown>;
+  top_rows?: RiskRow[];
+  primary_actions?: RiskRow[];
+  holdings_rows?: RiskRow[];
+  opportunity_rows?: RiskRow[];
+  risk_rows?: RiskRow[];
+  evidence_rows?: RiskRow[];
+  source_cards?: SourceCardData[];
+  artifacts?: Record<string, unknown>;
+  links?: LinkMap;
 }
 
 export interface AskSuggestion {
@@ -1359,6 +1593,7 @@ export interface AskFollowupShell {
 
 export interface AskFollowupAnswer {
   intent?: string;
+  intent_label?: string;
   title?: string;
   summary?: string;
   bullets?: string[];
@@ -1657,6 +1892,7 @@ export interface StockTodayActionContext {
 
 export interface StockProfileData {
   generated_at?: string;
+  summary_only?: boolean;
   code: string;
   name?: string | null;
   trade_date?: string;
@@ -1673,6 +1909,80 @@ export interface StockProfileData {
   today_action?: StockTodayActionContext | null;
   errors?: Partial<Record<"watchlist" | "opportunity", string>>;
   links?: LinkMap;
+}
+
+export type StockProfileSummaryData = Omit<
+  StockProfileData,
+  "primary_detail" | "watchlist" | "opportunity" | "formal_data" | "today_action"
+> & { summary_only: true };
+
+export type StockProfileDetailData = Omit<StockProfileData, "formal_data" | "today_action">;
+
+export interface StockProfileFormalDataResponse {
+  generated_at?: string;
+  code: string;
+  trade_date?: string;
+  expected_trade_date?: string;
+  data_trade_date?: string | null;
+  section?: string;
+  formal_data: StockFormalData;
+  links?: LinkMap;
+}
+
+export interface StockProfileTodayActionResponse {
+  generated_at?: string;
+  code: string;
+  trade_date?: string;
+  expected_trade_date?: string;
+  data_trade_date?: string | null;
+  today_action?: StockTodayActionContext | null;
+  links?: LinkMap;
+}
+
+export interface StockLearningScorecardMetric {
+  label: string;
+  value: string | number;
+  detail?: string;
+  tone?: Tone | string;
+}
+
+export interface StockLearningScorecardPattern {
+  label: string;
+  detail: string;
+  tone?: Tone | string;
+}
+
+export interface StockLearningScorecardRecentDecision {
+  decision_id?: string;
+  trade_date?: string;
+  action?: string;
+  action_label?: string;
+  main_conclusion?: string;
+  outcome_tone?: string;
+  execution_events_count?: number;
+  outcome_events_count?: number;
+}
+
+export interface StockLearningScorecard {
+  generated_at?: string;
+  code: string;
+  canonical_code?: string;
+  trade_date?: string;
+  stage: string;
+  feeds_execution: boolean;
+  confidence_label?: string;
+  headline?: string;
+  reason?: string;
+  sample_count: number;
+  evaluated_count: number;
+  validated_count?: number;
+  missed_opportunity_count?: number;
+  execution_gap_count?: number;
+  pending_count?: number;
+  scorecards?: StockLearningScorecardMetric[];
+  failure_patterns?: StockLearningScorecardPattern[];
+  recent_decisions?: StockLearningScorecardRecentDecision[];
+  similar_edge?: Record<string, unknown> | null;
 }
 
 export interface RunItem {
@@ -1857,6 +2167,20 @@ export interface DataAssetRow {
   dataset: string;
   label: string;
   purpose?: string;
+  usage?: {
+    dataset?: string;
+    label?: string;
+    group?: string;
+    decision_use?: string;
+    live_permission?: string;
+    intended_surfaces?: string[];
+    explanation?: string;
+  };
+  feature_group?: string;
+  decision_use?: string;
+  live_permission?: string;
+  intended_surfaces?: string[];
+  usage_explanation?: string;
   available: boolean;
   provider?: string;
   trade_date?: string | null;
@@ -1912,7 +2236,7 @@ export interface DataAssetsStatus {
 }
 
 export interface TushareFactorEvidenceBlock {
-  values?: Record<string, number | string | null | Array<Record<string, unknown>>>;
+  values?: Record<string, number | string | boolean | null | Array<Record<string, unknown> | string | number | boolean | null>>;
   interpretation?: string;
   available?: boolean;
 }
@@ -1928,6 +2252,11 @@ export interface TushareFactorExplanation {
     capital?: TushareFactorEvidenceBlock;
     trading_anomaly?: TushareFactorEvidenceBlock;
     index_weight?: TushareFactorEvidenceBlock;
+    theme?: TushareFactorEvidenceBlock;
+    event_risk?: TushareFactorEvidenceBlock;
+    margin?: TushareFactorEvidenceBlock;
+    chips?: TushareFactorEvidenceBlock;
+    execution?: TushareFactorEvidenceBlock;
   };
 }
 
@@ -1943,18 +2272,49 @@ export interface TushareFactorProfile {
   }>;
   factor_tags?: string[];
   risk_flags?: string[];
+  risk_level?: RiskLevel;
+  risk_level_label?: string;
+  risk_items?: RiskItem[];
+  degrade_reason?: string;
+  block_reason?: string;
+  risk_evidence_refs?: RiskEvidenceRef[];
+  risk_source_cards?: SourceCardData[];
   explanation?: TushareFactorExplanation;
+  factor_snapshot?: Record<string, unknown>;
   trade_date_used?: string | null;
 }
 
 export interface StockFormalData {
   available: boolean;
+  summary_only?: boolean;
   code: string;
   trade_date?: string;
+  requested_trade_date?: string;
+  data_trade_date?: string | null;
+  stale?: boolean;
+  freshness_status?: string;
   provider?: string;
   headline?: string;
   summary?: string;
   metric_cards?: MetricCardData[];
+  profile?: Record<string, unknown>;
+  themes?: {
+    concepts?: string[];
+    industries?: string[];
+    ths?: string[];
+    dc?: string[];
+    raw?: Record<string, Array<Record<string, unknown>>>;
+  };
+  business_breakdown?: {
+    end_date?: string | null;
+    top_items?: Array<Record<string, unknown>>;
+    by_type?: Record<string, Array<Record<string, unknown>>>;
+    top_share?: number | null;
+    concentration_label?: string;
+  };
+  event_risks?: Record<string, unknown>;
+  market_activity?: Record<string, unknown>;
+  technical_chips?: Record<string, unknown>;
   valuation?: Record<string, unknown>;
   liquidity?: Record<string, unknown>;
   capital_flow?: Record<string, unknown>;
@@ -1967,6 +2327,18 @@ export interface StockFormalData {
   shareholders?: Array<Record<string, unknown>>;
   source_cards?: SourceCardData[];
   factor_profile?: TushareFactorProfile;
+  coverage?: {
+    stock_scoped_available?: number;
+    stock_scoped_total?: number;
+    catalog_available?: number;
+    catalog_total?: number;
+  };
+  sections?: Array<{
+    key: string;
+    label: string;
+    available?: boolean;
+    endpoint?: string;
+  }>;
 }
 
 export interface ScheduledRunState {
@@ -2632,6 +3004,13 @@ export interface DecisionLedgerAttributionDraftResponse {
   draft: DecisionLedgerAttributionDraft;
 }
 
+export interface DecisionLedgerAutoReviewResponse {
+  ok: boolean;
+  draft: DecisionLedgerAttributionDraft;
+  review_case: DecisionLedgerReviewCase;
+  workbench: DecisionLedgerReviewCaseWorkbench;
+}
+
 export interface DecisionLedgerReviewCasesResponse {
   items: DecisionLedgerReviewCase[];
   count: number;
@@ -2792,6 +3171,17 @@ export interface DecisionLedgerDetailResponse {
     sha256?: string | null;
     summary?: unknown;
   };
+  factor_snapshot?: {
+    tushare_score?: number | null;
+    data_completeness?: number | null;
+    factor_tags?: string[];
+    risk_flags?: string[];
+    tushare_score_breakdown?: Record<string, unknown>;
+    factor_snapshot?: Record<string, unknown>;
+    trade_date_used?: string | null;
+    risk_level?: string | null;
+    degrade_reason?: string | null;
+  } | null;
   status?: {
     state?: string;
     superseded_by?: string | null;
@@ -2838,6 +3228,89 @@ export interface DecisionLedgerLearningSuggestion {
   review_rate: number;
 }
 
+export interface DecisionLedgerFactorWindowStats {
+  sample_count: number;
+  win_rate?: number | null;
+  positive_label_rate?: number | null;
+  avg_return_pct?: number | null;
+  avg_excess_return_pct?: number | null;
+  negative_rate?: number | null;
+  review_rate?: number | null;
+  outcomes?: Record<string, number>;
+  sample_too_small?: boolean;
+}
+
+export interface DecisionLedgerFactorStatsRow {
+  key: string;
+  label?: string;
+  sample_count: number;
+  mature_count: number;
+  decision_ids?: string[];
+  window_stats: Record<string, DecisionLedgerFactorWindowStats>;
+  sample_too_small?: boolean;
+}
+
+export interface DecisionLedgerFactorSummaryItem {
+  key?: string;
+  label?: string;
+  window?: string;
+  sample_count?: number;
+  decision_sample_count?: number;
+  win_rate?: number | null;
+  avg_return_pct?: number | null;
+  avg_excess_return_pct?: number | null;
+  negative_rate?: number | null;
+  review_rate?: number | null;
+  sample_too_small?: boolean;
+  reason?: string;
+}
+
+export interface DecisionLedgerWeightRecommendation {
+  kind?: string;
+  target?: string;
+  suggested_action?: string;
+  reason?: string;
+  sample_count?: number;
+  auto_apply?: boolean;
+}
+
+export interface DecisionLedgerFactorLearningSummary {
+  version?: string;
+  generated_at?: string;
+  sample_window?: {
+    from_date?: string | null;
+    to_date?: string | null;
+    as_of?: string;
+    outcome_windows?: string[];
+  };
+  sample_count?: number;
+  factor_record_count?: number;
+  min_sample_size?: number;
+  best_positive_factors?: DecisionLedgerFactorSummaryItem[];
+  worst_risk_flags?: DecisionLedgerFactorSummaryItem[];
+  noisy_factors?: DecisionLedgerFactorSummaryItem[];
+  score_bucket_performance?: DecisionLedgerFactorStatsRow[];
+  recommendations_for_weights?: DecisionLedgerWeightRecommendation[];
+  guardrail?: {
+    auto_apply?: boolean;
+    message?: string;
+  };
+}
+
+export interface DecisionLedgerFactorLearningLoop {
+  version?: string;
+  generated_at?: string;
+  as_of?: string;
+  outcome_windows?: string[];
+  samples_total?: number;
+  dimensions?: string[];
+  buckets?: Record<string, unknown>;
+  factor_tag_stats?: DecisionLedgerFactorStatsRow[];
+  risk_flag_stats?: DecisionLedgerFactorStatsRow[];
+  score_bucket_performance?: DecisionLedgerFactorStatsRow[];
+  learning_summary?: DecisionLedgerFactorLearningSummary;
+}
+
 export interface DecisionLedgerLearningLoopResponse {
   version: string;
   generated_at: string;
@@ -2849,6 +3322,8 @@ export interface DecisionLedgerLearningLoopResponse {
   buckets: DecisionLedgerLearningBucket[];
   suggestions: DecisionLedgerLearningSuggestion[];
   errors: DecisionLedgerScanError[];
+  factor_learning_loop?: DecisionLedgerFactorLearningLoop;
+  learning_summary?: DecisionLedgerFactorLearningSummary;
 }
 
 export interface DecisionLedgerCaptureStatus {
@@ -2887,6 +3362,7 @@ export interface DecisionLedgerOutcomeStatus {
     label?: string;
     detail?: string;
   }>;
+  learning_summary?: DecisionLedgerFactorLearningSummary | null;
   error?: string | null;
 }
 

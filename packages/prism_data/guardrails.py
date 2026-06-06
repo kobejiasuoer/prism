@@ -29,6 +29,9 @@ REPO_SCAN_ALLOWLIST: dict[str, str] = {
     "packages/quant/free_sources/live_smoke_runner.py": (
         "research-only free-source smoke runner; intentionally probes akshare/baostock"
     ),
+    "apps/scripts/backfill_shadow_replay_data.py": (
+        "research-only shadow replay backfill; intentionally probes akshare before sina fallback"
+    ),
 }
 
 

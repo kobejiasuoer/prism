@@ -195,6 +195,70 @@ class PermitsTest(unittest.TestCase):
         )
         self.assertEqual(permits["opportunity"]["value"], "actionable")
 
+    def test_live_ready_but_not_approvable_is_review_only(self) -> None:
+        permits = derive_permits(
+            readiness=_readiness(
+                "live_ready",
+                capabilities={
+                    "review": {"granted": True},
+                    "approve": {
+                        "granted": False,
+                        "why_not": [{"message": "正式放行需要正式数据口径通过后再确认。"}],
+                    },
+                    "trade": {"granted": False},
+                },
+                trust_level={
+                    "level": "observe_only",
+                    "blocking_reasons": ["正式数据底座已接入；业务链路仍有观察级降级项。"],
+                },
+            ),
+            gate=_gate(allow=True, label="放开"),
+            confirmation=_confirmation(confirmed=2, fresh=1),
+            screening_batch=None,
+        )
+        self.assertEqual(permits["data"]["value"], "review")
+        self.assertEqual(permits["data"]["label"], "可观察/复核")
+        self.assertEqual(permits["market"]["value"], "off")
+        self.assertEqual(permits["opportunity"]["value"], "observe")
+        self.assertIn("正式放行", permits["opportunity"]["why"])
+
+    def test_v2_active_downgrade_is_visible_in_opportunity_permit(self) -> None:
+        item = {
+            "code": "600001",
+            "suggested_action": "trial",
+            "opportunity_v2": {
+                "suggested_action": "trial",
+                "desired_action": "trial",
+                "mode_requested": "active",
+                "mode_effective": "assist",
+                "mode_guard": {
+                    "requested_mode": "active",
+                    "effective_mode": "assist",
+                    "active_allowed": False,
+                    "sample_stage": "cold_start",
+                    "guard_reason": "V2 尚无可用 outcome 样本",
+                },
+                "calibration": {
+                    "sample_stage": "cold_start",
+                    "guard_reason": "V2 尚无可用 outcome 样本",
+                },
+            },
+        }
+
+        permits = derive_permits(
+            readiness=_readiness("live_ready"),
+            gate=_gate(allow=True, label="进攻放开"),
+            confirmation=_confirmation(),
+            screening_batch={
+                "candidates": [item],
+                "screening_summary": {"approved_count": 1, "candidate_total": 1},
+            },
+        )
+
+        self.assertEqual(permits["opportunity"]["value"], "conditional")
+        self.assertIn("校准护栏", permits["opportunity"]["why"])
+        self.assertIn("V2 尚无可用 outcome 样本", permits["opportunity"]["why"])
+
 
 class FirstActionTest(unittest.TestCase):
     def test_defense_returns_recover_data_action(self) -> None:
@@ -237,6 +301,37 @@ class FirstActionTest(unittest.TestCase):
         self.assertEqual(action["kind"], "system")
         self.assertEqual(action["url"], "/portfolio")
 
+    def test_review_only_readiness_suppresses_stock_first_action(self) -> None:
+        action = derive_first_action(
+            mode_value="observe",
+            action_queue={
+                "items": [
+                    {
+                        "key": "watchlist:600690",
+                        "title": "海尔智家 600690",
+                        "detail": "ROE偏弱",
+                        "tone": "watch",
+                        "url": "/stock/600690",
+                        "decision": {"value": "pending"},
+                    }
+                ]
+            },
+            readiness=_readiness(
+                "live_ready",
+                capabilities={
+                    "approve": {
+                        "granted": False,
+                        "why_not": [{"message": "正式放行需要正式数据口径通过后再确认。"}],
+                    },
+                    "trade": {"granted": False},
+                },
+            ),
+        )
+        self.assertEqual(action["kind"], "review_only")
+        self.assertEqual(action["url"], "#judgement-chain")
+        self.assertNotIn("600690", action["title"])
+        self.assertIn("正式放行", action["reason"])
+
     def test_probe_with_no_pending_falls_back_to_judgement_chain(self) -> None:
         action = derive_first_action(
             mode_value="probe",
@@ -266,6 +361,16 @@ class PositionCapTest(unittest.TestCase):
         )
         self.assertEqual(cap["value"], "0成")
         self.assertEqual(cap["tone"], "risk")
+
+    def test_gate_zero_position_cap_forces_defense_note(self) -> None:
+        cap = derive_position_cap(
+            mode_value="observe",
+            gate=_gate(allow=False, label="进攻阀门关闭"),
+            decision_brief={"summary": {"position_cap": "0-0.3成"}},
+        )
+        self.assertEqual(cap["value"], "0成")
+        self.assertEqual(cap["tone"], "risk")
+        self.assertIn("不开新仓", cap["note"])
 
 
 class ForbidTodayTest(unittest.TestCase):
@@ -466,6 +571,40 @@ class JudgementChainTest(unittest.TestCase):
         nq = next(item for item in chain if item["dim"] == "new_quality")
         self.assertEqual(nq["verdict"], "中")
 
+    def test_v2_new_quality_exposes_ai_judge_coverage(self) -> None:
+        v2_item = {
+            "code": "600001",
+            "suggested_action": "trial",
+            "ai_status": "used",
+            "ai_status_label": "AI Judge 已参与结构判读",
+            "opportunity_v2": {
+                "suggested_action": "trial",
+                "desired_action": "trial",
+                "ai_status": "used",
+                "ai_summary": {
+                    "status": "used",
+                    "label": "AI Judge 已参与结构判读",
+                    "detail": "AI 改写/确认了 thesis、fake_breakout_risk；最终动作仍受 hard gate 封顶。",
+                },
+            },
+        }
+
+        chain = derive_judgement_chain(
+            readiness=_readiness("live_ready"),
+            gate=_gate(allow=True, label="放开"),
+            watchlist=_watchlist(),
+            screening_batch={
+                **_screening(),
+                "candidates": [v2_item],
+            },
+            confirmation=_confirmation(),
+        )
+
+        nq = next(item for item in chain if item["dim"] == "new_quality")
+        self.assertEqual(nq["verdict"], "条件")
+        self.assertIn("AI=采用1/影子0/fallback0/未调用0", nq["evidence"])
+        self.assertTrue(any("AI判读=AI Judge 已参与结构判读" in item for item in nq["evidence"]))
+
 
 def _action_item(
     *,
@@ -473,8 +612,12 @@ def _action_item(
     title: str,
     tone: str = "watch",
     detail: str = "",
+    foot: str = "",
     setup_label: str | None = None,
     stop_loss: str | None = None,
+    entry_plan: dict[str, object] | None = None,
+    decision_rank_label: str | None = None,
+    decision_summary: str | None = None,
     url: str = "",
     state: str = "pending",
 ) -> dict[str, object]:
@@ -483,8 +626,12 @@ def _action_item(
         "title": title,
         "tone": tone,
         "detail": detail,
+        "foot": foot,
         "setup_label": setup_label,
         "stop_loss": stop_loss,
+        "entry_plan": entry_plan,
+        "decision_rank_label": decision_rank_label,
+        "decision_summary": decision_summary,
         "url": url,
         "source": "test",
         "decision": {"value": state, "label": state, "tone": tone},
@@ -536,6 +683,147 @@ class ActionLanesTest(unittest.TestCase):
         conditional = next(lane for lane in lanes if lane["key"] == "conditional")
         self.assertEqual(conditional["items"][0]["trigger"], "突破 220")
         self.assertEqual(conditional["items"][0]["invalidate_when"], "215")
+
+    def test_trial_candidate_with_entry_plan_trigger_goes_to_conditional(self) -> None:
+        item = _action_item(
+            key="confirmation:000063",
+            title="中兴通讯 000063",
+            tone="positive",
+            detail="站回关键位后小仓位试错",
+            foot="审计意见出现异常表述，候选降级为谨慎观察。",
+            entry_plan={
+                "trigger": "站回 36.25 上方且资金不转负，再考虑试错。",
+                "invalidate": "跌回 36.07 下方取消。",
+                "sizing": "触发后小仓位试错",
+            },
+            decision_rank_label="#1 先看",
+            decision_summary="低位反转优先；卡点：资金不能转负",
+        )
+        lanes = derive_action_lanes(
+            mode_value="probe",
+            action_groups=_groups(do_now=[item]),
+            decision_brief=None,
+        )
+
+        must = next(lane for lane in lanes if lane["key"] == "must")
+        conditional = next(lane for lane in lanes if lane["key"] == "conditional")
+
+        self.assertEqual(must["items"], [])
+        self.assertEqual(conditional["items"][0]["code"], "000063")
+        self.assertEqual(conditional["items"][0]["action_type"], "等触发")
+        self.assertIn("站回 36.25", conditional["items"][0]["trigger"])
+        self.assertIn("36.07", conditional["items"][0]["invalidate_when"])
+        self.assertIn("#1 先看", conditional["items"][0]["reason"])
+
+    def test_v2_trial_goes_to_conditional_even_without_legacy_trigger(self) -> None:
+        item = _action_item(
+            key="screening:300750",
+            title="宁德时代 300750",
+            tone="positive",
+            detail="旧字段没有触发位",
+        )
+        item.update({
+            "suggested_action": "trial",
+            "suggested_action_label": "试错待触发",
+            "thesis": "新能源主线修复，个股角色从观察转为承接接力。",
+            "why_now": "资金回流且回踩不破。",
+            "missing_confirmation": ["站回 210 上方", "资金不能转负"],
+            "invalidation": "跌破 198 取消。",
+        })
+
+        lanes = derive_action_lanes(
+            mode_value="probe",
+            action_groups=_groups(watch=[item]),
+            decision_brief=None,
+        )
+
+        conditional = next(lane for lane in lanes if lane["key"] == "conditional")
+        observe = next(lane for lane in lanes if lane["key"] == "observe")
+        self.assertEqual(conditional["items"][0]["code"], "300750")
+        self.assertEqual(conditional["items"][0]["action_type"], "等触发")
+        self.assertIn("还差：站回 210 上方", conditional["items"][0]["reason"])
+        self.assertEqual(observe["items"], [])
+
+    def test_v2_shadow_with_hard_gate_reason_stays_observe(self) -> None:
+        item = _action_item(
+            key="screening:600001",
+            title="样本股份 600001",
+            tone="positive",
+            setup_label="突破 12.30",
+            detail="旧逻辑会把 setup_label 当触发。",
+        )
+        item.update({
+            "suggested_action": "shadow",
+            "suggested_action_label": "影子跟踪",
+            "thesis": "结构假设成立，但真实交易权限未放行。",
+            "hard_gate_max_action": "shadow",
+            "hard_gate_block_reason": "真实交易权限未放行",
+            "opportunity_v2": {
+                "suggested_action": "shadow",
+                "desired_action": "trial",
+                "hard_gate": {
+                    "maximum_allowed_action": "shadow",
+                    "block_reasons": ["真实交易权限未放行"],
+                },
+            },
+        })
+
+        lanes = derive_action_lanes(
+            mode_value="probe",
+            action_groups=_groups(watch=[item]),
+            decision_brief=None,
+        )
+
+        conditional = next(lane for lane in lanes if lane["key"] == "conditional")
+        observe = next(lane for lane in lanes if lane["key"] == "observe")
+        self.assertEqual(conditional["items"], [])
+        self.assertEqual(observe["items"][0]["code"], "600001")
+        self.assertEqual(observe["items"][0]["action_type"], "影子跟踪")
+        self.assertIn("不能买：真实交易权限未放行", observe["items"][0]["reason"])
+
+    def test_v2_calibration_guard_is_visible_in_action_lane_reason(self) -> None:
+        item = _action_item(
+            key="screening:600001",
+            title="样本股份 600001",
+            tone="positive",
+            detail="结构已成，但 active 尚未校准。",
+        )
+        item.update({
+            "suggested_action": "trial",
+            "suggested_action_label": "试错待触发",
+            "thesis": "主线回踩后承接重新成立。",
+            "why_now": "资金回流且触发位清楚。",
+            "missing_confirmation": [],
+            "invalidation": "跌破承接位取消。",
+            "opportunity_v2": {
+                "suggested_action": "trial",
+                "desired_action": "trial",
+                "mode_requested": "active",
+                "mode_effective": "assist",
+                "mode_guard": {
+                    "requested_mode": "active",
+                    "effective_mode": "assist",
+                    "active_allowed": False,
+                    "sample_stage": "cold_start",
+                    "guard_reason": "V2 active 未放开",
+                },
+                "calibration": {
+                    "sample_stage": "cold_start",
+                    "guard_reason": "V2 active 未放开",
+                },
+            },
+        })
+
+        lanes = derive_action_lanes(
+            mode_value="probe",
+            action_groups=_groups(watch=[item]),
+            decision_brief=None,
+        )
+
+        conditional = next(lane for lane in lanes if lane["key"] == "conditional")
+        self.assertEqual(conditional["items"][0]["code"], "600001")
+        self.assertIn("校准护栏", conditional["items"][0]["reason"])
+        self.assertIn("V2 active 未放开", conditional["items"][0]["reason"])
 
     def test_watch_item_without_trigger_goes_to_observe(self) -> None:
         item = _action_item(key="confirmation:600000", title="600000 浦发", tone="watch", detail="午盘新增观察")
@@ -616,6 +904,37 @@ class MiddayVerifyTest(unittest.TestCase):
         self.assertEqual(len(verify["fresh_candidates"]), 2)
         self.assertEqual(len(verify["downgraded"]), 1)
         self.assertIn("弱环境", verify["morning_takeaway"])
+
+    def test_verify_failed_is_rendered_as_execution_failure(self) -> None:
+        confirmation = _confirmation()
+        confirmation["validation_status"] = "verify_failed"
+        confirmation["validation_errors"] = ["midday_verify.py 执行失败，请查看 stderr"]
+        confirmation["runner_status"] = "failed"
+        verify = derive_midday_verify(
+            confirmation=confirmation,
+            screening_batch={"screening_summary": {"execution_gate_status": "弱环境"}},
+            decision_brief=None,
+            mode_value="observe",
+        )
+        self.assertTrue(verify["available"])
+        self.assertIn("午盘确认执行失败", verify["midday_status"])
+        self.assertIn("midday_verify.py 执行失败", verify["midday_status"])
+        self.assertIn("请重跑午盘确认", verify["midday_status"])
+        self.assertNotIn("承接未通过", verify["midday_status"])
+        self.assertNotIn("今天不触发买入", verify["midday_status"])
+        self.assertNotIn("verify_failed", verify["midday_status"])
+
+    def test_ok_zero_counts_is_rendered_as_no_buy_signal(self) -> None:
+        verify = derive_midday_verify(
+            confirmation=_confirmation(),
+            screening_batch={"screening_summary": {"execution_gate_status": "弱环境"}},
+            decision_brief=None,
+            mode_value="observe",
+        )
+        self.assertTrue(verify["available"])
+        self.assertIn("午盘已确认", verify["midday_status"])
+        self.assertIn("确认 0", verify["midday_status"])
+        self.assertIn("今天不触发买入", verify["midday_status"])
 
 
 class TrustTest(unittest.TestCase):

@@ -22,7 +22,7 @@ import {
   useRecordPortfolioNoFill,
   useRecordPortfolioReconcile,
   useSetPortfolioMode,
-  useTodayData,
+  useTodayActions,
   useUpdateTodayActionDecision,
   useWatchlist,
 } from "@/lib/hooks";
@@ -812,67 +812,127 @@ function PositionLatestDecisionPanel({
       {ledger.isError ? (
         <ErrorState message="Decision Ledger 暂不可用" onRetry={() => void ledger.refetch()} />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-[12px]">
-            <thead className="text-[var(--text-tertiary)]">
-              <tr>
-                <th className="px-2 py-1 text-left">代码</th>
-                <th className="px-2 py-1 text-left">名称</th>
-                <th className="px-2 py-1 text-left">决策日期</th>
-                <th className="px-2 py-1 text-left">动作</th>
-                <th className="px-2 py-1 text-left">执行</th>
-                <th className="px-2 py-1 text-left">结果</th>
-                <th className="px-2 py-1 text-left">状态</th>
-              </tr>
-            </thead>
-            <tbody>
-              {positions.map((pos) => {
-                const decision = latestByCode.get(String(pos.code || "").toLowerCase());
-                return (
-                  <tr key={pos.code} className="border-t border-[var(--border-subtle)]">
-                    <td className="px-2 py-1 font-mono">{pos.code}</td>
-                    <td className="px-2 py-1">{pos.name}</td>
-                    <td className="px-2 py-1">{decision?.trade_date || "-"}</td>
-                    <td className="px-2 py-1">
-                      {decision ? (
-                        <Badge tone="watch">{decision.action_label || decision.action || "-"}</Badge>
-                      ) : (
-                        <span className="text-[var(--text-tertiary)]">未记录</span>
-                      )}
-                    </td>
-                    <td className="px-2 py-1">
-                      {decision ? (
-                        <Badge tone={decision.latest_execution?.status ? "info" : "stale"}>
-                          {decision.latest_execution?.status || "未记录"}
-                        </Badge>
-                      ) : (
-                        <span className="text-[var(--text-tertiary)]">-</span>
-                      )}
-                    </td>
-                    <td className="px-2 py-1">
-                      {decision?.latest_outcome?.label ? (
-                        <Badge tone={(decision.latest_outcome.tone as Tone) || "info"}>
-                          {decision.latest_outcome.window || ""} {decision.latest_outcome.label}
-                        </Badge>
-                      ) : (
-                        <span className="text-[var(--text-tertiary)]">待评估</span>
-                      )}
-                    </td>
-                    <td className="px-2 py-1">
-                      {decision ? (
-                        <Badge tone={decision.status === "superseded" ? "warning" : "good"}>
-                          {decision.status === "superseded" ? "已被替代" : decision.status || "open"}
-                        </Badge>
-                      ) : (
-                        <span className="text-[var(--text-tertiary)]">-</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div className="flex flex-col gap-2 md:hidden">
+            {positions.map((pos) => {
+              const decision = latestByCode.get(String(pos.code || "").toLowerCase());
+              return (
+                <article key={`${pos.code}-decision-mobile`} className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <Link href={stockDetailHref(pos.code)} className="focus-ring min-w-0 rounded-[6px]">
+                      <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{pos.name || pos.code}</div>
+                      <div className="mono mt-0.5 text-[11px] text-[var(--text-tertiary)]">{pos.code}</div>
+                    </Link>
+                    {decision ? (
+                      <Badge tone={decision.status === "superseded" ? "warning" : "good"}>
+                        {decision.status === "superseded" ? "已被替代" : decision.status || "open"}
+                      </Badge>
+                    ) : (
+                      <Badge tone="stale">未记录</Badge>
+                    )}
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-[12px]">
+                    <div>
+                      <div className="text-[11px] text-[var(--text-tertiary)]">决策日期</div>
+                      <div className="mt-1 text-[var(--text-primary)]">{decision?.trade_date || "-"}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] text-[var(--text-tertiary)]">动作</div>
+                      <div className="mt-1">
+                        {decision ? <Badge tone="watch">{decision.action_label || decision.action || "-"}</Badge> : <span className="text-[var(--text-tertiary)]">未记录</span>}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] text-[var(--text-tertiary)]">执行</div>
+                      <div className="mt-1">
+                        {decision ? (
+                          <Badge tone={decision.latest_execution?.status ? "info" : "stale"}>
+                            {decision.latest_execution?.status || "未记录"}
+                          </Badge>
+                        ) : (
+                          <span className="text-[var(--text-tertiary)]">-</span>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] text-[var(--text-tertiary)]">结果</div>
+                      <div className="mt-1">
+                        {decision?.latest_outcome?.label ? (
+                          <Badge tone={(decision.latest_outcome.tone as Tone) || "info"}>
+                            {decision.latest_outcome.window || ""} {decision.latest_outcome.label}
+                          </Badge>
+                        ) : (
+                          <span className="text-[var(--text-tertiary)]">待评估</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
+            <table className="w-full text-[12px]">
+              <thead className="text-[var(--text-tertiary)]">
+                <tr>
+                  <th className="px-2 py-1 text-left">代码</th>
+                  <th className="px-2 py-1 text-left">名称</th>
+                  <th className="px-2 py-1 text-left">决策日期</th>
+                  <th className="px-2 py-1 text-left">动作</th>
+                  <th className="px-2 py-1 text-left">执行</th>
+                  <th className="px-2 py-1 text-left">结果</th>
+                  <th className="px-2 py-1 text-left">状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                {positions.map((pos) => {
+                  const decision = latestByCode.get(String(pos.code || "").toLowerCase());
+                  return (
+                    <tr key={pos.code} className="border-t border-[var(--border-subtle)]">
+                      <td className="px-2 py-1 font-mono">{pos.code}</td>
+                      <td className="px-2 py-1">{pos.name}</td>
+                      <td className="px-2 py-1">{decision?.trade_date || "-"}</td>
+                      <td className="px-2 py-1">
+                        {decision ? (
+                          <Badge tone="watch">{decision.action_label || decision.action || "-"}</Badge>
+                        ) : (
+                          <span className="text-[var(--text-tertiary)]">未记录</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1">
+                        {decision ? (
+                          <Badge tone={decision.latest_execution?.status ? "info" : "stale"}>
+                            {decision.latest_execution?.status || "未记录"}
+                          </Badge>
+                        ) : (
+                          <span className="text-[var(--text-tertiary)]">-</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1">
+                        {decision?.latest_outcome?.label ? (
+                          <Badge tone={(decision.latest_outcome.tone as Tone) || "info"}>
+                            {decision.latest_outcome.window || ""} {decision.latest_outcome.label}
+                          </Badge>
+                        ) : (
+                          <span className="text-[var(--text-tertiary)]">待评估</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1">
+                        {decision ? (
+                          <Badge tone={decision.status === "superseded" ? "warning" : "good"}>
+                            {decision.status === "superseded" ? "已被替代" : decision.status || "open"}
+                          </Badge>
+                        ) : (
+                          <span className="text-[var(--text-tertiary)]">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </Panel>
   );
@@ -883,52 +943,104 @@ function PositionsTable({ positions }: { positions: PortfolioAccountResponse["ac
     return <EmptyState>当前没有真持仓。研究态下可继续观察自选股，但不要把它当作真账户。</EmptyState>;
   }
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-[12px]">
-        <thead className="text-[var(--text-tertiary)]">
-          <tr>
-            <th className="px-2 py-1 text-left">代码</th>
-            <th className="px-2 py-1 text-left">名称</th>
-            <th className="px-2 py-1 text-right">持仓</th>
-            <th className="px-2 py-1 text-right">均价</th>
-            <th className="px-2 py-1 text-right">成本</th>
-            <th className="px-2 py-1 text-right">现价</th>
-            <th className="px-2 py-1 text-right">市值</th>
-            <th className="px-2 py-1 text-right">浮盈亏</th>
-            <th className="px-2 py-1 text-right">已实现</th>
-            <th className="px-2 py-1 text-right">总盈亏</th>
-            <th className="px-2 py-1 text-left">最近成交</th>
-          </tr>
-        </thead>
-        <tbody>
-          {positions.map((pos) => (
-            <tr key={pos.code} className="border-t border-[var(--border-subtle)]">
-              <td className="px-2 py-1 font-mono">{pos.code}</td>
-              <td className="px-2 py-1">{pos.name}</td>
-              <td className="px-2 py-1 text-right">{pos.qty}</td>
-              <td className="px-2 py-1 text-right">{formatMoney(pos.avg_cost)}</td>
-              <td className="px-2 py-1 text-right">{formatMoney(pos.cost_basis)}</td>
-              <td className="px-2 py-1 text-right">
-                <div>{formatMoney(pos.current_price)}</div>
-                {pos.quote_change_pct !== null && pos.quote_change_pct !== undefined ? (
-                  <div className={`text-[10px] ${pnlTone(pos.quote_change_pct)}`}>{formatPercent(pos.quote_change_pct)}</div>
-                ) : null}
-              </td>
-              <td className="px-2 py-1 text-right">{formatMoney(pos.market_value)}</td>
-              <td className={`px-2 py-1 text-right ${pnlTone(pos.unrealized_pnl)}`}>
-                <div>{formatMoney(pos.unrealized_pnl)}</div>
-                <div className="text-[10px]">{formatPercent(pos.unrealized_pnl_pct)}</div>
-              </td>
-              <td className={`px-2 py-1 text-right ${pnlTone(pos.realized_pnl)}`}>
-                {formatMoney(pos.realized_pnl)}
-              </td>
-              <td className={`px-2 py-1 text-right ${pnlTone(pos.total_pnl)}`}>{formatMoney(pos.total_pnl)}</td>
-              <td className="px-2 py-1 text-[var(--text-tertiary)]">{pos.last_fill_at || "-"}</td>
+    <>
+      <div className="flex flex-col gap-2 md:hidden">
+        {positions.map((pos) => (
+          <article key={`${pos.code}-position-mobile`} className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-3">
+            <div className="flex items-start justify-between gap-3">
+              <Link href={stockDetailHref(pos.code)} className="focus-ring min-w-0 rounded-[6px]">
+                <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{pos.name || pos.code}</div>
+                <div className="mono mt-0.5 text-[11px] text-[var(--text-tertiary)]">{pos.code}</div>
+              </Link>
+              <div className={`shrink-0 text-right text-[13px] font-semibold ${pnlTone(pos.total_pnl)}`}>
+                {formatMoney(pos.total_pnl)}
+                <div className="mt-0.5 text-[10px] font-normal text-[var(--text-tertiary)]">总盈亏</div>
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-[12px]">
+              <div>
+                <div className="text-[11px] text-[var(--text-tertiary)]">持仓 / 均价</div>
+                <div className="mt-1 text-[var(--text-primary)]">{pos.qty} / {formatMoney(pos.avg_cost)}</div>
+              </div>
+              <div>
+                <div className="text-[11px] text-[var(--text-tertiary)]">现价</div>
+                <div className="mt-1 text-[var(--text-primary)]">
+                  {formatMoney(pos.current_price)}
+                  {pos.quote_change_pct !== null && pos.quote_change_pct !== undefined ? (
+                    <span className={`ml-1 text-[11px] ${pnlTone(pos.quote_change_pct)}`}>{formatPercent(pos.quote_change_pct)}</span>
+                  ) : null}
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] text-[var(--text-tertiary)]">市值 / 成本</div>
+                <div className="mt-1 text-[var(--text-primary)]">{formatMoney(pos.market_value)} / {formatMoney(pos.cost_basis)}</div>
+              </div>
+              <div>
+                <div className="text-[11px] text-[var(--text-tertiary)]">浮盈亏</div>
+                <div className={`mt-1 ${pnlTone(pos.unrealized_pnl)}`}>
+                  {formatMoney(pos.unrealized_pnl)}
+                  <span className="ml-1 text-[11px]">{formatPercent(pos.unrealized_pnl_pct)}</span>
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] text-[var(--text-tertiary)]">已实现</div>
+                <div className={`mt-1 ${pnlTone(pos.realized_pnl)}`}>{formatMoney(pos.realized_pnl)}</div>
+              </div>
+              <div>
+                <div className="text-[11px] text-[var(--text-tertiary)]">最近成交</div>
+                <div className="mt-1 text-[var(--text-primary)]">{pos.last_fill_at || "-"}</div>
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+      <div className="hidden overflow-x-auto md:block">
+        <table className="w-full text-[12px]">
+          <thead className="text-[var(--text-tertiary)]">
+            <tr>
+              <th className="px-2 py-1 text-left">代码</th>
+              <th className="px-2 py-1 text-left">名称</th>
+              <th className="px-2 py-1 text-right">持仓</th>
+              <th className="px-2 py-1 text-right">均价</th>
+              <th className="px-2 py-1 text-right">成本</th>
+              <th className="px-2 py-1 text-right">现价</th>
+              <th className="px-2 py-1 text-right">市值</th>
+              <th className="px-2 py-1 text-right">浮盈亏</th>
+              <th className="px-2 py-1 text-right">已实现</th>
+              <th className="px-2 py-1 text-right">总盈亏</th>
+              <th className="px-2 py-1 text-left">最近成交</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {positions.map((pos) => (
+              <tr key={pos.code} className="border-t border-[var(--border-subtle)]">
+                <td className="px-2 py-1 font-mono">{pos.code}</td>
+                <td className="px-2 py-1">{pos.name}</td>
+                <td className="px-2 py-1 text-right">{pos.qty}</td>
+                <td className="px-2 py-1 text-right">{formatMoney(pos.avg_cost)}</td>
+                <td className="px-2 py-1 text-right">{formatMoney(pos.cost_basis)}</td>
+                <td className="px-2 py-1 text-right">
+                  <div>{formatMoney(pos.current_price)}</div>
+                  {pos.quote_change_pct !== null && pos.quote_change_pct !== undefined ? (
+                    <div className={`text-[10px] ${pnlTone(pos.quote_change_pct)}`}>{formatPercent(pos.quote_change_pct)}</div>
+                  ) : null}
+                </td>
+                <td className="px-2 py-1 text-right">{formatMoney(pos.market_value)}</td>
+                <td className={`px-2 py-1 text-right ${pnlTone(pos.unrealized_pnl)}`}>
+                  <div>{formatMoney(pos.unrealized_pnl)}</div>
+                  <div className="text-[10px]">{formatPercent(pos.unrealized_pnl_pct)}</div>
+                </td>
+                <td className={`px-2 py-1 text-right ${pnlTone(pos.realized_pnl)}`}>
+                  {formatMoney(pos.realized_pnl)}
+                </td>
+                <td className={`px-2 py-1 text-right ${pnlTone(pos.total_pnl)}`}>{formatMoney(pos.total_pnl)}</td>
+                <td className="px-2 py-1 text-[var(--text-tertiary)]">{pos.last_fill_at || "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 
@@ -937,42 +1049,82 @@ function FillsTable({ fills }: { fills: PortfolioAccountResponse["recent_fills"]
     return <EmptyState>尚无成交记录。</EmptyState>;
   }
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-[12px]">
-        <thead className="text-[var(--text-tertiary)]">
-          <tr>
-            <th className="px-2 py-1 text-left">时间</th>
-            <th className="px-2 py-1 text-left">交易日</th>
-            <th className="px-2 py-1 text-left">代码</th>
-            <th className="px-2 py-1 text-left">名称</th>
-            <th className="px-2 py-1 text-left">方向</th>
-            <th className="px-2 py-1 text-right">数量</th>
-            <th className="px-2 py-1 text-right">价格</th>
-            <th className="px-2 py-1 text-right">现金变动</th>
-            <th className="px-2 py-1 text-left">关联意图</th>
-          </tr>
-        </thead>
-        <tbody>
-          {fills.map((f) => (
-            <tr key={f.fill_id} className="border-t border-[var(--border-subtle)]">
-              <td className="px-2 py-1 text-[var(--text-tertiary)]">{f.ts}</td>
-              <td className="px-2 py-1">{f.trade_date}</td>
-              <td className="px-2 py-1 font-mono">{f.code}</td>
-              <td className="px-2 py-1">{f.name || "-"}</td>
-              <td className="px-2 py-1">
-                <Badge tone={f.side === "buy" ? "buy" : "sell"}>{f.side === "buy" ? "买" : "卖"}</Badge>
-              </td>
-              <td className="px-2 py-1 text-right">{f.qty}</td>
-              <td className="px-2 py-1 text-right">{formatMoney(f.price)}</td>
-              <td className={`px-2 py-1 text-right ${f.cash_delta >= 0 ? "text-[var(--tone-positive)]" : "text-[var(--tone-risk)]"}`}>
-                {formatMoney(f.cash_delta)}
-              </td>
-              <td className="px-2 py-1 text-[var(--text-tertiary)]">{f.intent_key || "-"}</td>
+    <>
+      <div className="flex flex-col gap-2 md:hidden">
+        {fills.map((f) => (
+          <article key={`${f.fill_id}-mobile`} className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-3">
+            <div className="flex items-start justify-between gap-3">
+              <Link href={stockDetailHref(f.code)} className="focus-ring min-w-0 rounded-[6px]">
+                <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{f.name || f.code}</div>
+                <div className="mono mt-0.5 text-[11px] text-[var(--text-tertiary)]">{f.code}</div>
+              </Link>
+              <Badge tone={f.side === "buy" ? "buy" : "sell"}>{f.side === "buy" ? "买" : "卖"}</Badge>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-[12px]">
+              <div>
+                <div className="text-[11px] text-[var(--text-tertiary)]">时间</div>
+                <div className="mt-1 text-[var(--text-primary)]">{f.ts}</div>
+              </div>
+              <div>
+                <div className="text-[11px] text-[var(--text-tertiary)]">交易日</div>
+                <div className="mt-1 text-[var(--text-primary)]">{f.trade_date}</div>
+              </div>
+              <div>
+                <div className="text-[11px] text-[var(--text-tertiary)]">数量 / 价格</div>
+                <div className="mt-1 text-[var(--text-primary)]">{f.qty} / {formatMoney(f.price)}</div>
+              </div>
+              <div>
+                <div className="text-[11px] text-[var(--text-tertiary)]">现金变动</div>
+                <div className={`mt-1 font-medium ${f.cash_delta >= 0 ? "text-[var(--tone-positive)]" : "text-[var(--tone-risk)]"}`}>
+                  {formatMoney(f.cash_delta)}
+                </div>
+              </div>
+            </div>
+            {f.intent_key ? (
+              <div className="mt-3 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-2.5 py-2 text-[11px] text-[var(--text-tertiary)]">
+                关联意图：<span className="mono break-all">{f.intent_key}</span>
+              </div>
+            ) : null}
+          </article>
+        ))}
+      </div>
+      <div className="hidden overflow-x-auto md:block">
+        <table className="w-full text-[12px]">
+          <thead className="text-[var(--text-tertiary)]">
+            <tr>
+              <th className="px-2 py-1 text-left">时间</th>
+              <th className="px-2 py-1 text-left">交易日</th>
+              <th className="px-2 py-1 text-left">代码</th>
+              <th className="px-2 py-1 text-left">名称</th>
+              <th className="px-2 py-1 text-left">方向</th>
+              <th className="px-2 py-1 text-right">数量</th>
+              <th className="px-2 py-1 text-right">价格</th>
+              <th className="px-2 py-1 text-right">现金变动</th>
+              <th className="px-2 py-1 text-left">关联意图</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {fills.map((f) => (
+              <tr key={f.fill_id} className="border-t border-[var(--border-subtle)]">
+                <td className="px-2 py-1 text-[var(--text-tertiary)]">{f.ts}</td>
+                <td className="px-2 py-1">{f.trade_date}</td>
+                <td className="px-2 py-1 font-mono">{f.code}</td>
+                <td className="px-2 py-1">{f.name || "-"}</td>
+                <td className="px-2 py-1">
+                  <Badge tone={f.side === "buy" ? "buy" : "sell"}>{f.side === "buy" ? "买" : "卖"}</Badge>
+                </td>
+                <td className="px-2 py-1 text-right">{f.qty}</td>
+                <td className="px-2 py-1 text-right">{formatMoney(f.price)}</td>
+                <td className={`px-2 py-1 text-right ${f.cash_delta >= 0 ? "text-[var(--tone-positive)]" : "text-[var(--tone-risk)]"}`}>
+                  {formatMoney(f.cash_delta)}
+                </td>
+                <td className="px-2 py-1 text-[var(--text-tertiary)]">{f.intent_key || "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 
@@ -982,28 +1134,50 @@ function NoFillTable({ items }: { items: PortfolioAccountResponse["account"]["no
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-[12px]">
-        <thead className="text-[var(--text-tertiary)]">
-          <tr>
-            <th className="px-2 py-1 text-left">时间</th>
-            <th className="px-2 py-1 text-left">交易日</th>
-            <th className="px-2 py-1 text-left">关联意图</th>
-            <th className="px-2 py-1 text-left">原因</th>
-          </tr>
-        </thead>
-        <tbody>
-          {[...items].reverse().map((item) => (
-            <tr key={`${item.ts}-${item.intent_key}`} className="border-t border-[var(--border-subtle)]">
-              <td className="px-2 py-1 text-[var(--text-tertiary)]">{item.ts}</td>
-              <td className="px-2 py-1">{item.trade_date}</td>
-              <td className="px-2 py-1 font-mono text-[11px]">{item.intent_key}</td>
-              <td className="px-2 py-1 text-[var(--text-secondary)]">{item.reason}</td>
+    <>
+      <div className="flex flex-col gap-2 md:hidden">
+        {[...items].reverse().map((item) => (
+          <article key={`${item.ts}-${item.intent_key}-mobile`} className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[13px] font-semibold text-[var(--text-primary)]">{item.trade_date || "未成交记录"}</div>
+                <div className="mt-0.5 text-[11px] text-[var(--text-tertiary)]">{item.ts}</div>
+              </div>
+              <Badge tone="watch">未成交</Badge>
+            </div>
+            <div className="mt-3 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-2.5 py-2">
+              <div className="text-[11px] text-[var(--text-tertiary)]">关联意图</div>
+              <div className="mono mt-1 break-all text-[11px] text-[var(--text-primary)]">{item.intent_key || "-"}</div>
+            </div>
+            <div className="mt-3 text-[12px] leading-5 text-[var(--text-secondary)]">
+              <span className="text-[var(--text-tertiary)]">原因：</span>{item.reason || "-"}
+            </div>
+          </article>
+        ))}
+      </div>
+      <div className="hidden overflow-x-auto md:block">
+        <table className="w-full text-[12px]">
+          <thead className="text-[var(--text-tertiary)]">
+            <tr>
+              <th className="px-2 py-1 text-left">时间</th>
+              <th className="px-2 py-1 text-left">交易日</th>
+              <th className="px-2 py-1 text-left">关联意图</th>
+              <th className="px-2 py-1 text-left">原因</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {[...items].reverse().map((item) => (
+              <tr key={`${item.ts}-${item.intent_key}`} className="border-t border-[var(--border-subtle)]">
+                <td className="px-2 py-1 text-[var(--text-tertiary)]">{item.ts}</td>
+                <td className="px-2 py-1">{item.trade_date}</td>
+                <td className="px-2 py-1 font-mono text-[11px]">{item.intent_key}</td>
+                <td className="px-2 py-1 text-[var(--text-secondary)]">{item.reason}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 
@@ -1140,9 +1314,34 @@ function ModeSwitch({ data }: { data: PortfolioAccountResponse }) {
   const errorMsg = mutation.error instanceof ApiError ? mutation.error.message : null;
   const unsafeConfirmReady = unsafeConfirmText.trim() === "LIVE_SMALL";
   const unsafeBlocked = allowUnsafe && (!unsafeNote.trim() || !unsafeConfirmReady);
+  const latestModeChange = [...(data.account.mode_history || [])].reverse()[0];
 
   return (
     <div className="flex flex-col gap-3">
+      <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge tone={data.account.mode_tone === "risk" ? "risk" : data.account.mode_tone === "watch" ? "watch" : "info"}>
+            {data.account.mode_label || data.account.mode}
+          </Badge>
+          <span className="text-[12px] text-[var(--text-secondary)]">
+            当前模式自 {data.account.mode_updated_at || "未记录"} 生效
+          </span>
+        </div>
+        {latestModeChange ? (
+          <div className="mt-1 text-[11px] leading-5 text-[var(--text-tertiary)]">
+            最近切换：{latestModeChange.from_mode || "-"} → {latestModeChange.to_mode || "-"} · {latestModeChange.ts || "-"}
+            {latestModeChange.allow_unsafe ? " · bypass" : ""}
+            {latestModeChange.note ? ` · ${latestModeChange.note}` : ""}
+          </div>
+        ) : (
+          <div className="mt-1 text-[11px] text-[var(--text-tertiary)]">没有模式切换历史。</div>
+        )}
+        {data.account.unsafe_bypass_active ? (
+          <div className="mt-1 text-[11px] leading-5 text-[var(--tone-risk)]">
+            当前存在 unsafe bypass：{data.account.unsafe_bypass_note || data.account.unsafe_bypass_at || "未记录原因"}
+          </div>
+        ) : null}
+      </div>
       <div className="flex flex-wrap items-center gap-2">
         {MODE_OPTIONS.map((opt) => (
           <button
@@ -2176,7 +2375,6 @@ function LedgerForms({
 function PortfolioPageContent() {
   const portfolio = usePortfolioAccount();
   const refreshQuotes = useRefreshPortfolioQuotes();
-  const today = useTodayData();
   const watchlist = useWatchlist();
   const searchParams = useSearchParams();
   const data = portfolio.data;
@@ -2262,13 +2460,14 @@ function PortfolioPageContent() {
       stopCondition: searchParams.get("stop_condition")?.trim() || "",
     };
   }, [defaultTradeDate, searchParams]);
+  const todayActions = useTodayActions({ enabled: Boolean(writebackContext?.intentKey) });
   const persistedOutcome = useMemo<WritebackOutcome | null>(() => {
     if (!writebackContext) {
       return null;
     }
 
     const actionDecision =
-      today.data?.action_queue?.items?.find((item) => item.key === writebackContext.intentKey)?.decision || null;
+      todayActions.data?.action_queue?.items?.find((item) => item.key === writebackContext.intentKey)?.decision || null;
 
     if (actionDecision && (actionDecision.value === "watch" || actionDecision.value === "skip")) {
       return {
@@ -2309,7 +2508,7 @@ function PortfolioPageContent() {
     }
 
     return null;
-  }, [data, today.data, writebackContext]);
+  }, [data, todayActions.data, writebackContext]);
 
   useEffect(() => {
     if (!optimisticOutcome || !persistedOutcome) {
@@ -2413,7 +2612,7 @@ function PortfolioPageContent() {
         ) : null}
 
         {data?.readiness?.trust_level ? (
-          <TrustBanner trust={data.readiness.trust_level} className="mb-4" />
+          <TrustBanner trust={data.readiness.trust_level} readiness={data.readiness} className="mb-4" />
         ) : null}
 
         {data ? <ReadinessBanner data={data} /> : null}

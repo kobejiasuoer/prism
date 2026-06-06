@@ -14,6 +14,7 @@ STATE_PATH = RUN_ROOT / "scheduler_state.json"
 RUNNING_STATUSES = {"starting", "running"}
 SUCCESS_STATUSES = {"success"}
 FAILED_STATUSES = {"failed"}
+RUNNING_MAX_AGE_SECONDS = 3 * 60 * 60
 
 
 def parse_timestamp(value: Any) -> datetime | None:
@@ -47,6 +48,20 @@ def today_key(now: datetime | None = None) -> str:
     return (now or datetime.now()).strftime("%Y-%m-%d")
 
 
+def pid_alive(pid: Any) -> bool:
+    try:
+        parsed = int(pid)
+    except (TypeError, ValueError):
+        return False
+    if parsed <= 0:
+        return False
+    try:
+        os.kill(parsed, 0)
+    except OSError:
+        return False
+    return True
+
+
 def run_trade_date(payload: Mapping[str, Any]) -> str:
     calendar = payload.get("calendar") if isinstance(payload.get("calendar"), Mapping) else {}
     for value in (
@@ -74,17 +89,30 @@ def run_state_for_task(task_name: str, *, now: datetime | None = None, run_root:
     status = str(payload.get("status") or "missing") if payload else "missing"
     trade_date = run_trade_date(payload)
     same_day = trade_date == expected_date
-    running = status in RUNNING_STATUSES
-    success = status in SUCCESS_STATUSES and same_day
-    failed = status in FAILED_STATUSES and same_day
     started_at = str(payload.get("started_at") or "")
     finished_at = str(payload.get("finished_at") or "")
+    started_dt = parse_timestamp(started_at)
+    finished_dt = parse_timestamp(finished_at)
+    running_age_seconds = max(int((current - started_dt).total_seconds()), 0) if started_dt else None
+    pid_is_alive = pid_alive(payload.get("pid")) if payload else False
+    running = (
+        status in RUNNING_STATUSES
+        and same_day
+        and pid_is_alive
+        and (running_age_seconds is None or running_age_seconds <= RUNNING_MAX_AGE_SECONDS)
+    )
+    orphaned = bool(status in RUNNING_STATUSES and not running and payload)
+    success = status in SUCCESS_STATUSES and same_day
+    failed = (status in FAILED_STATUSES and same_day) or (orphaned and same_day)
     return {
         "task_name": task_name,
         "status": status,
         "same_day": same_day,
         "today_success": success,
         "running": running,
+        "orphaned": orphaned,
+        "pid_alive": pid_is_alive,
+        "running_age_seconds": running_age_seconds,
         "failed_today": failed,
         "missing": not payload,
         "stale_latest": bool(payload and not same_day),
@@ -94,8 +122,8 @@ def run_state_for_task(task_name: str, *, now: datetime | None = None, run_root:
         "title": str(payload.get("title") or payload.get("schedule_name") or task_name),
         "started_at": started_at,
         "finished_at": finished_at,
-        "started_dt": parse_timestamp(started_at),
-        "finished_dt": parse_timestamp(finished_at),
+        "started_dt": started_dt,
+        "finished_dt": finished_dt,
         "exit_code": payload.get("exit_code"),
         "skip_reason": str(payload.get("skip_reason") or ""),
         "log_path": str(payload.get("log_path") or ""),
@@ -125,6 +153,7 @@ __all__ = [
     "latest_path_for_task",
     "load_json",
     "load_scheduler_state",
+    "pid_alive",
     "parse_timestamp",
     "run_state_for_task",
     "scheduler_alive",

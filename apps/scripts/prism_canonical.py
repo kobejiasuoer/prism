@@ -177,9 +177,133 @@ def build_confirmation_observation_contract(raw: dict[str, Any], status: str) ->
     return build_intraday_observation_contract(
         raw,
         status=status,
-        active_theme=bool(raw.get("active_theme")),
+        active_theme=bool(raw.get("active_theme") or raw.get("theme_in_play")),
         flow_today_yi=raw.get("flow_today_yi"),
     )
+
+
+def _price_text(value: Any) -> str:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return ""
+    if number <= 0:
+        return ""
+    return f"{number:.2f}"
+
+
+def _confirmation_snapshot_entry_plan(snapshot: dict[str, Any], status: str) -> dict[str, Any]:
+    setup_type = str(snapshot.get("setup_type") or "")
+    pullback = _price_text(snapshot.get("pullback_level") or snapshot.get("ma5"))
+    trigger = _price_text(snapshot.get("trigger_level") or snapshot.get("price"))
+    invalidate = _price_text(snapshot.get("invalidate_level") or snapshot.get("ma10") or snapshot.get("ma20"))
+
+    if setup_type == "breakout_follow":
+        trigger_text = (
+            f"放量站稳 {trigger} 上方再试，若回踩 {pullback} 不破可候补。"
+            if trigger and pullback
+            else f"放量站稳 {trigger} 上方再试。"
+            if trigger
+            else "放量站稳后再试，盘中直线拉高不追。"
+        )
+        avoid_text = "高开高走但量能跟不上时不追。"
+        invalidate_text = f"跌回 {invalidate} 下方或主力转负就取消。" if invalidate else "主力转负或结构走弱就取消。"
+    elif setup_type == "pullback_continuation":
+        trigger_text = (
+            f"回踩 {pullback} 一带不破，且资金继续为正，再考虑进场。"
+            if pullback
+            else "回踩承接不破，且资金继续为正，再考虑进场。"
+        )
+        avoid_text = "脱离支撑过远时不追。"
+        invalidate_text = f"跌破 {invalidate} 或主题明显转弱就取消。" if invalidate else "主题明显转弱就取消。"
+    elif setup_type == "low_reversal":
+        reference = pullback or trigger
+        trigger_text = (
+            f"站回 {reference} 上方且资金不转负，再考虑试错。"
+            if reference
+            else "站回短线均线且资金不转负，再考虑试错。"
+        )
+        avoid_text = "第一波直线拉升不追。"
+        invalidate_text = f"跌破 {invalidate} 或再次放量走弱就取消。" if invalidate else "再次放量走弱就取消。"
+    elif pullback and trigger:
+        trigger_text = f"优先看 {pullback} 一带承接，或放量站稳 {trigger} 后再评估。"
+        avoid_text = "没有站稳触发位或资金转弱时不追。"
+        invalidate_text = f"跌破 {invalidate} 或结构走弱就取消。" if invalidate else "资金转负或结构走弱就取消。"
+    else:
+        trigger_text = "先等换手、承接和资金同时确认。"
+        avoid_text = "没有站稳触发位或资金转弱时不追。"
+        invalidate_text = "资金转负或结构走弱就取消。"
+
+    return {
+        "action": "午盘转弱，暂停执行，只保留观察。" if status == "downgraded" else "午盘确认仍在，按触发条件继续跟踪。",
+        "trigger": trigger_text,
+        "avoid": avoid_text,
+        "invalidate": invalidate_text,
+        "sizing": "先不开新仓" if status == "downgraded" else "触发后小仓位试错",
+        "levels": {
+            "trigger": snapshot.get("trigger_level"),
+            "pullback": snapshot.get("pullback_level"),
+            "invalidate": snapshot.get("invalidate_level"),
+        },
+    }
+
+
+def confirmation_contract_source(raw: dict[str, Any], status: str) -> dict[str, Any]:
+    payload = dict(raw)
+    snapshot = raw.get("snapshot") if isinstance(raw.get("snapshot"), dict) else {}
+    if not snapshot:
+        return payload
+
+    def fill(key: str, *values: Any) -> None:
+        if payload.get(key) not in (None, "", [], {}):
+            return
+        for value in values:
+            if value not in (None, "", [], {}):
+                payload[key] = value
+                return
+
+    active_themes = snapshot.get("active_themes") if isinstance(snapshot.get("active_themes"), list) else []
+    fill("theme", snapshot.get("current_theme"), snapshot.get("morning_theme"), active_themes[0] if active_themes else None)
+    fill("setup_type", snapshot.get("setup_type"))
+    fill("setup_label", snapshot.get("setup_label"))
+    fill("score", snapshot.get("score"), raw.get("morning_score"))
+    fill("change_pct", snapshot.get("change_pct"))
+    fill("amount_yi", snapshot.get("amount_yi"))
+    fill("flow_today_yi", snapshot.get("flow_today_yi"))
+    fill("capital_trend", snapshot.get("capital_trend"))
+    fill("price", snapshot.get("price"))
+    fill("high20", snapshot.get("trigger_level"))
+    fill("ma5", snapshot.get("ma5"), snapshot.get("pullback_level"))
+    fill("ma10", snapshot.get("ma10"), snapshot.get("invalidate_level"))
+    fill("ma20", snapshot.get("ma20"))
+    fill("entry_reason", raw.get("reason"), snapshot.get("confirmation_label"))
+
+    details = raw.get("details") if isinstance(raw.get("details"), list) else []
+    if status == "downgraded":
+        fill("main_risk", raw.get("main_risk"), details[0] if details else raw.get("reason"))
+    fill("watch_condition", raw.get("watch_condition"), "；".join(str(item) for item in details if item))
+
+    technical_state = dict(payload.get("technical_state") or {})
+    for source_key, target_key in (
+        ("trigger_level", "high20"),
+        ("pullback_level", "ma5"),
+        ("invalidate_level", "ma10"),
+        ("ma20", "ma20"),
+    ):
+        if technical_state.get(target_key) in (None, "", [], {}) and snapshot.get(source_key) not in (None, "", [], {}):
+            technical_state[target_key] = snapshot.get(source_key)
+    if technical_state:
+        payload["technical_state"] = technical_state
+
+    if payload.get("entry_plan") in (None, "", [], {}):
+        payload["entry_plan"] = _confirmation_snapshot_entry_plan(snapshot, status)
+    if snapshot.get("theme_in_play") is not None:
+        payload["theme_in_play"] = snapshot.get("theme_in_play")
+        payload["active_theme"] = snapshot.get("theme_in_play")
+    if snapshot.get("confirmation_label") not in (None, "", [], {}):
+        payload["confirmation_label"] = snapshot.get("confirmation_label")
+    payload["snapshot"] = snapshot
+    return payload
 
 
 def stable_artifact_path(path_value: str | None) -> str | None:
@@ -719,11 +843,19 @@ def diff_watchlist_snapshots(
 
 def candidate_risk_flags(raw: dict[str, Any]) -> list[str]:
     warnings = ((raw.get("execution_quality") or {}).get("warnings") or [])
-    return unique_strings([raw.get("main_risk") or "", *warnings])
+    factors = raw.get("tushare_factors") if isinstance(raw.get("tushare_factors"), dict) else {}
+    return unique_strings([
+        raw.get("main_risk") or "",
+        *(raw.get("risk_flags") or []),
+        *(factors.get("risk_flags") or []),
+        *warnings,
+    ])
 
 
 def normalize_candidate(raw: dict[str, Any], batch_id: str) -> dict[str, Any]:
     capital_flow = normalize_capital_flow_payload(raw.get("capital_flow") or {}, legacy_source_unit=UNIT_YUAN)
+    factors = raw.get("tushare_factors") if isinstance(raw.get("tushare_factors"), dict) else {}
+    opportunity_v2 = raw.get("opportunity_v2") if isinstance(raw.get("opportunity_v2"), dict) else {}
     return {
         "entity": "candidate",
         "schema_version": SCHEMA_VERSION,
@@ -747,15 +879,31 @@ def normalize_candidate(raw: dict[str, Any], batch_id: str) -> dict[str, Any]:
         "watch_condition": raw.get("watch_condition"),
         "main_risk": raw.get("main_risk"),
         "screening_note": raw.get("screening_note"),
+        "suggested_action": raw.get("suggested_action") or opportunity_v2.get("suggested_action"),
+        "suggested_action_label": raw.get("suggested_action_label") or opportunity_v2.get("action_label"),
+        "confidence": raw.get("confidence") if raw.get("confidence") is not None else opportunity_v2.get("confidence"),
+        "thesis": raw.get("thesis") or opportunity_v2.get("thesis"),
+        "why_now": raw.get("why_now") or opportunity_v2.get("why_now"),
+        "invalidation": raw.get("invalidation") or opportunity_v2.get("invalidation"),
+        "missing_confirmation": raw.get("missing_confirmation") or opportunity_v2.get("missing_confirmation") or [],
+        "hard_gate_max_action": raw.get("hard_gate_max_action") or ((opportunity_v2.get("hard_gate") or {}).get("maximum_allowed_action") if isinstance(opportunity_v2.get("hard_gate"), dict) else None),
+        "hard_gate_block_reason": raw.get("hard_gate_block_reason") or "",
+        "opportunity_v2": opportunity_v2,
         "consistency": raw.get("consistency") or {},
         "execution_quality": raw.get("execution_quality") or {},
         "capital_flow": capital_flow,
-        "tushare_score": (raw.get("tushare_factors") or {}).get("tushare_score"),
-        "tushare_score_breakdown": (raw.get("tushare_factors") or {}).get("tushare_score_breakdown") or {},
-        "factor_tags": (raw.get("tushare_factors") or {}).get("factor_tags") or [],
-        "factor_risk_flags": (raw.get("tushare_factors") or {}).get("risk_flags") or [],
-        "factor_explanation": (raw.get("tushare_factors") or {}).get("explanation") or {},
-        "tushare_factors": raw.get("tushare_factors") or {},
+        "risk_level": raw.get("risk_level") or factors.get("risk_level") or "info",
+        "risk_items": raw.get("risk_items") or factors.get("risk_items") or [],
+        "degrade_reason": raw.get("degrade_reason") or factors.get("degrade_reason") or "",
+        "block_reason": raw.get("block_reason") or factors.get("block_reason") or "",
+        "risk_evidence_refs": raw.get("risk_evidence_refs") or factors.get("risk_evidence_refs") or [],
+        "risk_source_cards": raw.get("risk_source_cards") or factors.get("risk_source_cards") or [],
+        "tushare_score": factors.get("tushare_score"),
+        "tushare_score_breakdown": factors.get("tushare_score_breakdown") or {},
+        "factor_tags": factors.get("factor_tags") or [],
+        "factor_risk_flags": factors.get("risk_flags") or [],
+        "factor_explanation": factors.get("explanation") or {},
+        "tushare_factors": factors,
     }
 
 
@@ -792,6 +940,8 @@ def load_screening_batch(path: str | None = None, trade_date: str | None = None)
         "market_regime": raw.get("market_regime") or {},
         "market_themes": raw.get("market_themes") or [],
         "screening_summary": raw.get("screening_summary") or {},
+        "opportunity_v2": raw.get("opportunity_v2") or ((raw.get("screening_summary") or {}).get("opportunity_v2") or {}),
+        "opportunity_v2_tracking": raw.get("opportunity_v2_tracking") or {},
         "candidates": shortlist,
     }
 
@@ -803,28 +953,31 @@ def normalize_confirmation_item(
     morning_batch_id: str | None,
     midday_batch_id: str | None,
 ) -> dict[str, Any]:
-    observation_contract = build_confirmation_observation_contract(raw, status)
+    source = confirmation_contract_source(raw, status)
+    observation_contract = build_confirmation_observation_contract(source, status)
     return {
-        "code": raw.get("code") or "",
-        "name": raw.get("name") or raw.get("code") or "",
+        "code": source.get("code") or "",
+        "name": source.get("name") or source.get("code") or "",
         "status": status,
-        "theme": raw.get("theme") or raw.get("active_theme"),
+        "theme": source.get("theme") or source.get("active_theme"),
         "setup_type": observation_contract["setup_type"],
         "setup_label": observation_contract["setup_label"],
         "setup_summary": observation_contract["setup_summary"],
-        "score": safe_float(raw.get("score")),
-        "change_pct": safe_float(raw.get("change_pct")),
-        "amount_yi": safe_float(raw.get("amount_yi")),
-        "flow_today_yi": safe_float(raw.get("flow_today_yi")),
-        "capital_trend": raw.get("capital_trend"),
-        "entry_reason": raw.get("entry_reason"),
+        "score": safe_float(source.get("score")),
+        "change_pct": safe_float(source.get("change_pct")),
+        "amount_yi": safe_float(source.get("amount_yi")),
+        "flow_today_yi": safe_float(source.get("flow_today_yi")),
+        "capital_trend": source.get("capital_trend"),
+        "entry_reason": source.get("entry_reason"),
         "entry_plan": observation_contract["entry_plan"],
         "execution_quality": observation_contract["execution_quality"],
-        "main_risk": raw.get("main_risk"),
-        "watch_condition": raw.get("watch_condition"),
-        "high20": safe_float(raw.get("high20")),
-        "ma5": safe_float(raw.get("ma5")),
-        "ma10": safe_float(raw.get("ma10")),
+        "main_risk": source.get("main_risk"),
+        "watch_condition": source.get("watch_condition"),
+        "high20": safe_float(source.get("high20")),
+        "ma5": safe_float(source.get("ma5")),
+        "ma10": safe_float(source.get("ma10")),
+        "confirmation_label": source.get("confirmation_label"),
+        "snapshot": source.get("snapshot") or {},
         "morning_batch_id": morning_batch_id,
         "midday_batch_id": midday_batch_id,
     }
@@ -1115,11 +1268,39 @@ def normalize_lifecycle_item(raw: dict[str, Any]) -> dict[str, Any]:
         "current_screening_status",
         "in_current_shortlist",
         "persistence_label",
+        "suggested_action",
+        "suggested_action_label",
+        "desired_action",
+        "confidence",
+        "thesis",
+        "why_now",
+        "invalidation",
+        "upgrade_reason",
+        "missing_confirmation",
+        "hard_gate_max_action",
+        "hard_gate_block_reason",
+        "market_phase",
+        "market_phase_label",
+        "theme_phase",
+        "theme_phase_label",
+        "stock_role",
+        "stock_role_label",
+        "opportunity_type",
+        "playbook_label",
+        "crowding_risk_level",
+        "fake_breakout_risk_level",
+        "evidence_notes",
+        "prev_suggested_action",
+        "curr_suggested_action",
+        "prev_confidence",
+        "curr_confidence",
+        "prev_missing_confirmation_count",
+        "curr_missing_confirmation_count",
     ):
         if key not in raw:
             continue
         value = raw.get(key)
-        if key in {"score", "change_pct", "prev_score", "curr_score", "score_delta", "morning_score"}:
+        if key in {"score", "change_pct", "prev_score", "curr_score", "score_delta", "morning_score", "confidence", "prev_confidence", "curr_confidence"}:
             normalized[key] = safe_float(value)
         else:
             normalized[key] = value

@@ -15,7 +15,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useTheme, type ThemeMode } from "@/components/theme-provider";
 import { TrustBanner } from "@/components/trust-banner";
-import { useOverview, useTodayData } from "@/lib/hooks";
+import { useOverview, useTodaySummary } from "@/lib/hooks";
 import { cn, toneColor } from "@/lib/utils";
 
 export const navItems = [
@@ -122,7 +122,7 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const overview = useOverview();
-  const today = useTodayData();
+  const today = useTodaySummary();
   const daemonOk = !overview.isError;
   const readiness = today.data?.readiness;
   const trust = readiness?.trust_level;

@@ -8,6 +8,7 @@ import {
   Database,
   Eye,
   FileJson,
+  KeyRound,
   LoaderCircle,
   Play,
   RefreshCw,
@@ -28,6 +29,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { api, ApiError } from "@/lib/api";
 import {
   useDecisionLedgerHealth,
+  useDataAssetsStatus,
+  useFormalDataStatus,
   useHealth,
   useOverview,
   useParameters,
@@ -48,8 +51,12 @@ import {
 } from "@/lib/readiness-copy";
 import type {
   DecisionLedgerHealthResponse,
+  DataAssetsStatus,
+  FormalDataStatus,
+  FreshnessGuardianDatasetState,
   ParametersResponse,
   RefreshStatus,
+  ReadinessSourceFreshness,
   RunItem,
   TaskDefinition,
 } from "@/lib/types";
@@ -90,11 +97,11 @@ function advancedTaskList(tasks: TaskDefinition[]) {
 function formatAuthorityLabel(value?: string) {
   const key = String(value || "").trim();
   const copy: Record<string, string> = {
-    authoritative_daily: "权威日线",
+    authoritative_daily: "正式日线",
     disclosure: "公告披露",
     display_only: "仅展示",
     execution: "执行约束",
-    formal_candidate: "Formal 候选",
+    formal_candidate: "正式候选",
     live: "盘中快源",
     live_small: "小额实盘",
     news: "新闻",
@@ -418,6 +425,42 @@ function readinessStateLabel(state?: string): string {
   }
 }
 
+function formalSetupTone(state?: string) {
+  switch (state) {
+    case "ready":
+      return "positive";
+    case "token_missing":
+    case "token_invalid":
+    case "provider_error":
+      return "risk";
+    case "rate_limited":
+    case "permission_or_points_blocked":
+    case "stale_or_misaligned":
+    case "coverage_incomplete":
+      return "warning";
+    case "manifest_missing":
+      return "watch";
+    default:
+      return "info";
+  }
+}
+
+function formalSetupLabel(state?: string): string {
+  const copy: Record<string, string> = {
+    ready: "已接入",
+    token_missing: "缺 token",
+    token_invalid: "token 无效",
+    rate_limited: "流控等待",
+    permission_or_points_blocked: "权限/积分阻塞",
+    coverage_incomplete: "覆盖不完整",
+    manifest_missing: "未刷新",
+    provider_error: "接口失败",
+    stale_or_misaligned: "过期/错日",
+    formal_not_allowed: "未放行",
+  };
+  return copy[state || ""] || state || "未知";
+}
+
 const CAPABILITY_LABELS: Record<string, string> = {
   observe: "观察",
   review: "复盘",
@@ -426,6 +469,97 @@ const CAPABILITY_LABELS: Record<string, string> = {
   notify: "通知",
   ledger_capture: "账本回写",
 };
+
+const HARD_DATA_REASONS = new Set([
+  "manifest_missing",
+  "manifest_status_failed",
+  "missing",
+  "provider_failure",
+  "trade_date_mismatch",
+  "trade_date_unknown",
+  "freshness_unknown",
+]);
+const STALE_DATA_REASONS = new Set(["freshness_stale", "freshness_expired"]);
+const POLICY_ONLY_REASONS = new Set(["live_small_not_allowed", "fallback_not_allowed", "formal_not_allowed"]);
+
+function datasetReasonSet(row: ReadinessSourceFreshness) {
+  return new Set((row.stale_reasons || []).map((reason) => String(reason || "").trim()).filter(Boolean));
+}
+
+function datasetHasAny(reasons: Set<string>, targets: Set<string>) {
+  for (const reason of reasons) {
+    if (targets.has(reason)) return true;
+  }
+  return false;
+}
+
+function datasetIsAuxiliary(row: ReadinessSourceFreshness): boolean {
+  return (
+    row.decision_scope === "display_only" ||
+    row.source_lane === "reference" ||
+    row.source_lane === "news" ||
+    row.source_lane === "disclosure"
+  );
+}
+
+function datasetIssueKind(row: ReadinessSourceFreshness, state?: string): "hard" | "optional" | "stale" | "policy" | "ok" {
+  const normalizedState = String(state || "").toUpperCase();
+  const reasons = datasetReasonSet(row);
+  if (!row.available || normalizedState === "INVALID" || datasetHasAny(reasons, HARD_DATA_REASONS)) {
+    if (datasetIsAuxiliary(row)) return "optional";
+    return "hard";
+  }
+  if (datasetHasAny(reasons, STALE_DATA_REASONS) || normalizedState === "STALE") {
+    return "stale";
+  }
+  if (
+    normalizedState === "BLOCKED" ||
+    normalizedState === "DEGRADED" ||
+    datasetHasAny(reasons, POLICY_ONLY_REASONS) ||
+    row.fallback_used
+  ) {
+    return "policy";
+  }
+  return "ok";
+}
+
+function datasetIssueTone(row: ReadinessSourceFreshness, state?: string): "positive" | "info" | "watch" | "warning" | "risk" {
+  switch (datasetIssueKind(row, state)) {
+    case "hard":
+      return "risk";
+    case "optional":
+      return "warning";
+    case "stale":
+      return "watch";
+    case "policy":
+      return "warning";
+    default:
+      return "positive";
+  }
+}
+
+function datasetIssueLabel(row: ReadinessSourceFreshness, state?: string): string {
+  switch (datasetIssueKind(row, state)) {
+    case "hard":
+      return "数据不可用";
+    case "optional":
+      return "辅助受限";
+    case "stale":
+      return "偏旧/需补刷";
+    case "policy":
+      return "复盘可用";
+    default:
+      return "可用";
+  }
+}
+
+function datasetScopeLabel(row: ReadinessSourceFreshness): string | null {
+  if (row.decision_scope === "display_only") return "辅助数据";
+  if (row.decision_scope === "live_small") return row.live_small_allowed ? "可进实盘链路" : "不进实盘";
+  if (row.source_lane === "reference") return "参考数据";
+  if (row.source_lane === "authoritative_daily") return "正式日频";
+  return null;
+}
 
 function DatasetFreshnessPanel({ status }: { status?: RefreshStatus }) {
   const readiness = status?.readiness;
@@ -448,24 +582,35 @@ function DatasetFreshnessPanel({ status }: { status?: RefreshStatus }) {
     const aBlocks = blockingDatasets.has(a.key) ? 0 : 1;
     const bBlocks = blockingDatasets.has(b.key) ? 0 : 1;
     if (aBlocks !== bBlocks) return aBlocks - bBlocks;
-    const aTone = readinessStateTone(datasetStates[a.key]);
-    const bTone = readinessStateTone(datasetStates[b.key]);
+    const aTone = datasetIssueTone(a, datasetStates[a.key]);
+    const bTone = datasetIssueTone(b, datasetStates[b.key]);
     const severity = { risk: 0, warning: 1, watch: 2, info: 3, positive: 4 } as const;
     return severity[aTone] - severity[bTone];
   });
 
   const visible = expanded ? sorted : sorted.slice(0, 4);
-  const degradedCapabilities = Object.entries(capabilities)
+  const hardIssueCount = sorted.filter((row) => datasetIssueKind(row, datasetStates[row.key]) === "hard").length;
+  const optionalIssueCount = sorted.filter((row) => datasetIssueKind(row, datasetStates[row.key]) === "optional").length;
+  const staleIssueCount = sorted.filter((row) => datasetIssueKind(row, datasetStates[row.key]) === "stale").length;
+  const policyIssueCount = sorted.filter((row) => datasetIssueKind(row, datasetStates[row.key]) === "policy").length;
+  const reviewGranted = capabilities.review?.granted !== false;
+  const approveGranted = Boolean(capabilities.approve?.granted);
+  const tradeGranted = Boolean(capabilities.trade?.granted);
+  const dataBlockedCapabilities = Object.entries(capabilities)
     .filter(([, report]) => report && !report.granted)
+    .filter(([, report]) => (report.blocking_sources || []).length > 0)
     .map(([key, report]) => ({ key, report }));
 
   return (
     <div className="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <Database size={15} className="text-[var(--text-primary)]" />
-        <span className="text-[13px] font-medium text-[var(--text-primary)]">底层数据源</span>
+        <span className="text-[13px] font-medium text-[var(--text-primary)]">能力闸门数据依赖</span>
         <span className="text-[11px] text-[var(--text-tertiary)]">
-          {datasets.length} 个数据源 · {blockingDatasets.size ? `${blockingDatasets.size} 个阻塞能力` : "无阻塞"}
+          {datasets.length} 项 · {hardIssueCount ? `${hardIssueCount} 项真不可用` : "无真故障"}
+          {optionalIssueCount ? ` · ${optionalIssueCount} 项辅助受限` : ""}
+          {staleIssueCount ? ` · ${staleIssueCount} 项偏旧` : ""}
+          {policyIssueCount ? ` · ${policyIssueCount} 项仅限复盘/观察` : ""}
         </span>
         <button
           type="button"
@@ -476,12 +621,18 @@ function DatasetFreshnessPanel({ status }: { status?: RefreshStatus }) {
         </button>
       </div>
       <p className="text-[12px] leading-5 text-[var(--text-secondary)]">
-        显示进入能力闸门的每一个底层数据源（如 quotes.batch、capital_flow.batch）。当某项能力被阻塞时，这里会标出具体是哪个数据源不满足。
+        这里不是“正式数据源是否崩了”的总览，而是能力闸门看到的底层依赖。红色才代表数据本身不可用/错日/缺证明；黄色通常表示可观察、可复盘，但不能直接作为真钱审批或交易依据。
       </p>
 
-      {degradedCapabilities.length ? (
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        <Badge tone={reviewGranted ? "positive" : "risk"}>复盘{reviewGranted ? "可用" : "受限"}</Badge>
+        <Badge tone={approveGranted ? "positive" : "warning"}>审批{approveGranted ? "可用" : "未放行"}</Badge>
+        <Badge tone={tradeGranted ? "positive" : "warning"}>交易{tradeGranted ? "可用" : "未放行"}</Badge>
+      </div>
+
+      {dataBlockedCapabilities.length ? (
         <div className="mt-3 flex flex-wrap gap-1.5">
-          {degradedCapabilities.map(({ key, report }) => (
+          {dataBlockedCapabilities.map(({ key, report }) => (
             <Badge key={key} tone={report.status === "blocked" ? "risk" : "warning"}>
               {CAPABILITY_LABELS[key] || key}: {(report.blocking_sources || []).slice(0, 2).join(", ") || "未知"}
             </Badge>
@@ -492,8 +643,9 @@ function DatasetFreshnessPanel({ status }: { status?: RefreshStatus }) {
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
         {visible.map((row) => {
           const state = datasetStates[row.key];
-          const tone = readinessStateTone(state);
+          const tone = datasetIssueTone(row, state);
           const isBlocking = blockingDatasets.has(row.key);
+          const scopeLabel = datasetScopeLabel(row);
           return (
             <div
               key={row.key}
@@ -502,12 +654,14 @@ function DatasetFreshnessPanel({ status }: { status?: RefreshStatus }) {
             >
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[12px] font-medium text-[var(--text-primary)]">{row.label || row.key}</span>
-                <Badge tone={tone}>{readinessStateLabel(state)}</Badge>
-                {isBlocking ? <Badge tone="risk">阻塞能力</Badge> : null}
+                <Badge tone={tone}>{datasetIssueLabel(row, state)}</Badge>
+                {scopeLabel ? <Badge tone="info">{scopeLabel}</Badge> : null}
+                {isBlocking ? <Badge tone={tone === "risk" ? "risk" : "warning"}>影响放行</Badge> : null}
               </div>
               <div className="mt-1 text-[11px] leading-5 text-[var(--text-tertiary)]">
                 {row.value || "-"}
                 {row.age_label ? ` · ${row.age_label}` : ""}
+                {row.provider ? ` · ${row.provider}` : ""}
               </div>
               {row.stale_reasons?.length ? (
                 <div className="mt-1.5 flex flex-wrap gap-1">
@@ -576,13 +730,13 @@ function ReadinessStatusPanel({ status }: { status?: RefreshStatus }) {
         <div className="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Database size={15} className={readiness?.formal_ready ? "text-[var(--positive)]" : "text-[var(--warning)]"} />
-            <span className="text-[13px] font-medium text-[var(--text-primary)]">Formal 数据源闸门</span>
+            <span className="text-[13px] font-medium text-[var(--text-primary)]">正式数据口径</span>
             <Badge tone={readiness?.formal_ready ? "positive" : "watch"}>
-              {readiness?.formal_ready ? "Formal Ready" : "Live 快源 / Formal 未放行"}
+              {readiness?.formal_ready ? "正式口径通过" : "快源可用 / 正式口径未接入"}
             </Badge>
           </div>
           <p className="text-[12px] leading-5 text-[var(--text-secondary)]">
-            Live-ready 只代表当前控制台数据可按纪律观察/小额执行；formal-ready 需要权威日线、复权、benchmark 和执行约束源全部通过。
+            当前快源用于看盘、复核和影子推演；正式放行需要日线、复权、benchmark 和执行约束等目标源全部通过。
           </p>
           {formalSources.length ? (
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -642,6 +796,367 @@ function ReadinessStatusPanel({ status }: { status?: RefreshStatus }) {
   );
 }
 
+function formatAssetCount(value?: number | null) {
+  const number = Number(value || 0);
+  if (number >= 10000) {
+    return `${(number / 10000).toFixed(number >= 100000 ? 0 : 1)}w`;
+  }
+  return String(number);
+}
+
+function assetTone(row: DataAssetsStatus["datasets"][number]) {
+  if (!row.available) {
+    return "warning";
+  }
+  if (row.provider === "tushare" && row.source_authority_ready) {
+    return "positive";
+  }
+  if (row.provider === "tushare") {
+    return "info";
+  }
+  return "watch";
+}
+
+function usageLabel(value?: string) {
+  const labels: Record<string, string> = {
+    formal_guardrail: "正式闸门",
+    stock_profile: "个股证据",
+    factor: "排序因子",
+    risk_event: "风险标签",
+    reference: "引用字典",
+    review_only: "复盘只读",
+    hard_gate: "硬闸门",
+    ranking_signal: "参与排序",
+    risk_penalty: "风险扣分",
+    evidence_only: "只读证据",
+    backtest_label: "复盘标签",
+    formal_candidate: "真钱闸门可用",
+    display_only: "仅展示",
+    research_only: "研究/观察",
+  };
+  return labels[value || ""] || value || "-";
+}
+
+function DataAssetsPanel({
+  status,
+  loading,
+  onRefresh,
+}: {
+  status?: DataAssetsStatus;
+  loading?: boolean;
+  onRefresh: () => void;
+}) {
+  const summary = status?.summary;
+  const rows = status?.datasets || [];
+  const mustShowDatasets = new Set([
+    "index.weight",
+    "market.daily_basic_snapshot",
+    "market.margin",
+    "market.top_list",
+    "market.top_inst",
+    "market.hsgt_moneyflow",
+    "market.ggt_daily",
+  ]);
+  const mustShowRows = rows.filter((row) => mustShowDatasets.has(row.dataset) && row.available);
+  const fillerRows = rows
+    .filter((row) => !mustShowDatasets.has(row.dataset) && row.available)
+    .sort((a, b) => Number(b.key_count || 0) - Number(a.key_count || 0));
+  const missingRows = rows.filter((row) => !row.available);
+  const priorityRows = [...mustShowRows, ...fillerRows, ...missingRows].filter((row, index, list) => (
+    list.findIndex((item) => item.dataset === row.dataset) === index
+  ));
+  const runs = status?.harvest_runs || [];
+
+  return (
+    <Panel id="data-assets" title="Tushare 数据资产" eyebrow="Data Assets" className="scroll-mt-6">
+      <div className="surface-card p-4">
+        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <Badge tone={(summary?.available_count || 0) > 0 ? "positive" : "warning"}>
+                {status ? `${summary?.available_count}/${summary?.catalog_count}` : loading ? "检查中" : "等待"}
+              </Badge>
+              <Badge tone="info">交易日 {status?.expected_trade_date || "-"}</Badge>
+              <Badge tone="watch">manifest {formatAssetCount(summary?.manifest_count)}</Badge>
+            </div>
+            <h3 className="text-[16px] font-semibold text-[var(--text-primary)]">一天授权已经沉淀成可查询资产</h3>
+            <p className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">
+              覆盖 {formatAssetCount(summary?.universe_count)} 只、{formatAssetCount(summary?.trade_days)} 个交易日；每个资产都标明用途、排序权限和真钱闸门边界。
+            </p>
+          </div>
+          <button type="button" className="focus-ring prism-btn prism-btn-secondary" onClick={onRefresh}>
+            <RotateCcw size={13} className={loading ? "animate-spin" : ""} />
+            重新检查
+          </button>
+        </div>
+
+        <div className="mb-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <MetricCard label="Tushare 资产" value={formatAssetCount(summary?.tushare_ready_count)} detail="已落库数据集" tone="positive" />
+          <MetricCard label="覆盖股票" value={formatAssetCount(summary?.universe_count)} detail="沪深300/中证500底池" tone="info" />
+          <MetricCard label="交易日" value={formatAssetCount(summary?.trade_days)} detail="历史窗口" tone="watch" />
+          <MetricCard label="资产文件" value={formatAssetCount(summary?.manifest_count)} detail={status?.generated_at || "等待扫描"} tone="info" />
+        </div>
+
+        {runs.length ? (
+          <div className="mb-4 grid grid-cols-1 gap-2 lg:grid-cols-3">
+            {runs.map((run) => (
+              <div key={`${run.label}-${run.run_dir}`} className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[12px] font-medium text-[var(--text-primary)]">{run.label}</span>
+                  <Badge tone={run.ok ? "positive" : "warning"}>{run.ok ? "ok" : "待确认"}</Badge>
+                </div>
+                <div className="mt-1 text-[11px] leading-5 text-[var(--text-tertiary)]">
+                  {run.start_date || "-"} {"->"} {run.end_date || run.trade_date || "-"}
+                </div>
+                <div className="mt-1 text-[11px] leading-5 text-[var(--text-secondary)]">
+                  {formatAssetCount(run.universe_count)} 只 · {formatAssetCount(run.trade_days)} 天 · {(run.datasets || []).slice(0, 3).join(" / ") || "dataset"}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+          {priorityRows.map((row) => (
+            <div key={row.dataset} className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-[12px] font-medium text-[var(--text-primary)]">{row.label}</div>
+                  <div className="mono mt-0.5 truncate text-[10px] text-[var(--text-tertiary)]">{row.dataset}</div>
+                </div>
+                <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                  <Badge tone={assetTone(row)}>{row.provider || "-"}</Badge>
+                  <Badge tone={row.live_permission === "formal_candidate" ? "positive" : row.live_permission === "research_only" ? "watch" : "info"}>
+                    {usageLabel(row.live_permission)}
+                  </Badge>
+                </div>
+              </div>
+              <div className="mt-2 text-[11px] leading-5 text-[var(--text-secondary)]">
+                {row.purpose || "-"} · key {formatAssetCount(row.key_count)} · rows {formatAssetCount(row.latest_row_count)}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1">
+                <Badge tone="info">{usageLabel(row.feature_group)}</Badge>
+                <Badge tone={row.decision_use === "hard_gate" ? "positive" : row.decision_use === "risk_penalty" ? "risk" : row.decision_use === "ranking_signal" ? "watch" : "info"}>
+                  {usageLabel(row.decision_use)}
+                </Badge>
+                {(row.intended_surfaces || []).slice(0, 4).map((surface) => (
+                  <Badge key={`${row.dataset}-${surface}`} tone="info">{surface}</Badge>
+                ))}
+              </div>
+              {row.usage_explanation ? (
+                <div className="mt-2 text-[11px] leading-5 text-[var(--text-secondary)]">{row.usage_explanation}</div>
+              ) : null}
+              <div className="mt-1 text-[11px] leading-5 text-[var(--text-tertiary)]">
+                {row.trade_date || "-"} · {row.freshness_status || "-"} · {row.decision_scope || "display_only"}
+              </div>
+            </div>
+          ))}
+          {!priorityRows.length ? <EmptyState>等待 Tushare 数据资产扫描。</EmptyState> : null}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function FormalDataPanel({
+  status,
+  loading,
+  onRefresh,
+}: {
+  status?: FormalDataStatus;
+  loading?: boolean;
+  onRefresh: () => void;
+}) {
+  const trigger = useTriggerRefresh("today");
+  const [feedback, setFeedback] = useState("");
+  const datasets = status?.datasets || [];
+  const blockers = status?.blockers || [];
+  const provider = status?.provider;
+  const ready = Boolean(status?.ready);
+  const lastRun = status?.last_run;
+  const setupSteps = status?.setup_steps || [];
+
+  function startRefresh() {
+    setFeedback("");
+    trigger.mutate(
+      { task_name: "formal_data_refresh", reason: "manual_formal_data_setup" },
+      {
+        onSuccess: (payload) => {
+          setFeedback(`${payload.task.title || "正式口径数据刷新"} 已启动。`);
+          onRefresh();
+        },
+        onError: (error) => setFeedback(error instanceof Error ? error.message : "正式口径刷新启动失败"),
+      },
+    );
+  }
+
+  return (
+    <Panel id="formal-data" title="正式口径数据源" eyebrow="Formal Sources" className="scroll-mt-6">
+      <div className="surface-card p-4">
+        <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+            <div className="flex items-center gap-2 text-[11px] text-[var(--text-tertiary)]">
+              <KeyRound size={13} />
+              Tushare Token
+            </div>
+            <div className="mt-1">
+              <Badge tone={provider?.token_configured ? "positive" : "risk"}>
+                {provider?.token_configured ? "已配置" : "未配置"}
+              </Badge>
+            </div>
+            <div className="mt-1 truncate text-[11px] text-[var(--text-tertiary)]">
+              {(provider?.configured_token_env_names?.length
+                ? provider.configured_token_env_names
+                : provider?.token_env_names || []
+              ).join(" / ") || "PRISM_TUSHARE_TOKEN"}
+            </div>
+            <div className="mt-0.5 truncate text-[10px] text-[var(--text-tertiary)]">
+              {provider?.local_env_file_exists ? ".env 可用" : ".env 未写入"}
+            </div>
+          </div>
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+            <div className="text-[11px] text-[var(--text-tertiary)]">接入进度</div>
+            <div className="mt-1 flex items-center gap-2">
+              <Badge tone={ready ? "positive" : "warning"}>
+                {status ? `${status.ready_count}/${status.total_count}` : loading ? "检查中" : "-"}
+              </Badge>
+              <span className="text-[12px] text-[var(--text-secondary)]">{ready ? "全部通过" : `${status?.blocked_count ?? 0} 项待处理`}</span>
+            </div>
+            <div className="mt-1 text-[11px] text-[var(--text-tertiary)]">{status?.expected_trade_date || "-"}</div>
+          </div>
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+            <div className="text-[11px] text-[var(--text-tertiary)]">最近刷新</div>
+            <div className="mt-1 flex items-center gap-2">
+              <Badge tone={runTone(lastRun?.status)}>{status?.running ? "running" : lastRun?.status || "none"}</Badge>
+              <span className="truncate text-[12px] text-[var(--text-secondary)]">{lastRun?.checked_started_at || status?.generated_at || "-"}</span>
+            </div>
+          </div>
+        </div>
+
+        {feedback ? (
+          <div className="mb-3 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2 text-[12px] text-[var(--text-secondary)]">
+            {feedback}
+          </div>
+        ) : null}
+
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="focus-ring prism-btn prism-btn-primary"
+            onClick={startRefresh}
+            disabled={trigger.isPending || Boolean(status?.running)}
+          >
+            {trigger.isPending || status?.running ? <LoaderCircle size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+            刷新正式口径
+          </button>
+          <button type="button" className="focus-ring prism-btn prism-btn-secondary" onClick={onRefresh}>
+            <RotateCcw size={13} />
+            重新检查
+          </button>
+        </div>
+
+        {blockers.length ? (
+          <div className="mb-4 rounded-md border border-[color-mix(in_srgb,var(--warning)_24%,transparent)] bg-[color-mix(in_srgb,var(--warning)_8%,transparent)] px-3 py-3">
+            <div className="mb-2 text-[12px] font-medium text-[var(--text-primary)]">当前阻塞项</div>
+            <div className="grid gap-1.5">
+              {blockers.slice(0, 4).map((item) => (
+                <div key={`${item.dataset}-${item.state}`} className="text-[12px] leading-5 text-[var(--text-secondary)]">
+                  <span className="font-medium text-[var(--text-primary)]">{item.label || item.dataset}</span>
+                  ：{formalSetupLabel(item.state)} · {item.next_action || "查看 manifest"}
+                  {item.source_apis?.length ? (
+                    <span className="ml-1 text-[var(--text-tertiary)]">
+                      API: {item.source_apis.join(" / ")}
+                    </span>
+                  ) : null}
+                  {item.blocked_request_keys?.length ? (
+                    <span className="ml-1 text-[var(--text-tertiary)]">
+                      key: {item.blocked_request_keys.join(" / ")}
+                    </span>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {setupSteps.length ? (
+          <div className="mb-4 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+            <div className="mb-2 text-[12px] font-medium text-[var(--text-primary)]">接入步骤</div>
+            <div className="grid gap-1.5">
+              {setupSteps.map((step, index) => (
+                <div key={`${index}-${step}`} className="text-[12px] leading-5 text-[var(--text-secondary)]">
+                  {index + 1}. {step}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {datasets.map((row) => (
+            <div key={row.dataset || row.key} className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-[12px] font-medium text-[var(--text-primary)]">{row.label || row.dataset}</div>
+                  <div className="mono mt-0.5 truncate text-[10px] text-[var(--text-tertiary)]">{row.dataset}</div>
+                </div>
+                <Badge tone={formalSetupTone(row.setup_state)}>{formalSetupLabel(row.setup_state)}</Badge>
+              </div>
+              <div className="mt-2 text-[11px] leading-5 text-[var(--text-secondary)]">
+                当前 {row.provider || "-"} · 目标 {row.target_authority_provider || row.authority_provider || "-"} · {row.trade_date || "-"}
+              </div>
+              {row.source_apis?.length ? (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {row.source_apis.map((apiName) => (
+                    <span key={`${row.dataset}-${apiName}`} className="rounded border border-[var(--border-subtle)] px-1.5 py-0.5 text-[10px] text-[var(--text-secondary)]">
+                      {apiName}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              {row.required_permission ? (
+                <div className="mt-1 text-[11px] leading-5 text-[var(--text-tertiary)]">{row.required_permission}</div>
+              ) : null}
+              {row.blocked_request_keys?.length || row.missing_request_keys?.length ? (
+                <div className="mt-1 text-[11px] leading-5 text-[var(--text-tertiary)]">
+                  待补 key: {[...(row.blocked_request_keys || []), ...(row.missing_request_keys || [])].join(" / ")}
+                </div>
+              ) : null}
+              {row.error ? <div className="mt-1 line-clamp-2 text-[11px] text-[var(--text-warn)]">{row.error}</div> : null}
+              <div className="mt-1 text-[11px] leading-5 text-[var(--text-tertiary)]">{row.next_action || "-"}</div>
+              {row.docs?.length ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {row.docs.slice(0, 3).map((href, index) => (
+                    <a
+                      key={`${row.dataset}-${href}`}
+                      href={href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] text-[var(--accent)] underline-offset-2 hover:underline"
+                    >
+                      文档 {index + 1}
+                    </a>
+                  ))}
+                </div>
+              ) : null}
+              {row.quality_flags?.length ? (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {row.quality_flags.slice(0, 3).map((flag) => (
+                    <span key={`${row.dataset}-${flag}`} className="rounded border border-[var(--border-subtle)] px-1.5 py-0.5 text-[10px] text-[var(--text-secondary)]">
+                      {flag}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ))}
+          {!datasets.length ? <EmptyState>等待正式口径状态。</EmptyState> : null}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 function formatDuration(seconds?: number) {
   const value = Math.max(0, Math.round(Number(seconds || 0)));
   if (!value) {
@@ -664,8 +1179,7 @@ function SafeRefreshPanel({
   const trigger = useTriggerRefresh("today");
   const [feedback, setFeedback] = useState("");
   const allRecoverySteps = status?.recovery_steps || [];
-  const recoverySteps = allRecoverySteps.filter((step) => refreshTaskCopy(step.task_name).category === "safe");
-  const advancedRecoveryCount = allRecoverySteps.length - recoverySteps.length;
+  const advancedRecoveryCount = allRecoverySteps.filter((step) => refreshTaskCopy(step.task_name).category !== "safe").length;
   const fallbackRows = safeTaskList(tasks).map((task, index) => {
     const taskName = taskNameOf(task);
     const copy = refreshTaskCopy(taskName);
@@ -684,7 +1198,7 @@ function SafeRefreshPanel({
       estimated_seconds: 60,
     };
   });
-  const rows = recoverySteps.length ? recoverySteps : fallbackRows;
+  const rows = allRecoverySteps.length ? allRecoverySteps : fallbackRows;
   const trust = status?.readiness?.trust_level;
 
   function startRefresh(taskName?: string) {
@@ -713,7 +1227,7 @@ function SafeRefreshPanel({
             <div className="flex flex-wrap items-center gap-2">
               <Badge tone="positive">安全区</Badge>
               <span className="text-[12px] text-[var(--text-secondary)]">
-                按下方顺序逐步恢复今天的数据链路。带「写账本」标记的步骤会影响真实账本，其他步骤只刷新数据或重生成简报。
+                按下方顺序逐步恢复今天的数据链路。高级步骤会重算候选池或时段产物；带「写账本」标记的步骤会影响真实账本。
               </span>
             </div>
             {trust ? (
@@ -725,7 +1239,7 @@ function SafeRefreshPanel({
             {feedback ? <div className="mt-2 text-[12px] text-[var(--text-secondary)]">{feedback}</div> : null}
             {advancedRecoveryCount > 0 ? (
               <div className="mt-2 text-[12px] text-[var(--text-tertiary)]">
-                另有 {advancedRecoveryCount} 个高级恢复任务已放在右侧高级任务区，避免和日常刷新混用。
+                其中 {advancedRecoveryCount} 个为高级恢复步骤，已保留在当前链路中，运行前请确认用途。
               </div>
             ) : null}
           </div>
@@ -739,6 +1253,7 @@ function SafeRefreshPanel({
               const disabled = trigger.isPending || running || cooling || !row.can_trigger;
               const stepNumber = row.step || index + 1;
               const writesToLedger = Boolean(row.writes_to_ledger);
+              const isAdvanced = copy.category !== "safe";
               const purpose = row.purpose || copy.summary;
               const passed = !running && !cooling && row.can_trigger && (row.issue_count || 0) === 0;
               return (
@@ -757,6 +1272,7 @@ function SafeRefreshPanel({
                           <Badge tone={running ? "watch" : cooling ? "warning" : passed ? "positive" : "info"}>
                             {running ? "运行中" : cooling ? `冷却 ${formatCooldown(row.cooldown_remaining_seconds)}` : passed ? "当前通过" : "待运行"}
                           </Badge>
+                          <Badge tone={isAdvanced ? "warning" : "positive"}>{isAdvanced ? "高级恢复" : "安全恢复"}</Badge>
                           {writesToLedger ? <Badge tone="risk">写账本</Badge> : <Badge tone="info">不写账本</Badge>}
                           <span className="text-[11px] text-[var(--text-tertiary)]">{formatDuration(row.estimated_seconds)}</span>
                         </div>
@@ -827,13 +1343,165 @@ function schedulerHealthLabel(health?: string) {
   return labels[String(health || "")] || "待检查";
 }
 
+function guardianDecisionTone(state?: FreshnessGuardianDatasetState): "positive" | "info" | "watch" | "warning" | "risk" {
+  const decision = String(state?.last_decision || "");
+  const skipReason = String(state?.last_skip_reason || "");
+  if (decision === "fresh") {
+    return "positive";
+  }
+  if (decision === "launched" || skipReason.startsWith("running:")) {
+    return "watch";
+  }
+  if (skipReason === "cooldown") {
+    return "warning";
+  }
+  if (decision === "skip" || skipReason) {
+    return "info";
+  }
+  const freshness = String(state?.freshness?.freshness_status || "");
+  if (freshness === "expired") {
+    return "risk";
+  }
+  if (freshness === "stale") {
+    return "warning";
+  }
+  return "info";
+}
+
+function guardianDecisionLabel(state?: FreshnessGuardianDatasetState) {
+  const decision = String(state?.last_decision || "");
+  const skipReason = String(state?.last_skip_reason || "");
+  if (!state?.last_checked_at && !decision) {
+    return "等待检查";
+  }
+  if (decision === "fresh") {
+    return "新鲜";
+  }
+  if (decision === "launched") {
+    return "已触发";
+  }
+  if (decision === "dry_run") {
+    return "Dry-run";
+  }
+  if (skipReason === "cooldown") {
+    return "冷却中";
+  }
+  if (skipReason === "outside_auto_window") {
+    return "窗口外";
+  }
+  if (skipReason.startsWith("running:")) {
+    return "同类运行中";
+  }
+  if (skipReason.startsWith("non_trading_day:")) {
+    return "非交易日";
+  }
+  if (decision === "skip") {
+    return "已跳过";
+  }
+  return decision || "待检查";
+}
+
+function formatGuardianSeconds(seconds?: number | null) {
+  if (seconds === null || seconds === undefined) {
+    return "-";
+  }
+  const value = Math.max(0, Math.round(Number(seconds || 0)));
+  if (value < 60) {
+    return `${value}s`;
+  }
+  if (value < 3600) {
+    return `${Math.floor(value / 60)}m`;
+  }
+  const hours = value / 3600;
+  return `${hours < 10 ? hours.toFixed(1) : Math.round(hours)}h`;
+}
+
+function GuardianDatasetCard({
+  title,
+  taskName,
+  state,
+}: {
+  title: string;
+  taskName: "quotes_light" | "capital_flow_light";
+  state?: FreshnessGuardianDatasetState;
+}) {
+  const freshness = state?.freshness || {};
+  const reasons = freshness.stale_reasons || [];
+  const triggerReasons = state?.last_trigger_reasons || [];
+  const tone = guardianDecisionTone(state);
+  const copy = refreshTaskCopy(taskName);
+  const age = formatGuardianSeconds(freshness.age_seconds);
+  const budget = formatGuardianSeconds(freshness.stale_after_seconds);
+  const cooldown = Number(state?.cooldown_remaining_seconds || 0);
+
+  return (
+    <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[13px] font-medium text-[var(--text-primary)]">{title}</span>
+            <Badge tone={tone}>{guardianDecisionLabel(state)}</Badge>
+          </div>
+          <div className="mono mt-1 truncate text-[11px] text-[var(--text-tertiary)]">
+            {freshness.dataset || copy.title}
+          </div>
+        </div>
+        <Badge tone={String(freshness.freshness_status || "") === "fresh" ? "positive" : reasons.length ? "warning" : "info"}>
+          {freshness.freshness_status || "unknown"}
+        </Badge>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="rounded border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-2 py-1.5">
+          <div className="text-[10px] text-[var(--text-tertiary)]">数据年龄</div>
+          <div className="mt-0.5 text-[12px] font-medium text-[var(--text-primary)]">{age}</div>
+        </div>
+        <div className="rounded border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-2 py-1.5">
+          <div className="text-[10px] text-[var(--text-tertiary)]">预算</div>
+          <div className="mt-0.5 text-[12px] font-medium text-[var(--text-primary)]">{budget}</div>
+        </div>
+      </div>
+
+      <div className="mt-3 space-y-1 text-[11px] leading-5 text-[var(--text-tertiary)]">
+        <div>检查 {state?.last_checked_at || "-"}</div>
+        <div>触发 {state?.last_triggered_at || "-"}</div>
+        <div>数据日 {freshness.trade_date || "-"}</div>
+        {cooldown > 0 ? <div>冷却剩余 {formatCooldown(cooldown)}</div> : null}
+      </div>
+
+      {state?.active_windows?.length ? (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {state.active_windows.slice(0, 4).map((window) => (
+            <span key={`${taskName}-${window}`} className="rounded border border-[var(--border-subtle)] px-1.5 py-0.5 text-[10px] text-[var(--text-secondary)]">
+              {window}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      {reasons.length || triggerReasons.length ? (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {[...new Set([...reasons, ...triggerReasons])].slice(0, 4).map((reason) => (
+            <span key={`${taskName}-${reason}`} className="rounded border border-[var(--border-subtle)] px-1.5 py-0.5 text-[10px] text-[var(--text-secondary)]">
+              {refreshReasonLabel(reason)}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function SchedulerStatusPanel({ status }: { status?: RefreshStatus }) {
   const scheduler = status?.scheduler_status;
   const service = scheduler?.scheduler;
   const summary = scheduler?.summary;
   const jobs = scheduler?.jobs || [];
+  const guardian = service?.freshness_guardian;
   const visibleJobs = jobs.filter((job) => job.health !== "success").concat(jobs.filter((job) => job.health === "success")).slice(0, 7);
   const hasIssues = Boolean((summary?.failed || 0) + (summary?.stale || 0) + (summary?.missing || 0));
+  const guardianCalendar = guardian?.calendar && typeof guardian.calendar === "object" ? String(guardian.calendar.status || "") : "";
+  const guardianHealthy = Boolean(service?.alive && guardian?.enabled && !guardian?.last_skip_reason);
 
   return (
     <Panel title="后台刷新守护" eyebrow="Scheduler">
@@ -871,6 +1539,29 @@ function SchedulerStatusPanel({ status }: { status?: RefreshStatus }) {
           <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
             <div className="text-[11px] text-[var(--text-tertiary)]">旧/缺失</div>
             <div className="mt-1 text-[16px] font-semibold text-[var(--text-primary)]">{(summary?.stale || 0) + (summary?.missing || 0)}</div>
+          </div>
+        </div>
+
+        <div className="mb-3 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <Database size={15} className={guardianHealthy ? "text-[var(--positive)]" : "text-[var(--warning)]"} />
+            <span className="text-[13px] font-medium text-[var(--text-primary)]">轻量数据保鲜</span>
+            <Badge tone={guardianHealthy ? "positive" : guardian?.enabled ? "watch" : "warning"}>
+              {guardian?.enabled ? "已启用" : "未启用"}
+            </Badge>
+            {guardianCalendar ? <Badge tone={guardianCalendar === "trading" ? "info" : "warning"}>{guardianCalendar}</Badge> : null}
+            <span className="text-[11px] text-[var(--text-tertiary)]">
+              checked {guardian?.last_checked_at || "-"}
+            </span>
+          </div>
+          {guardian?.last_skip_reason ? (
+            <div className="mb-3 rounded-md border border-[color-mix(in_srgb,var(--warning)_24%,transparent)] bg-[color-mix(in_srgb,var(--warning)_8%,transparent)] px-3 py-2 text-[12px] text-[var(--text-secondary)]">
+              {guardian.last_skip_reason}
+            </div>
+          ) : null}
+          <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+            <GuardianDatasetCard title="批量行情" taskName="quotes_light" state={guardian?.quotes_light} />
+            <GuardianDatasetCard title="批量资金流" taskName="capital_flow_light" state={guardian?.capital_flow_light} />
           </div>
         </div>
 
@@ -1338,6 +2029,35 @@ function captureStatusTone(status?: string) {
   return "info" as const;
 }
 
+function learningStageLabel(stage?: string) {
+  if (stage === "pattern_formed") {
+    return "已形成模式";
+  }
+  if (stage === "validating_pattern") {
+    return "待验证";
+  }
+  if (stage === "observation_hypothesis") {
+    return "观察假设";
+  }
+  if (stage === "pending_outcome") {
+    return "等待 outcome";
+  }
+  return stage || "-";
+}
+
+function learningActionLabel(action?: string) {
+  if (action === "fix_data_pipeline") {
+    return "修数据链路";
+  }
+  if (action === "fix_execution_pipeline") {
+    return "修执行链路";
+  }
+  if (action === "review_rule_threshold") {
+    return "复核规则阈值";
+  }
+  return action || "复核";
+}
+
 function DecisionLedgerHealthPanel() {
   const ledger = useDecisionLedgerHealth();
   const data = ledger.data as DecisionLedgerHealthResponse | undefined;
@@ -1346,6 +2066,14 @@ function DecisionLedgerHealthPanel() {
   const outcome = data?.last_outcome_evaluation;
   const corrupt = data?.corrupt_files || [];
   const statusErrors = data?.status_errors || [];
+  const storage = data?.storage;
+  const learning = data?.learning_loop;
+  const topBuckets = (learning?.buckets || [])
+    .filter((bucket) => bucket.samples > 0)
+    .slice()
+    .sort((a, b) => (b.needs_review || 0) - (a.needs_review || 0) || (b.mature_samples || 0) - (a.mature_samples || 0))
+    .slice(0, 3);
+  const suggestions = (learning?.suggestions || []).slice(0, 2);
 
   return (
     <Panel
@@ -1411,6 +2139,67 @@ function DecisionLedgerHealthPanel() {
               ) : null}
             </div>
 
+            <div className="mt-3 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-[12px] font-medium text-[var(--text-primary)]">规则学习闭环</div>
+                <Badge tone={(learning?.pending_review_count || 0) > 0 ? "warning" : "positive"}>
+                  待复盘 {learning?.pending_review_count ?? 0}
+                </Badge>
+                <Badge tone="info">成熟样本 {learning?.mature_samples ?? 0}</Badge>
+              </div>
+              <div className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">
+                {learning
+                  ? `${learning.version || "-"} · 样本 ${learning.samples_total ?? 0} · 规则版本 ${(learning.ruleset_versions || []).join(", ") || "-"}`
+                  : "等待 Decision Ledger learning loop 数据。"}
+              </div>
+              {suggestions.length ? (
+                <div className="mt-2 grid gap-2 md:grid-cols-2">
+                  {suggestions.map((suggestion) => (
+                    <div
+                      key={`${suggestion.ruleset_version}-${suggestion.lane}-${suggestion.action}-${suggestion.suggested_action}`}
+                      className="rounded border border-[var(--border-warn)] bg-[var(--surface-warn)] px-2 py-1.5 text-[11px]"
+                    >
+                      <div className="font-medium text-[var(--text-warn)]">
+                        {learningActionLabel(suggestion.suggested_action)}
+                      </div>
+                      <div className="mt-0.5 text-[var(--text-secondary)]">
+                        {suggestion.lane}/{suggestion.action} · {suggestion.reason}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {topBuckets.length ? (
+                <div className="mt-2 grid gap-1.5 text-[11px] text-[var(--text-secondary)]">
+                  {topBuckets.map((bucket) => (
+                    <div
+                      key={`${bucket.ruleset_version}-${bucket.lane}-${bucket.action}`}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded border border-[var(--border-subtle)] px-2 py-1"
+                    >
+                      <span className="font-mono text-[var(--text-primary)]">{bucket.lane}/{bucket.action}</span>
+                      <span>
+                        {learningStageLabel(bucket.sample_stage)} · 成熟 {bucket.mature_samples} · 复盘 {bucket.needs_review}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
+            {storage ? (
+              <div className="mt-3 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="text-[12px] font-medium text-[var(--text-primary)]">Ledger 存储</div>
+                  <Badge tone="info">{storage.mode || "runtime_primary_legacy_read"}</Badge>
+                  <Badge tone={storage.legacy_exists ? "warning" : "info"}>legacy {storage.legacy_decision_files ?? 0}</Badge>
+                </div>
+                <div className="mt-1 grid gap-1 text-[11px] text-[var(--text-tertiary)]">
+                  <div className="truncate">writes_to: {storage.writes_to || "-"}</div>
+                  <div className="truncate">primary: {storage.primary_root || "-"} ({storage.primary_decision_files ?? 0})</div>
+                </div>
+              </div>
+            ) : null}
+
             {corrupt.length ? (
               <div className="mt-3 rounded-md border border-[var(--border-warn)] bg-[var(--surface-warn)] px-3 py-2 text-[11px] text-[var(--text-warn)]">
                 <div className="font-medium">Decisions 文件损坏 ({corrupt.length})</div>
@@ -1448,6 +2237,8 @@ export default function SettingsPage() {
   const health = useHealth();
   const runs = useRuns();
   const refreshStatus = useRefreshStatus("today", true, { auto: false });
+  const formalData = useFormalDataStatus();
+  const dataAssets = useDataAssetsStatus();
   const [preview, setPreview] = useState<PreviewDrawerState>({
     open: false,
     title: "",
@@ -1480,6 +2271,8 @@ export default function SettingsPage() {
                   void overview.refetch();
                   void health.refetch();
                   void runs.refetch();
+                  void formalData.refetch();
+                  void dataAssets.refetch();
                 }}
               >
                 <RefreshCw size={14} className={overview.isFetching || health.isFetching || runs.isFetching ? "animate-spin" : ""} />
@@ -1496,11 +2289,22 @@ export default function SettingsPage() {
             <MetricCard label="安全刷新" value={String(safeTasks.length)} detail="日常可用入口" tone="info" />
             <MetricCard label="最近运行" value={String(runRows.length)} detail="来自 /api/runs" tone="watch" />
             <MetricCard label="刷新源" value={String(overview.data?.freshness?.length || 0)} detail={overview.data?.generated_at || "等待总览"} tone={(readiness?.stale_count || 0) > 0 ? "warning" : "positive"} />
+            <MetricCard label="Tushare 资产" value={String(dataAssets.data?.summary?.tushare_ready_count || 0)} detail={dataAssets.data?.generated_at || "等待数据资产"} tone={(dataAssets.data?.summary?.tushare_ready_count || 0) > 0 ? "positive" : "watch"} />
           </section>
 
           <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
             <div className="flex flex-col gap-6">
               <ReadinessStatusPanel status={refreshStatus.data} />
+              <DataAssetsPanel
+                status={dataAssets.data}
+                loading={dataAssets.isLoading || dataAssets.isFetching}
+                onRefresh={() => void dataAssets.refetch()}
+              />
+              <FormalDataPanel
+                status={formalData.data}
+                loading={formalData.isLoading || formalData.isFetching}
+                onRefresh={() => void formalData.refetch()}
+              />
               <SafeRefreshPanel status={refreshStatus.data} tasks={safeTasks} />
               <SchedulerStatusPanel status={refreshStatus.data} />
               <RefreshPolicyPanel status={refreshStatus.data} />

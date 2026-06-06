@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -46,6 +47,29 @@ def file_has_text(path_value: str | None) -> bool:
         return False
 
 
+def date_prefix(value: Any) -> str:
+    text = str(value or "").strip()
+    if len(text) >= 10 and text[4:5] == "-" and text[7:8] == "-":
+        return text[:10]
+    digits = "".join(ch for ch in text if ch.isdigit())
+    if len(digits) >= 8:
+        return f"{digits[:4]}-{digits[4:6]}-{digits[6:8]}"
+    return ""
+
+
+def resolve_quality_trade_date(*payloads: dict[str, Any], expected_timestamp: str = "") -> str:
+    for env_name in ("PRISM_EXPECTED_TRADE_DATE", "TRADE_DATE", "RUN_DATE"):
+        value = date_prefix(os.environ.get(env_name))
+        if value:
+            return value
+    for payload in payloads:
+        for key in ("checked_trade_date", "expected_trade_date", "trade_date", "date"):
+            value = date_prefix(payload.get(key))
+            if value:
+                return value
+    return date_prefix(expected_timestamp)
+
+
 def build_result(args: argparse.Namespace) -> dict[str, Any]:
     ai_payload = load_json(args.ai_input)
     scan_payload = load_json(args.scan_input)
@@ -74,6 +98,12 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
         or scan_payload.get("timestamp")
         or ""
     )
+    quality_trade_date = resolve_quality_trade_date(
+        midday_payload,
+        ai_payload,
+        scan_payload,
+        expected_timestamp=expected_timestamp,
+    )
     stats = {
         "shortlist_count": len(ai_payload.get("shortlist") or []),
         "has_lifecycle": bool(lifecycle_payload),
@@ -91,6 +121,9 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
         "checked_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "mode": args.mode,
         "validation_status": "ok" if not errors else "failed",
+        "trade_date": quality_trade_date,
+        "checked_trade_date": quality_trade_date,
+        "expected_trade_date": quality_trade_date,
         "errors": errors,
         "warnings": warnings,
         "paths": {

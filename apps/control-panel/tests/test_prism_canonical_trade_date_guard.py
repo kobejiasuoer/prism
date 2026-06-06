@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -86,6 +87,45 @@ class PrismCanonicalTradeDateGuardTests(unittest.TestCase):
                 self.assertEqual(resolved, legacy / "lifecycle_2026-04-13_16-13.json")
             finally:
                 prism_canonical.SCREENER_DATA_DIRS = original_dirs
+
+    def test_quality_status_prefers_internal_expected_trade_date_over_filename(self) -> None:
+        original_patterns = prism_canonical.QUALITY_PATTERNS
+        previous_expected = os.environ.get("PRISM_EXPECTED_TRADE_DATE")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            write_json(
+                root / "quality_gate_watchlist_2026-05-30.json",
+                {
+                    "checked_at": "2026-05-30 10:11:24",
+                    "validation_status": "ok",
+                },
+            )
+            write_json(
+                root / "quality_gate_watchlist_2026-05-29.json",
+                {
+                    "checked_at": "2026-05-30 10:26:14",
+                    "validation_status": "ok",
+                    "trade_date": "2026-05-29",
+                    "checked_trade_date": "2026-05-29",
+                    "expected_trade_date": "2026-05-29",
+                },
+            )
+
+            prism_canonical.QUALITY_PATTERNS = {
+                **original_patterns,
+                "watchlist": root / "quality_gate_watchlist_*.json",
+            }
+            os.environ["PRISM_EXPECTED_TRADE_DATE"] = "2026-05-29"
+            try:
+                status = prism_canonical.load_quality_status("watchlist")
+                self.assertEqual(status["checked_trade_date"], "2026-05-29")
+                self.assertTrue(status["path"].endswith("quality_gate_watchlist_2026-05-29.json"))
+            finally:
+                prism_canonical.QUALITY_PATTERNS = original_patterns
+                if previous_expected is None:
+                    os.environ.pop("PRISM_EXPECTED_TRADE_DATE", None)
+                else:
+                    os.environ["PRISM_EXPECTED_TRADE_DATE"] = previous_expected
 
 
 if __name__ == "__main__":

@@ -12,9 +12,11 @@ import unittest
 from pathlib import Path
 
 
-INVEST_FLOW_ROOT = Path(__file__).resolve().parents[2]
-if str(INVEST_FLOW_ROOT) not in sys.path:
-    sys.path.insert(0, str(INVEST_FLOW_ROOT))
+CONTROL_PANEL_ROOT = Path(__file__).resolve().parents[1]
+PACKAGES_ROOT = CONTROL_PANEL_ROOT.parents[1] / "packages"
+for path in (CONTROL_PANEL_ROOT, PACKAGES_ROOT):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
 from capability_matrix import (  # noqa: E402
     Capability,
@@ -43,9 +45,12 @@ def _source_row(
     available: bool = True,
     stale: bool = False,
     degraded: bool = False,
+    deferred: bool = False,
     stale_reasons: list[str] | None = None,
     formal_decision_allowed: bool = True,
     manifest_path: str = "/tmp/fake.manifest.json",
+    source_authority_ready: bool = True,
+    authority_flags: list[str] | None = None,
 ) -> dict[str, object]:
     return {
         "key": key,
@@ -58,10 +63,13 @@ def _source_row(
         "available": available,
         "stale": stale,
         "degraded": degraded,
+        "deferred": deferred,
         "stale_reasons": stale_reasons or [],
         "degradation_reasons": [],
         "formal_decision_allowed": formal_decision_allowed,
         "manifest_path": manifest_path,
+        "source_authority_ready": source_authority_ready,
+        "authority_flags": authority_flags or [],
     }
 
 
@@ -193,6 +201,85 @@ class FormalReadyDivergenceTests(unittest.TestCase):
         self.assertTrue(result["trade"].granted)
 
 
+class DegradedSourceGrantTests(unittest.TestCase):
+    def test_degraded_sources_keep_observe_and_review_granted(self) -> None:
+        payload = _readiness(
+            sources=[
+                _source_row("watchlist", degraded=True, formal_decision_allowed=False),
+                _source_row("screening", degraded=True, formal_decision_allowed=False),
+                _source_row("confirmation", degraded=True, formal_decision_allowed=False),
+                _source_row("decision_brief", degraded=True, formal_decision_allowed=False),
+            ],
+        )
+        result = evaluate_capabilities(readiness_payload=payload)
+
+        self.assertEqual(result["observe"].status, "degraded")
+        self.assertTrue(result["observe"].granted)
+        self.assertEqual(result["review"].status, "degraded")
+        self.assertTrue(result["review"].granted)
+        self.assertFalse(result["approve"].granted)
+        self.assertFalse(result["trade"].granted)
+
+
+class DeferredSourceTests(unittest.TestCase):
+    def test_deferred_confirmation_does_not_make_today_unreliable(self) -> None:
+        payload = _readiness(
+            ready=True,
+            readiness_mode="live_ready",
+            account_mode="research",
+            account_ready_for_live_small=False,
+            sources=[
+                _source_row("watchlist"),
+                _source_row("screening"),
+                _source_row(
+                    "confirmation",
+                    available=False,
+                    stale=False,
+                    deferred=True,
+                    stale_reasons=["manifest_missing", "missing"],
+                ),
+                _source_row("decision_brief"),
+            ],
+        )
+
+        result = evaluate_capabilities(readiness_payload=payload)
+        trust = evaluate_trust_level(
+            readiness_payload=payload,
+            capabilities={key: report.as_dict() for key, report in result.items()},
+        )
+
+        self.assertTrue(result["observe"].granted)
+        self.assertTrue(result["review"].granted)
+        self.assertFalse(result["approve"].granted)
+        self.assertFalse(result["trade"].granted)
+        self.assertEqual(trust.level, "observe_only")
+        self.assertNotIn("午盘承接确认当前不可用", "\n".join(trust.blocking_reasons))
+
+    def test_missing_confirmation_after_due_still_blocks_formal_actions(self) -> None:
+        payload = _readiness(
+            ready=False,
+            readiness_mode="blocked",
+            sources=[
+                _source_row("watchlist"),
+                _source_row("screening"),
+                _source_row("confirmation", available=False, stale=True, stale_reasons=["manifest_missing", "missing"]),
+                _source_row("decision_brief"),
+            ],
+            blockers=[{
+                "code": "confirmation_missing",
+                "label": "午盘承接确认",
+                "message": "午盘承接确认缺失",
+                "recommended_task": "midday_confirmation",
+            }],
+        )
+
+        result = evaluate_capabilities(readiness_payload=payload)
+
+        self.assertFalse(result["approve"].granted)
+        self.assertFalse(result["trade"].granted)
+        self.assertIn("screening.confirmation", result["approve"].blocking_sources)
+
+
 class InvalidSourceTests(unittest.TestCase):
     def test_trade_date_mismatch_invalidates_dependent_caps(self) -> None:
         payload = _readiness(
@@ -315,6 +402,21 @@ class TrustLevelTests(unittest.TestCase):
         self.assertTrue(trust.can_trade_live)
         self.assertEqual(trust.blocking_reasons, [])
 
+    def test_trusted_when_formal_ready_but_account_stays_research(self) -> None:
+        trust = evaluate_trust_level(
+            readiness_payload=_readiness(
+                ready=True,
+                readiness_mode="live_ready",
+                formal_ready=True,
+                account_mode="research",
+                account_ready_for_live_small=False,
+            )
+        )
+        self.assertEqual(trust.level, "trusted")
+        self.assertTrue(trust.can_approve)
+        self.assertFalse(trust.can_trade_live)
+        self.assertIn("账户模式约束", trust.headline)
+
     def test_observe_only_when_data_stale_but_observable(self) -> None:
         payload = _readiness(
             ready=False,
@@ -352,6 +454,113 @@ class TrustLevelTests(unittest.TestCase):
         self.assertEqual(trust.level, "observe_only")
         self.assertTrue(trust.can_observe)
         self.assertFalse(trust.can_trade_live)
+
+    def test_live_ready_degraded_sources_are_observe_only(self) -> None:
+        payload = _readiness(
+            ready=True,
+            readiness_mode="live_ready",
+            account_mode="research",
+            account_ready_for_live_small=False,
+            sources=[
+                _source_row(
+                    "watchlist",
+                    degraded=True,
+                    formal_decision_allowed=False,
+                    source_authority_ready=False,
+                    authority_flags=["target_authority_not_in_use:tushare"],
+                ),
+                _source_row(
+                    "screening",
+                    degraded=True,
+                    formal_decision_allowed=False,
+                    source_authority_ready=False,
+                    authority_flags=["upstream_authority_not_ready"],
+                ),
+                _source_row(
+                    "confirmation",
+                    degraded=True,
+                    formal_decision_allowed=False,
+                    source_authority_ready=False,
+                    authority_flags=["upstream_formal_not_allowed"],
+                ),
+                _source_row("decision_brief", degraded=True, formal_decision_allowed=False),
+            ],
+        )
+        trust = evaluate_trust_level(readiness_payload=payload)
+
+        self.assertEqual(trust.level, "observe_only")
+        self.assertEqual(trust.label, "仅可观察")
+        self.assertIn("正式数据底座已接入", trust.headline)
+        self.assertIn("账户处于研究态", trust.headline)
+        self.assertNotIn("先补齐缺口", trust.headline)
+        self.assertTrue(trust.can_observe)
+        self.assertTrue(trust.can_review)
+        self.assertFalse(trust.can_approve)
+        self.assertFalse(trust.can_trade_live)
+        self.assertIn("正式数据底座已接入", trust.blocking_reasons[0])
+        self.assertIn("账户处于研究态", trust.blocking_reasons[1])
+
+    def test_degraded_pipeline_does_not_claim_formal_base_missing_when_formal_rows_ready(self) -> None:
+        payload = _readiness(
+            ready=True,
+            readiness_mode="shadow_only",
+            formal_ready=False,
+            account_mode="research",
+            account_ready_for_live_small=False,
+            sources=[
+                _source_row(
+                    "watchlist",
+                    degraded=True,
+                    formal_decision_allowed=False,
+                    source_authority_ready=False,
+                    authority_flags=["upstream_authority_not_ready"],
+                ),
+                _source_row("screening", degraded=True, formal_decision_allowed=False),
+                _source_row("confirmation", degraded=True, formal_decision_allowed=False),
+                _source_row("decision_brief", degraded=True, formal_decision_allowed=False),
+            ],
+        )
+        payload["formal_base_ready"] = True
+        payload["pipeline_formal_ready"] = False
+        payload["formal_freshness"] = [
+            {"dataset": "bars.daily", "label": "正式日线", "stale": False, "formal_decision_allowed": True},
+            {"dataset": "execution.flags", "label": "执行约束", "stale": False, "formal_decision_allowed": True},
+        ]
+
+        trust = evaluate_trust_level(readiness_payload=payload)
+
+        self.assertEqual(trust.level, "observe_only")
+        self.assertIn("正式数据底座已接入", trust.headline)
+        self.assertIn("正式数据底座已接入", trust.blocking_reasons[0])
+        self.assertNotIn("正式口径未接入", trust.headline)
+        self.assertNotIn("正式口径未接入", trust.blocking_reasons[0])
+
+    def test_unreliable_when_observe_and_review_not_granted(self) -> None:
+        payload = _readiness(ready=False, readiness_mode="shadow_only")
+        trust = evaluate_trust_level(
+            readiness_payload=payload,
+            capabilities={
+                "observe": {
+                    "status": "degraded",
+                    "granted": False,
+                    "why_not": [{"message": "批量行情当前不可用，需要重新生成后才能继续。"}],
+                    "next_actions": [{"task_name": "watchlist_refresh"}],
+                },
+                "review": {
+                    "status": "degraded",
+                    "granted": False,
+                    "why_not": [{"message": "单股基本面当前不可用，需要重新生成后才能继续。"}],
+                    "next_actions": [{"task_name": "watchlist_refresh"}],
+                },
+                "approve": {"status": "blocked", "granted": False, "why_not": [], "next_actions": []},
+                "trade": {"status": "blocked", "granted": False, "why_not": [], "next_actions": []},
+            },
+        )
+
+        self.assertEqual(trust.level, "unreliable")
+        self.assertFalse(trust.can_observe)
+        self.assertFalse(trust.can_review)
+        self.assertFalse(trust.can_approve)
 
     def test_unreliable_when_observe_blocked(self) -> None:
         # Use an INVALID-class freshness state that strips observe permission.

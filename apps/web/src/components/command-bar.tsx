@@ -36,6 +36,28 @@ export function CommandBar({
     }
     return pages.filter((item) => item.label.toLowerCase().includes(text) || item.href.includes(text));
   }, [query]);
+  const directStockSuggestion = useMemo<AskSuggestion | null>(() => {
+    const code = query.trim().replace(/\D/g, "");
+    if (code.length !== 6) {
+      return null;
+    }
+    return {
+      code,
+      name: code,
+      tag: "直接打开",
+      detail: `${code} · 个股档案`,
+      url: `/stock/${code}`,
+    };
+  }, [query]);
+  const visibleSuggestions = useMemo(() => {
+    if (!directStockSuggestion) {
+      return suggestions;
+    }
+    return [
+      directStockSuggestion,
+      ...suggestions.filter((item) => item.code !== directStockSuggestion.code),
+    ];
+  }, [directStockSuggestion, suggestions]);
 
   useEffect(() => {
     if (!open) {
@@ -163,9 +185,9 @@ export function CommandBar({
                   </Command.Group>
                 ) : null}
 
-                {suggestions.length ? (
+                {visibleSuggestions.length ? (
                   <Command.Group heading="股票" className="command-group">
-                    {suggestions.map((item) => (
+                    {visibleSuggestions.map((item) => (
                       <Command.Item
                         key={`${item.code}-${item.name}`}
                         value={`stock:${item.code}:${item.name}`}
@@ -191,7 +213,7 @@ export function CommandBar({
                   </Command.Group>
                 ) : null}
 
-                {!loading && !filteredPages.length && !suggestions.length ? (
+                {!loading && !filteredPages.length && !visibleSuggestions.length ? (
                   <Command.Empty className="px-3 py-8 text-center text-[13px] text-[var(--text-tertiary)]">
                     没有匹配项
                   </Command.Empty>

@@ -16,9 +16,17 @@ if str(INVEST_FLOW_ROOT) not in sys.path:
 
 from control_panel.app import app  # noqa: E402
 from control_panel.dashboard_data import (  # noqa: E402
+    build_stock_profile_detail_view,
+    build_stock_profile_formal_data_section_view,
+    build_stock_profile_formal_data_view,
+    build_stock_profile_learning_scorecard,
+    build_stock_profile_summary_view,
+    build_stock_profile_today_action_view,
     build_candidate_detail_view,
     build_opportunities_view,
     build_stock_profile_view,
+    build_today_actions_view,
+    build_today_summary_view,
     build_today_view,
     build_watchlist_detail_view,
     normalize_avoid_sentence,
@@ -158,6 +166,36 @@ class StockMvpFirstScreenContractTest(unittest.TestCase):
             self.assertIn(key, top_level_counts)
             self.assertIsInstance(top_level_counts[key], int)
 
+    def test_today_summary_is_light_and_actions_are_lazy(self) -> None:
+        summary = build_today_summary_view()
+
+        self.assertTrue(summary["summary_only"])
+        for key in ("generated_at", "trade_date", "readiness", "hero", "command_brief", "action_register", "links_lazy"):
+            self.assertIn(key, summary)
+        self.assertNotIn("action_queue", summary)
+        self.assertNotIn("decision_contracts", summary)
+        self.assertEqual(summary["links_lazy"]["actions"], "/api/today/actions")
+
+        response = self.client.get("/api/today/summary")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["summary_only"])
+        self.assertNotIn("action_queue", body)
+        self.assertIn("action_register", body)
+
+        actions = build_today_actions_view()
+        self.assertIn("action_queue", actions)
+        self.assertIn("decision_contracts", actions)
+        self.assertIn("action_register", actions)
+        counts = actions["action_register"]["counts"]
+        self.assertIn("writable", counts)
+        self.assertIn("read_only", counts)
+        self.assertIn("stale", counts)
+
+        actions_response = self.client.get("/api/today/actions")
+        self.assertEqual(actions_response.status_code, 200)
+        self.assertIn("action_queue", actions_response.json())
+
     def test_first_stock_route_has_a_renderable_detail_contract(self) -> None:
         today = build_today_view()
         stock_item = next(
@@ -229,6 +267,71 @@ class StockMvpFirstScreenContractTest(unittest.TestCase):
         self.assertEqual(profile["code"], code)
         self.assertIn(profile["primary_source"], {"watchlist", "opportunity"})
         self.assert_renderable_detail_contract(profile["primary_detail"])
+
+    def test_stock_profile_split_endpoints_keep_summary_light_and_slices_addressable(self) -> None:
+        today = build_today_view()
+        stock_item = next(
+            (
+                item
+                for item in (today.get("action_queue") or {}).get("items") or []
+                if STOCK_URL_PATTERN.match(str(item.get("url") or ""))
+            ),
+            None,
+        )
+        if not stock_item:
+            self.skipTest("current action queue has no stock item")
+
+        match = STOCK_URL_PATTERN.match(str(stock_item["url"]))
+        self.assertIsNotNone(match)
+        code = match.group("code")
+        trade_date = today.get("trade_date")
+
+        summary = build_stock_profile_summary_view(code, trade_date=trade_date)
+        self.assertTrue(summary["summary_only"])
+        self.assertEqual(summary["code"], code)
+        self.assertIn("readiness", summary)
+        self.assertNotIn("formal_data", summary)
+        self.assertNotIn("today_action", summary)
+        self.assertNotIn("primary_detail", summary)
+        self.assertIn("api_detail", summary["links"])
+        self.assertIn("api_formal_data", summary["links"])
+        self.assertIn("api_today_action", summary["links"])
+
+        detail = build_stock_profile_detail_view(code, trade_date=trade_date)
+        self.assertEqual(detail["code"], code)
+        self.assertIn("primary_detail", detail)
+        self.assertIn(detail["primary_source"], {"watchlist", "opportunity"})
+        self.assert_renderable_detail_contract(detail["primary_detail"])
+
+        formal = build_stock_profile_formal_data_view(code, trade_date=trade_date)
+        self.assertEqual(formal["code"], code)
+        self.assertIn("formal_data", formal)
+        self.assertIn("available", formal["formal_data"])
+
+        formal_summary = build_stock_profile_formal_data_section_view(code, "summary", trade_date=trade_date)
+        self.assertEqual(formal_summary["code"], code)
+        self.assertEqual(formal_summary["section"], "summary")
+        self.assertTrue(formal_summary["formal_data"]["summary_only"])
+        self.assertIn("source_cards", formal_summary["formal_data"])
+
+        today_action = build_stock_profile_today_action_view(code, trade_date=trade_date)
+        self.assertEqual(today_action["code"], code)
+        self.assertIn("today_action", today_action)
+
+        scorecard = build_stock_profile_learning_scorecard(code, trade_date=trade_date)
+        self.assertEqual(scorecard["code"], code)
+        self.assertFalse(scorecard["feeds_execution"])
+        self.assertEqual(scorecard["stage"], "research")
+
+        for suffix in ("summary", "detail", "formal-data", "formal-data/summary", "today-action", "learning-scorecard", "full"):
+            response = self.client.get(f"/api/stock/{code}/{suffix}?trade_date={trade_date}")
+            self.assertEqual(response.status_code, 200, suffix)
+            self.assertEqual(response.json()["code"], code)
+
+        full = self.client.get(f"/api/stock/{code}/full?trade_date={trade_date}").json()
+        self.assertIn("formal_data", full)
+        self.assertIn("today_action", full)
+        self.assertIn("primary_detail", full)
 
     def test_unified_stock_profile_returns_degradable_empty_profile_for_unknown_stock(self) -> None:
         code = "000000"

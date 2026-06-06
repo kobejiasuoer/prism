@@ -63,7 +63,7 @@ _PROVIDER_CHOICES = ("prism_data", "cache", "none")
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Evaluate due Decision Ledger outcomes (T+1 / T+3 / T+5).",
+        description="Evaluate due Decision Ledger outcomes (T+1 / T+3 / T+5 / T+10).",
     )
     parser.add_argument(
         "--as-of",
@@ -175,6 +175,14 @@ def main() -> int:
         price_provider=provider,
         benchmark_code=benchmark,
     )
+    try:
+        calibration = decision_ledger.write_opportunity_v2_calibration(as_of=args.as_of)
+    except Exception as exc:  # pragma: no cover - defensive
+        calibration = {
+            "status": "failed",
+            "error": str(exc),
+        }
+    summary["opportunity_v2_calibration"] = calibration
 
     # Translate orchestrator counts into a status payload the Settings
     # page can render directly.  ``status`` collapses the operational
@@ -206,6 +214,16 @@ def main() -> int:
         # Keep the most informative per-decision rows; bound the list so
         # the status file does not balloon for very large ledgers.
         "events": list(summary.get("events") or [])[:50],
+        "learning_summary": summary.get("learning_summary"),
+        "opportunity_v2_calibration": {
+            "path": calibration.get("path"),
+            "sample_stage": calibration.get("sample_stage"),
+            "sample_count": calibration.get("sample_count"),
+            "mature_samples": calibration.get("mature_samples"),
+            "active_allowed": calibration.get("active_allowed"),
+            "guard_reason": calibration.get("guard_reason") or calibration.get("error"),
+            "threshold_adjustments": calibration.get("threshold_adjustments"),
+        },
     }
     _write_outcome_status(status_payload)
 

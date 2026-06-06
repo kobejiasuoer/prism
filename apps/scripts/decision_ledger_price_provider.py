@@ -9,10 +9,15 @@ end_date)`` calls through ``DataGateway.fetch_kline()``.
 
 Failure handling:
 
-* Successful fetch with rows in the window -> filtered list of dicts.
+* Successful fetch with rows that cover both window edges -> filtered
+  list of dicts.
 * Successful fetch but the window did not overlap any returned row ->
   empty list.  The evaluator's caller treats that as ``data_issue``
   rather than retrying forever.
+* Successful fetch with partial overlap (for example the entry day is
+  present but the end day is still missing because the close bar has not
+  landed yet) -> :class:`PriceProviderUnavailable`.  The evaluator
+  should retry later instead of freezing a premature ``data_issue``.
 * Gateway exception, empty ``GatewayResult.data``, or upstream provider
   ``status != "ok"`` -> :class:`PriceProviderUnavailable`.  The
   evaluator treats that as "skip and try again later" so a transient
@@ -43,7 +48,7 @@ from decision_ledger import PriceProviderUnavailable  # type: ignore  # noqa: E4
 
 
 # How many daily bars to ask the gateway for in a single ``fetch_kline``
-# call.  Most outcome windows are bounded by T+5 trading days (about a
+# call.  Most outcome windows are bounded by T+10 trading days (about a
 # calendar week), but the request key embeds ``start_date`` so the cache
 # slot can stretch arbitrarily far back without re-fetching.  120 bars
 # gives plenty of headroom for any benchmark / cross-week comparison the
@@ -85,6 +90,15 @@ def _filter_window(rows: list[dict[str, Any]], *, start_date: str, end_date: str
             out.append(dict(row))
     out.sort(key=lambda r: str(r.get("trade_date") or ""))
     return out
+
+
+def _window_trade_dates(rows: list[dict[str, Any]]) -> set[str]:
+    dates: set[str] = set()
+    for row in rows:
+        trade_date = str(row.get("trade_date") or row.get("day") or "")[:10]
+        if trade_date:
+            dates.add(trade_date)
+    return dates
 
 
 class PrismDataPriceProvider:
@@ -154,6 +168,18 @@ class PrismDataPriceProvider:
             )
 
         filtered = _filter_window(rows, start_date=start_date, end_date=end_date)
+        if filtered:
+            covered_dates = _window_trade_dates(filtered)
+            if start_date not in covered_dates or end_date not in covered_dates:
+                missing_edges: list[str] = []
+                if start_date not in covered_dates:
+                    missing_edges.append(f"start_date={start_date}")
+                if end_date not in covered_dates:
+                    missing_edges.append(f"end_date={end_date}")
+                raise PriceProviderUnavailable(
+                    f"prism_data gateway returned partial window for {code}: "
+                    + ", ".join(missing_edges)
+                )
         return filtered
 
 

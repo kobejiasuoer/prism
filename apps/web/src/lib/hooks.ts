@@ -7,6 +7,8 @@ import type { DecisionValue } from "./types";
 
 export const queryKeys = {
   today: ["today"] as const,
+  todaySummary: ["today", "summary"] as const,
+  todayActions: ["today", "actions"] as const,
   overview: ["overview"] as const,
   watchlist: ["watchlist"] as const,
   watchlistManager: ["watchlist-manager"] as const,
@@ -19,10 +21,18 @@ export const queryKeys = {
   askSuggest: (query: string) => ["ask-suggest", query] as const,
   refreshStatus: (page: string, auto = false) => ["refresh-status", page, auto ? "auto" : "passive"] as const,
   stockProfiles: ["stock-profile"] as const,
+  stockProfileSummary: (code: string) => ["stock-profile", code, "summary"] as const,
+  stockProfileDetail: (code: string) => ["stock-profile", code, "detail"] as const,
+  stockProfileFormalData: (code: string) => ["stock-profile", code, "formal-data"] as const,
+  stockProfileFormalDataSection: (code: string, section: string) => ["stock-profile", code, "formal-data", section] as const,
+  stockProfileTodayAction: (code: string) => ["stock-profile", code, "today-action"] as const,
+  stockProfileLearningScorecard: (code: string) => ["stock-profile", code, "learning-scorecard"] as const,
   stockProfile: (code: string) => ["stock-profile", code] as const,
   parameters: ["parameters"] as const,
   runs: ["runs"] as const,
   health: ["health"] as const,
+  formalData: ["formal-data"] as const,
+  dataAssets: ["data-assets"] as const,
   portfolioAccount: ["portfolio-account"] as const,
   decisionLedger: ["decision-ledger"] as const,
   decisionLedgerSummary: (params: { window?: string; as_of?: string } = {}) =>
@@ -30,6 +40,8 @@ export const queryKeys = {
   decisionLedgerRecent: (limit: number) => ["decision-ledger", "recent", limit] as const,
   decisionLedgerCalibration: (params: { window?: string; as_of?: string; limit?: number } = {}) =>
     ["decision-ledger", "calibration", params.window || "", params.as_of || "", params.limit || ""] as const,
+  decisionLedgerLearningLoop: (params: { as_of?: string } = {}) =>
+    ["decision-ledger", "learning-loop", params.as_of || ""] as const,
   decisionLedgerReviewCases: ["decision-ledger", "review-cases"] as const,
   decisionLedgerReviewCase: (decisionId: string) => ["decision-ledger", "review-case", decisionId] as const,
   decisionLedgerAttributionDraft: (decisionId: string) => ["decision-ledger", "attribution-draft", decisionId] as const,
@@ -42,8 +54,29 @@ export function useTodayData() {
   return useQuery({
     queryKey: queryKeys.today,
     queryFn: api.getToday,
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useTodaySummary() {
+  return useQuery({
+    queryKey: queryKeys.todaySummary,
+    queryFn: api.getTodaySummary,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useTodayActions(options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: queryKeys.todayActions,
+    queryFn: api.getTodayActions,
+    enabled: options.enabled ?? true,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
     refetchOnWindowFocus: true,
   });
 }
@@ -110,13 +143,73 @@ export function useReviewDetail(params: { section?: string; label?: string; base
   });
 }
 
-export function useStockProfile(code: string) {
+export function useStockProfileSummary(code: string) {
+  return useQuery({
+    queryKey: queryKeys.stockProfileSummary(code),
+    queryFn: () => api.getStockProfileSummary(code),
+    enabled: Boolean(code),
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useStockProfile(code: string, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: queryKeys.stockProfile(code),
     queryFn: () => api.getStockProfile(code),
-    enabled: Boolean(code),
+    enabled: Boolean(code) && (options.enabled ?? true),
     staleTime: 60_000,
     refetchInterval: 120_000,
+  });
+}
+
+export function useStockProfileDetail(code: string, options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: queryKeys.stockProfileDetail(code),
+    queryFn: () => api.getStockProfileDetail(code),
+    enabled: Boolean(code) && (options.enabled ?? true),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useStockProfileFormalData(code: string, options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: queryKeys.stockProfileFormalData(code),
+    queryFn: () => api.getStockProfileFormalData(code),
+    enabled: Boolean(code) && (options.enabled ?? true),
+    staleTime: 120_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useStockProfileFormalDataSection(code: string, section: string, options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: queryKeys.stockProfileFormalDataSection(code, section),
+    queryFn: () => api.getStockProfileFormalDataSection(code, section),
+    enabled: Boolean(code && section) && (options.enabled ?? true),
+    staleTime: 120_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useStockProfileTodayAction(code: string, options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: queryKeys.stockProfileTodayAction(code),
+    queryFn: () => api.getStockProfileTodayAction(code),
+    enabled: Boolean(code) && (options.enabled ?? true),
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useStockProfileLearningScorecard(code: string, options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: queryKeys.stockProfileLearningScorecard(code),
+    queryFn: () => api.getStockProfileLearningScorecard(code),
+    enabled: Boolean(code) && (options.enabled ?? true),
+    staleTime: 120_000,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -156,6 +249,24 @@ export function useHealth() {
   });
 }
 
+export function useFormalDataStatus() {
+  return useQuery({
+    queryKey: queryKeys.formalData,
+    queryFn: api.getFormalDataStatus,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useDataAssetsStatus() {
+  return useQuery({
+    queryKey: queryKeys.dataAssets,
+    queryFn: api.getDataAssetsStatus,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
 export function useRefreshStatus(page: string, enabled = true, options: { auto?: boolean } = {}) {
   const auto = Boolean(options.auto);
   return useQuery({
@@ -165,7 +276,7 @@ export function useRefreshStatus(page: string, enabled = true, options: { auto?:
     staleTime: 20_000,
     refetchInterval: (query) => {
       const suggested = query.state.data?.suggested_poll_seconds;
-      return Math.max(30_000, Number(suggested || 60) * 1000);
+      return Math.max(10_000, Number(suggested || 60) * 1000);
     },
   });
 }
@@ -178,6 +289,8 @@ export function useUpdateTodayActionDecision() {
       api.updateTodayActionDecision(payload),
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.today });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.todaySummary });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.todayActions });
       void queryClient.invalidateQueries({ queryKey: queryKeys.portfolioAccount });
       // Today action "watch"/"skip" decisions attach execution events to
       // the matching ledger record; invalidate ledger views so the next
@@ -227,6 +340,7 @@ export function useTriggerRefresh(page: string, options: { stockCode?: string } 
       void queryClient.invalidateQueries({ queryKey: queryKeys.runs });
       if (page === "today") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.today });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.formalData });
       }
       if (page === "watchlist") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.watchlist });
@@ -407,6 +521,15 @@ export function useDecisionLedgerCalibration(params: { window?: string; as_of?: 
   });
 }
 
+export function useDecisionLedgerLearningLoop(params: { as_of?: string } = {}) {
+  return useQuery({
+    queryKey: queryKeys.decisionLedgerLearningLoop(params),
+    queryFn: () => api.getDecisionLedgerLearningLoop(params),
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+  });
+}
+
 export function useDecisionLedgerReviewCases() {
   return useQuery({
     queryKey: queryKeys.decisionLedgerReviewCases,
@@ -444,6 +567,20 @@ export function useSaveDecisionLedgerReviewCase() {
 export function useGenerateDecisionLedgerAttributionDraft() {
   return useMutation({
     mutationFn: (decisionId: string) => api.generateDecisionLedgerAttributionDraft(decisionId),
+  });
+}
+
+export function useAutoReviewDecisionLedgerCase() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (decisionId: string) => api.autoReviewDecisionLedgerCase(decisionId),
+    onSuccess: (response, decisionId) => {
+      queryClient.setQueryData(queryKeys.decisionLedgerReviewCase(decisionId), response.workbench);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.decisionLedger });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.decisionLedgerReviewCases });
+      void queryClient.invalidateQueries({ queryKey: ["review"] });
+    },
   });
 }
 

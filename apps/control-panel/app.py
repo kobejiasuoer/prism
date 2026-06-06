@@ -50,10 +50,19 @@ from control_panel.dashboard_data import (
     build_review_detail_view,
     build_review_view,
     build_screening_batch_view,
+    build_stock_profile_detail_view,
+    build_stock_profile_formal_data_section_view,
+    build_stock_profile_formal_data_view,
+    build_stock_profile_learning_scorecard,
+    build_stock_profile_today_action_view,
     build_stock_profile_view,
+    build_stock_profile_summary_view,
+    build_today_actions_view,
+    build_today_summary_view,
     build_today_view,
     build_watchlist_page_view,
     build_watchlist_detail_view,
+    clear_stock_profile_cache,
     ensure_runtime_dirs,
     list_runs,
     parse_timestamp,
@@ -119,8 +128,10 @@ LIGHTWEIGHT_REFRESH_COMMAND = [sys.executable, "apps/scripts/refresh_lightweight
 MORNING_WARMUP_COMMAND = [sys.executable, "apps/scripts/run_morning_warmup.py"]
 FORMAL_DATA_REFRESH_COMMAND = [sys.executable, "apps/scripts/refresh_formal_data.py"]
 PARAMETERS_PATH = STOCK_ANALYZER_ROOT / "config" / "stocks.json"
-WEB_ORIGIN = os.environ.get("PRISM_WEB_ORIGIN", "http://127.0.0.1:8000").rstrip("/")
-SCHEDULER_REQUIRED_TASKS = ("morning_warmup", "watchlist_refresh", "aggressive")
+WEB_HOST = os.environ.get("PRISM_WEB_HOST", "127.0.0.1").strip() or "127.0.0.1"
+WEB_PORT = os.environ.get("PRISM_WEB_PORT", "8000").strip() or "8000"
+WEB_ORIGIN = os.environ.get("PRISM_WEB_ORIGIN", f"http://{WEB_HOST}:{WEB_PORT}").rstrip("/")
+SCHEDULER_REQUIRED_TASKS = ("morning_warmup", "formal_data_refresh", "watchlist_refresh", "aggressive")
 SCHEDULER_SAFETY_GRACE_MINUTES = 2
 TASK_NAME_ALIASES = {
     "watchlist": "watchlist_refresh",
@@ -204,6 +215,8 @@ def allowed_cors_origins() -> list[str]:
     ]
     defaults = [
         WEB_ORIGIN,
+        f"http://127.0.0.1:{WEB_PORT}",
+        f"http://localhost:{WEB_PORT}",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:3001",
         "http://127.0.0.1:3002",
@@ -806,6 +819,15 @@ def resolve_refresh_task(task_name: str) -> dict[str, Any]:
             "send_to_feishu": False,
         }
 
+    if normalized.startswith("formal_data_refresh_index_"):
+        return {
+            "task_name": normalized,
+            "title": policy.title if policy else "正式基准指数补刷",
+            "command": [*FORMAL_DATA_REFRESH_COMMAND, "--datasets", "benchmark.index_daily"],
+            "cwd": str(WORKSPACE_ROOT),
+            "send_to_feishu": False,
+        }
+
     if normalized == "morning_warmup":
         return {
             "task_name": normalized,
@@ -945,10 +967,21 @@ def _latest_run_for_task_name(task_name: str) -> dict[str, Any] | None:
     return None
 
 
+def _latest_run_for_task_family(task_name: str) -> dict[str, Any] | None:
+    expected_family = task_family(normalize_task_name(task_name))
+    for item in list_runs(limit=80):
+        candidate = normalize_task_name(str(item.get("task_name") or ""))
+        if candidate and task_family(candidate) == expected_family:
+            return item
+    return None
+
+
 def _formal_row_state(row: dict[str, Any], *, token_configured: bool) -> str:
     flags = {str(item or "").strip() for item in row.get("quality_flags") or []}
     reasons = {str(item or "").strip() for item in row.get("stale_reasons") or []}
     target = str(row.get("target_authority_provider") or row.get("authority_provider") or "")
+    available = bool(row.get("available"))
+    has_manifest = bool(row.get("manifest_path"))
     if row.get("formal_decision_allowed") and not row.get("stale"):
         return "ready"
     if "provider_token_invalid" in flags:
@@ -959,7 +992,7 @@ def _formal_row_state(row: dict[str, Any], *, token_configured: bool) -> str:
         return "permission_or_points_blocked"
     if "execution_flags_price_limit_missing" in flags or "execution_flags_code_coverage_mismatch" in flags:
         return "coverage_incomplete"
-    if target == "tushare" and not token_configured:
+    if target == "tushare" and not token_configured and not available and not has_manifest:
         return "token_missing"
     if "manifest_missing" in reasons:
         return "manifest_missing"
@@ -1029,7 +1062,7 @@ def build_formal_data_status_payload() -> dict[str, Any]:
         for item in enriched_rows
         if item.get("setup_state") != "ready"
     ]
-    last_run = _latest_run_for_task_name("formal_data_refresh")
+    last_run = _latest_run_for_task_family("formal_data_refresh")
     running = bool(last_run and last_run.get("status") == "running")
     return {
         "generated_at": current.strftime("%Y-%m-%d %H:%M:%S"),
@@ -1100,6 +1133,8 @@ def _readiness_freshness_rows(
                 "stale_reasons": list(item.get("stale_reasons") or []),
                 "degraded": bool(item.get("degraded")),
                 "degradation_reasons": list(item.get("degradation_reasons") or []),
+                "deferred": bool(item.get("deferred")),
+                "deferred_reason": item.get("deferred_reason"),
             }
         )
     return rows
@@ -1384,6 +1419,31 @@ def build_scheduler_status_payload(*, now: datetime | None = None) -> dict[str, 
     }
 
 
+def _scheduler_safety_lightweight_task(
+    *,
+    page: str,
+    freshness: list[dict[str, Any]],
+    readiness_payload: dict[str, Any] | None,
+    running: list[dict[str, Any]],
+    state: dict[str, Any],
+    now: datetime,
+) -> str:
+    if page != "today":
+        return ""
+    if readiness_payload and not readiness_payload.get("ready"):
+        return ""
+    allowed_tasks = list((page_policy(page).allowed_tasks) if page_policy(page) else ())
+    task_name = eligible_lightweight_task(page=page, freshness=freshness, allowed_tasks=allowed_tasks)
+    if not task_name:
+        return ""
+    if task_conflict_is_running(task_name, running):
+        return ""
+    cooldown = page_cooldown_state(page=page, task_name=task_name, state=state, now=now)
+    if int(cooldown.get("remaining_seconds") or 0) > 0:
+        return ""
+    return task_name
+
+
 def build_refresh_status_payload(
     page: str,
     *,
@@ -1482,7 +1542,23 @@ def build_refresh_status_payload(
         now=current,
     )
     trigger_result: dict[str, Any] | None = None
-    if auto and not skip_auto and auto_decision.get("should_trigger"):
+    scheduler_status = build_scheduler_status_payload(now=current)
+    scheduler_safety_refresh: dict[str, Any] | None = None
+    if auto and not skip_auto:
+        scheduler_safety_refresh = maybe_trigger_scheduler_safety_refresh(
+            page=page,
+            scheduler_status=scheduler_status,
+            running=running,
+            current=current,
+            state=state,
+        )
+        if scheduler_safety_refresh:
+            state = load_refresh_state()
+            running = build_running_refresh_tasks(page)
+            scheduler_status = build_scheduler_status_payload(now=current)
+            suggested_poll_seconds = min(int(REFRESH_PAGE_CONFIG[page]["poll_seconds"][market_mode]), 25)
+
+    if auto and not skip_auto and not scheduler_safety_refresh and auto_decision.get("should_trigger"):
         trigger_result = trigger_refresh_task(
             page=page,
             task_name=recommended_task_name,
@@ -1509,6 +1585,66 @@ def build_refresh_status_payload(
         auto_decision["next_allowed_at"] = str(cooldown.get("next_allowed_at") or "")
     else:
         auto_decision = {**auto_decision, "triggered": False, "trigger": None}
+
+    if auto and not skip_auto and not auto_decision.get("triggered") and not scheduler_safety_refresh:
+        lightweight_task = _scheduler_safety_lightweight_task(
+            page=page,
+            freshness=freshness,
+            readiness_payload=readiness_payload,
+            running=running,
+            state=state,
+            now=current,
+        )
+        if lightweight_task:
+            lightweight_policy = task_policy(lightweight_task)
+            lightweight_freshness = _stale_subset(
+                freshness,
+                list(lightweight_policy.manifest_dependencies if lightweight_policy else ()),
+            )
+            decision = {
+                "enabled": True,
+                "allowed": True,
+                "should_trigger": True,
+                "force": False,
+                "page": page,
+                "task_name": lightweight_task,
+                "task_kind": (lightweight_policy.kind if lightweight_policy else "lightweight"),
+                "reason_codes": ["lightweight_dataset_stale", "first_open_recovery"],
+                "blocked_reasons": [],
+                "active_windows": active_auto_windows(current),
+                "required_windows": list(lightweight_policy.auto_windows if lightweight_policy else ()),
+                "manifest_reasons": manifest_trigger_reasons(lightweight_freshness),
+                "stale_count": sum(1 for item in lightweight_freshness if item.get("stale")),
+                "cooldown_remaining_seconds": 0,
+                "next_allowed_at": "",
+                "calendar_status": calendar_status(current),
+                "summary": "",
+            }
+            decision["summary"] = summarize_auto_decision(decision)
+            trigger_result = trigger_refresh_task(
+                page=page,
+                task_name=lightweight_task,
+                force=False,
+                trigger_type="auto",
+                reason="homepage_lightweight_first_open_recovery",
+                decision=decision,
+                freshness=lightweight_freshness,
+            )
+            auto_decision = {
+                **decision,
+                "triggered": True,
+                "trigger": trigger_result,
+            }
+            state = load_refresh_state()
+            running = build_running_refresh_tasks(page)
+            cooldown = page_cooldown_state(
+                page=page,
+                task_name=lightweight_task,
+                state=state,
+                now=current,
+            )
+            auto_decision["cooldown_remaining_seconds"] = int(cooldown.get("remaining_seconds") or 0)
+            auto_decision["next_allowed_at"] = str(cooldown.get("next_allowed_at") or "")
 
     suggested_poll_seconds = int(REFRESH_PAGE_CONFIG[page]["poll_seconds"][market_mode])
     if running:
@@ -1539,21 +1675,6 @@ def build_refresh_status_payload(
     }
     signature_seed = json.dumps(signature_payload, ensure_ascii=False, sort_keys=True)
     snapshot_signature = hashlib.sha1(signature_seed.encode("utf-8")).hexdigest()[:16]
-    scheduler_status = build_scheduler_status_payload(now=current)
-    scheduler_safety_refresh: dict[str, Any] | None = None
-    if auto and not skip_auto and not auto_decision.get("triggered"):
-        scheduler_safety_refresh = maybe_trigger_scheduler_safety_refresh(
-            page=page,
-            scheduler_status=scheduler_status,
-            running=running,
-            current=current,
-            state=state,
-        )
-        if scheduler_safety_refresh:
-            state = load_refresh_state()
-            running = build_running_refresh_tasks(page)
-            scheduler_status = build_scheduler_status_payload(now=current)
-            suggested_poll_seconds = min(suggested_poll_seconds, 25)
 
     payload = {
         "page": page,
@@ -1719,7 +1840,9 @@ def _scheduler_safety_task(status: dict[str, Any], *, now: datetime) -> str:
         if isinstance(job, dict)
     }
     for task_name in SCHEDULER_REQUIRED_TASKS:
-        job = by_task.get(task_name) or {}
+        job = by_task.get(task_name)
+        if job is None:
+            continue
         due_minute = _cron_daily_minute(str(job.get("cron_expr") or ""))
         if due_minute is not None and now.hour * 60 + now.minute < due_minute + SCHEDULER_SAFETY_GRACE_MINUTES:
             continue
@@ -1825,7 +1948,7 @@ async def index(request: Request) -> RedirectResponse:
 
 
 @app.get("/api/overview")
-async def api_overview() -> JSONResponse:
+def api_overview() -> JSONResponse:
     return JSONResponse(build_overview())
 
 
@@ -1835,12 +1958,26 @@ async def today(request: Request) -> RedirectResponse:
 
 
 @app.get("/api/today")
-async def api_today() -> JSONResponse:
+def api_today() -> JSONResponse:
     today_view = build_today_view()
     readiness = today_view.get("readiness")
     if isinstance(readiness, dict):
         readiness["formal_data_status"] = build_formal_data_status_payload()
     return JSONResponse(today_view)
+
+
+@app.get("/api/today/summary")
+def api_today_summary() -> JSONResponse:
+    today_view = build_today_summary_view()
+    readiness = today_view.get("readiness")
+    if isinstance(readiness, dict):
+        readiness["formal_data_status"] = build_formal_data_status_payload()
+    return JSONResponse(today_view)
+
+
+@app.get("/api/today/actions")
+def api_today_actions() -> JSONResponse:
+    return JSONResponse(build_today_actions_view())
 
 
 @app.get("/ask", include_in_schema=False)
@@ -1912,6 +2049,7 @@ async def api_today_action_decision(request: Request) -> JSONResponse:
         update_today_action_decision(trade_date, key, decision)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    clear_stock_profile_cache()
 
     today_view = build_today_view()
     matched_item = next(
@@ -1964,12 +2102,12 @@ async def watchlist(request: Request) -> RedirectResponse:
 
 
 @app.get("/api/watchlist")
-async def api_watchlist() -> JSONResponse:
+def api_watchlist() -> JSONResponse:
     return JSONResponse(build_watchlist_page_view())
 
 
 @app.get("/api/watchlist/manage")
-async def api_watchlist_manage() -> JSONResponse:
+def api_watchlist_manage() -> JSONResponse:
     return JSONResponse({"manager": (build_watchlist_page_view().get("manager") or {})})
 
 
@@ -1989,6 +2127,7 @@ async def api_watchlist_manage_add(request: Request) -> JSONResponse:
         operation = upsert_watchlist_stock(code, name=name)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    clear_stock_profile_cache(code)
 
     trigger_refresh = parse_bool_value(payload.get("trigger_refresh"), True)
     refresh = {"started": False}
@@ -2031,6 +2170,7 @@ async def api_watchlist_manage_archive(request: Request) -> JSONResponse:
         operation = archive_watchlist_stock(code)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    clear_stock_profile_cache(code)
 
     trigger_refresh = parse_bool_value(payload.get("trigger_refresh"), True)
     refresh = {"started": False}
@@ -2072,6 +2212,7 @@ async def api_watchlist_manage_restore(request: Request) -> JSONResponse:
         operation = restore_watchlist_stock(code)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    clear_stock_profile_cache(code)
 
     trigger_refresh = parse_bool_value(payload.get("trigger_refresh"), True)
     refresh = {"started": False}
@@ -2104,7 +2245,7 @@ async def opportunities(request: Request) -> RedirectResponse:
 
 
 @app.get("/api/opportunities")
-async def api_opportunities() -> JSONResponse:
+def api_opportunities() -> JSONResponse:
     return JSONResponse(build_opportunities_view())
 
 
@@ -2155,17 +2296,17 @@ async def api_data_capability_matrix() -> JSONResponse:
 
 
 @app.get("/api/formal-data/status")
-async def api_formal_data_status() -> JSONResponse:
+def api_formal_data_status() -> JSONResponse:
     return JSONResponse(build_formal_data_status_payload())
 
 
 @app.get("/api/data-assets/status")
-async def api_data_assets_status() -> JSONResponse:
+def api_data_assets_status() -> JSONResponse:
     return JSONResponse(build_data_assets_status(readiness_expected_trade_date()))
 
 
 @app.get("/api/capabilities")
-async def api_capabilities() -> JSONResponse:
+def api_capabilities() -> JSONResponse:
     """Read-only capability matrix for the current readiness payload.
 
     Returns 6 investment capabilities (observe/review/approve/trade/notify/
@@ -2186,7 +2327,7 @@ async def api_capabilities() -> JSONResponse:
 
 
 @app.get("/api/readiness/live")
-async def api_readiness_live() -> JSONResponse:
+def api_readiness_live() -> JSONResponse:
     """Operator-facing readiness summary.
 
     Returns the same readiness object that ``/api/today`` embeds, so the
@@ -2314,7 +2455,7 @@ async def review(request: Request) -> RedirectResponse:
 
 
 @app.get("/api/review")
-async def api_review(baseline: str | None = None, window: str | None = None) -> JSONResponse:
+def api_review(baseline: str | None = None, window: str | None = None) -> JSONResponse:
     return JSONResponse(build_review_view(baseline_id=baseline, window_id=window))
 
 
@@ -2330,7 +2471,7 @@ async def review_detail(
 
 
 @app.get("/api/review/detail")
-async def api_review_detail(
+def api_review_detail(
     section: str,
     label: str,
     baseline: str | None = None,
@@ -2348,9 +2489,9 @@ async def watchlist_detail(request: Request, code: str) -> RedirectResponse:
 
 
 @app.get("/api/watchlist/{code}")
-async def api_watchlist_detail(code: str) -> JSONResponse:
+def api_watchlist_detail(code: str, trade_date: str | None = None) -> JSONResponse:
     try:
-        return JSONResponse(build_watchlist_detail_view(code))
+        return JSONResponse(build_watchlist_detail_view(code, trade_date=trade_date))
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -2361,16 +2502,54 @@ async def today_watchlist_detail(request: Request, code: str) -> RedirectRespons
 
 
 @app.get("/api/today/watchlist/{code}")
-async def api_today_watchlist_detail(code: str) -> JSONResponse:
+def api_today_watchlist_detail(code: str, trade_date: str | None = None) -> JSONResponse:
     try:
-        return JSONResponse(build_watchlist_detail_view(code))
+        return JSONResponse(build_watchlist_detail_view(code, trade_date=trade_date))
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/api/stock/{code}")
-async def api_stock_profile(code: str) -> JSONResponse:
-    return JSONResponse(build_stock_profile_view(code))
+def api_stock_profile(code: str, trade_date: str | None = None) -> JSONResponse:
+    return JSONResponse(build_stock_profile_view(code, trade_date=trade_date))
+
+
+@app.get("/api/stock/{code}/full")
+def api_stock_profile_full(code: str, trade_date: str | None = None) -> JSONResponse:
+    return JSONResponse(build_stock_profile_view(code, trade_date=trade_date))
+
+
+@app.get("/api/stock/{code}/summary")
+def api_stock_profile_summary(code: str, trade_date: str | None = None) -> JSONResponse:
+    return JSONResponse(build_stock_profile_summary_view(code, trade_date=trade_date))
+
+
+@app.get("/api/stock/{code}/detail")
+def api_stock_profile_detail(code: str, trade_date: str | None = None) -> JSONResponse:
+    return JSONResponse(build_stock_profile_detail_view(code, trade_date=trade_date))
+
+
+@app.get("/api/stock/{code}/formal-data")
+def api_stock_profile_formal_data(code: str, trade_date: str | None = None) -> JSONResponse:
+    return JSONResponse(build_stock_profile_formal_data_view(code, trade_date=trade_date))
+
+
+@app.get("/api/stock/{code}/formal-data/{section}")
+def api_stock_profile_formal_data_section(code: str, section: str, trade_date: str | None = None) -> JSONResponse:
+    try:
+        return JSONResponse(build_stock_profile_formal_data_section_view(code, section, trade_date=trade_date))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/stock/{code}/today-action")
+def api_stock_profile_today_action(code: str, trade_date: str | None = None) -> JSONResponse:
+    return JSONResponse(build_stock_profile_today_action_view(code, trade_date=trade_date))
+
+
+@app.get("/api/stock/{code}/learning-scorecard")
+def api_stock_profile_learning_scorecard(code: str, trade_date: str | None = None) -> JSONResponse:
+    return JSONResponse(build_stock_profile_learning_scorecard(code, trade_date=trade_date))
 
 
 @app.get("/opportunities/batch/{kind}", include_in_schema=False)
@@ -2379,7 +2558,7 @@ async def opportunities_batch_detail(request: Request, kind: str) -> RedirectRes
 
 
 @app.get("/api/opportunities/batch/{kind}")
-async def api_opportunities_batch_detail(kind: str) -> JSONResponse:
+def api_opportunities_batch_detail(kind: str) -> JSONResponse:
     if kind == "screener":
         return JSONResponse(build_screening_batch_view())
     if kind == "confirmation":
@@ -2635,14 +2814,14 @@ async def portfolio_redirect() -> RedirectResponse:
 
 
 @app.get("/api/portfolio/account")
-async def api_portfolio_account() -> JSONResponse:
+def api_portfolio_account() -> JSONResponse:
     """Canonical account view: mode, cash, positions, fills, readiness."""
 
     return JSONResponse(build_portfolio_account_view())
 
 
 @app.post("/api/portfolio/quotes/refresh")
-async def api_portfolio_quotes_refresh() -> JSONResponse:
+def api_portfolio_quotes_refresh() -> JSONResponse:
     """Refresh market quotes for current open positions and recompute P/L."""
 
     return JSONResponse(build_portfolio_account_view(refresh_quotes=True))
@@ -2670,6 +2849,7 @@ async def api_portfolio_mode(request: Request) -> JSONResponse:
         )
     except AccountBookError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    clear_stock_profile_cache()
 
     return JSONResponse(build_portfolio_account_view())
 
@@ -2687,6 +2867,7 @@ async def api_portfolio_cash(request: Request) -> JSONResponse:
         record_cash_adjustment(delta=delta, reason=reason)
     except AccountBookError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    clear_stock_profile_cache()
 
     return JSONResponse(build_portfolio_account_view())
 
@@ -2714,6 +2895,7 @@ async def api_portfolio_fill(request: Request) -> JSONResponse:
         )
     except AccountBookError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    clear_stock_profile_cache(str(payload.get("code") or "").strip() or None)
 
     qty_val = payload.get("qty")
     price_val = payload.get("price")
@@ -2764,6 +2946,8 @@ async def api_portfolio_holding_identity(request: Request) -> JSONResponse:
         )
     except AccountBookError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    clear_stock_profile_cache(from_code)
+    clear_stock_profile_cache(to_code)
 
     return JSONResponse(build_portfolio_account_view())
 
@@ -2783,6 +2967,7 @@ async def api_portfolio_intent_no_fill(request: Request) -> JSONResponse:
         )
     except AccountBookError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    clear_stock_profile_cache()
 
     # The intent payload does not carry an explicit ``code``; we rely on
     # ``intent_key`` matching the captured decision's ``source.action_key``.
@@ -2815,6 +3000,7 @@ async def api_portfolio_reconcile(request: Request) -> JSONResponse:
         )
     except AccountBookError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    clear_stock_profile_cache()
 
     return JSONResponse(build_portfolio_account_view())
 
@@ -2961,7 +3147,9 @@ async def api_decision_ledger_learning_loop(request: Request) -> JSONResponse:
     as_of = request.query_params.get("as_of") or None
     records, errors = decision_ledger.scan_all_decisions()
     payload = decision_ledger.build_rule_learning_loop(records, errors=errors, as_of=as_of)
-    payload["factor_learning_loop"] = decision_ledger.build_factor_learning_loop(records)
+    factor_learning_loop = decision_ledger.build_factor_learning_loop(records, as_of=as_of)
+    payload["factor_learning_loop"] = factor_learning_loop
+    payload["learning_summary"] = factor_learning_loop.get("learning_summary")
     return JSONResponse(payload)
 
 
@@ -3005,6 +3193,19 @@ async def api_decision_ledger_attribution_draft(decision_id: str) -> JSONRespons
         status = 404 if "decision not found" in message else 400
         raise HTTPException(status_code=status, detail=message) from exc
     return JSONResponse({"ok": True, "draft": draft})
+
+
+@app.post("/api/decision-ledger/review-case/{decision_id}/auto-review")
+async def api_decision_ledger_auto_review_case(decision_id: str) -> JSONResponse:
+    """Generate an AI attribution draft and save it as a Review Case."""
+
+    try:
+        payload = decision_ledger.auto_review_case(decision_id)
+    except decision_ledger.DecisionLedgerError as exc:
+        message = str(exc)
+        status = 404 if "decision not found" in message else 400
+        raise HTTPException(status_code=status, detail=message) from exc
+    return JSONResponse(payload)
 
 
 @app.post("/api/decision-ledger/review-case/{decision_id}")

@@ -29,6 +29,8 @@ import {
   useDecisionLedgerCalibration,
   useDecisionLedgerRecent,
   useDecisionLedgerReviewCase,
+  useAutoReviewDecisionLedgerCase,
+  useDecisionLedgerLearningLoop,
   useGenerateDecisionLedgerAttributionDraft,
   useReview,
   useRunTask,
@@ -42,6 +44,9 @@ import type {
   DecisionLedgerCalibrationResponse,
   DecisionLedgerCompactRecord,
   DecisionLedgerDetailResponse,
+  DecisionLedgerFactorLearningLoop,
+  DecisionLedgerFactorStatsRow,
+  DecisionLedgerFactorSummaryItem,
   DecisionLedgerOutcomeEvent,
   DecisionLedgerRecentResponse,
   DecisionLedgerReviewCase,
@@ -188,6 +193,13 @@ function pct(value?: number | null) {
   return `${Number(value).toFixed(2)}%`;
 }
 
+function ratePct(value?: number | null) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "-";
+  }
+  return `${(Number(value) * 100).toFixed(0)}%`;
+}
+
 function countText(value?: number | string) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
@@ -215,7 +227,7 @@ function shadowStatusMeta(status?: string) {
 
 function latestOutcomeEvent(decision?: DecisionLedgerDetailResponse): DecisionLedgerOutcomeEvent | undefined {
   const events = decision?.outcome_events || [];
-  const rank: Record<string, number> = { "T+5": 3, "T+3": 2, "T+1": 1 };
+  const rank: Record<string, number> = { "T+10": 4, "T+5": 3, "T+3": 2, "T+1": 1 };
   return [...events].sort((a, b) => {
     const windowDiff = (rank[b.window || ""] || 0) - (rank[a.window || ""] || 0);
     if (windowDiff) {
@@ -335,11 +347,15 @@ function DecisionLedgerHero({
   loading,
   onRefetch,
   fetching,
+  onAutoReview,
+  autoReviewingDecisionId,
 }: {
   data?: DecisionLedgerCalibrationResponse;
   loading: boolean;
   onRefetch: () => void;
   fetching: boolean;
+  onAutoReview: (decisionId?: string) => void;
+  autoReviewingDecisionId?: string;
 }) {
   const workbench = data?.review_workbench;
   const top = topQueueItem(data);
@@ -380,12 +396,21 @@ function DecisionLedgerHero({
                 {sampleGuardrailText(null)}
               </div>
               <div className="mt-5 flex flex-wrap gap-2">
-                <Link
-                  href={reviewCaseHref(top.decision_id)}
+                <button
+                  type="button"
+                  onClick={() => onAutoReview(top.decision_id)}
+                  disabled={!top.decision_id || autoReviewingDecisionId === top.decision_id}
                   className={PRIMARY_ACTION_CLASS}
                 >
+                  {autoReviewingDecisionId === top.decision_id ? <LoaderCircle size={15} className="animate-spin" /> : <Sparkles size={15} />}
+                  AI一键复盘
+                </button>
+                <Link
+                  href={reviewCaseHref(top.decision_id)}
+                  className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--border-subtle)] px-3 py-2 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                >
                   <ClipboardCheck size={15} />
-                  开始归因
+                  人工归因
                 </Link>
                 <a
                   href="#review-queue"
@@ -455,11 +480,15 @@ function ReviewQueue({
   loading,
   error,
   onRetry,
+  onAutoReview,
+  autoReviewingDecisionId,
 }: {
   data?: DecisionLedgerCalibrationResponse;
   loading: boolean;
   error: boolean;
   onRetry: () => void;
+  onAutoReview: (decisionId?: string) => void;
+  autoReviewingDecisionId?: string;
 }) {
   const readyItems = (data?.review_queue || []).filter((item) =>
     ["ready_review", "blocked_data"].includes(String(item.review_status || "")),
@@ -481,7 +510,14 @@ function ReviewQueue({
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
             <div className="space-y-3">
               {readyItems.length ? (
-                readyItems.map((item) => <ReviewQueueCard key={item.decision_id} item={item} />)
+                readyItems.map((item) => (
+                  <ReviewQueueCard
+                    key={item.decision_id}
+                    item={item}
+                    onAutoReview={onAutoReview}
+                    autoReviewing={autoReviewingDecisionId === item.decision_id}
+                  />
+                ))
               ) : (
                 <EmptyState>没有成熟且必须优先归因的决策样本。</EmptyState>
               )}
@@ -507,7 +543,15 @@ function ReviewQueue({
   );
 }
 
-function ReviewQueueCard({ item }: { item: DecisionLedgerReviewRecord }) {
+function ReviewQueueCard({
+  item,
+  onAutoReview,
+  autoReviewing,
+}: {
+  item: DecisionLedgerReviewRecord;
+  onAutoReview: (decisionId?: string) => void;
+  autoReviewing: boolean;
+}) {
   const status = reviewStatusMeta(item.review_status);
   const outcomeLabel = item.latest_outcome?.label || item.outcome_status || "pending";
   return (
@@ -537,12 +581,21 @@ function ReviewQueueCard({ item }: { item: DecisionLedgerReviewRecord }) {
         建议下一步：{item.next_action_reason || "开始人工归因，保存结构化 Review Case。"}
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
-        <Link
-          href={reviewCaseHref(item.decision_id)}
+        <button
+          type="button"
+          onClick={() => onAutoReview(item.decision_id)}
+          disabled={!item.decision_id || autoReviewing}
           className="focus-ring prism-btn prism-btn-primary prism-btn-sm"
         >
+          {autoReviewing ? <LoaderCircle size={14} className="animate-spin" /> : <Sparkles size={14} />}
+          AI一键复盘
+        </button>
+        <Link
+          href={reviewCaseHref(item.decision_id)}
+          className="focus-ring inline-flex min-h-9 items-center gap-2 rounded-md border border-[var(--border-subtle)] px-3 py-2 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+        >
           <ClipboardCheck size={14} />
-          开始归因
+          人工归因
         </Link>
         {item.code ? (
           <Link
@@ -1458,7 +1511,195 @@ function ShadowCalibrationRowItem({ row }: { row: ShadowCalibrationRow }) {
   );
 }
 
-function LearningPatterns({ data }: { data?: DecisionLedgerCalibrationResponse }) {
+function factorWindowStats(row?: DecisionLedgerFactorStatsRow, preferred = ["T+10", "T+5", "T+3", "T+1"]) {
+  const stats = row?.window_stats || {};
+  for (const window of preferred) {
+    const item = stats[window];
+    if (item && !item.sample_too_small && Number(item.sample_count || 0) > 0) {
+      return { window, stats: item };
+    }
+  }
+  for (const window of preferred) {
+    const item = stats[window];
+    if (item && Number(item.sample_count || 0) > 0) {
+      return { window, stats: item };
+    }
+  }
+  return { window: preferred[0], stats: undefined };
+}
+
+function FactorLearningPanel({
+  factorLearning,
+  loading,
+  error,
+  onRetry,
+}: {
+  factorLearning?: DecisionLedgerFactorLearningLoop;
+  loading?: boolean;
+  error?: boolean;
+  onRetry?: () => void;
+}) {
+  const summary = factorLearning?.learning_summary;
+  const best = summary?.best_positive_factors || [];
+  const risks = summary?.worst_risk_flags || [];
+  const noisy = summary?.noisy_factors || [];
+  const buckets = summary?.score_bucket_performance || factorLearning?.score_bucket_performance || [];
+
+  return (
+    <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-3">
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <BarChart3 size={14} className="text-[var(--text-tertiary)]" />
+            <div className="text-[12px] font-medium text-[var(--text-primary)]">因子复盘摘要</div>
+          </div>
+          <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-[var(--text-tertiary)]">
+            {summary?.guardrail?.message || "只形成观察和人工调权建议，不自动改生产参数。"}
+          </div>
+        </div>
+        <Badge tone={Number(summary?.sample_count || 0) >= Number(summary?.min_sample_size || 3) ? "positive" : "warning"}>
+          样本 {countText(summary?.sample_count)}
+        </Badge>
+      </div>
+
+      {loading && !factorLearning ? (
+        <div className="space-y-2">
+          <SkeletonBlock className="h-16 w-full" />
+          <SkeletonBlock className="h-16 w-full" />
+        </div>
+      ) : error ? (
+        <ErrorState message="因子复盘暂不可用" onRetry={onRetry} />
+      ) : summary ? (
+        <div className="space-y-3">
+          <FactorSummaryGroup icon="positive" title="近期有效因子" items={best} empty="暂无达到样本阈值的正向因子。" />
+          <FactorSummaryGroup icon="risk" title="伤害收益的风险标签" items={risks} empty="暂无可确认的负向风险标签。" />
+          <FactorSummaryGroup icon="noisy" title="样本不足 / 信号混杂" items={noisy} empty="暂无样本不足提示。" />
+          <ScoreBucketTable buckets={buckets} />
+          <WeightRecommendationList recommendations={summary.recommendations_for_weights || []} />
+        </div>
+      ) : (
+        <EmptyState>暂无因子快照样本。候选捕获后会开始累积。</EmptyState>
+      )}
+    </div>
+  );
+}
+
+function FactorSummaryGroup({
+  title,
+  items,
+  empty,
+  icon,
+}: {
+  title: string;
+  items: DecisionLedgerFactorSummaryItem[];
+  empty: string;
+  icon: "positive" | "risk" | "noisy";
+}) {
+  const Icon = icon === "risk" ? ShieldAlert : icon === "positive" ? Sparkles : Target;
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-tertiary)]">
+        <Icon size={12} />
+        {title}
+      </div>
+      {items.length ? (
+        <div className="space-y-1.5">
+          {items.slice(0, 3).map((item) => <FactorSummaryRow key={`${title}-${item.key}-${item.window}`} item={item} />)}
+        </div>
+      ) : (
+        <EmptyState>{empty}</EmptyState>
+      )}
+    </div>
+  );
+}
+
+function FactorSummaryRow({ item }: { item: DecisionLedgerFactorSummaryItem }) {
+  return (
+    <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-3 py-2">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-[12px] font-medium text-[var(--text-primary)]">{item.label || item.key}</div>
+          <div className="mt-1 text-[11px] leading-4 text-[var(--text-tertiary)]">
+            {item.window || "-"} · 胜率 {ratePct(item.win_rate)} · 收益 {pct(item.avg_return_pct)} · 超额 {pct(item.avg_excess_return_pct)}
+          </div>
+        </div>
+        <Badge tone={item.sample_too_small ? "warning" : "info"}>{item.sample_too_small ? "小样本" : countText(item.sample_count)}</Badge>
+      </div>
+    </div>
+  );
+}
+
+function ScoreBucketTable({ buckets }: { buckets: DecisionLedgerFactorStatsRow[] }) {
+  const visible = buckets.slice(0, 4);
+  if (!visible.length) {
+    return null;
+  }
+  return (
+    <div className="border-t border-[var(--border-subtle)] pt-3">
+      <div className="mb-2 text-[11px] font-medium text-[var(--text-tertiary)]">Tushare 分桶表现</div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[11px]">
+          <thead className="text-[var(--text-tertiary)]">
+            <tr>
+              <th className="px-2 py-1 text-left">分桶</th>
+              <th className="px-2 py-1 text-right">窗口</th>
+              <th className="px-2 py-1 text-right">样本</th>
+              <th className="px-2 py-1 text-right">胜率</th>
+              <th className="px-2 py-1 text-right">超额</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map((bucket) => {
+              const { window, stats } = factorWindowStats(bucket);
+              return (
+                <tr key={bucket.key} className="border-t border-[var(--border-subtle)]">
+                  <td className="px-2 py-1 text-[var(--text-primary)]">{bucket.label || bucket.key}</td>
+                  <td className="px-2 py-1 text-right text-[var(--text-tertiary)]">{window}</td>
+                  <td className="px-2 py-1 text-right">{countText(stats?.sample_count)}</td>
+                  <td className="px-2 py-1 text-right">{ratePct(stats?.win_rate)}</td>
+                  <td className="px-2 py-1 text-right">{pct(stats?.avg_excess_return_pct)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function WeightRecommendationList({ recommendations }: { recommendations: Array<{ target?: string; reason?: string; sample_count?: number; auto_apply?: boolean }> }) {
+  if (!recommendations.length) {
+    return null;
+  }
+  return (
+    <div className="border-t border-[var(--border-subtle)] pt-3">
+      <div className="mb-2 text-[11px] font-medium text-[var(--text-tertiary)]">人工调权建议</div>
+      <div className="space-y-1.5">
+        {recommendations.slice(0, 3).map((item, index) => (
+          <div key={`${item.target}-${index}`} className="rounded-md bg-[var(--bg-primary)] px-3 py-2 text-[11px] leading-4 text-[var(--text-secondary)]">
+            <span className="font-medium text-[var(--text-primary)]">{item.target || "全部因子"}</span>
+            ：{item.reason || "继续观察。"}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LearningPatterns({
+  data,
+  factorLearning,
+  factorLoading,
+  factorError,
+  onRetryFactors,
+}: {
+  data?: DecisionLedgerCalibrationResponse;
+  factorLearning?: DecisionLedgerFactorLearningLoop;
+  factorLoading?: boolean;
+  factorError?: boolean;
+  onRetryFactors?: () => void;
+}) {
   const patterns = data?.review_case_patterns || [];
   const groups = [data?.by_lane || [], data?.by_action || []];
   const shadow = data?.shadow_calibration;
@@ -1474,6 +1715,12 @@ function LearningPatterns({ data }: { data?: DecisionLedgerCalibrationResponse }
             )}
           </div>
           <div className="grid grid-cols-1 gap-3">
+            <FactorLearningPanel
+              factorLearning={factorLearning}
+              loading={factorLoading}
+              error={factorError}
+              onRetry={onRetryFactors}
+            />
             <ShadowCalibrationPanel shadow={shadow} />
             <CalibrationGroupTable title="链路质量分布" groups={groups[0]} />
             <CalibrationGroupTable title="动作质量分布" groups={groups[1]} />
@@ -1778,6 +2025,29 @@ function ReviewPageContent() {
   const selectedDecisionId = cleanParam(searchParams.get("case"));
   const review = useReview();
   const calibration = useDecisionLedgerCalibration({ window: "20d", limit: 12 });
+  const learningLoop = useDecisionLedgerLearningLoop();
+  const autoReview = useAutoReviewDecisionLedgerCase();
+  const [autoReviewFeedback, setAutoReviewFeedback] = useState("");
+  const autoReviewingDecisionId = autoReview.isPending ? autoReview.variables : undefined;
+
+  function runAutoReview(decisionId?: string) {
+    if (!decisionId) {
+      return;
+    }
+    setAutoReviewFeedback("");
+    autoReview.mutate(decisionId, {
+      onSuccess: (response) => {
+        const cause = response.review_case.primary_cause_label || response.review_case.primary_cause || "AI归因";
+        const strength = response.review_case.evidence_strength_label || "观察假设";
+        setAutoReviewFeedback(`已完成 AI 一键复盘：${cause}，${strength}。`);
+        void calibration.refetch();
+        void review.refetch();
+      },
+      onError: (error) => {
+        setAutoReviewFeedback(error instanceof Error ? error.message : "AI 一键复盘失败。");
+      },
+    });
+  }
 
   const titleSummary = selectedDecisionId
     ? "围绕一条 Decision Ledger 样本完成归因、备注、结论动作与后续验证。"
@@ -1812,9 +2082,10 @@ function ReviewPageContent() {
                 onClick={() => {
                   void review.refetch();
                   void calibration.refetch();
+                  void learningLoop.refetch();
                 }}
               >
-                <RefreshCw size={14} className={review.isFetching || calibration.isFetching ? "animate-spin" : ""} />
+                <RefreshCw size={14} className={review.isFetching || calibration.isFetching || learningLoop.isFetching ? "animate-spin" : ""} />
                 重读数据
               </button>
             </div>
@@ -1829,17 +2100,32 @@ function ReviewPageContent() {
             loading={calibration.isLoading}
             fetching={calibration.isFetching}
             onRefetch={() => void calibration.refetch()}
+            onAutoReview={runAutoReview}
+            autoReviewingDecisionId={autoReviewingDecisionId}
           />
         )}
+        {autoReviewFeedback ? (
+          <div className="mb-7 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-4 py-3 text-[12px] leading-5 text-[var(--text-secondary)]">
+            {autoReviewFeedback}
+          </div>
+        ) : null}
         <OutcomeEvaluatorAction calibration={calibration} />
         <ReviewQueue
           data={calibration.data}
           loading={calibration.isLoading}
           error={calibration.isError}
           onRetry={() => void calibration.refetch()}
+          onAutoReview={runAutoReview}
+          autoReviewingDecisionId={autoReviewingDecisionId}
         />
         <HistoricalShadowReplay review={review.data} />
-        <LearningPatterns data={calibration.data} />
+        <LearningPatterns
+          data={calibration.data}
+          factorLearning={learningLoop.data?.factor_learning_loop}
+          factorLoading={learningLoop.isLoading}
+          factorError={learningLoop.isError}
+          onRetryFactors={() => void learningLoop.refetch()}
+        />
         <HistoricalDecisionLedger />
         <EvidenceStatus review={review.data} />
       </div>

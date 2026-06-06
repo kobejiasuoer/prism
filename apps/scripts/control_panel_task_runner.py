@@ -17,6 +17,10 @@ for path in (str(PACKAGES_ROOT), str(CONTROL_PANEL_ROOT)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
+from prism_data.env import load_project_env
+
+load_project_env(root=REPO_ROOT)
+
 try:
     from prism_storage import TaskRunRepository
 except Exception:  # pragma: no cover - task metadata JSON remains the fallback.

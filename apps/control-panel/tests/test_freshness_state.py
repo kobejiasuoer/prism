@@ -12,9 +12,9 @@ import unittest
 from pathlib import Path
 
 
-INVEST_FLOW_ROOT = Path(__file__).resolve().parents[2]
-if str(INVEST_FLOW_ROOT) not in sys.path:
-    sys.path.insert(0, str(INVEST_FLOW_ROOT))
+CONTROL_PANEL_ROOT = Path(__file__).resolve().parents[1]
+if str(CONTROL_PANEL_ROOT) not in sys.path:
+    sys.path.insert(0, str(CONTROL_PANEL_ROOT))
 
 from freshness_state import (  # noqa: E402
     FreshnessState,
@@ -30,6 +30,7 @@ class ClassifySourceRowTests(unittest.TestCase):
         available: bool = True,
         stale: bool = False,
         degraded: bool = False,
+        deferred: bool = False,
         stale_reasons: list[str] | None = None,
         degradation_reasons: list[str] | None = None,
     ) -> dict[str, object]:
@@ -37,6 +38,7 @@ class ClassifySourceRowTests(unittest.TestCase):
             "available": available,
             "stale": stale,
             "degraded": degraded,
+            "deferred": deferred,
             "stale_reasons": stale_reasons or [],
             "degradation_reasons": degradation_reasons or [],
         }
@@ -58,13 +60,13 @@ class ClassifySourceRowTests(unittest.TestCase):
         row = self._row(stale=True, stale_reasons=["trade_date_unknown"])
         self.assertEqual(classify_source_row(row), FreshnessState.INVALID)
 
-    def test_live_small_not_allowed_is_blocked(self) -> None:
+    def test_live_small_not_allowed_is_degraded(self) -> None:
         row = self._row(stale=True, stale_reasons=["live_small_not_allowed"])
-        self.assertEqual(classify_source_row(row), FreshnessState.BLOCKED)
+        self.assertEqual(classify_source_row(row), FreshnessState.DEGRADED)
 
-    def test_fallback_not_allowed_is_blocked(self) -> None:
+    def test_fallback_not_allowed_is_degraded(self) -> None:
         row = self._row(stale=True, stale_reasons=["fallback_not_allowed"])
-        self.assertEqual(classify_source_row(row), FreshnessState.BLOCKED)
+        self.assertEqual(classify_source_row(row), FreshnessState.DEGRADED)
 
     def test_degraded_only_is_degraded(self) -> None:
         row = self._row(degraded=True, degradation_reasons=["upstream_freshness_stale"])
@@ -78,15 +80,29 @@ class ClassifySourceRowTests(unittest.TestCase):
         row = self._row(stale=True, stale_reasons=["freshness_expired"])
         self.assertEqual(classify_source_row(row), FreshnessState.STALE)
 
-    def test_invalid_dominates_blocked(self) -> None:
-        # If both INVALID (trade_date_mismatch) and BLOCKED (live_small_not_allowed)
-        # apply, INVALID wins because the data is structurally unusable.
+    def test_invalid_dominates_policy_degraded(self) -> None:
+        # If both INVALID (trade_date_mismatch) and policy DEGRADED
+        # (live_small_not_allowed) apply, INVALID wins because the data is
+        # structurally unusable.
         row = self._row(stale=True, stale_reasons=["trade_date_mismatch", "live_small_not_allowed"])
         self.assertEqual(classify_source_row(row), FreshnessState.INVALID)
 
-    def test_blocked_dominates_stale(self) -> None:
+    def test_stale_dominates_policy_degraded(self) -> None:
         row = self._row(stale=True, stale_reasons=["freshness_stale", "live_small_not_allowed"])
-        self.assertEqual(classify_source_row(row), FreshnessState.BLOCKED)
+        self.assertEqual(classify_source_row(row), FreshnessState.STALE)
+
+    def test_provider_failure_is_invalid(self) -> None:
+        row = self._row(available=False, stale=True, stale_reasons=["manifest_status_failed", "provider_failure"])
+        self.assertEqual(classify_source_row(row), FreshnessState.INVALID)
+
+    def test_deferred_missing_source_is_usable_until_due(self) -> None:
+        row = self._row(
+            available=False,
+            stale=False,
+            deferred=True,
+            stale_reasons=["manifest_missing", "missing"],
+        )
+        self.assertEqual(classify_source_row(row), FreshnessState.USABLE)
 
 
 class StateAllowsMatrixTests(unittest.TestCase):

@@ -19,7 +19,12 @@ import {
   useAsk,
   useDecisionLedgerStock,
   useRestoreWatchlistStock,
-  useStockProfile,
+  useStockProfileDetail,
+  useStockProfileFormalData,
+  useStockProfileFormalDataSection,
+  useStockProfileLearningScorecard,
+  useStockProfileSummary,
+  useStockProfileTodayAction,
   useWatchlistManager,
 } from "@/lib/hooks";
 import { readinessHasStaleData, readinessModeCopy, refreshTaskCopy } from "@/lib/readiness-copy";
@@ -28,6 +33,7 @@ import type {
   DecisionLedgerCompactRecord,
   StockDetailData,
   StockFormalData,
+  StockLearningScorecard,
   StockProfileData,
   WatchlistManagerItem,
 } from "@/lib/types";
@@ -107,6 +113,32 @@ function hasDisplayValue(value: unknown) {
 
 function displayText(value: unknown, fallback = "暂未给出") {
   return hasDisplayValue(value) ? String(value) : fallback;
+}
+
+function riskLevelTone(level?: string) {
+  if (level === "block") {
+    return "risk";
+  }
+  if (level === "degrade") {
+    return "warning";
+  }
+  if (level === "warn") {
+    return "watch";
+  }
+  return "info";
+}
+
+function riskLevelLabel(level?: string) {
+  if (level === "block") {
+    return "硬执行约束";
+  }
+  if (level === "degrade") {
+    return "候选降级";
+  }
+  if (level === "warn") {
+    return "风险提醒";
+  }
+  return "只展示";
 }
 
 function uniqueTexts(values: unknown[]) {
@@ -787,6 +819,37 @@ function recordField(row: Record<string, unknown> | undefined, keys: string[], f
   return fallback;
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function asRecordArray(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object" && !Array.isArray(item))) : [];
+}
+
+function tagList(values?: string[], limit = 8) {
+  return (values || []).filter(Boolean).slice(0, limit);
+}
+
+function usageLabel(value: unknown) {
+  switch (String(value || "")) {
+    case "hard_gate":
+      return "硬闸门";
+    case "ranking_signal":
+      return "排序因子";
+    case "risk_penalty":
+      return "风险提示";
+    case "research_only":
+      return "研究口径";
+    case "display_only":
+      return "只读展示";
+    case "evidence_only":
+      return "只读证据";
+    default:
+      return displayText(value, "只读证据");
+  }
+}
+
 function FormalDataSnapshotPanel({ data }: { data?: StockFormalData }) {
   if (!data?.available) {
     return null;
@@ -794,8 +857,33 @@ function FormalDataSnapshotPanel({ data }: { data?: StockFormalData }) {
   const cards = data.metric_cards || [];
   const indexRows = data.index_memberships || [];
   const topRows = data.top_list || [];
+  const topInstRows = data.top_inst || [];
   const holderRows = data.shareholders || [];
   const dividendRows = data.dividends || [];
+  const profile = asRecord(data.profile);
+  const nameChanges = asRecordArray(profile.name_changes);
+  const themes = data.themes || {};
+  const businessRows = asRecordArray(data.business_breakdown?.top_items);
+  const businessByType = asRecord(data.business_breakdown?.by_type);
+  const eventRisks = asRecord(data.event_risks);
+  const pledge = asRecord(eventRisks.pledge);
+  const shareFloat = asRecord(eventRisks.share_float);
+  const repurchase = asRecord(eventRisks.repurchase);
+  const audit = asRecord(eventRisks.audit);
+  const research = asRecord(eventRisks.research);
+  const marketActivity = asRecord(data.market_activity);
+  const blockTrade = asRecord(marketActivity.block_trade);
+  const margin = asRecord(marketActivity.margin);
+  const capital = asRecord(data.capital_flow);
+  const technical = asRecord(data.technical_chips);
+  const cyqChips = asRecord(technical.cyq_chips);
+  const sourceCards = (data.source_cards || []).filter((card) => card.available);
+  const factorRiskItems = data.factor_profile?.risk_items || [];
+  const factorRiskRefs = data.factor_profile?.risk_evidence_refs || [];
+  const businessTypeRows = ["产品", "地区", "行业"].map((label) => {
+    const rows = asRecordArray(businessByType[label]);
+    return { label, item: rows[0] };
+  }).filter((item) => item.item);
 
   return (
     <Panel
@@ -804,6 +892,8 @@ function FormalDataSnapshotPanel({ data }: { data?: StockFormalData }) {
       action={
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone="positive">{data.provider || "tushare/tinyshare"}</Badge>
+          {data.stale ? <Badge tone="warning">只读旧证据</Badge> : null}
+          {data.stale && data.requested_trade_date ? <Badge tone="warning">请求日 {data.requested_trade_date}</Badge> : null}
           {data.trade_date ? <Badge tone="info">交易日 {data.trade_date}</Badge> : null}
         </div>
       }
@@ -831,25 +921,54 @@ function FormalDataSnapshotPanel({ data }: { data?: StockFormalData }) {
           <div className="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-3">
             <div className="flex items-center justify-between">
               <span className="text-[11px] uppercase text-[var(--text-tertiary)]">Tushare 因子评分</span>
-              <Badge tone={typeof data.factor_profile.tushare_score === "number" ? "positive" : "stale"}>
-                {typeof data.factor_profile.tushare_score === "number"
-                  ? `${Math.round(data.factor_profile.tushare_score)} 分`
-                  : "数据缺失/不可用"}
-              </Badge>
+              <div className="flex flex-wrap justify-end gap-1.5">
+                <Badge tone={typeof data.factor_profile.tushare_score === "number" ? "positive" : "stale"}>
+                  {typeof data.factor_profile.tushare_score === "number"
+                    ? `${Math.round(data.factor_profile.tushare_score)} 分`
+                    : "数据缺失/不可用"}
+                </Badge>
+                <Badge tone={riskLevelTone(data.factor_profile.risk_level)}>
+                  {riskLevelLabel(data.factor_profile.risk_level)}
+                </Badge>
+              </div>
             </div>
             <div className="mt-2 flex flex-wrap gap-1">
               {(data.factor_profile.factor_tags ?? []).map((t) => <Badge key={t} tone="info">{t}</Badge>)}
               {(data.factor_profile.risk_flags ?? []).map((t) => <Badge key={t} tone="risk">{t}</Badge>)}
             </div>
+            {(data.factor_profile.block_reason || data.factor_profile.degrade_reason) && (
+              <div className="mt-2 rounded-md border border-[color-mix(in_srgb,var(--negative)_24%,transparent)] bg-[color-mix(in_srgb,var(--negative)_8%,transparent)] px-3 py-2 text-[12px] leading-5 text-[var(--text-secondary)]">
+                {data.factor_profile.block_reason || data.factor_profile.degrade_reason}
+              </div>
+            )}
             {data.factor_profile.explanation?.entry_reason && (
               <p className="mt-2 text-[13px] text-[var(--text-primary)]">{data.factor_profile.explanation.entry_reason}</p>
             )}
+            {factorRiskItems.length ? (
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {factorRiskItems.slice(0, 4).map((item, index) => (
+                  <div key={`${item.code || item.label || "risk"}-${index}`} className="rounded-md border border-[var(--border-subtle)] px-3 py-2">
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-[var(--text-tertiary)]">{item.dataset_label || item.dataset || "风险证据"}</span>
+                      <Badge tone={riskLevelTone(item.level)}>{riskLevelLabel(item.level)}</Badge>
+                    </div>
+                    <div className="text-[13px] font-medium text-[var(--text-primary)]">{item.label || "风险提示"}</div>
+                    <div className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">{item.reason || "-"}</div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
               {([
                 ["基本面", data.factor_profile.explanation?.evidence?.fundamental],
                 ["资金面", data.factor_profile.explanation?.evidence?.capital],
                 ["交易异动", data.factor_profile.explanation?.evidence?.trading_anomaly],
                 ["指数权重", data.factor_profile.explanation?.evidence?.index_weight],
+                ["主题行业", data.factor_profile.explanation?.evidence?.theme],
+                ["事件风险", data.factor_profile.explanation?.evidence?.event_risk],
+                ["两融", data.factor_profile.explanation?.evidence?.margin],
+                ["筹码", data.factor_profile.explanation?.evidence?.chips],
+                ["执行约束", data.factor_profile.explanation?.evidence?.execution],
               ] as const).map(([label, block]) => (
                 <div key={label} className="rounded-md border border-[var(--border-subtle)] px-3 py-2">
                   <div className="text-[11px] text-[var(--text-tertiary)]">{label}</div>
@@ -859,8 +978,134 @@ function FormalDataSnapshotPanel({ data }: { data?: StockFormalData }) {
                 </div>
               ))}
             </div>
+            {factorRiskRefs.length ? (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {factorRiskRefs.slice(0, 6).map((ref, index) => (
+                  <Badge key={`${ref.dataset || ref.label}-${index}`} tone={ref.hard_block ? "risk" : "info"}>
+                    {ref.label || ref.dataset || "风险证据"} · {riskLevelLabel(ref.level)}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
           </div>
         )}
+
+        <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[12px] font-medium text-[var(--text-primary)]">公司画像</span>
+              <Badge tone={profile.name ? "positive" : "warning"}>{displayText(profile.industry, "行业缺失")}</Badge>
+            </div>
+            <div className="grid gap-1.5 text-[12px] leading-5 text-[var(--text-secondary)]">
+              <div>{displayText(profile.full_name || profile.name, data.code)}</div>
+              <div>主营：{displayText(profile.main_business, "暂无主营描述")}</div>
+              <div>地区：{displayText(profile.province || profile.area, "-")} {displayText(profile.city, "")}</div>
+              <div>上市：{displayText(profile.list_date, "-")} · {displayText(profile.market || profile.exchange, "-")}</div>
+              <div>历史名称：{nameChanges.length ? nameChanges.slice(0, 3).map((row) => recordField(row, ["name", "ann_name", "change_reason"])).join(" / ") : "暂无更名记录"}</div>
+            </div>
+          </div>
+
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[12px] font-medium text-[var(--text-primary)]">主题 / 行业</span>
+              <Badge tone={(themes.concepts?.length || themes.industries?.length) ? "info" : "warning"}>
+                {(themes.concepts?.length || 0) + (themes.industries?.length || 0)} 个标签
+              </Badge>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {tagList(themes.concepts, 6).map((item) => <Badge key={`concept-${item}`} tone="info">{item}</Badge>)}
+              {tagList(themes.industries, 4).map((item) => <Badge key={`industry-${item}`} tone="positive">{item}</Badge>)}
+              {tagList(themes.ths, 3).map((item) => <Badge key={`ths-${item}`} tone="watch">{item}</Badge>)}
+              {tagList(themes.dc, 3).map((item) => <Badge key={`dc-${item}`} tone="watch">{item}</Badge>)}
+              {!(themes.concepts?.length || themes.industries?.length || themes.ths?.length || themes.dc?.length) ? (
+                <span className="text-[12px] text-[var(--text-tertiary)]">暂无主题/行业归属命中。</span>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[12px] font-medium text-[var(--text-primary)]">主营构成</span>
+              <Badge tone={businessRows.length ? "info" : "warning"}>{displayText(data.business_breakdown?.concentration_label, `${businessRows.length} 条`)}</Badge>
+            </div>
+            <div className="grid gap-1.5">
+              {businessTypeRows.length ? (
+                <div className="mb-1 flex flex-wrap gap-1.5">
+                  {businessTypeRows.map((item) => (
+                    <Badge key={item.label} tone="info">{item.label}：{recordField(item.item, ["item", "bz_item", "name"])}</Badge>
+                  ))}
+                </div>
+              ) : null}
+              {businessRows.slice(0, 4).map((row, index) => (
+                <div key={`${recordField(row, ["item"])}-${index}`} className="flex items-center justify-between gap-3 text-[12px]">
+                  <span className="line-clamp-1 text-[var(--text-secondary)]">{recordField(row, ["item", "bz_item", "name"])}</span>
+                  <span className="shrink-0 text-[var(--text-primary)]">{recordField(row, ["sales", "bz_sales", "revenue"])}</span>
+                </div>
+              ))}
+              {!businessRows.length ? <span className="text-[12px] text-[var(--text-tertiary)]">暂无主营构成命中。</span> : null}
+            </div>
+          </div>
+
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[12px] font-medium text-[var(--text-primary)]">事件风险</span>
+              <Badge tone={audit.abnormal ? "risk" : "info"}>{audit.abnormal ? "审计异常" : "证据摘要"}</Badge>
+            </div>
+            <div className="grid gap-1.5 text-[12px] leading-5 text-[var(--text-secondary)]">
+              <div>质押：{displayText(pledge.pledge_ratio, "-")}% · 解禁市值 {displayText(shareFloat.total_float_mv, "-")}</div>
+              <div>回购：{displayText(repurchase.total_amount, "-")} · 研报目标均值 {displayText(research.average_target_price, "-")}</div>
+              <div>审计：{displayText(audit.opinion, "暂无异常意见")}</div>
+            </div>
+          </div>
+
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[12px] font-medium text-[var(--text-primary)]">资金 / 两融 / 龙虎榜</span>
+              <Badge tone={topRows.length || blockTrade.count ? "watch" : "info"}>{topRows.length} 次龙虎榜</Badge>
+            </div>
+            <div className="grid gap-1.5 text-[12px] leading-5 text-[var(--text-secondary)]">
+              <div>主力净流入：{displayText(capital.main_net_yi, "-")} 亿 · 净占比 {displayText(capital.main_net_pct, "-")}%</div>
+              <div>大宗：{displayText(blockTrade.count, "0")} 次 · 平均折溢价 {displayText(blockTrade.average_discount_pct, "-")}%</div>
+              <div>两融：余额变化 {displayText(margin.balance_change, "-")} · 标的 {margin.is_margin_target ? "是" : "否"}</div>
+              <div>机构席位：{topInstRows.length ? `${topInstRows.length} 条命中` : "近窗口未命中"}</div>
+            </div>
+          </div>
+
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[12px] font-medium text-[var(--text-primary)]">技术筹码</span>
+              <Badge tone={cyqChips.winner_rate ? "watch" : "info"}>{displayText(cyqChips.winner_rate, "筹码缺失")}</Badge>
+            </div>
+            <div className="grid gap-1.5 text-[12px] leading-5 text-[var(--text-secondary)]">
+              <div>MACD：{displayText(asRecord(technical.technical_factor).macd, "-")} · 收盘 {displayText(asRecord(technical.technical_factor).close, "-")}</div>
+              <div>获利盘：{displayText(cyqChips.winner_rate, "-")} · 成本压力 {displayText(cyqChips.cost_pressure, "-")}</div>
+              <div>筹码价格带：{displayText(cyqChips.price_low, "-")} - {displayText(cyqChips.price_high, "-")}</div>
+            </div>
+          </div>
+        </div>
+
+        {sourceCards.length ? (
+          <div className="mt-4 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[12px] font-medium text-[var(--text-primary)]">数据用途</span>
+              <Badge tone="info">个股档案只读</Badge>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              {sourceCards.slice(0, 8).map((card) => (
+                <div key={`${card.dataset || card.label}-${card.value}`} className="rounded-md border border-[var(--border-subtle)] px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[12px] font-medium text-[var(--text-primary)]">{card.label}</span>
+                    <Badge tone={card.live_permission === "research_only" ? "watch" : "info"}>{usageLabel(card.stock_profile_use || card.live_permission)}</Badge>
+                  </div>
+                  <div className="mt-1 text-[11px] leading-4 text-[var(--text-tertiary)]">
+                    {card.dataset || "-"} · {usageLabel(card.decision_use)} · {card.value}
+                    {card.stale ? " · 旧证据" : ""}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
           <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
@@ -925,6 +1170,149 @@ function FormalDataSnapshotPanel({ data }: { data?: StockFormalData }) {
             </div>
           </div>
         </div>
+      </div>
+    </Panel>
+  );
+}
+
+function FormalDataSummaryPanel({
+  data,
+  loadingFull,
+}: {
+  data?: StockFormalData;
+  loadingFull?: boolean;
+}) {
+  if (!data?.available) {
+    return null;
+  }
+  const cards = data.metric_cards || [];
+  const sourceCards = (data.source_cards || []).filter((card) => card.available);
+  const coverage = data.coverage || {};
+
+  return (
+    <Panel
+      title="正式数据轻量摘要"
+      eyebrow="Formal Summary"
+      action={
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge tone="info">{data.provider || "tushare/tinyshare"}</Badge>
+          {data.summary_only ? <Badge tone="watch">轻量首屏</Badge> : null}
+          {data.stale ? <Badge tone="warning">只读旧证据</Badge> : null}
+          {loadingFull ? <Badge tone="info">完整档案加载中</Badge> : null}
+        </div>
+      }
+    >
+      <div className="surface-card p-4">
+        <div className="mb-4 flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)]">
+            <Database size={17} className="text-[var(--info)]" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">{data.headline || "正式数据摘要已就绪"}</h2>
+            <p className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">
+              {data.summary || "先展示可快速读取的估值、资金、财务和来源索引；完整证据按需展开。"}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          {cards.slice(0, 6).map((card, index) => (
+            <MetricCard key={`${card.label}-${index}`} {...card} tone={card.tone || "info"} />
+          ))}
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[12px] font-medium text-[var(--text-primary)]">来源索引</span>
+              <Badge tone="info">{sourceCards.length} 个可用</Badge>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {sourceCards.slice(0, 10).map((card) => (
+                <Badge key={`${card.dataset || card.label}-${card.value}`} tone={card.stock_profile_use === "coverage_hint" ? "watch" : "info"}>
+                  {card.label}
+                </Badge>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3 text-[12px] leading-5 text-[var(--text-secondary)]">
+            <div className="font-medium text-[var(--text-primary)]">执行权限</div>
+            <div className="mt-1">只读证据，不提升真钱 readiness。</div>
+            <div className="mt-1 text-[var(--text-tertiary)]">
+              个股直连 {coverage.stock_scoped_available ?? "-"} / {coverage.stock_scoped_total ?? "-"} · 数据集索引 {coverage.catalog_available ?? "-"} / {coverage.catalog_total ?? "-"}
+            </div>
+          </div>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function LearningScorecardPanel({
+  scorecard,
+  loading,
+  compact = false,
+}: {
+  scorecard?: StockLearningScorecard;
+  loading?: boolean;
+  compact?: boolean;
+}) {
+  if (loading && !scorecard) {
+    return (
+      <Panel title="只读学习摘要" eyebrow="Learning">
+        <div className="surface-card p-4">
+          <SkeletonBlock className="h-24 w-full" />
+        </div>
+      </Panel>
+    );
+  }
+  if (!scorecard) {
+    return null;
+  }
+  const metrics = scorecard.scorecards || [];
+  const patterns = scorecard.failure_patterns || [];
+
+  return (
+    <Panel
+      title={compact ? "冻结页学习摘要" : "历史可信度"}
+      eyebrow="Read-only Learning"
+      action={
+        <div className="flex flex-wrap gap-2">
+          <Badge tone="watch">{scorecard.confidence_label || scorecard.stage}</Badge>
+          <Badge tone={scorecard.feeds_execution ? "risk" : "info"}>{scorecard.feeds_execution ? "会影响执行" : "不喂执行"}</Badge>
+        </div>
+      }
+    >
+      <div className="surface-card p-4">
+        <div className="mb-3">
+          <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">{scorecard.headline || "历史可信度只作学习参考"}</h2>
+          <p className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">
+            {scorecard.reason || "统计 Prism 自己的历史建议和 outcome，不作为胜率承诺。"}
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          {metrics.slice(0, 4).map((card) => (
+            <MetricCard key={card.label} label={card.label} value={card.value} detail={card.detail} tone={card.tone || "info"} />
+          ))}
+        </div>
+        {patterns.length ? (
+          <div className="mt-3 grid gap-2 lg:grid-cols-2">
+            {patterns.slice(0, compact ? 2 : 4).map((item) => (
+              <div key={item.label} className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <span className="text-[12px] font-medium text-[var(--text-primary)]">{item.label}</span>
+                  <Badge tone={item.tone || "watch"}>学习项</Badge>
+                </div>
+                <div className="text-[12px] leading-5 text-[var(--text-secondary)]">{item.detail}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-3 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2 text-[12px] text-[var(--text-tertiary)]">
+            暂无突出失败模式；样本仍需继续积累。
+          </div>
+        )}
       </div>
     </Panel>
   );
@@ -1017,11 +1405,20 @@ export default function StockProfilePage() {
   const searchParams = useSearchParams();
   const code = String(params.code || "");
   const queryName = String(searchParams.get("name") || "").trim();
-  const profile = useStockProfile(code);
+  const profileSummary = useStockProfileSummary(code);
   const addStock = useAddWatchlistStock();
   const archiveStock = useArchiveWatchlistStock();
   const restoreStock = useRestoreWatchlistStock();
   const [activeTab, setActiveTab] = useState<StockTab>("决策");
+  const [formalFullEnabled, setFormalFullEnabled] = useState(false);
+  const detailEnabled = Boolean(code) && activeTab !== "追问";
+  const profileDetail = useStockProfileDetail(code, { enabled: detailEnabled });
+  const formalSummaryQuery = useStockProfileFormalDataSection(code, "summary", { enabled: activeTab === "证据" });
+  const formalDataQuery = useStockProfileFormalData(code, { enabled: activeTab === "证据" && formalFullEnabled });
+  const learningScorecardQuery = useStockProfileLearningScorecard(code, {
+    enabled: Boolean(code) && (activeTab === "决策" || activeTab === "证据"),
+  });
+  const todayActionQuery = useStockProfileTodayAction(code, { enabled: Boolean(code) });
   const ask = useAsk(code, activeTab === "追问");
   const managerQuery = useWatchlistManager();
   const [question, setQuestion] = useState("");
@@ -1031,16 +1428,30 @@ export default function StockProfilePage() {
   const [askError, setAskError] = useState("");
   const [manageFeedback, setManageFeedback] = useState("");
   const threadEndRef = useRef<HTMLDivElement | null>(null);
-  const profileData = profile.data;
-  const detail = pickDetail(profileData, activeTab);
+  const profileData = profileDetail.data || profileSummary.data;
+  const profileLoading = !profileData && profileSummary.isLoading;
+  const detailLoading = profileDetail.isLoading && detailEnabled;
+  const profileHydrating = Boolean(profileSummary.data && !profileDetail.data && profileDetail.isFetching);
+  const formalSummary = formalSummaryQuery.data?.formal_data;
+  const formalData = formalDataQuery.data?.formal_data;
+  const learningScorecard = learningScorecardQuery.data;
+  const formalColdLoading =
+    activeTab === "证据" &&
+    !formalSummary &&
+    !formalData &&
+    (formalSummaryQuery.isFetching || formalDataQuery.isFetching);
+  const formalFullLoading = activeTab === "证据" && Boolean(formalSummary) && !formalData && formalDataQuery.isFetching;
+  const todayAction = todayActionQuery.data?.today_action || null;
+  const detail = pickDetail(profileDetail.data, activeTab);
   const askCase = ask.data?.case;
   const manager = managerQuery.data?.manager;
   const activeManagerItem = findManagerItem(manager?.active_items, code);
   const archivedManagerItem = findManagerItem(manager?.archived_items, code);
   const manageBusy = addStock.isPending || archiveStock.isPending || restoreStock.isPending;
   const managerUnavailable = managerQuery.isError || (managerQuery.isLoading && !manager);
-  const hasWatchlistDetail = Boolean(profileData?.watchlist);
-  const hasOpportunityDetail = Boolean(profileData?.opportunity);
+  const availableSources = profileDetail.data?.available_sources || profileSummary.data?.available_sources || [];
+  const hasWatchlistDetail = availableSources.includes("watchlist");
+  const hasOpportunityDetail = availableSources.includes("opportunity");
   const visibleTabs = useMemo<StockTab[]>(() => {
     const items: StockTab[] = ["决策", "追问"];
     if (hasWatchlistDetail) {
@@ -1052,6 +1463,19 @@ export default function StockProfilePage() {
     items.push("证据");
     return items;
   }, [hasOpportunityDetail, hasWatchlistDetail]);
+
+  useEffect(() => {
+    setFormalFullEnabled(false);
+  }, [code]);
+
+  useEffect(() => {
+    if (activeTab !== "证据" || !formalSummary?.available || formalFullEnabled) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => setFormalFullEnabled(true), 1200);
+    return () => window.clearTimeout(timer);
+  }, [activeTab, formalFullEnabled, formalSummary?.available]);
   const rawStockName = detail?.name || profileData?.name || queryName || activeManagerItem?.name || archivedManagerItem?.name || askCase?.name || "";
   const stockName = rawStockName && rawStockName !== code ? rawStockName : code;
   const hasResolvedName = Boolean(rawStockName && rawStockName !== code);
@@ -1089,7 +1513,6 @@ export default function StockProfilePage() {
       ...(detail.level_cards || []),
     ];
   }, [detail]);
-  const todayAction = profileData?.today_action;
   const decisionContext = (detail || askCase) as DecisionContext | undefined;
   const decisionLocked = Boolean(profileData?.readiness && (profileData.readiness.readiness_mode !== "live_ready" || readinessHasStaleData(profileData.readiness)));
   const trustLevel = profileData?.readiness?.trust_level;
@@ -1212,7 +1635,20 @@ export default function StockProfilePage() {
         {
           onSuccess: (payload) => setManageFeedback(payload.message || "已加入持仓。"),
           onError: (error) => setManageFeedback(error instanceof Error ? error.message : "加入失败"),
-          onSettled: () => void profile.refetch(),
+          onSettled: () => {
+            void profileSummary.refetch();
+            void profileDetail.refetch();
+            void todayActionQuery.refetch();
+            void formalSummaryQuery.refetch();
+            if (activeTab === "证据") {
+              if (formalFullEnabled) {
+                void formalDataQuery.refetch();
+              } else {
+                setFormalFullEnabled(true);
+              }
+            }
+            void learningScorecardQuery.refetch();
+          },
         },
       );
     } else if (action === "archive") {
@@ -1221,7 +1657,20 @@ export default function StockProfilePage() {
         {
           onSuccess: (payload) => setManageFeedback(payload.message || "已归档。"),
           onError: (error) => setManageFeedback(error instanceof Error ? error.message : "归档失败"),
-          onSettled: () => void profile.refetch(),
+          onSettled: () => {
+            void profileSummary.refetch();
+            void profileDetail.refetch();
+            void todayActionQuery.refetch();
+            void formalSummaryQuery.refetch();
+            if (activeTab === "证据") {
+              if (formalFullEnabled) {
+                void formalDataQuery.refetch();
+              } else {
+                setFormalFullEnabled(true);
+              }
+            }
+            void learningScorecardQuery.refetch();
+          },
         },
       );
     } else {
@@ -1230,7 +1679,20 @@ export default function StockProfilePage() {
         {
           onSuccess: (payload) => setManageFeedback(payload.message || "已恢复持仓。"),
           onError: (error) => setManageFeedback(error instanceof Error ? error.message : "恢复失败"),
-          onSettled: () => void profile.refetch(),
+          onSettled: () => {
+            void profileSummary.refetch();
+            void profileDetail.refetch();
+            void todayActionQuery.refetch();
+            void formalSummaryQuery.refetch();
+            if (activeTab === "证据") {
+              if (formalFullEnabled) {
+                void formalDataQuery.refetch();
+              } else {
+                setFormalFullEnabled(true);
+              }
+            }
+            void learningScorecardQuery.refetch();
+          },
         },
       );
     }
@@ -1290,9 +1752,34 @@ export default function StockProfilePage() {
               <button
                 type="button"
                 className="focus-ring inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] px-3 py-2 text-[12px] text-[var(--text-secondary)]"
-                onClick={() => void profile.refetch()}
+                onClick={() => {
+                  void profileSummary.refetch();
+                  void profileDetail.refetch();
+                  void todayActionQuery.refetch();
+                  void formalSummaryQuery.refetch();
+                  if (activeTab === "证据") {
+                    if (formalFullEnabled) {
+                      void formalDataQuery.refetch();
+                    } else {
+                      setFormalFullEnabled(true);
+                    }
+                  }
+                  void learningScorecardQuery.refetch();
+                }}
               >
-                <RefreshCw size={14} className={profile.isFetching ? "animate-spin" : ""} />
+                <RefreshCw
+                  size={14}
+                  className={
+                    profileDetail.isFetching ||
+                    profileSummary.isFetching ||
+                    todayActionQuery.isFetching ||
+                    formalSummaryQuery.isFetching ||
+                    formalDataQuery.isFetching ||
+                    learningScorecardQuery.isFetching
+                      ? "animate-spin"
+                      : ""
+                  }
+                />
                 刷新
               </button>
             </div>
@@ -1303,13 +1790,33 @@ export default function StockProfilePage() {
           <TrustBanner trust={trustLevel} readiness={profileData?.readiness} className="mb-4" />
         ) : null}
 
-        {profile.isError ? <ErrorState message="个股详情暂不可用" onRetry={() => void profile.refetch()} /> : null}
+        {profileDetail.isError && !profileSummary.data ? <ErrorState message="个股详情暂不可用" onRetry={() => void profileDetail.refetch()} /> : null}
         {manageFeedback ? (
           <div className="mb-5 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2 text-[12px] text-[var(--text-secondary)]">
             {manageFeedback}
           </div>
         ) : null}
-        {!profile.isLoading && !ask.isLoading && !detail && !askCase ? <EmptyState>当前股票不在持仓或观察池详情中。</EmptyState> : null}
+        {profileLoading ? (
+          <div className="mb-6 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-4">
+            <div className="mb-3 flex items-center gap-2 text-[13px] text-[var(--text-secondary)]">
+              <LoaderCircle size={14} className="animate-spin" />
+              正在读取个股档案、名单状态和数据可信度
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, index) => <MetricSkeleton key={index} />)}
+            </div>
+          </div>
+        ) : null}
+        {profileHydrating ? (
+          <div className="mb-5 flex items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2 text-[12px] text-[var(--text-secondary)]">
+            <LoaderCircle size={13} className="animate-spin" />
+            摘要已就绪，正在补齐当前工作区详情
+          </div>
+        ) : null}
+        {profileDetail.isError && profileSummary.data && activeTab !== "追问" ? (
+          <ErrorState message="当前工作区详情暂不可用" onRetry={() => void profileDetail.refetch()} />
+        ) : null}
+        {!profileLoading && !detailLoading && !ask.isLoading && !detail && !askCase ? <EmptyState>当前股票不在持仓或观察池详情中。</EmptyState> : null}
 
         {detail || askCase ? (
           <div className="mb-5 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3">
@@ -1329,9 +1836,22 @@ export default function StockProfilePage() {
           </div>
         ) : null}
 
-        {profileData?.formal_data?.available ? (
+        {formalColdLoading ? (
+          <div className="mb-5 flex items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2 text-[12px] text-[var(--text-secondary)]">
+            <LoaderCircle size={13} className="animate-spin" />
+            正在加载正式数据轻量摘要
+          </div>
+        ) : null}
+
+        {activeTab === "证据" && formalSummary?.available ? (
           <div className="mb-6">
-            <FormalDataSnapshotPanel data={profileData.formal_data} />
+            <FormalDataSummaryPanel data={formalSummary} loadingFull={formalFullLoading} />
+          </div>
+        ) : null}
+
+        {activeTab === "证据" && formalData?.available ? (
+          <div className="mb-6">
+            <FormalDataSnapshotPanel data={formalData} />
           </div>
         ) : null}
 
@@ -1345,6 +1865,20 @@ export default function StockProfilePage() {
                   sourceTradeDate={displayTradeDate}
                   onViewEvidence={() => setActiveTab("证据")}
                 />
+                <LearningScorecardPanel
+                  scorecard={learningScorecard}
+                  loading={learningScorecardQuery.isLoading}
+                  compact
+                />
+                {decisionContext?.canonical_decision ? (
+                  <Panel title="旧结论只读摘要" eyebrow="Frozen Context">
+                    <DecisionSummary
+                      canonical={decisionContext.canonical_decision}
+                      sourceLabel={sourceLabel}
+                      generatedAt={sourceGeneratedAt}
+                    />
+                  </Panel>
+                ) : null}
               </>
             ) : (
               <>
@@ -1387,9 +1921,21 @@ export default function StockProfilePage() {
           ))}
         </div>
 
-        {profile.isLoading && !detail ? (
+        {profileLoading && !detail ? (
           <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {Array.from({ length: 4 }).map((_, index) => <MetricSkeleton key={index} />)}
+          </section>
+        ) : null}
+
+        {detailLoading && !detail ? (
+          <section className="mb-6 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-4">
+            <div className="mb-3 flex items-center gap-2 text-[13px] text-[var(--text-secondary)]">
+              <LoaderCircle size={14} className="animate-spin" />
+              正在加载当前工作区详情
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, index) => <MetricSkeleton key={index} />)}
+            </div>
           </section>
         ) : null}
 
@@ -1475,6 +2021,7 @@ export default function StockProfilePage() {
                           <span className="text-[13px] font-medium text-[var(--text-primary)]">
                             {item.answer?.title || "追问回答"}
                           </span>
+                          {item.answer?.intent_label ? <Badge tone="watch">{item.answer.intent_label}</Badge> : null}
                           {item.answer?.engine_label ? <Badge tone="info">{item.answer.engine_label}</Badge> : null}
                         </div>
                         <p className="text-[13px] leading-6 text-[var(--text-secondary)]">{item.answer?.summary || "-"}</p>
@@ -1502,7 +2049,7 @@ export default function StockProfilePage() {
                       </div>
                       <div className="inline-flex max-w-[92%] items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-3 text-[13px] text-[var(--text-secondary)]">
                         <LoaderCircle size={14} className="animate-spin" />
-                        正在整理回答
+                        正在识别追问并整理回答
                       </div>
                     </div>
                   ) : null}
@@ -1647,6 +2194,11 @@ export default function StockProfilePage() {
                   <LearningMemoryPreview memories={detail.learning_memories} limit={3} />
                 </Panel>
               ) : null}
+
+              <LearningScorecardPanel
+                scorecard={learningScorecard}
+                loading={learningScorecardQuery.isLoading}
+              />
             </div>
           </div>
         ) : null}
@@ -1705,7 +2257,7 @@ export default function StockProfilePage() {
 
         {detail && activeTab === "证据" ? (
           <EvidencePanel
-            page={profile.data?.watchlist ? "watchlist" : "opportunities"}
+            page={profileDetail.data?.watchlist ? "watchlist" : "opportunities"}
             stockCode={code}
             sources={detail.source_cards}
             artifacts={detail.artifacts}
@@ -1729,7 +2281,7 @@ export default function StockProfilePage() {
           <EmptyState>{activeTab === "持仓" ? "这只股票当前不在持仓名单，可用页面右上角加入。" : "这只股票当前不在观察池，先以 Ask 结论和证据为准。"}</EmptyState>
         ) : null}
 
-        {activeTab === "决策" ? <StockDecisionTimelinePanel code={code} /> : null}
+        {activeTab === "决策" && !profileLoading ? <StockDecisionTimelinePanel code={code} /> : null}
       </div>
     </main>
   );

@@ -17,8 +17,10 @@ if str(INVEST_FLOW_ROOT) not in sys.path:
 
 from control_panel.app import app  # noqa: E402
 from control_panel.dashboard_data import (  # noqa: E402
+    ask_followup_model_config,
     ask_page_url,
     batch_detail_url,
+    build_ask_followup_answer,
     candidate_detail_url,
     review_detail_url,
     today_nav_links,
@@ -159,6 +161,103 @@ class ControlPanelApiTest(unittest.TestCase):
         for fragment in UNSUPPORTED_ASK_FOLLOWUP_COPY:
             self.assertNotIn(fragment, answer_text)
         self.assertIn("纪律", answer_text)
+
+    def test_ask_followup_understands_action_question(self) -> None:
+        answer = build_ask_followup_answer(
+            {
+                "hero": {
+                    "decision_label": "继续观察",
+                    "position": "0-0.5成",
+                    "summary": "ROE偏弱",
+                    "confidence_label": "高",
+                    "confidence_note": "实时链路和系统上下文都比较完整。",
+                },
+                "canonical_decision": {
+                    "why_now": "ROE偏弱",
+                    "trigger_condition": "放量站上压力位 55.0 元",
+                    "stop_condition": "盘中跌破止损位 52.0 元",
+                    "next_step": "先观望",
+                },
+                "plan_rows": [
+                    {"label": "动作", "value": "观望"},
+                    {"label": "触发", "value": "放量站上压力位 55.0 元"},
+                    {"label": "回避", "value": "ROE偏弱"},
+                    {"label": "失效", "value": "盘中跌破止损位 52.0 元"},
+                    {"label": "仓位", "value": "0-0.5成"},
+                ],
+                "level_cards": [
+                    {"label": "支撑位", "value": 52.0, "detail": "MA10"},
+                    {"label": "压力位", "value": 55.0, "detail": "MA20"},
+                    {"label": "止损位", "value": 52.0, "detail": "MA10"},
+                ],
+                "metric_cards": [
+                    {"label": "最新价", "value": 52.85, "detail": "15:00:03"},
+                    {"label": "资金信号", "value": "主力净流出", "detail": "主力 -4573.68 万元"},
+                ],
+                "analysis_groups": [
+                    {"title": "资金面", "metric": "主力净流出", "items": ["主力净流出"]},
+                    {"title": "风险", "metric": "ROE偏弱", "items": ["ROE偏弱"]},
+                ],
+                "cross_cards": [
+                    {"label": "自选股", "value": "未进入"},
+                    {"label": "观察池", "value": "未进入"},
+                    {"label": "今日动作队列", "value": "未进入"},
+                ],
+                "triggers": [
+                    {
+                        "name": "确认线",
+                        "condition": "回踩不破支撑位 52.0 元，但若主力继续流出则不成立",
+                        "action": "没有资金确认前，不把反弹当反转",
+                    }
+                ],
+            },
+            "这只今天到底要不要动？",
+            [],
+        )
+
+        answer_text = json.dumps(answer, ensure_ascii=False)
+        self.assertEqual(answer["intent"], "plan")
+        self.assertIn("操作追问", answer["intent_label"])
+        self.assertIn("先不主动动", answer["summary"])
+        self.assertIn("放量站上压力位 55.0 元", answer_text)
+        self.assertIn("盘中跌破止损位 52.0 元", answer_text)
+        self.assertIn("ROE偏弱", answer_text)
+
+    def test_ask_followup_uses_shared_ai_provider_config(self) -> None:
+        keys = [
+            "PRISM_ASK_FOLLOWUP_DISABLE",
+            "PRISM_ASK_FOLLOWUP_API_KEY",
+            "PRISM_ASK_FOLLOWUP_MODEL",
+            "PRISM_ASK_FOLLOWUP_BASE_URL",
+            "PRISM_ASK_FOLLOWUP_PROVIDER",
+            "PRISM_AI_PROVIDER",
+            "PRISM_AI_API_KEY",
+            "PRISM_AI_MODEL",
+            "PRISM_AI_BASE_URL",
+            "OPENAI_API_KEY",
+            "OPENAI_MODEL",
+            "OPENAI_BASE_URL",
+            "OPENAI_API_BASE",
+        ]
+        previous = {key: os.environ.get(key) for key in keys}
+        try:
+            for key in keys:
+                os.environ.pop(key, None)
+            os.environ["PRISM_AI_PROVIDER"] = "deepseek"
+            os.environ["PRISM_AI_API_KEY"] = "test-key"
+
+            config = ask_followup_model_config()
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+        self.assertIsNotNone(config)
+        assert config is not None
+        self.assertEqual(config["model"], "deepseek-v4-flash")
+        self.assertEqual(config["endpoint"], "https://api.deepseek.com/chat/completions")
 
     def test_parameter_api_save_validates_payload_without_touching_real_config(self) -> None:
         seed = {

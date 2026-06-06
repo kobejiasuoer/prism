@@ -417,7 +417,12 @@ class DecisionLedgerCoreTests(unittest.TestCase):
         record = self._build_record()
         self.ledger.upsert_decision(record)
 
-        for window, ref_date in (("T+1", "2026-05-18"), ("T+3", "2026-05-20"), ("T+5", "2026-05-22")):
+        for window, ref_date in (
+            ("T+1", "2026-05-18"),
+            ("T+3", "2026-05-20"),
+            ("T+5", "2026-05-22"),
+            ("T+10", "2026-05-29"),
+        ):
             self.ledger.append_outcome_event(
                 record["decision_id"],
                 {
@@ -430,7 +435,7 @@ class DecisionLedgerCoreTests(unittest.TestCase):
 
         stored = self.ledger.load_decision(record["decision_id"])
         windows = sorted(ev["window"] for ev in stored["outcome_events"])
-        self.assertEqual(windows, ["T+1", "T+3", "T+5"])
+        self.assertEqual(windows, ["T+1", "T+10", "T+3", "T+5"])
 
     def test_append_outcome_event_unknown_decision_raises(self) -> None:
         with self.assertRaises(self.ledger.DecisionLedgerError):

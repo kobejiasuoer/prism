@@ -91,6 +91,11 @@ generate_feishu_message.py]
 
 如果你想顺着这条主链路继续看模块边界和数据边界，可以直接看 [docs/architecture/system.md](docs/architecture/system.md)。
 
+如果你想对外介绍或演示 Prism，可以看：
+
+- [Prism 对外介绍与推广说明](docs/prism-promotion-guide.zh-CN.md)
+- [Prism 用户操作手册](docs/prism-user-manual.zh-CN.md)
+
 ## 当前产品前端
 
 Prism 当前唯一正式前端是 `apps/web` 里的 Next.js 应用。FastAPI 不再承载 Jinja 页面，只作为后端 API。
@@ -154,9 +159,9 @@ python3 scripts/scrub-secrets.py
 ./start_prism.sh
 ```
 
-默认会启动三层服务：Next 前端在 `http://127.0.0.1:8000`，FastAPI 后端 API 在 `http://127.0.0.1:8001`，以及 Prism 内置调度器，用来执行固定时间的刷新任务。
-调度器只会在确认的 A 股交易日运行任务，并且会跳过自己启动所在分钟内正好到点的任务，避免在 cron 时间点重启 Prism 时意外补跑。
-如果只想启动页面和 API，不启动定时刷新，可以设置 `PRISM_ENABLE_SCHEDULER=0`。
+默认会启动三层服务：Next 前端在 `http://127.0.0.1:8000`，FastAPI 后端 API 在 `http://127.0.0.1:8001`，以及 Prism 内置调度器。
+调度器只会在确认的 A 股交易日运行固定任务，并且会跳过自己启动所在分钟内正好到点的任务，避免在 cron 时间点重启 Prism 时意外补跑。它还会持续守护轻量市场数据新鲜度：在自动刷新窗口内检查 `quotes.batch` 和 `capital_flow.batch` 是否超过业务新鲜度预算，过期就启动 `quotes_light` / `capital_flow_light` 补刷，所以早上晚一点打开系统也不再依赖某一个固定 cron 时刻。早盘关键流程到点后若仍未成功，首页自动刷新检查仍会作为安全兜底补拉起缺失任务。
+如果只想启动页面和 API，不启动定时刷新，可以设置 `PRISM_ENABLE_SCHEDULER=0`；只有明确想关闭轻量数据保鲜时，才设置 `PRISM_SCHEDULER_FRESHNESS_GUARDIAN=0`。
 
 几个常用页面：
 
@@ -202,7 +207,7 @@ python apps\scripts\prism_scheduler.py
 ```
 
 这个调度器读取 Prism 自己的任务策略，不依赖 macOS `launchd`、Windows Task Scheduler 或 OpenClaw。
-它和 Unix 启动脚本使用同一套非交易日与启动分钟保护。
+它和 Unix 启动脚本使用同一套非交易日、启动分钟、冷却时间和轻量数据保鲜保护。
 
 如果 PowerShell 阻止虚拟环境激活，可以只对当前窗口放开脚本执行权限：
 

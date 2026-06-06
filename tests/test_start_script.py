@@ -17,8 +17,16 @@ def test_start_script_targets_next_web_shell_and_local_backend() -> None:
     assert "node_modules/.bin/next" in content
     assert "scripts/dev.mjs" in content
     assert "PRISM_BACKEND_ORIGIN" in content
+    assert "PRISM_WEB_ORIGIN" in content
     assert "prism_scheduler.py" in content
+    assert "prism_scheduled_job.py" in content
     assert "PRISM_ENABLE_SCHEDULER" in content
+    assert "PRISM_STARTUP_FORMAL_BOOTSTRAP" in content
+    assert "PRISM_STARTUP_FORMAL_INDEX_BATCH_LIMIT" in content
+    assert "--task-name formal_data_refresh" in content
+    assert "--allow-non-trading-day" in content
+    assert "--task-arg=--index-batch-limit" in content
+    assert "formal_data_bootstrap.log" in content
     assert "127.0.0.1" in content
     assert "8001" in content
     assert "8000" in content
@@ -33,7 +41,9 @@ def test_next_rewrites_target_internal_backend_by_default() -> None:
 
     content = config_path.read_text(encoding="utf-8")
 
-    assert 'process.env.PRISM_BACKEND_ORIGIN ?? "http://127.0.0.1:8001"' in content
+    assert "process.env.PRISM_BACKEND_ORIGIN" in content
+    assert "process.env.NEXT_PUBLIC_PRISM_BACKEND_ORIGIN" in content
+    assert '"http://127.0.0.1:8001"' in content
     assert '"http://localhost:8000' not in content
 
 

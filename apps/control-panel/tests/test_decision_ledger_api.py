@@ -73,6 +73,13 @@ class _LedgerApiTestBase(unittest.TestCase):
                 "PRISM_REPO_ROOT": str(self._tmp.name),
                 "PRISM_DB_PATH": str(self.db_path),
                 "PRISM_SCHEDULER_STATE_PATH": str(self.scheduler_state_path),
+                "PRISM_AI_PROVIDER": "compatible",
+                "PRISM_AI_API_KEY": "",
+                "PRISM_AI_BASE_URL": "",
+                "PRISM_AI_MODEL": "",
+                "OPENAI_API_KEY": "",
+                "OPENAI_BASE_URL": "",
+                "OPENAI_MODEL": "",
             },
         )
         self._env.start()
@@ -503,6 +510,47 @@ class ReviewCaseApiTests(_LedgerApiTestBase):
         self.assertEqual(case["attribution_confidence"], draft["confidence"])
         self.assertEqual(case["evidence_refs"], draft["evidence"])
         self.assertEqual(case["human_check_required"], draft["human_check_required"])
+
+    def test_auto_review_generates_draft_and_saves_review_case(self) -> None:
+        decision = self._capture(
+            action="observe",
+            action_label="新增观察",
+            action_key="midday:603986:auto",
+            lane="midday_confirmation",
+            code="sh603986",
+            name="兆易创新",
+        )
+        self._attach_outcome(
+            decision["decision_id"],
+            window="T+1",
+            label="missed_opportunity",
+            return_pct=6.2,
+            tone="warning",
+        )
+
+        before = self.client.get("/api/decision-ledger/calibration?window=7d&as_of=2026-05-22")
+        self.assertEqual(before.status_code, 200)
+        self.assertEqual(before.json()["needs_review_count"], 1)
+
+        resp = self.client.post(
+            f"/api/decision-ledger/review-case/{decision['decision_id']}/auto-review"
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        draft = body["draft"]
+        case = body["review_case"]
+
+        self.assertEqual(draft["primary_cause"], "too_strict")
+        self.assertEqual(case["primary_cause"], draft["primary_cause"])
+        self.assertEqual(case["ai_draft"]["draft_id"], draft["draft_id"])
+        self.assertEqual(case["human_final"]["review_note"], draft["review_note"])
+        self.assertEqual(case["human_overrides"], {})
+        self.assertEqual(body["workbench"]["review_case"]["review_case_id"], case["review_case_id"])
+
+        after = self.client.get("/api/decision-ledger/calibration?window=7d&as_of=2026-05-22")
+        self.assertEqual(after.status_code, 200)
+        self.assertEqual(after.json()["needs_review_count"], 0)
+        self.assertEqual(after.json()["reviewed_case_count"], 1)
 
     def test_save_review_case_persists_and_removes_item_from_ready_queue(self) -> None:
         decision = self._capture(

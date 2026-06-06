@@ -7,12 +7,14 @@ import type { BasicCard } from "@/lib/types";
 import { cn, toneColor } from "@/lib/utils";
 
 export function Panel({
+  id,
   title,
   eyebrow,
   children,
   action,
   className,
 }: {
+  id?: string;
   title: string;
   eyebrow?: string;
   children: ReactNode;
@@ -20,7 +22,7 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={className}>
+    <section id={id} className={className}>
       <div className="mb-3 flex min-w-0 items-end justify-between gap-3">
         <div className="min-w-0">
           {eyebrow ? <div className="text-[11px] font-medium uppercase text-[var(--text-tertiary)]">{eyebrow}</div> : null}

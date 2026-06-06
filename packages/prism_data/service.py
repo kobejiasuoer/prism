@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import os
 
+from .env import load_project_env
 from .gateway import DataGateway
-from .providers import AkshareProvider, EastmoneyProvider, SinaProvider, THSProvider
+from .providers import AkshareProvider, EastmoneyProvider, SinaProvider, THSProvider, TushareProvider
 from .repositories import DatasetRepository
 from .utils import default_dataset_repository_root
 
+
+load_project_env()
 
 _GATEWAY: DataGateway | None = None
 
@@ -28,6 +31,7 @@ def get_data_gateway() -> DataGateway:
         "eastmoney": EastmoneyProvider(),
         "akshare": AkshareProvider(),
         "ths": THSProvider(),
+        "tushare": TushareProvider(),
     }
     _GATEWAY = DataGateway(providers=providers, repository=repository)
     return _GATEWAY
