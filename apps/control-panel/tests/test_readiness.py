@@ -768,22 +768,19 @@ class TodayViewReadinessTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.client = TestClient(app)
 
-    def test_api_today_embeds_readiness(self) -> None:
-        response = self.client.get("/api/today")
+    def test_api_readiness_live_exposes_full_readiness(self) -> None:
+        response = self.client.get("/api/readiness/live")
         self.assertEqual(response.status_code, 200)
         payload = response.json()
 
-        self.assertIn("readiness", payload)
-        readiness = payload["readiness"]
-        self.assertIn("expected_trade_date", readiness)
-        self.assertIn("readiness_mode", readiness)
-        self.assertIn("source_freshness", readiness)
-        self.assertIn("quality_freshness", readiness)
-        self.assertIn("recommended_tasks", readiness)
-        # source_cards must carry freshness metadata, not just label/value
-        for card in payload["source_cards"]:
-            self.assertIn("stale", card)
-            self.assertIn("age_label", card)
+        self.assertIn("expected_trade_date", payload)
+        self.assertIn("readiness_mode", payload)
+        self.assertIn("source_freshness", payload)
+        self.assertIn("quality_freshness", payload)
+        self.assertIn("recommended_tasks", payload)
+        for row in payload["source_freshness"]:
+            self.assertIn("stale", row)
+            self.assertIn("age_label", row)
 
     def test_api_readiness_live_endpoint(self) -> None:
         response = self.client.get("/api/readiness/live")
@@ -800,11 +797,11 @@ class TodayViewReadinessTest(unittest.TestCase):
         ):
             self.assertIn(key, payload)
 
-    def test_api_today_with_old_data_is_blocked(self) -> None:
+    def test_today_summary_with_old_data_is_blocked(self) -> None:
         """The current repository fixtures use 2026-04-27 data while today is
         2026-05-06.  The readiness payload MUST report blocked, never live."""
 
-        response = self.client.get("/api/today")
+        response = self.client.get("/api/today/summary")
         payload = response.json()
         readiness = payload["readiness"]
         if readiness["data_trade_date"] != readiness["expected_trade_date"]:
@@ -1099,7 +1096,7 @@ class ConfirmationRecommendedTaskTest(unittest.TestCase):
 
 
 class TodayRefreshConsistencyTest(unittest.TestCase):
-    """Regression: /api/today, /api/readiness/live and /api/refresh/status?page=today
+    """Regression: /api/today/summary, /api/readiness/live and /api/refresh/status?page=today
     must agree on readiness_mode, stale_count, recommended task and per-source
     stale flags.  The previous implementation ran ``build_page_freshness`` in
     parallel with readiness for the today page, producing two truths.
@@ -1110,7 +1107,7 @@ class TodayRefreshConsistencyTest(unittest.TestCase):
         cls.client = TestClient(app)
 
     def test_three_endpoints_agree_on_readiness_mode_and_stale_count(self) -> None:
-        today_payload = self.client.get("/api/today").json()
+        today_payload = self.client.get("/api/today/summary").json()
         live_payload = self.client.get("/api/readiness/live").json()
         refresh_payload = self.client.get("/api/refresh/status?page=today").json()
 
@@ -1136,12 +1133,12 @@ class TodayRefreshConsistencyTest(unittest.TestCase):
     def test_refresh_freshness_rows_match_readiness_source_freshness(self) -> None:
         """Per-source stale flag must come from readiness, not be re-derived."""
 
-        today_payload = self.client.get("/api/today").json()
+        live_payload = self.client.get("/api/readiness/live").json()
         refresh_payload = self.client.get("/api/refresh/status?page=today").json()
 
         readiness_sources = {
             item["key"]: bool(item.get("stale"))
-            for item in today_payload["readiness"]["source_freshness"]
+            for item in live_payload["source_freshness"]
         }
         for row in refresh_payload["freshness"]:
             key = row.get("key")
@@ -1154,7 +1151,7 @@ class TodayRefreshConsistencyTest(unittest.TestCase):
 
     def test_refresh_status_includes_operator_recovery_steps(self) -> None:
         refresh_payload = self.client.get("/api/refresh/status?page=today").json()
-        today_ready = self.client.get("/api/today").json()["readiness"]
+        today_ready = self.client.get("/api/today/summary").json()["readiness"]
         steps = refresh_payload.get("recovery_steps") or []
 
         self.assertIsInstance(steps, list)

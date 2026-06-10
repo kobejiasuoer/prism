@@ -1,4 +1,3 @@
-import { Badge } from "./badge";
 import type { MetricCardData } from "@/lib/types";
 import { cn, toneColor } from "@/lib/utils";
 
@@ -34,15 +33,6 @@ export function MetricSkeleton() {
       <div className="h-3 w-20 rounded bg-[var(--bg-elevated)]" />
       <div className="mt-4 h-7 w-14 rounded bg-[var(--bg-elevated)]" />
       <div className="mt-4 h-3 w-28 rounded bg-[var(--bg-elevated)]" />
-    </div>
-  );
-}
-
-export function MiniMetric({ label, value, tone }: { label: string; value: string; tone?: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
-      <span className="truncate text-[12px] text-[var(--text-tertiary)]">{label}</span>
-      <Badge tone={tone}>{value}</Badge>
     </div>
   );
 }

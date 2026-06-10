@@ -234,39 +234,6 @@ function overviewPayload() {
   };
 }
 
-function todayPayload() {
-  return {
-    generated_at: `${tradeDate} 09:35:00`,
-    display_date: tradeDate,
-    trade_date: tradeDate,
-    expected_trade_date: tradeDate,
-    data_trade_date: tradeDate,
-    brief_is_live: true,
-    readiness: readinessPayload(),
-    hero: {},
-    command_hero: {},
-    radar_cards: [],
-    action_queue: {
-      title: "今日动作",
-      items: [],
-      counts: { total: 0, pending: 0, done: 0, watch: 0, skip: 0, no_fill: 0, stale: 0 },
-    },
-    risk_rows: [],
-    source_cards: [],
-    summary_cards: [],
-    quality_cards: [],
-    links: {},
-    counts: {
-      watchlist_priority: 1,
-      watchlist_total: 1,
-      candidate_total: 0,
-      confirmed: 0,
-      downgraded: 0,
-      fresh_candidates: 0,
-    },
-  };
-}
-
 function watchlistPayload() {
   return {
     generated_at: `${tradeDate} 09:35:00`,
@@ -394,10 +361,6 @@ async function installApiMocks() {
 
     if (pathname === "/api/portfolio/account") {
       await route.fulfill(jsonResponse(portfolioPayload()));
-      return;
-    }
-    if (pathname === "/api/today") {
-      await route.fulfill(jsonResponse(todayPayload()));
       return;
     }
     if (pathname === "/api/overview") {

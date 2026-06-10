@@ -22,11 +22,13 @@ export function JudgementChain({ items }: { items: CommandBriefJudgement[] }) {
               <Badge tone={item.tone}>{item.verdict}</Badge>
             </div>
             <ul className="mt-2 space-y-0.5 text-[11px] text-[var(--text-tertiary)]">
-              {item.evidence.slice(0, 3).map((line, idx) => (
+              {(item.evidence || []).slice(0, 3).map((line, idx) => (
                 <li key={`${item.dim}-evi-${idx}`}>· {line}</li>
               ))}
             </ul>
-            <p className="mt-2 text-[12px] leading-5 text-[var(--text-secondary)]">{item.impact}</p>
+            {item.impact ? (
+              <p className="mt-2 text-[12px] leading-5 text-[var(--text-secondary)]">{item.impact}</p>
+            ) : null}
           </div>
         ))}
       </div>

@@ -54,6 +54,37 @@ def _sample_decision_inputs(**overrides):
     return base
 
 
+def _sample_factor_snapshot(
+    *,
+    score: float = 70.0,
+    tags: list[str] | None = None,
+    risks: list[str] | None = None,
+) -> dict:
+    return {
+        "tushare_score": score,
+        "factor_tags": tags or [],
+        "risk_flags": risks or [],
+        "factor_snapshot": {
+            "fundamentals": {"roe": 18.0, "debt_to_assets": 30.0},
+            "valuation": {"pe_ttm": 20.0, "pb": 2.0},
+            "capital_flow": {"main_net_yi": 1.2, "five_day_main_net_yi": 3.4},
+            "theme_exposure": {"concepts": ["AI"], "industries": ["电子"]},
+            "event_risks": {
+                "pledge_ratio": 5.0,
+                "share_float_total_mv": 1.0,
+                "block_trade_average_discount_pct": 1.0,
+            },
+            "margin_activity": {"balance_change": 0.5, "data_available": True},
+            "technical_chips": {
+                "data_available": True,
+                "winner_rate": 55.0,
+                "pressure_ratio": 0.98,
+            },
+        },
+        "trade_date_used": "2026-05-15",
+    }
+
+
 class _LedgerApiTestBase(unittest.TestCase):
     """Shared setup: temp ledger root + reloaded modules + TestClient."""
 
@@ -233,16 +264,120 @@ class CalibrationApiTests(_LedgerApiTestBase):
         self.assertEqual(body["overall"]["data_issue"], 1)
         self.assertEqual(body["needs_review_count"], 2)
         self.assertEqual(
-            {item["review_reason_key"] for item in body["needs_review"]},
+            {item["review_reason_key"] for item in body["review_queue"]},
             {"invalidated", "data_issue"},
         )
-        lane_keys = {item["key"] for item in body["by_lane"]}
-        self.assertEqual(lane_keys, {"watchlist", "midday_confirmation"})
-        self.assertTrue(body["suggestion_cards"])
         self.assertIn("review_workbench", body)
         self.assertEqual(body["review_workbench"]["today_queue_count"], 2)
         self.assertEqual(body["review_workbench"]["ready_review_count"], 1)
         self.assertEqual(body["review_workbench"]["blocked_data_count"], 1)
+        self.assertTrue(body["learning_patterns_deferred"])
+        self.assertEqual(
+            body["links_lazy"]["learning_patterns"],
+            "/api/decision-ledger/calibration-detail",
+        )
+        self.assertNotIn("by_lane", body)
+        self.assertNotIn("by_action", body)
+        self.assertNotIn("suggestion_cards", body)
+        self.assertNotIn("review_case_patterns", body)
+
+        detail = self.client.get("/api/decision-ledger/calibration-detail?window=7d&as_of=2026-05-22")
+        self.assertEqual(detail.status_code, 200)
+        detail_body = detail.json()
+        lane_keys = {item["key"] for item in detail_body["by_lane"]}
+        self.assertEqual(lane_keys, {"watchlist", "midday_confirmation"})
+        self.assertTrue(detail_body["suggestion_cards"])
+
+    def test_calibration_defaults_to_compact_payload(self) -> None:
+        decision = self._capture(
+            action="observe",
+            action_label="新增观察",
+            action_key="midday:603986:compact",
+            lane="midday_confirmation",
+            code="sh603986",
+            name="兆易创新",
+        )
+        self._attach_outcome(
+            decision["decision_id"],
+            window="T+1",
+            label="missed_opportunity",
+            tone="warning",
+        )
+        save = self.client.post(
+            f"/api/decision-ledger/review-case/{decision['decision_id']}",
+            json={
+                "primary_cause": "too_strict",
+                "secondary_causes": ["capital_flow_filter_strict"],
+                "review_note": "同链路观察样本，先记录为模式。",
+                "conclusion_action": "wait_more_samples",
+            },
+        )
+        self.assertEqual(save.status_code, 200)
+
+        resp = self.client.get("/api/decision-ledger/calibration?window=7d&as_of=2026-05-22")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+
+        self.assertNotIn("review_records", body)
+        self.assertIn("review_queue", body)
+        self.assertIn("pending_reviews", body)
+        self.assertNotIn("needs_review", body)
+        self.assertIn("review_workbench", body)
+        self.assertNotIn("ready_reviews", body)
+        self.assertNotIn("shadow_calibration", body)
+        self.assertNotIn("review_case_patterns", body)
+        self.assertNotIn("by_lane", body)
+        self.assertNotIn("suggestion_cards", body)
+        self.assertTrue(body["learning_patterns_deferred"])
+        self.assertEqual(body["reviewed_case_count"], 1)
+
+        detail = self.client.get("/api/decision-ledger/calibration-detail?window=7d&as_of=2026-05-22")
+        self.assertEqual(detail.status_code, 200)
+        detail_body = detail.json()
+        self.assertEqual(detail_body["review_case_patterns"][0]["sample_count"], 1)
+        self.assertNotIn("cases", detail_body["review_case_patterns"][0])
+
+        legacy_full = self.client.get("/api/decision-ledger/calibration?window=7d&as_of=2026-05-22&compact=0")
+        self.assertEqual(legacy_full.status_code, 200)
+        legacy_body = legacy_full.json()
+        self.assertIn("review_queue", legacy_body)
+        self.assertIn("pending_reviews", legacy_body)
+        self.assertTrue(legacy_body["learning_patterns_deferred"])
+        self.assertNotIn("review_records", legacy_body)
+        self.assertNotIn("ready_reviews", legacy_body)
+        self.assertNotIn("needs_review", legacy_body)
+        self.assertNotIn("shadow_calibration", legacy_body)
+        self.assertNotIn("review_case_patterns", legacy_body)
+
+    def test_calibration_compact_skips_shadow_sample_scan(self) -> None:
+        self._capture(action="observe", action_key="watchlist:600690")
+
+        with mock.patch.object(
+            self.app_module.decision_ledger,
+            "build_shadow_calibration_summary",
+            side_effect=AssertionError("shadow scan should be lazy"),
+        ):
+            resp = self.client.get("/api/decision-ledger/calibration?window=7d&as_of=2026-05-16")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn("shadow_calibration", resp.json())
+
+    def test_shadow_calibration_endpoint_is_loaded_on_demand(self) -> None:
+        with mock.patch.object(
+            self.app_module.decision_ledger,
+            "build_shadow_calibration_summary",
+            return_value={
+                "status": "missing",
+                "title": "历史影子样本未生成",
+                "cards": [],
+                "bucket_rows": [],
+            },
+        ) as build_shadow:
+            resp = self.client.get("/api/decision-ledger/shadow-calibration")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["status"], "missing")
+        build_shadow.assert_called_once()
 
     def test_calibration_tracks_non_overdue_pending_when_outcomes_missing(self) -> None:
         self._capture(action="observe", action_key="watchlist:600690")
@@ -252,14 +387,16 @@ class CalibrationApiTests(_LedgerApiTestBase):
         body = resp.json()
         self.assertEqual(body["overall"]["total"], 1)
         self.assertEqual(body["overall"]["pending"], 1)
-        self.assertEqual(body["needs_review"], [])
-        self.assertEqual(body["suggestion_cards"][0]["kind"], "pending")
-        self.assertEqual(body["suggestion_cards"][0]["calibration_action"], "wait_for_sample")
-        self.assertEqual(body["suggestion_cards"][0]["action_label"], "等待样本")
+        self.assertEqual(body["review_queue"], [])
         self.assertEqual(body["review_workbench"]["pending_count"], 1)
         self.assertEqual(body["pending_reviews"][0]["review_status"], "pending_outcome")
         self.assertFalse(body["pending_reviews"][0]["is_overdue"])
-        self.assertIn("outcome_events", body["pending_reviews"][0]["missing_fields"])
+        detail = self.client.get("/api/decision-ledger/calibration-detail?window=7d&as_of=2026-05-16")
+        self.assertEqual(detail.status_code, 200)
+        detail_body = detail.json()
+        self.assertEqual(detail_body["suggestion_cards"][0]["kind"], "pending")
+        self.assertEqual(detail_body["suggestion_cards"][0]["calibration_action"], "wait_for_sample")
+        self.assertEqual(detail_body["suggestion_cards"][0]["action_label"], "等待样本")
         self.assertTrue(body["pending_reviews"][0]["next_action_label"])
 
     def test_calibration_counts_superseded_decisions_as_review_needed(self) -> None:
@@ -280,8 +417,10 @@ class CalibrationApiTests(_LedgerApiTestBase):
         self.assertEqual(body["overall"]["review_needed"], 1)
         self.assertEqual(body["overall"]["review_rate"], 50.0)
         self.assertEqual(body["needs_review_count"], 1)
-        self.assertEqual(body["needs_review"][0]["review_reason_key"], "superseded")
-        self.assertEqual(body["by_lane"][0]["review_needed"], 1)
+        self.assertEqual(body["review_queue"][0]["review_reason_key"], "superseded")
+        detail = self.client.get("/api/decision-ledger/calibration-detail?window=7d&as_of=2026-05-22")
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json()["by_lane"][0]["review_needed"], 1)
 
     def test_calibration_limit_keeps_total_and_prioritizes_failure_review(self) -> None:
         data_issue = self._capture(action="observe", action_key="watchlist:600690:data")
@@ -294,15 +433,15 @@ class CalibrationApiTests(_LedgerApiTestBase):
         body = resp.json()
 
         self.assertEqual(body["needs_review_count"], 2)
-        self.assertEqual(len(body["needs_review"]), 1)
-        self.assertEqual(body["needs_review"][0]["review_reason_key"], "invalidated")
+        self.assertEqual(len(body["review_queue"]), 1)
+        self.assertEqual(body["review_queue"][0]["review_reason_key"], "invalidated")
 
     def test_calibration_surfaces_corrupt_file_errors(self) -> None:
         decisions_dir = self.ledger_root / "decisions"
         decisions_dir.mkdir(parents=True, exist_ok=True)
         (decisions_dir / "2026-05-20.json").write_text("{not valid", encoding="utf-8")
 
-        resp = self.client.get("/api/decision-ledger/calibration?window=7d&as_of=2026-05-22")
+        resp = self.client.get("/api/decision-ledger/calibration-detail?window=7d&as_of=2026-05-22")
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
         self.assertTrue(body["errors"])
@@ -317,11 +456,10 @@ class CalibrationApiTests(_LedgerApiTestBase):
         pending = body["pending_reviews"][0]
 
         self.assertEqual(pending["review_status"], "pending_execution")
-        self.assertIn("execution_events", pending["missing_fields"])
-        self.assertIn("outcome_events", pending["missing_fields"])
         self.assertEqual(pending["calibration_action"], "fix_execution")
-        self.assertEqual(pending["quality_axes"]["execution_quality"]["label"], "missing")
-        self.assertTrue(pending["maturity_due_at"])
+        self.assertEqual(pending["execution_status"], "missing")
+        self.assertEqual(pending["outcome_status"], "pending")
+        self.assertEqual(pending["next_action_label"], "修复执行")
         self.assertTrue(pending["next_action_reason"])
 
     def test_overdue_pending_increases_priority_and_queue_count(self) -> None:
@@ -334,18 +472,21 @@ class CalibrationApiTests(_LedgerApiTestBase):
 
         self.assertTrue(pending["is_overdue"])
         self.assertGreaterEqual(pending["priority_score"], 35)
-        self.assertIn("pending 已过成熟日", pending["priority_reasons"])
+        self.assertEqual(pending["priority_label"], "medium")
         self.assertEqual(pending["calibration_action"], "run_outcome_evaluator")
         self.assertEqual(pending["next_action_label"], "补跑结果评估")
         self.assertIn("outcome evaluator", pending["next_action_reason"])
         self.assertEqual(body["review_workbench"]["overdue_count"], 1)
         self.assertEqual(body["review_workbench"]["today_queue_count"], 1)
         self.assertEqual(body["review_workbench"]["system_learning_state"], "outcome_overdue")
-        self.assertEqual(body["suggestion_cards"][0]["kind"], "outcome_overdue")
-        self.assertEqual(body["suggestion_cards"][0]["calibration_action"], "run_outcome_evaluator")
-        self.assertEqual(body["suggestion_cards"][0]["action_label"], "补跑结果评估")
-        self.assertIn("学习闭环", body["suggestion_cards"][0]["action_reason"])
-        self.assertNotIn("等待样本", {card["action_label"] for card in body["suggestion_cards"]})
+        detail = self.client.get("/api/decision-ledger/calibration-detail?window=7d&as_of=2026-05-22")
+        self.assertEqual(detail.status_code, 200)
+        detail_body = detail.json()
+        self.assertEqual(detail_body["suggestion_cards"][0]["kind"], "outcome_overdue")
+        self.assertEqual(detail_body["suggestion_cards"][0]["calibration_action"], "run_outcome_evaluator")
+        self.assertEqual(detail_body["suggestion_cards"][0]["action_label"], "补跑结果评估")
+        self.assertIn("学习闭环", detail_body["suggestion_cards"][0]["action_reason"])
+        self.assertNotIn("等待样本", {card["action_label"] for card in detail_body["suggestion_cards"]})
 
     def test_execution_gap_enters_ready_review_queue(self) -> None:
         decision = self._capture(action="trial_buy", action_key="watchlist:600690")
@@ -358,18 +499,18 @@ class CalibrationApiTests(_LedgerApiTestBase):
         resp = self.client.get("/api/decision-ledger/calibration?window=7d&as_of=2026-05-22")
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
-        item = body["needs_review"][0]
+        item = body["review_queue"][0]
 
         self.assertEqual(item["review_reason_key"], "execution_gap")
         self.assertEqual(item["review_status"], "ready_review")
         self.assertEqual(item["calibration_action"], "fix_execution")
-        self.assertEqual(body["ready_reviews"][0]["decision_id"], decision["decision_id"])
+        self.assertEqual(item["decision_id"], decision["decision_id"])
 
     def test_suggestion_cards_are_action_oriented(self) -> None:
         invalid = self._capture(action="trial_buy", action_key="watchlist:600690")
         self._attach_outcome(invalid["decision_id"], window="T+1", label="invalidated")
 
-        resp = self.client.get("/api/decision-ledger/calibration?window=7d&as_of=2026-05-22")
+        resp = self.client.get("/api/decision-ledger/calibration-detail?window=7d&as_of=2026-05-22")
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
 
@@ -391,6 +532,65 @@ class CalibrationApiTests(_LedgerApiTestBase):
         )
         self.assertIn("evidence_strength", card)
         self.assertIn("insufficient_sample", card)
+
+
+# ===========================================================================
+# /api/decision-ledger/learning-loop
+# ===========================================================================
+
+
+class LearningLoopApiTests(_LedgerApiTestBase):
+
+    def test_learning_loop_defaults_to_compact_payload(self) -> None:
+        for index in range(3):
+            decision = self._capture(
+                action="trial_buy",
+                action_key=f"watchlist:60069{index}",
+                code=f"sh60069{index}",
+                factor_snapshot=_sample_factor_snapshot(
+                    score=70.0,
+                    tags=["高ROE"],
+                    risks=["大宗折价"] if index == 0 else [],
+                ),
+            )
+            self._attach_outcome(
+                decision["decision_id"],
+                window="T+1",
+                label="validated",
+                return_pct=2.0 + index,
+                tone="positive",
+            )
+
+        resp = self.client.get("/api/decision-ledger/learning-loop?as_of=2026-05-22")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+
+        self.assertNotIn("buckets", body)
+        self.assertIn("suggestions", body)
+        self.assertNotIn("learning_summary", body)
+        factor_loop = body["factor_learning_loop"]
+        self.assertIn("learning_summary", factor_loop)
+        self.assertNotIn("score_bucket_performance", factor_loop)
+        self.assertNotIn("buckets", factor_loop)
+        self.assertNotIn("factor_tag_stats", factor_loop)
+        self.assertNotIn("risk_flag_stats", factor_loop)
+        summary = factor_loop["learning_summary"]
+        self.assertLessEqual(len(summary.get("score_bucket_performance") or []), 4)
+        for row in summary.get("score_bucket_performance") or []:
+            self.assertNotIn("decision_ids", row)
+            for stats in (row.get("window_stats") or {}).values():
+                self.assertNotIn("outcomes", stats)
+
+        legacy_full = self.client.get("/api/decision-ledger/learning-loop?as_of=2026-05-22&compact=0")
+        self.assertEqual(legacy_full.status_code, 200)
+        legacy_body = legacy_full.json()
+        self.assertNotIn("buckets", legacy_body)
+        legacy_factor_loop = legacy_body["factor_learning_loop"]
+        self.assertNotIn("buckets", legacy_factor_loop)
+        self.assertNotIn("factor_tag_stats", legacy_factor_loop)
+        self.assertNotIn("risk_flag_stats", legacy_factor_loop)
+        legacy_summary = legacy_factor_loop["learning_summary"]
+        self.assertLessEqual(len(legacy_summary.get("score_bucket_performance") or []), 4)
 
 
 # ===========================================================================
@@ -594,15 +794,18 @@ class ReviewCaseApiTests(_LedgerApiTestBase):
         self.assertFalse(case["rule_action_allowed"])
         self.assertIn("不生成可执行规则修改", case["rule_hypothesis"])
 
-        after = self.client.get("/api/decision-ledger/calibration?window=7d&as_of=2026-05-22")
+        after = self.client.get("/api/decision-ledger/calibration?window=7d&as_of=2026-05-22&compact=0")
         self.assertEqual(after.status_code, 200)
         payload = after.json()
         self.assertEqual(payload["needs_review_count"], 0)
         self.assertEqual(payload["review_workbench"]["ready_review_count"], 0)
         self.assertEqual(payload["reviewed_case_count"], 1)
-        self.assertEqual(payload["review_records"][0]["review_status"], "reviewed")
-        self.assertEqual(payload["review_records"][0]["review_case"]["primary_cause"], "too_strict")
-        self.assertEqual(payload["review_case_patterns"][0]["sample_count"], 1)
+        self.assertNotIn("review_records", payload)
+        self.assertNotIn("review_case_patterns", payload)
+
+        detail = self.client.get("/api/decision-ledger/calibration-detail?window=7d&as_of=2026-05-22")
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json()["review_case_patterns"][0]["sample_count"], 1)
 
         workbench = self.client.get(f"/api/decision-ledger/review-case/{decision['decision_id']}")
         self.assertEqual(workbench.status_code, 200)
@@ -754,6 +957,45 @@ class RecentApiTests(_LedgerApiTestBase):
         body = resp.json()
         self.assertEqual(len(body["items"]), 2)
         self.assertEqual(body["count"], 2)
+
+    def test_recent_can_filter_codes_and_return_latest_per_code(self) -> None:
+        self._capture(
+            trade_date="2026-05-10",
+            action_key="watchlist:600690",
+            code="sh600690",
+            main_conclusion="旧判断",
+        )
+        self._capture(
+            trade_date="2026-05-16",
+            action_key="watchlist:600690",
+            code="sh600690",
+            main_conclusion="新判断",
+        )
+        self._capture(
+            trade_date="2026-05-14",
+            action_key="watchlist:000001",
+            code="sz000001",
+        )
+        self._capture(
+            trade_date="2026-05-17",
+            action_key="watchlist:603986",
+            code="sh603986",
+        )
+
+        resp = self.client.get(
+            "/api/decision-ledger/recent?codes=600690,000001&latest_per_code=1&limit=20",
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["codes"], ["sh600690", "sz000001"])
+        self.assertTrue(body["latest_per_code"])
+        self.assertEqual(body["count"], 2)
+
+        by_code = {item["code"]: item for item in body["items"]}
+        self.assertEqual(set(by_code), {"sh600690", "sz000001"})
+        self.assertEqual(by_code["sh600690"]["trade_date"], "2026-05-16")
+        self.assertEqual(by_code["sh600690"]["main_conclusion"], "新判断")
+        self.assertNotIn("sh603986", by_code)
 
     def test_recent_with_corrupt_file_degrades_with_errors(self) -> None:
         self._capture()

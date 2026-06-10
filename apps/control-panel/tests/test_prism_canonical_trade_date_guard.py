@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -126,6 +127,91 @@ class PrismCanonicalTradeDateGuardTests(unittest.TestCase):
                     os.environ.pop("PRISM_EXPECTED_TRADE_DATE", None)
                 else:
                     os.environ["PRISM_EXPECTED_TRADE_DATE"] = previous_expected
+
+    def test_decision_brief_resolver_limits_trade_date_scan_to_named_candidates(self) -> None:
+        previous_dir = prism_canonical.COMMAND_BRIEF_DIR
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            brief_dir = root / "command_brief"
+            target = brief_dir / "prism_command_brief_2026-05-12_11-04-46.json"
+            same_day_bad = brief_dir / "prism_command_brief_2026-05-12_11-04-59.json"
+            other_day = brief_dir / "prism_command_brief_2026-05-11_23-59-59.json"
+            write_json(target, {"summary": {"trade_date": "2026-05-12", "generated_at": "2026-05-12 11:04:46"}})
+            write_json(target.with_suffix(".manifest.json"), {"trade_date": "2026-05-12", "asof": "2026-05-12 11:04:46"})
+            write_json(same_day_bad, {"summary": {"trade_date": "2026-05-12", "generated_at": "2026-05-12 11:04:59"}})
+            write_json(same_day_bad.with_suffix(".manifest.json"), {"trade_date": "2026-05-11", "asof": "2026-05-12 11:04:59"})
+            write_json(other_day, {"summary": {"trade_date": "2026-05-12", "generated_at": "2026-05-11 23:59:59"}})
+            write_json(other_day.with_suffix(".manifest.json"), {"trade_date": "2026-05-12", "asof": "2026-05-11 23:59:59"})
+
+            seen_payload_paths: list[str] = []
+            seen_manifest_paths: list[str] = []
+            original_load_json = prism_canonical.load_json
+            original_load_manifest_file = prism_canonical.load_manifest_file
+
+            def tracking_load_json(path: Path | None) -> dict:
+                if path is not None:
+                    seen_payload_paths.append(path.name)
+                return original_load_json(path)
+
+            def tracking_load_manifest_file(path: Path | None) -> dict | None:
+                if path is not None:
+                    seen_manifest_paths.append(Path(path).name)
+                return original_load_manifest_file(path)
+
+            prism_canonical.COMMAND_BRIEF_DIR = brief_dir
+            try:
+                with patch.object(prism_canonical, "load_json", side_effect=tracking_load_json), patch.object(
+                    prism_canonical,
+                    "load_manifest_file",
+                    side_effect=tracking_load_manifest_file,
+                ):
+                    resolved = prism_canonical.resolve_decision_brief_path(trade_date="2026-05-12")
+            finally:
+                prism_canonical.COMMAND_BRIEF_DIR = previous_dir
+
+        self.assertEqual(resolved, target)
+        self.assertEqual(seen_payload_paths, [])
+        self.assertEqual(
+            set(seen_manifest_paths),
+            {
+                target.with_suffix(".manifest.json").name,
+                same_day_bad.with_suffix(".manifest.json").name,
+            },
+        )
+        self.assertNotIn(other_day.with_suffix(".manifest.json").name, seen_manifest_paths)
+
+    def test_screener_history_resolver_filters_by_filename_before_payload_scan(self) -> None:
+        original_dirs = prism_canonical.SCREENER_DATA_DIRS
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            current = root / "packages-data"
+            legacy = root / "stock-screener-data"
+            target = current / "ai_history" / "ai_screening_2026-05-14_10-30-01.json"
+            other_day = current / "ai_history" / "ai_screening_2026-05-13_10-30-01.json"
+            other_day_manifest = current / "ai_history" / "ai_screening_2026-05-13_10-30-01.manifest.json"
+            write_json(target, {"timestamp": "2026-05-14 10:30:01"})
+            write_json(other_day, {"timestamp": "2026-05-13 10:30:01"})
+            write_json(other_day_manifest, {"trade_date": "2026-05-13"})
+
+            seen_payload_paths: list[str] = []
+            original_load_json = prism_canonical.load_json
+
+            def tracking_load_json(path: Path | None) -> dict:
+                if path is not None:
+                    seen_payload_paths.append(path.name)
+                return original_load_json(path)
+
+            prism_canonical.SCREENER_DATA_DIRS = (current, legacy)
+            try:
+                with patch.object(prism_canonical, "load_json", side_effect=tracking_load_json):
+                    resolved = prism_canonical.resolve_screening_batch_path(trade_date="2026-05-14")
+            finally:
+                prism_canonical.SCREENER_DATA_DIRS = original_dirs
+
+        self.assertEqual(resolved, target)
+        self.assertIn(target.name, seen_payload_paths)
+        self.assertNotIn(other_day.name, seen_payload_paths)
+        self.assertNotIn(other_day_manifest.name, seen_payload_paths)
 
 
 if __name__ == "__main__":

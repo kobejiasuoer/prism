@@ -100,6 +100,19 @@ def load_sidecar_manifest(path: Path | None, raw: dict[str, Any] | None = None) 
     return None
 
 
+def _payload_json_candidates(directory: Path, pattern: str) -> list[Path]:
+    return [
+        candidate
+        for candidate in directory.glob(pattern)
+        if candidate.is_file() and candidate.suffix == ".json" and not candidate.name.endswith(".manifest.json")
+    ]
+
+
+def _filename_trade_date(path: Path) -> str | None:
+    match = re.search(r"(\d{4}-\d{2}-\d{2})", path.name)
+    return match.group(1) if match else None
+
+
 def parse_ts(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -456,6 +469,9 @@ def _payload_trade_date(path: Path) -> str | None:
 def _matches_trade_date(path: Path, trade_date: str | None) -> bool:
     if not trade_date:
         return True
+    name_trade_date = _filename_trade_date(path)
+    if name_trade_date and name_trade_date != trade_date:
+        return False
     return _payload_trade_date(path) == trade_date
 
 
@@ -470,7 +486,7 @@ def resolve_screening_batch_path(path: str | None = None, trade_date: str | None
     for data_dir in SCREENER_DATA_DIRS:
         history = [
             candidate
-            for candidate in (data_dir / "ai_history").glob("ai_screening_*.json")
+            for candidate in _payload_json_candidates(data_dir / "ai_history", "ai_screening_*.json")
             if _matches_trade_date(candidate, trade_date)
         ]
         history.sort(key=_path_sort_key, reverse=True)
@@ -490,7 +506,7 @@ def resolve_confirmation_path(path: str | None = None, trade_date: str | None = 
     for data_dir in SCREENER_DATA_DIRS:
         history = [
             candidate
-            for candidate in data_dir.glob("midday_verification_*.json")
+            for candidate in _payload_json_candidates(data_dir, "midday_verification_*.json")
             if _matches_trade_date(candidate, trade_date)
         ]
         history.sort(key=_path_sort_key, reverse=True)
@@ -508,7 +524,19 @@ def _decision_brief_trade_dates(path: Path) -> tuple[str | None, str | None]:
     return str(summary_trade_date) if summary_trade_date else None, str(manifest_trade_date) if manifest_trade_date else None
 
 
+def _decision_brief_manifest_trade_date(path: Path) -> str | None:
+    manifest = load_sidecar_manifest(path)
+    trade_date = (manifest or {}).get("trade_date")
+    return str(trade_date) if trade_date else None
+
+
 def _decision_brief_rank(path: Path, trade_date: str | None = None) -> tuple[int, datetime, float, str]:
+    if trade_date:
+        manifest_trade_date = _decision_brief_manifest_trade_date(path)
+        if manifest_trade_date:
+            priority = 3 if manifest_trade_date == trade_date else 0
+            return (priority, *_path_sort_key(path))
+
     summary_trade_date, manifest_trade_date = _decision_brief_trade_dates(path)
     if trade_date:
         if manifest_trade_date == trade_date:
@@ -530,9 +558,19 @@ def resolve_decision_brief_path(path: str | None = None, trade_date: str | None 
     if path:
         candidate = Path(path).expanduser()
         return candidate if candidate.exists() else None
-    files = list(COMMAND_BRIEF_DIR.glob("prism_command_brief_*.json"))
+    if trade_date and re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(trade_date).strip()):
+        scoped_files = _payload_json_candidates(COMMAND_BRIEF_DIR, f"prism_command_brief_{str(trade_date).strip()}_*.json")
+        if scoped_files:
+            ranked = [(_decision_brief_rank(candidate, trade_date), candidate) for candidate in scoped_files]
+            ranked.sort(key=lambda item: item[0], reverse=True)
+            if ranked[0][0][0] > 0:
+                return ranked[0][1]
+    files = _payload_json_candidates(COMMAND_BRIEF_DIR, "prism_command_brief_*.json")
     if not files:
         return None
+    if trade_date and re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(trade_date).strip()):
+        files.sort(key=_path_sort_key, reverse=True)
+        return files[0]
     files.sort(key=lambda candidate: _decision_brief_rank(candidate, trade_date), reverse=True)
     return files[0]
 

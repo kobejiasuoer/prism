@@ -4,7 +4,7 @@ import sys
 import unittest
 from importlib import import_module
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 INVEST_FLOW_ROOT = Path(__file__).resolve().parents[2]
@@ -197,6 +197,133 @@ class DiscoveryLifecyclePipelineTest(unittest.TestCase):
         self.assertEqual(lifecycle_groups["lifecycle_exited"]["count"], 1)
         self.assertEqual(lifecycle_groups["lifecycle_upgraded"]["cards"][0]["code"], "600001")
         self.assertEqual(lifecycle_groups["lifecycle_exited"]["cards"][0]["code"], "600002")
+        self.assertNotIn("secondary_groups", payload)
+        self.assertNotIn("secondary_total", payload)
+
+    def test_opportunities_lifecycle_sidebar_payload_is_capped_to_visible_cards(self) -> None:
+        dashboard_data = self.dashboard_data()
+        lifecycle_payload = {
+            "current_timestamp": "2026-05-31 12:30:00",
+            "summary": {
+                "current_pool_size": 8,
+                "previous_pool_size": 8,
+            },
+            "groups": {
+                "continued": [
+                    {"code": f"60000{index}", "name": f"延续{index}", "theme": "机器人"}
+                    for index in range(5)
+                ],
+                "upgraded": [{"code": "600101", "name": "升级", "theme": "算力"}],
+                "downgraded": [{"code": "600102", "name": "降级", "theme": "算力"}],
+                "entered": [{"code": "600103", "name": "新增", "theme": "算力"}],
+                "exited": [{"code": "600104", "name": "退出", "theme": "算力"}],
+                "handed_off": [{"code": "600105", "name": "交接", "theme": "算力"}],
+            },
+            "activity_count": 10,
+            "midday_matches_current_ai": True,
+        }
+        lifecycle_context = {
+            "latest_lifecycle": lifecycle_payload,
+            "active_lifecycle": lifecycle_payload,
+            "display_lifecycle": lifecycle_payload,
+            "lifecycle_note": "test lifecycle note",
+        }
+
+        with patch.object(dashboard_data, "expected_trade_date", return_value="2026-05-31"), patch.object(
+            dashboard_data,
+            "safe_canonical_load",
+            return_value=None,
+        ), patch.object(
+            dashboard_data,
+            "load_screening_batch",
+            return_value={"candidates": [], "market_regime": {"execution_gate": {}}, "screening_summary": {}},
+        ), patch.object(
+            dashboard_data,
+            "resolve_lifecycle_context",
+            return_value=lifecycle_context,
+        ), patch.object(
+            dashboard_data,
+            "build_review_learning_memory_index",
+            return_value={"cases": [], "patterns": []},
+        ), patch.object(
+            dashboard_data,
+            "compute_readiness",
+            return_value={
+                "expected_trade_date": "2026-05-31",
+                "data_trade_date": "2026-05-31",
+                "brief_is_live": False,
+                "trust_level": {"level": "trusted"},
+            },
+        ), patch.object(
+            dashboard_data,
+            "load_account_book",
+            return_value={},
+        ), patch.object(
+            dashboard_data,
+            "load_today_action_decision_store",
+            return_value={},
+        ), patch.object(
+            dashboard_data,
+            "build_dataset_freshness_rows",
+            return_value=[],
+        ), patch.object(
+            dashboard_data,
+            "build_formal_freshness_rows",
+            return_value=[],
+        ):
+            payload = dashboard_data.build_opportunities_view()
+
+        lifecycle_groups = payload.get("lifecycle_groups") or []
+        self.assertEqual(len(lifecycle_groups), 4)
+        self.assertEqual(lifecycle_groups[0]["key"], "lifecycle_continued")
+        self.assertEqual(lifecycle_groups[0]["count"], 5)
+        self.assertEqual(len(lifecycle_groups[0]["cards"]), 3)
+
+    def test_opportunities_view_skips_heavy_freshness_diagnostics(self) -> None:
+        dashboard_data = self.dashboard_data()
+        readiness_mock = Mock(
+            return_value={
+                "expected_trade_date": "2026-05-31",
+                "data_trade_date": "2026-05-31",
+                "brief_is_live": False,
+            }
+        )
+
+        with patch.object(dashboard_data, "expected_trade_date", return_value="2026-05-31"), patch.object(
+            dashboard_data,
+            "safe_canonical_load",
+            return_value=None,
+        ), patch.object(
+            dashboard_data,
+            "load_screening_batch",
+            return_value={"candidates": [], "market_regime": {"execution_gate": {}}, "screening_summary": {}},
+        ), patch.object(
+            dashboard_data,
+            "resolve_lifecycle_context",
+            return_value={"display_lifecycle": {}, "lifecycle_note": "test"},
+        ), patch.object(
+            dashboard_data,
+            "build_review_learning_memory_index",
+            return_value={"cases": [], "patterns": []},
+        ), patch.object(
+            dashboard_data,
+            "compute_readiness",
+            readiness_mock,
+        ), patch.object(
+            dashboard_data,
+            "build_dataset_freshness_rows",
+            side_effect=AssertionError("Discovery should not build dataset freshness diagnostics"),
+        ), patch.object(
+            dashboard_data,
+            "build_formal_freshness_rows",
+            side_effect=AssertionError("Discovery should not build formal freshness diagnostics"),
+        ):
+            payload = dashboard_data.build_opportunities_view()
+
+        self.assertEqual(payload["trade_date"], "2026-05-31")
+        self.assertIn("groups", payload)
+        self.assertEqual(readiness_mock.call_args.kwargs["dataset_freshness"], [])
+        self.assertEqual(readiness_mock.call_args.kwargs["formal_freshness"], [])
 
 
 if __name__ == "__main__":

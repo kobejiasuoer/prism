@@ -271,7 +271,7 @@ def _configure_tushare_refresh_defaults(args: argparse.Namespace) -> None:
     os.environ.setdefault("PRISM_TUSHARE_MIN_INTERVAL_SECONDS", str(max(args.tushare_min_interval_seconds, 0.0)))
     os.environ.setdefault("PRISM_TUSHARE_RATE_LIMIT_RETRY_SECONDS", str(max(args.tushare_rate_limit_retry_seconds, 0.0)))
     os.environ.setdefault("PRISM_TUSHARE_REQUEST_CACHE_SECONDS", str(max(args.tushare_request_cache_seconds, 0.0)))
-    os.environ.setdefault("PRISM_TUSHARE_THROTTLED_APIS", "index_daily,stk_limit")
+    os.environ.setdefault("PRISM_TUSHARE_THROTTLED_APIS", "index_daily,stk_limit,adj_factor")
 
 
 def _load_existing_dataset(repository: Any, dataset: str, trade_date: str, key: str) -> Any:
@@ -285,6 +285,17 @@ def _load_existing_dataset(repository: Any, dataset: str, trade_date: str, key: 
 
 def _index_key(value: Any) -> str:
     return "".join(ch for ch in str(value or "") if ch.isdigit())[:6]
+
+
+def _stock_ts_code(value: Any) -> str:
+    digits = digits_code(value)
+    if digits.startswith(("5", "6", "9")):
+        suffix = "SH"
+    elif digits.startswith(("4", "8")):
+        suffix = "BJ"
+    else:
+        suffix = "SZ"
+    return f"{digits}.{suffix}"
 
 
 def _index_rows_for_symbol(rows: Any, symbol: str) -> list[dict[str, Any]]:
@@ -347,6 +358,152 @@ def _split_index_batch_result(batch_result: ProviderResult, symbol: str, rows: l
         live_small_allowed=not quality_flags,
         request_key=symbol,
     )
+
+
+def _adjustment_rows_for_code(rows: Any, code: str) -> list[dict[str, Any]]:
+    target_ts_code = _stock_ts_code(code)
+    if not isinstance(rows, list):
+        return []
+    output = [
+        dict(row)
+        for row in rows
+        if isinstance(row, dict)
+        and str(row.get("ts_code") or "").strip().upper() == target_ts_code
+    ]
+    output.sort(key=lambda item: str(item.get("trade_date") or ""))
+    return output
+
+
+def _missing_adjustment_result(batch_result: ProviderResult, code: str, trade_date: str) -> ProviderResult:
+    flags = list(batch_result.quality_flags or [])
+    if "adj_factor_cross_section_missing_symbol" not in flags:
+        flags.append("adj_factor_cross_section_missing_symbol")
+    return ProviderResult(
+        status=DatasetStatus.UNAVAILABLE,
+        data=None,
+        provider=batch_result.provider,
+        provider_role=batch_result.provider_role,
+        dataset="adjustment.factor",
+        trade_date=trade_date,
+        fetched_at=batch_result.fetched_at,
+        ttl_seconds=batch_result.ttl_seconds,
+        error=f"Tushare adj_factor cross section missing {_stock_ts_code(code)}",
+        source_endpoint=batch_result.source_endpoint,
+        params_hash=batch_result.params_hash,
+        payload_hash=batch_result.payload_hash,
+        row_count=0,
+        quality_flags=flags,
+        license_scope=batch_result.license_scope,
+        live_small_allowed=False,
+        request_key=code,
+        extra=dict(batch_result.extra or {}),
+    )
+
+
+def _split_adjustment_cross_section_result(
+    batch_result: ProviderResult,
+    code: str,
+    rows: list[dict[str, Any]],
+    trade_date: str,
+) -> ProviderResult:
+    if not rows:
+        return _missing_adjustment_result(batch_result, code, trade_date)
+    latest_trade_date = str(rows[-1].get("trade_date") or trade_date)
+    return replace(
+        batch_result,
+        data=rows,
+        dataset="adjustment.factor",
+        trade_date=latest_trade_date,
+        row_count=len(rows),
+        payload_hash=hash_payload(rows),
+        request_key=code,
+    )
+
+
+def _run_adjustment_factor_batch(
+    results: list[dict[str, Any]],
+    errors: list[str],
+    *,
+    gateway: Any,
+    repository: Any,
+    codes: list[str],
+    trade_date: str,
+    start_date: str,
+    provider_name: str,
+    reuse_existing: bool,
+) -> None:
+    pending: list[str] = []
+    existing_by_code: dict[str, dict[str, Any] | None] = {}
+    for code in codes:
+        existing = repository.load_manifest("adjustment.factor", trade_date, code) if repository is not None else None
+        existing_by_code[code] = dict(existing or {}) if existing else None
+        if reuse_existing and _manifest_formal_ready(existing, trade_date):
+            summary = _manifest_summary(dict(existing or {}))
+            summary["reused_existing"] = True
+            summary["skip_reason"] = "existing_formal_ready"
+            results.append(summary)
+            continue
+        pending.append(code)
+
+    if not pending:
+        return
+
+    provider = gateway.providers.get(provider_name)
+    if len(pending) <= 1 or provider is None or not hasattr(provider, "fetch_adjustment_factor_cross_section"):
+        for code in pending:
+            _run_step(
+                results,
+                errors,
+                f"adjustment.factor:{code}",
+                lambda code=code: gateway.fetch_adjustment_factor(
+                    code,
+                    trade_date=trade_date,
+                    start_date=start_date,
+                    end_date=trade_date,
+                    key=code,
+                    allow_fallback=False,
+                    provider_name=provider_name,
+                ),
+                repository=repository,
+                dataset="adjustment.factor",
+                key=code,
+                trade_date=trade_date,
+                reuse_existing=False,
+            )
+        return
+
+    try:
+        batch_result = provider.fetch_adjustment_factor_cross_section(trade_date=trade_date)
+        batch_result.dataset = "adjustment.factor"
+        batch_result.provider = provider_name
+        batch_result.provider_role = ProviderRole.PRIMARY
+        batch_result.request_key = f"cross-section-{trade_date}"
+        if not batch_result.payload_hash:
+            batch_result.payload_hash = hash_payload(batch_result.data)
+        if not batch_result.row_count:
+            batch_result.row_count = len(batch_result.data) if isinstance(batch_result.data, list) else int(batch_result.data is not None)
+        batch_result.ttl_seconds = gateway._effective_ttl_seconds(batch_result.dataset, batch_result.ttl_seconds)
+
+        for code in pending:
+            if batch_result.status == DatasetStatus.OK:
+                code_rows = _adjustment_rows_for_code(batch_result.data, code)
+                split_result = _split_adjustment_cross_section_result(batch_result, code, code_rows, trade_date)
+            else:
+                split_result = replace(batch_result, data=None, row_count=0, request_key=code)
+            gateway_result = gateway._finalize(
+                request_key=code,
+                expected_trade_date=trade_date,
+                result=split_result,
+                attempt_manifest_paths=[],
+            )
+            _append_gateway_result_preserving_existing(
+                results,
+                gateway_result=gateway_result,
+                existing=existing_by_code.get(code),
+                trade_date=trade_date,
+            )
+    except Exception as exc:
+        errors.append(f"adjustment.factor_cross_section:{exc}")
 
 
 def _run_index_daily_batch(
@@ -537,26 +694,17 @@ def main() -> int:
     if "adjustment.factor" in requested:
         dataset_trade_date = dataset_trade_dates["adjustment.factor"]
         dataset_start_date = dataset_start_dates["adjustment.factor"]
-        for code in codes:
-            _run_step(
-                results,
-                errors,
-                f"adjustment.factor:{code}",
-                lambda code=code: gateway.fetch_adjustment_factor(
-                    code,
-                    trade_date=dataset_trade_date,
-                    start_date=dataset_start_date,
-                    end_date=dataset_trade_date,
-                    key=code,
-                    allow_fallback=False,
-                    provider_name=args.provider,
-                ),
-                repository=repository,
-                dataset="adjustment.factor",
-                key=code,
-                trade_date=dataset_trade_date,
-                reuse_existing=reuse_existing,
-            )
+        _run_adjustment_factor_batch(
+            results,
+            errors,
+            gateway=gateway,
+            repository=repository,
+            codes=codes,
+            trade_date=dataset_trade_date,
+            start_date=dataset_start_date,
+            provider_name=args.provider,
+            reuse_existing=reuse_existing,
+        )
 
     if "benchmark.index_daily" in requested:
         dataset_trade_date = dataset_trade_dates["benchmark.index_daily"]
@@ -644,7 +792,7 @@ def main() -> int:
         "failed_or_not_formal": hard_failures,
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2))
-    return 0 if payload["ok"] else 1
+    return 0 if payload["complete"] else 1
 
 
 if __name__ == "__main__":

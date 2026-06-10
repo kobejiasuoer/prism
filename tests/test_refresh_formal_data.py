@@ -41,9 +41,14 @@ class FakeProvider:
     def __init__(self, result) -> None:
         self.result = result
         self.calls: list[list[str]] = []
+        self.adjustment_calls: list[str] = []
 
     def fetch_index_daily_batch(self, symbols: list[str], **_kwargs):
         self.calls.append(list(symbols))
+        return self.result
+
+    def fetch_adjustment_factor_cross_section(self, trade_date: str):
+        self.adjustment_calls.append(trade_date)
         return self.result
 
 
@@ -84,14 +89,22 @@ class FakeGateway:
         )
 
 
-def _provider_result(*, status, data=None, trade_date: str = "2026-05-07", flags: list[str] | None = None, error: str | None = None):
+def _provider_result(
+    *,
+    status,
+    data=None,
+    trade_date: str = "2026-05-07",
+    dataset: str = "benchmark.index_daily",
+    flags: list[str] | None = None,
+    error: str | None = None,
+):
     script = _load_script()
     return script.ProviderResult(
         status=status,
         data=data,
         provider="tushare",
         provider_role=script.ProviderRole.PRIMARY,
-        dataset="benchmark.index_daily",
+        dataset=dataset,
         trade_date=trade_date,
         fetched_at=datetime(2026, 5, 7, 15, 30, 0),
         ttl_seconds=86400,
@@ -231,6 +244,40 @@ def test_formal_refresh_outcome_reports_complete_when_no_work_is_deferred() -> N
         "partial_ok": False,
         "status": "success",
     }
+
+
+def test_adjustment_factor_batch_uses_one_cross_section_for_multiple_pending_codes() -> None:
+    script = _load_script()
+    result = _provider_result(
+        status=script.DatasetStatus.OK,
+        dataset="adjustment.factor",
+        data=[
+            {"code": "sh600690", "ts_code": "600690.SH", "trade_date": "2026-05-07", "adj_factor": 12.3},
+            {"code": "sh600378", "ts_code": "600378.SH", "trade_date": "2026-05-07", "adj_factor": 9.8},
+        ],
+    )
+    repository = FakeRepository()
+    provider = FakeProvider(result)
+    gateway = FakeGateway(provider, repository)
+    results: list[dict[str, object]] = []
+    errors: list[str] = []
+
+    script._run_adjustment_factor_batch(
+        results,
+        errors,
+        gateway=gateway,
+        repository=repository,
+        codes=["600690", "600378"],
+        trade_date="2026-05-07",
+        start_date="2026-01-01",
+        provider_name="tushare",
+        reuse_existing=True,
+    )
+
+    assert errors == []
+    assert provider.adjustment_calls == ["2026-05-07"]
+    assert [item["request_key"] for item in results] == ["600690", "600378"]
+    assert all(item["status"] == "ok" for item in results)
 
 
 def test_index_batch_failure_reports_existing_formal_manifest_as_reused() -> None:

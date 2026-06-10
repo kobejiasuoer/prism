@@ -67,6 +67,151 @@ class RefreshPolicyDecisionTests(unittest.TestCase):
         self.assertIn("cooldown", payload)
         self.assertIn("next_allowed_at", payload["cooldown"])
 
+    def test_today_source_cards_use_lightweight_view(self) -> None:
+        with mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_today_source_cards_view",
+            return_value={
+                "source_cards": [
+                    {
+                        "label": "自选股",
+                        "value": "2026-05-08 09:30:00",
+                        "detail": "2026-05-08",
+                    }
+                ]
+            },
+        ) as source_cards, mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_today_view",
+            side_effect=AssertionError("source-card reads must not build full today view"),
+        ) as full_view:
+            cards = LEGACY_APP_MODULE.read_page_source_cards("today")
+
+        self.assertEqual(cards[0]["label"], "自选股")
+        self.assertEqual(source_cards.call_count, 1)
+        self.assertEqual(full_view.call_count, 0)
+
+    def test_opportunities_refresh_status_uses_lightweight_source_cards(self) -> None:
+        with mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_opportunities_source_cards_view",
+            return_value={
+                "source_cards": [
+                    {
+                        "label": "早盘批次",
+                        "value": "2026-05-08 09:30:00",
+                        "detail": "fixture",
+                    }
+                ]
+            },
+        ) as source_cards, mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_opportunities_view",
+            side_effect=AssertionError("refresh/status must not build full opportunities view"),
+        ) as full_view, mock.patch.object(
+            LEGACY_APP_MODULE,
+            "_dataset_manifest_freshness_rows",
+            return_value=[],
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_running_refresh_tasks",
+            return_value=[],
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_scheduler_status_payload",
+            return_value={},
+        ):
+            payload = LEGACY_APP_MODULE.build_refresh_status_payload(
+                "opportunities",
+                auto=False,
+                compact=True,
+                now=datetime(2026, 5, 8, 10, 0, 0),
+            )
+
+        self.assertEqual(payload["page"], "opportunities")
+        self.assertEqual(payload["freshness"][0]["label"], "早盘批次")
+        self.assertEqual(source_cards.call_count, 1)
+        self.assertEqual(full_view.call_count, 0)
+
+    def test_watchlist_refresh_status_uses_lightweight_source_cards(self) -> None:
+        with mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_watchlist_source_cards_view",
+            return_value={
+                "source_cards": [
+                    {
+                        "label": "自选股快照",
+                        "value": "2026-05-08 09:30:00",
+                        "detail": "2026-05-08",
+                    }
+                ]
+            },
+        ) as source_cards, mock.patch.object(
+            LEGACY_APP_MODULE,
+            "_dataset_manifest_freshness_rows",
+            return_value=[],
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_running_refresh_tasks",
+            return_value=[],
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_scheduler_status_payload",
+            return_value={},
+        ):
+            payload = LEGACY_APP_MODULE.build_refresh_status_payload(
+                "watchlist",
+                auto=False,
+                compact=True,
+                now=datetime(2026, 5, 8, 10, 0, 0),
+            )
+
+        self.assertEqual(payload["page"], "watchlist")
+        self.assertEqual(payload["freshness"][0]["label"], "自选股快照")
+        self.assertEqual(source_cards.call_count, 1)
+
+    def test_review_refresh_status_uses_lightweight_source_cards(self) -> None:
+        with mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_review_source_cards_view",
+            return_value={
+                "source_cards": [
+                    {
+                        "label": "基准研究",
+                        "value": "2026-05-08 09:30:00",
+                        "detail": "7d",
+                    }
+                ]
+            },
+        ) as source_cards, mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_review_view",
+            side_effect=AssertionError("refresh/status must not build full review page"),
+        ) as full_view, mock.patch.object(
+            LEGACY_APP_MODULE,
+            "_dataset_manifest_freshness_rows",
+            return_value=[],
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_running_refresh_tasks",
+            return_value=[],
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_scheduler_status_payload",
+            return_value={},
+        ):
+            payload = LEGACY_APP_MODULE.build_refresh_status_payload(
+                "review",
+                auto=False,
+                compact=True,
+                now=datetime(2026, 5, 8, 10, 0, 0),
+            )
+
+        self.assertEqual(payload["page"], "review")
+        self.assertEqual(payload["freshness"][0]["label"], "基准研究")
+        self.assertEqual(source_cards.call_count, 1)
+        self.assertEqual(full_view.call_count, 0)
+
     def test_cooldown_prevents_auto_trigger(self) -> None:
         decision = evaluate_auto_refresh(
             page="today",
@@ -165,6 +310,31 @@ class RefreshPolicyApiTests(unittest.TestCase):
         self.assertIn("scheduler_status", payload)
         self.assertIn("freshness_guardian", payload["scheduler_status"]["scheduler"])
         self.assertIn("jobs", payload["scheduler_status"])
+
+    def test_refresh_status_compact_omits_diagnostics_but_keeps_poll_fields(self) -> None:
+        response = self.client.get("/api/refresh/status?page=today&auto=1&compact=1")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["page"], "today")
+        self.assertIn("recommended_task", payload)
+        self.assertNotIn("freshness", payload)
+        self.assertTrue(payload["freshness_deferred"])
+        self.assertEqual(
+            payload["links_lazy"]["freshness"],
+            "/api/refresh/status?page=today&compact=0",
+        )
+        self.assertIn("auto_refresh", payload)
+        self.assertIn("cooldown", payload)
+        self.assertIn("last_auto_refresh", payload)
+        self.assertIn("snapshot_signature", payload)
+        self.assertIn("readiness_mode", payload)
+        self.assertNotIn("readiness", payload)
+        self.assertNotIn("policy", payload)
+        self.assertNotIn("policy_catalog", payload)
+        self.assertNotIn("scheduler_status", payload)
+        self.assertNotIn("recovery_steps", payload)
+        self.assertNotIn("last_refresh_event", payload)
+        self.assertNotIn("last_decision", payload["cooldown"])
 
     def test_scheduler_status_endpoint_exposes_guardrail_fields(self) -> None:
         response = self.client.get("/api/scheduler/status")
@@ -369,7 +539,7 @@ class RefreshPolicyApiTests(unittest.TestCase):
                     return_value=[_freshness_row(key="watchlist")],
                 ), mock.patch.object(
                     LEGACY_APP_MODULE,
-                    "build_today_view",
+                    "build_today_readiness_view",
                     return_value={
                         "readiness": {
                             "ready": False,
@@ -432,7 +602,7 @@ class RefreshPolicyApiTests(unittest.TestCase):
                     return_value=[],
                 ), mock.patch.object(
                     LEGACY_APP_MODULE,
-                    "build_today_view",
+                    "build_today_readiness_view",
                     return_value={
                         "readiness": {
                             "ready": True,
@@ -499,7 +669,7 @@ class RefreshPolicyApiTests(unittest.TestCase):
                     return_value=[],
                 ), mock.patch.object(
                     LEGACY_APP_MODULE,
-                    "build_today_view",
+                    "build_today_readiness_view",
                     return_value={
                         "readiness": {
                             "ready": True,
@@ -617,7 +787,7 @@ class RefreshPolicyApiTests(unittest.TestCase):
                     return_value=[_freshness_row(key="watchlist")],
                 ), mock.patch.object(
                     LEGACY_APP_MODULE,
-                    "build_today_view",
+                    "build_today_readiness_view",
                     return_value={
                         "readiness": {
                             "ready": False,
@@ -682,13 +852,33 @@ class RefreshPolicyApiTests(unittest.TestCase):
                         },
                         "readiness": {"ready": False},
                     }
-                    fake_status.side_effect = [base_status, {**base_status, "cooldown": _cooldown()}]
+                    compact_status = {
+                        "page": "today",
+                        "running": [],
+                        "freshness": [_freshness_row(key="watchlist")],
+                        "recommended_task": {"task_name": "watchlist_refresh", "title": "自选股全流程刷新"},
+                        "cooldown": _cooldown(),
+                        "auto_refresh": {"triggered": False, "trigger": None},
+                        "last_auto_refresh": None,
+                        "snapshot_signature": "compact-signature",
+                    }
+                    fake_status.side_effect = [base_status, compact_status]
                     response = self.client.post(
                         "/api/refresh/trigger",
                         json={"page": "today", "task_name": "watchlist_refresh", "force": True, "reason": "test_force"},
                     )
                     state = LEGACY_APP_MODULE.load_refresh_state()
                 self.assertEqual(response.status_code, 200)
+                self.assertEqual(
+                    fake_status.call_args_list,
+                    [mock.call("today"), mock.call("today", skip_auto=True, compact=True)],
+                )
+                response_status = response.json()["status"]
+                self.assertEqual(response_status, compact_status)
+                self.assertNotIn("policy_catalog", response_status)
+                self.assertNotIn("scheduler_status", response_status)
+                self.assertNotIn("recovery_steps", response_status)
+                self.assertNotIn("last_refresh_event", response_status)
                 event = state["audit_events"][-1]
                 self.assertTrue(event["force"])
                 self.assertEqual(event["reason"], "test_force")
@@ -714,6 +904,9 @@ class RefreshPolicyApiTests(unittest.TestCase):
         self.assertFalse(policy.delivery_default)
         self.assertTrue(policy.catchup_enabled)
         self.assertEqual(policy.catchup_until, "15:05")
+        postclose_daily = ("python3", "apps/scripts/refresh_formal_data.py", "--datasets", "bars.daily,adjustment.factor")
+        self.assertEqual(policies["formal_data_refresh_postclose"].cron_expr, "35 16 * * 1-5")
+        self.assertEqual(policies["formal_data_refresh_postclose"].command, postclose_daily)
         index_command = ("python3", "apps/scripts/refresh_formal_data.py", "--datasets", "benchmark.index_daily")
         self.assertEqual(policies["formal_data_refresh_index_morning"].cron_expr, "37 10 * * 1-5")
         self.assertEqual(policies["formal_data_refresh_index_morning"].command, index_command)
@@ -723,6 +916,10 @@ class RefreshPolicyApiTests(unittest.TestCase):
         self.assertEqual(policies["formal_data_refresh_index_postclose"].command, index_command)
         self.assertEqual(policies["formal_data_refresh_index_postclose_second"].cron_expr, "30 16 * * 1-5")
         self.assertEqual(policies["formal_data_refresh_index_postclose_second"].command, index_command)
+        self.assertEqual(policies["formal_data_refresh_index_postclose_third"].cron_expr, "40 17 * * 1-5")
+        self.assertEqual(policies["formal_data_refresh_index_postclose_third"].command, index_command)
+        self.assertEqual(policies["formal_data_refresh_index_postclose_fourth"].cron_expr, "50 18 * * 1-5")
+        self.assertEqual(policies["formal_data_refresh_index_postclose_fourth"].command, index_command)
 
     def test_cron_config_contains_preclose_postclose_and_ledger_outcomes(self) -> None:
         payload = json.loads((Path(__file__).resolve().parents[3] / "config" / "openclaw" / "prism_cron_jobs.json").read_text(encoding="utf-8"))
@@ -731,6 +928,7 @@ class RefreshPolicyApiTests(unittest.TestCase):
         expr_by_name = {job["name"]: job["schedule"]["expr"] for job in payload["jobs"]}
         self.assertEqual(expr_by_name["晨间数据预热"], "25 9 * * 1-5")
         self.assertEqual(expr_by_name["正式口径数据刷新"], "27 9 * * 1-5")
+        self.assertEqual(expr_by_name["正式日线复权盘后补齐"], "35 16 * * 1-5")
         self.assertEqual(expr_by_name["正式基准指数补刷-上午一"], "37 10 * * 1-5")
         self.assertEqual(expr_by_name["正式基准指数补刷-上午二"], "47 11 * * 1-5")
         self.assertEqual(expr_by_name["自选股早盘分析"], "32 9 * * 1-5")
@@ -740,6 +938,8 @@ class RefreshPolicyApiTests(unittest.TestCase):
         self.assertEqual(expr_by_name["收盘后总控简报"], "5 15 * * 1-5")
         self.assertEqual(expr_by_name["Decision Ledger 结果评估"], "35 15 * * 1-5")
         self.assertEqual(expr_by_name["正式基准指数补刷-收盘二"], "30 16 * * 1-5")
+        self.assertEqual(expr_by_name["正式基准指数补刷-收盘三"], "40 17 * * 1-5")
+        self.assertEqual(expr_by_name["正式基准指数补刷-收盘四"], "50 18 * * 1-5")
 
     def test_command_brief_crons_wait_for_midday_confirmation(self) -> None:
         policies = {policy.task_name: policy for policy in CRON_POLICIES}
@@ -757,6 +957,15 @@ class RefreshPolicyApiTests(unittest.TestCase):
         self.assertEqual(task["task_name"], "formal_data_refresh_index_morning")
         self.assertEqual(task["title"], "正式基准指数补刷-上午一")
         self.assertEqual(task["command"], [sys.executable, "apps/scripts/refresh_formal_data.py", "--datasets", "benchmark.index_daily"])
+
+    def test_formal_postclose_refresh_resolves_as_daily_factor_task(self) -> None:
+        task = LEGACY_APP_MODULE.resolve_refresh_task("formal_data_refresh_postclose")
+        self.assertEqual(task["task_name"], "formal_data_refresh_postclose")
+        self.assertEqual(task["title"], "正式日线复权盘后补齐")
+        self.assertEqual(
+            task["command"],
+            [sys.executable, "apps/scripts/refresh_formal_data.py", "--datasets", "bars.daily,adjustment.factor"],
+        )
 
 
 if __name__ == "__main__":

@@ -1,6 +1,9 @@
 import type { ReadinessMode, ReadinessPayload, RefreshStatus, Tone } from "./types";
+import { normalizeTaskName } from "./task-utils";
 
-export const READINESS_MODE_COPY: Record<
+export { normalizeTaskName } from "./task-utils";
+
+const READINESS_MODE_COPY: Record<
   ReadinessMode,
   {
     badge: string;
@@ -45,7 +48,7 @@ export const READINESS_MODE_COPY: Record<
   },
 };
 
-export const REFRESH_TASK_COPY: Record<
+const REFRESH_TASK_COPY: Record<
   string,
   {
     title: string;
@@ -158,7 +161,7 @@ export const REFRESH_TASK_COPY: Record<
   },
 };
 
-export const REFRESH_REASON_COPY: Record<string, { label: string; detail: string }> = {
+const REFRESH_REASON_COPY: Record<string, { label: string; detail: string }> = {
   cooldown: { label: "冷却未结束", detail: "刚运行过同类任务，稍后再试。" },
   running: { label: "同类任务运行中", detail: "后台已有任务在跑，避免重复触发。" },
   outside_auto_window: { label: "不在自动刷新窗口", detail: "当前时间不允许自动触发该任务。" },
@@ -204,11 +207,6 @@ export function refreshReasonCopy(reason?: string) {
 
 export function refreshReasonLabel(reason?: string) {
   return refreshReasonCopy(reason).label;
-}
-
-export function normalizeTaskName(taskName?: string) {
-  const key = String(taskName || "").trim();
-  return key === "watchlist" ? "watchlist_refresh" : key;
 }
 
 export function formatCooldown(seconds?: number) {

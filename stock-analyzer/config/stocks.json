@@ -4,6 +4,17 @@
       "code": "600690",
       "name": "海尔智家",
       "active": true
+    },
+    {
+      "code": "600378",
+      "name": "昊华科技",
+      "active": true,
+      "created_at": "2026-06-08 21:42:29",
+      "updated_at": "2026-06-08 21:42:30",
+      "archived_at": null,
+      "source": "manual",
+      "market": "sh",
+      "sina": "sh600378"
     }
   ],
   "ma_periods": [

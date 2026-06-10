@@ -1155,6 +1155,39 @@ class TushareProvider(BaseProvider):
             return self._error(dataset="adjustment.factor", trade_date=_dash_date(end), error=f"empty Tushare adj_factor for {ts_code}", endpoint=endpoint, params_hash=params_hash, payload_hash=payload_hash)
         return self._ok_tushare(data=output, dataset="adjustment.factor", trade_date=str(output[-1]["trade_date"]), endpoint=endpoint, params_hash=params_hash, payload_hash=payload_hash, api_name="adj_factor")
 
+    def fetch_adjustment_factor_cross_section(self, trade_date: str, **kwargs: Any) -> ProviderResult:
+        date = _compact_date(trade_date or kwargs.get("trade_date") or today_str())
+        fields = "ts_code,trade_date,adj_factor"
+        rows, endpoint, params_hash, payload_hash, error = self._call(
+            "adj_factor",
+            params={"trade_date": date},
+            fields=fields,
+        )
+        if error:
+            return self._tushare_error(dataset="adjustment.factor", trade_date=_dash_date(date), api_name="adj_factor", endpoint=endpoint, params_hash=params_hash, payload_hash=payload_hash, error=error)
+        output = [
+            {
+                "code": _prism_stock_code(row.get("ts_code")),
+                "ts_code": row.get("ts_code"),
+                "trade_date": _dash_date(row.get("trade_date")),
+                "adj_factor": _float_or_none(row.get("adj_factor")),
+            }
+            for row in rows
+        ]
+        output = [item for item in output if item["trade_date"]]
+        output.sort(key=lambda item: (str(item.get("ts_code") or ""), str(item.get("trade_date") or "")))
+        if not output:
+            return self._error(dataset="adjustment.factor", trade_date=_dash_date(date), error="empty Tushare adj_factor cross section", endpoint=endpoint, params_hash=params_hash, payload_hash=payload_hash)
+        return self._ok_tushare(
+            data=output,
+            dataset="adjustment.factor",
+            trade_date=_dash_date(date),
+            endpoint=endpoint,
+            params_hash=params_hash,
+            payload_hash=payload_hash,
+            api_name="adj_factor",
+        )
+
     def fetch_price_limit(self, trade_date: str, code: str | None = None, **kwargs: Any) -> ProviderResult:
         date = _compact_date(trade_date or kwargs.get("trade_date") or today_str())
         ts_code = _stock_ts_code(code) if code else ""

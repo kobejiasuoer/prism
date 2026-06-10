@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import time
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -16,6 +19,8 @@ FORMAL_LATEST = REPO_ROOT / "data" / "prism_data" / "tinyshare_harvest" / "lates
 RESEARCH_LATEST = REPO_ROOT / "data" / "prism_data" / "tinyshare_research_harvest" / "latest_run.json"
 MARKET_LATEST = REPO_ROOT / "data" / "prism_data" / "tinyshare_market_supplement" / "latest_run.json"
 REFERENCE_LATEST = REPO_ROOT / "data" / "prism_data" / "tinyshare_reference_supplement" / "latest_run.json"
+DATA_ASSETS_STATUS_CACHE_TTL_SECONDS = 60
+_DATA_ASSETS_STATUS_CACHE: dict[tuple[str, str, str], tuple[float, dict[str, Any]]] = {}
 
 
 ASSET_CATALOG: tuple[dict[str, str], ...] = (
@@ -144,6 +149,76 @@ def _list_manifests(dataset: str) -> list[dict[str, Any]]:
     return manifests
 
 
+def _manifest_key_from_name(name: str) -> str:
+    if name.endswith(".manifest.json"):
+        return name[: -len(".manifest.json")]
+    return Path(name).stem
+
+
+def _load_manifest_path(path: Path | None) -> dict[str, Any] | None:
+    if path is None:
+        return None
+    payload = _read_json_or_none(path)
+    if not isinstance(payload, dict):
+        return None
+    payload.setdefault("manifest_path", str(path.resolve()))
+    return payload
+
+
+def _dataset_manifest_summary(dataset: str, expected_trade_date: str | None) -> dict[str, Any]:
+    dataset_dir = DATASET_ROOT / _sanitize(dataset)
+    if not dataset_dir.exists():
+        return {"manifest_count": 0, "latest": None, "key_count": 0}
+
+    expected = _sanitize(expected_trade_date) if expected_trade_date else ""
+    manifest_count = 0
+    expected_entries: list[tuple[str, str]] = []
+    latest_date = ""
+    latest_entries: list[tuple[str, str]] = []
+
+    try:
+        date_entries = [entry for entry in os.scandir(dataset_dir) if entry.is_dir()]
+    except OSError:
+        return {"manifest_count": 0, "latest": None, "key_count": 0}
+
+    for date_entry in date_entries:
+        try:
+            entries = [
+                (entry.name, entry.path)
+                for entry in os.scandir(date_entry.path)
+                if entry.name.endswith(".manifest.json") and entry.is_file()
+            ]
+        except OSError:
+            continue
+        if not entries:
+            continue
+        manifest_count += len(entries)
+        date_name = date_entry.name
+        if expected and date_name == expected:
+            expected_entries = entries
+        if date_name > latest_date:
+            latest_date = date_name
+            latest_entries = entries
+
+    display_entries = expected_entries or latest_entries
+    latest_path = None
+    if display_entries:
+        def latest_entry_key(item: tuple[str, str]) -> tuple[float, str]:
+            try:
+                mtime = os.stat(item[1]).st_mtime
+            except OSError:
+                mtime = 0.0
+            return (mtime, item[0])
+
+        latest_path = Path(max(display_entries, key=latest_entry_key)[1])
+    latest = _load_manifest_path(latest_path)
+    return {
+        "manifest_count": manifest_count,
+        "latest": latest,
+        "key_count": len({_manifest_key_from_name(name) for name, _path in display_entries}),
+    }
+
+
 def _manifest_sort_key(manifest: dict[str, Any]) -> tuple[str, str, str]:
     return (
         str(manifest.get("trade_date") or ""),
@@ -189,16 +264,105 @@ def _harvest_run(path: Path, label: str) -> dict[str, Any] | None:
     }
 
 
-def build_data_assets_status(expected_trade_date: str | None = None) -> dict[str, Any]:
+def clear_data_assets_status_cache() -> None:
+    _DATA_ASSETS_STATUS_CACHE.clear()
+
+
+COMPACT_DATASET_LIMIT = 6
+COMPACT_DATASET_PRIORITY: tuple[str, ...] = (
+    "bars.daily",
+    "adjustment.factor",
+    "price_limit.daily",
+    "execution.flags",
+    "index.weight",
+    "market.daily_basic_snapshot",
+)
+COMPACT_DATASET_FIELDS: tuple[str, ...] = (
+    "dataset",
+    "label",
+    "purpose",
+    "feature_group",
+    "decision_use",
+    "live_permission",
+    "available",
+    "provider",
+    "trade_date",
+    "key_count",
+    "manifest_count",
+    "latest_row_count",
+    "freshness_status",
+    "source_authority_ready",
+    "formal_decision_allowed",
+)
+
+
+def _compact_data_asset_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    priority = {dataset: index for index, dataset in enumerate(COMPACT_DATASET_PRIORITY)}
+
+    def sort_key(row: dict[str, Any]) -> tuple[int, int, int, str]:
+        dataset = str(row.get("dataset") or "")
+        if dataset in priority:
+            bucket = 0
+            order = priority[dataset]
+        elif row.get("available"):
+            bucket = 1
+            order = -int(row.get("key_count") or 0)
+        else:
+            bucket = 2
+            order = 0
+        return (bucket, order, -int(row.get("manifest_count") or 0), dataset)
+
+    selected = sorted(rows, key=sort_key)[:COMPACT_DATASET_LIMIT]
+    return [
+        {
+            key: row.get(key)
+            for key in COMPACT_DATASET_FIELDS
+            if row.get(key) not in (None, "", [], {})
+        }
+        for row in selected
+    ]
+
+
+def _compact_harvest_run(run: dict[str, Any]) -> dict[str, Any]:
+    datasets = run.get("datasets") if isinstance(run.get("datasets"), list) else []
+    return {
+        key: value
+        for key, value in {
+            "label": run.get("label"),
+            "ok": run.get("ok"),
+            "start_date": run.get("start_date"),
+            "end_date": run.get("end_date"),
+            "trade_date": run.get("trade_date"),
+            "universe_count": run.get("universe_count"),
+            "trade_days": run.get("trade_days"),
+            "datasets": datasets[:4],
+            "finished_at": run.get("finished_at"),
+        }.items()
+        if value not in (None, "", [], {})
+    }
+
+
+def build_data_assets_status(
+    expected_trade_date: str | None = None,
+    *,
+    fresh: bool = False,
+    compact: bool = False,
+) -> dict[str, Any]:
+    cache_key = (str(DATASET_ROOT.resolve()), str(expected_trade_date or ""), "compact" if compact else "full")
+    cached = _DATA_ASSETS_STATUS_CACHE.get(cache_key)
+    now = time.monotonic()
+    if cached and not fresh and now - cached[0] <= DATA_ASSETS_STATUS_CACHE_TTL_SECONDS:
+        return deepcopy(cached[1])
+
     rows: list[dict[str, Any]] = []
     all_manifest_count = 0
     tushare_ready_count = 0
     for item in ASSET_CATALOG:
         dataset = item["dataset"]
         usage = feature_usage(dataset)
-        manifests = _list_manifests(dataset)
-        all_manifest_count += len(manifests)
-        latest = _latest_manifest(manifests, expected_trade_date)
+        manifest_summary = _dataset_manifest_summary(dataset, expected_trade_date)
+        all_manifest_count += int(manifest_summary["manifest_count"])
+        latest = manifest_summary["latest"]
         provider = str((latest or {}).get("provider") or "")
         available = bool(latest)
         if provider == "tushare" and available:
@@ -208,7 +372,6 @@ def build_data_assets_status(expected_trade_date: str | None = None) -> dict[str
             "dataset": dataset,
             "label": item["label"],
             "purpose": item["purpose"],
-            "usage": usage,
             "feature_group": usage["group"],
             "decision_use": usage["decision_use"],
             "live_permission": usage["live_permission"],
@@ -217,16 +380,14 @@ def build_data_assets_status(expected_trade_date: str | None = None) -> dict[str
             "available": available,
             "provider": provider or "-",
             "trade_date": latest_trade_date or None,
-            "key_count": _count_keys_for_date(manifests, latest_trade_date),
-            "manifest_count": len(manifests),
+            "key_count": int(manifest_summary["key_count"]),
+            "manifest_count": int(manifest_summary["manifest_count"]),
             "latest_row_count": (latest or {}).get("row_count"),
             "freshness_status": (latest or {}).get("freshness_status"),
             "source_lane": (latest or {}).get("source_lane"),
             "decision_scope": (latest or {}).get("decision_scope"),
             "source_authority_ready": bool((latest or {}).get("source_authority_ready")),
             "formal_decision_allowed": bool((latest or {}).get("formal_decision_allowed")),
-            "source_endpoint": (latest or {}).get("source_endpoint"),
-            "manifest_path": (latest or {}).get("manifest_path"),
         })
 
     runs = [
@@ -241,7 +402,7 @@ def build_data_assets_status(expected_trade_date: str | None = None) -> dict[str
     ]
     promotion_report = None
     research_run = next((item for item in runs if item.get("label") == "研究扩展"), None)
-    if research_run and research_run.get("run_dir"):
+    if not compact and research_run and research_run.get("run_dir"):
         promotion_report = _read_json_or_none(Path(str(research_run["run_dir"])) / "promotion_report.json")
 
     universe_count = 0
@@ -250,18 +411,20 @@ def build_data_assets_status(expected_trade_date: str | None = None) -> dict[str
         universe_count = max(universe_count, int(run.get("universe_count") or 0))
         trade_days = max(trade_days, int(run.get("trade_days") or 0))
 
-    return {
+    summary = {
+        "catalog_count": len(ASSET_CATALOG),
+        "available_count": sum(1 for row in rows if row["available"]),
+        "tushare_ready_count": tushare_ready_count,
+        "manifest_count": all_manifest_count,
+        "universe_count": universe_count,
+        "trade_days": trade_days,
+    }
+    payload = {
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "expected_trade_date": expected_trade_date,
-        "dataset_root": str(DATASET_ROOT.resolve()),
-        "summary": {
-            "catalog_count": len(ASSET_CATALOG),
-            "available_count": sum(1 for row in rows if row["available"]),
-            "tushare_ready_count": tushare_ready_count,
-            "manifest_count": all_manifest_count,
-            "universe_count": universe_count,
-            "trade_days": trade_days,
-        },
+        "compact": compact,
+        "datasets_deferred": compact,
+        "summary": summary,
         "visible_usage": [
             "Settings 数据资产面板",
             "个股页 Tushare 档案",
@@ -269,10 +432,19 @@ def build_data_assets_status(expected_trade_date: str | None = None) -> dict[str
             "观察池解释因子和风险标签",
             "候选生命周期复盘快照",
         ],
-        "datasets": rows,
-        "harvest_runs": runs,
+        "datasets": _compact_data_asset_rows(rows) if compact else rows,
+        "harvest_runs": [_compact_harvest_run(run) for run in runs] if compact else runs,
         "promotion_report": promotion_report if isinstance(promotion_report, dict) else None,
     }
+    if compact:
+        payload["visible_usage"] = []
+        payload["promotion_report"] = None
+        payload["summary"] = {
+            **summary,
+            "displayed_dataset_count": len(payload["datasets"]),
+        }
+    _DATA_ASSETS_STATUS_CACHE[cache_key] = (now, payload)
+    return deepcopy(payload)
 
 
 def _normalize_code(value: Any) -> str:
@@ -366,6 +538,114 @@ def _source_card(label: str, dataset: str, manifest: dict[str, Any] | None, deta
         "source_authority_ready": bool((manifest or {}).get("source_authority_ready")),
         "formal_decision_allowed": formal_allowed,
     }
+
+
+def _compact_source_card(card: dict[str, Any]) -> dict[str, Any]:
+    payload = {
+        key: card.get(key)
+        for key in (
+            "dataset",
+            "label",
+            "value",
+            "detail",
+            "available",
+            "stock_profile_use",
+            "decision_use",
+            "live_permission",
+            "stale",
+            "stale_reasons",
+        )
+        if card.get(key) not in (None, "", [], {})
+    }
+    return payload
+
+
+def _compact_source_cards(cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [_compact_source_card(card) for card in cards]
+
+
+def _compact_fields(row: Any, fields: tuple[str, ...]) -> dict[str, Any]:
+    if not isinstance(row, dict):
+        return {}
+    return {
+        field: row.get(field)
+        for field in fields
+        if row.get(field) not in (None, "", [], {})
+    }
+
+
+def _compact_rows(rows: Any, fields: tuple[str, ...], limit: int) -> list[dict[str, Any]]:
+    if not isinstance(rows, list):
+        return []
+    return [
+        item
+        for item in (_compact_fields(row, fields) for row in rows[:limit])
+        if item
+    ]
+
+
+def _compact_profile_for_section(profile: dict[str, Any]) -> dict[str, Any]:
+    payload = _compact_fields(
+        profile,
+        (
+            "name",
+            "full_name",
+            "province",
+            "city",
+            "area",
+            "industry",
+            "main_business",
+            "list_date",
+            "exchange",
+            "market",
+        ),
+    )
+    name_changes = _compact_rows(
+        profile.get("name_changes"),
+        ("name", "ann_name", "change_reason", "start_date", "end_date", "ann_date"),
+        3,
+    )
+    if name_changes:
+        payload["name_changes"] = name_changes
+    return payload
+
+
+def _compact_business_breakdown_for_section(payload: dict[str, Any]) -> dict[str, Any]:
+    item_fields = ("item", "sales", "profit", "cost", "currency")
+    compact = _compact_fields(payload, ("end_date", "top_share", "concentration_label"))
+    compact["top_items"] = _compact_rows(payload.get("top_items"), item_fields, 4)
+    by_type = payload.get("by_type") if isinstance(payload.get("by_type"), dict) else {}
+    compact_by_type = {
+        str(label): rows
+        for label, rows in (
+            (label, _compact_rows(type_rows, item_fields, 1))
+            for label, type_rows in by_type.items()
+        )
+        if rows
+    }
+    if compact_by_type:
+        compact["by_type"] = compact_by_type
+    return compact
+
+
+def _compact_event_risks_for_section(event_risks: dict[str, Any]) -> dict[str, Any]:
+    pledge = event_risks.get("pledge") if isinstance(event_risks.get("pledge"), dict) else {}
+    share_float = event_risks.get("share_float") if isinstance(event_risks.get("share_float"), dict) else {}
+    repurchase = event_risks.get("repurchase") if isinstance(event_risks.get("repurchase"), dict) else {}
+    audit = event_risks.get("audit") if isinstance(event_risks.get("audit"), dict) else {}
+    research = event_risks.get("research") if isinstance(event_risks.get("research"), dict) else {}
+    payload = {
+        "pledge": _compact_fields(pledge, ("pledge_ratio",)),
+        "share_float": _compact_fields(share_float, ("total_float_amount", "total_float_mv")),
+        "repurchase": _compact_fields(repurchase, ("total_amount",)),
+        "audit": _compact_fields(audit, ("abnormal", "opinion")),
+        "research": _compact_fields(research, ("average_target_price", "downgrade_signal")),
+    }
+    if event_risks.get("research_deferred") is not None:
+        payload["research_deferred"] = bool(event_risks.get("research_deferred"))
+    if event_risks.get("research_endpoint"):
+        payload["research_endpoint"] = event_risks.get("research_endpoint")
+    return payload
 
 
 def _source_choice(*choices: tuple[str, dict[str, Any] | None]) -> tuple[str, dict[str, Any] | None]:
@@ -466,6 +746,28 @@ def _load_rows_for_keys(dataset: str, trade_date: str, keys: tuple[str, ...]) ->
 def _load_code_rows_for_keys(dataset: str, trade_date: str, keys: tuple[str, ...], code: str) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     rows, manifest = _load_rows_for_keys(dataset, trade_date, keys)
     return _filter_code(rows, code), manifest
+
+
+def _load_code_rows_for_preferred_key(
+    dataset: str,
+    trade_date: str,
+    keys: tuple[str, ...],
+    code: str,
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    """Load only the first available shard for lightweight section APIs."""
+
+    first_manifest: dict[str, Any] | None = None
+    for key in keys:
+        payload, manifest = _load_dataset(dataset, trade_date, key)
+        if manifest and first_manifest is None:
+            first_manifest = manifest
+        if isinstance(payload, list):
+            rows = _filter_code(payload, code)
+            return rows, manifest
+        if isinstance(payload, dict):
+            rows = _filter_code([payload], code)
+            return rows, manifest
+    return [], first_manifest
 
 
 def _latest_rows(rows: list[dict[str, Any]], limit: int = 5, fields: tuple[str, ...] = ("trade_date", "end_date", "ann_date", "report_date", "float_date")) -> list[dict[str, Any]]:
@@ -780,8 +1082,8 @@ def _build_stock_formal_data_summary_for_date(
     ]
 
     sections = [
-        {"key": "full", "label": "完整档案", "available": available, "endpoint": f"/api/stock/{normalized_code}/formal-data"},
-        {"key": "sources", "label": "来源索引", "available": bool(source_cards), "endpoint": f"/api/stock/{normalized_code}/formal-data/summary"},
+        {"key": "full", "label": "完整档案", "available": available, "endpoint": f"/api/stock/{normalized_code}/formal-data/full"},
+        {"key": "sources", "label": "来源索引", "available": bool(source_cards), "endpoint": f"/api/stock/{normalized_code}/formal-data/sources"},
         {"key": "risk", "label": "事件风险", "available": catalog_hits > 0, "endpoint": f"/api/stock/{normalized_code}/formal-data/risk"},
         {"key": "profile", "label": "公司画像", "available": catalog_hits > 0, "endpoint": f"/api/stock/{normalized_code}/formal-data/profile"},
     ]
@@ -803,7 +1105,7 @@ def _build_stock_formal_data_summary_for_date(
             else "当前交易日没有命中这只股票的轻量正式数据；可以展开完整档案尝试最近可用证据。"
         ),
         "metric_cards": metric_cards,
-        "source_cards": source_cards,
+        "source_cards": _compact_source_cards(source_cards),
         "coverage": {
             "stock_scoped_available": stock_hits,
             "stock_scoped_total": len(stock_source_cards),
@@ -845,6 +1147,308 @@ def build_stock_formal_data_summary(code: str, trade_date: str | None = None) ->
             )
             return _json_clean(fallback)
     return payload
+
+
+def _stock_formal_section_payload_with_fallback(
+    builder: Any,
+    code: str,
+    trade_date: str | None,
+) -> dict[str, Any]:
+    normalized_code = _normalize_code(code)
+    target_date = trade_date or ""
+    payload = builder(normalized_code, target_date, requested_trade_date=target_date)
+    if payload.get("available") or not target_date:
+        return _json_clean(payload)
+
+    for fallback_date in _stock_formal_candidate_dates(target_date):
+        if _compact_date(fallback_date) == _compact_date(target_date):
+            continue
+        fallback = builder(normalized_code, fallback_date, requested_trade_date=target_date)
+        if fallback.get("available"):
+            fallback = _mark_stale_stock_formal_payload(fallback, target_date, str(fallback.get("trade_date") or fallback_date))
+            return _json_clean(fallback)
+    return _json_clean(payload)
+
+
+def _stock_formal_source_index_cards(normalized_code: str, trade_date: str) -> list[dict[str, Any]]:
+    stock_scoped_specs = (
+        ("涨跌停价", "price_limit.daily", "formal-price-limit"),
+        ("执行标记", "execution.flags", "formal-execution-flags"),
+        ("估值历史", "valuation.daily", normalized_code),
+        ("流动性历史", "liquidity.daily", normalized_code),
+        ("资金流历史", "capital_flow.daily", normalized_code),
+        ("基本面快照", "fundamentals.snapshot", normalized_code),
+        ("财务指标", "financial.indicator", normalized_code),
+        ("财务报表", "financial.statement", normalized_code),
+        ("分红送配", "corporate_action.dividend", normalized_code),
+        ("股东结构", "shareholder.top10", normalized_code),
+    )
+    cards = [
+        _formal_summary_source_card(label, dataset, _load_manifest_only(dataset, trade_date, key), stock_scoped=True)
+        for label, dataset, key in stock_scoped_specs
+    ]
+    catalog_specs = (
+        ("全市场日指标", "market.daily_basic_snapshot"),
+        ("龙虎榜", "market.top_list"),
+        ("机构席位", "market.top_inst"),
+        ("公司画像", "reference.stock_company"),
+        ("名称变更", "reference.namechange"),
+        ("概念归属", "reference.concept_detail"),
+        ("行业/板块", "reference.industry_member"),
+        ("主营构成", "financial.main_business"),
+        ("大宗交易", "market.block_trade"),
+        ("两融明细", "market.margin_detail"),
+        ("股权质押", "corporate_action.pledge_stat"),
+        ("限售解禁", "corporate_action.share_float"),
+        ("股份回购", "corporate_action.repurchase"),
+        ("审计意见", "financial.audit"),
+        ("研报评级", "research.report_rc"),
+        ("技术筹码", "technical.stk_factor"),
+        ("指数权重", "index.weight"),
+    )
+    cards.extend(
+        _formal_summary_source_card(
+            label,
+            dataset,
+            _latest_manifest(_list_manifests(dataset), trade_date),
+            "按需展开后过滤个股。",
+            stock_scoped=False,
+        )
+        for label, dataset in catalog_specs
+    )
+    return cards
+
+
+def _build_stock_formal_sources_for_date(
+    code: str,
+    trade_date: str,
+    *,
+    requested_trade_date: str,
+) -> dict[str, Any]:
+    normalized_code = _normalize_code(code)
+    source_cards = _stock_formal_source_index_cards(normalized_code, trade_date)
+    available = any(card.get("available") for card in source_cards)
+    stale = bool(requested_trade_date and trade_date and _compact_date(trade_date) != _compact_date(requested_trade_date))
+    return {
+        "available": available,
+        "section": "sources",
+        "code": normalized_code,
+        "trade_date": trade_date,
+        "requested_trade_date": requested_trade_date,
+        "data_trade_date": trade_date if available else None,
+        "stale": stale,
+        "freshness_status": "stale" if stale else ("current" if available else "missing"),
+        "provider": "tushare/tinyshare",
+        "headline": "正式数据来源索引已就绪" if available else "暂未命中正式数据来源索引",
+        "summary": "这里只展示来源覆盖和权限语义，不构建完整个股档案。",
+        "source_cards": source_cards,
+    }
+
+
+def build_stock_formal_data_sources(code: str, trade_date: str | None = None) -> dict[str, Any]:
+    return _stock_formal_section_payload_with_fallback(_build_stock_formal_sources_for_date, code, trade_date)
+
+
+def _build_stock_formal_profile_for_date(
+    code: str,
+    trade_date: str,
+    *,
+    requested_trade_date: str,
+) -> dict[str, Any]:
+    normalized_code = _normalize_code(code)
+    company_rows, company_manifest = _load_code_rows_for_keys("reference.stock_company", trade_date, ("all",), normalized_code)
+    namechange_rows, namechange_manifest = _load_code_rows_for_keys("reference.namechange", trade_date, ("all",), normalized_code)
+    concept_rows, concept_manifest = _load_code_rows_for_keys("reference.concept_detail", trade_date, ("hs300-zz500", "all"), normalized_code)
+    industry_rows, industry_manifest = _load_code_rows_for_keys(
+        "reference.industry_member",
+        trade_date,
+        ("SW2021-hs300-zz500", "hs300-zz500", "all"),
+        normalized_code,
+    )
+    ths_rows, ths_manifest = _load_code_rows_for_keys("reference.ths_member", trade_date, ("hs300-zz500", "all"), normalized_code)
+    dc_rows, dc_manifest = _load_code_rows_for_keys("reference.dc_member", trade_date, ("hs300-zz500", "all"), normalized_code)
+    business_rows, business_manifest = _load_code_rows_for_keys(
+        "financial.main_business",
+        trade_date,
+        ("hs300-zz500-recent", "recent", "all"),
+        normalized_code,
+    )
+    company = company_rows[0] if company_rows else {}
+    profile = {
+        "name": _first_text(company, "name", "stock_name", "short_name"),
+        "full_name": _first_text(company, "fullname", "full_name", "company_name"),
+        "chairman": _first_text(company, "chairman"),
+        "manager": _first_text(company, "manager", "general_manager"),
+        "secretary": _first_text(company, "secretary", "secretary_name"),
+        "province": _first_text(company, "province"),
+        "city": _first_text(company, "city"),
+        "area": _first_text(company, "area"),
+        "industry": _first_text(company, "industry"),
+        "main_business": _first_text(company, "main_business", "main_biz", "business"),
+        "business_scope": _first_text(company, "business_scope", "scope"),
+        "list_date": _first_text(company, "list_date"),
+        "setup_date": _first_text(company, "setup_date", "established_date"),
+        "exchange": _first_text(company, "exchange"),
+        "market": _first_text(company, "market"),
+        "employees": company.get("employees") or company.get("staff_num"),
+        "reg_capital": company.get("reg_capital") or company.get("reg_capital_m"),
+        "name_changes": _latest_rows(namechange_rows, limit=5, fields=("end_date", "start_date", "ann_date")),
+    }
+    themes = {
+        "concepts": [item for item in dict.fromkeys(_first_text(row, "concept_name", "name", "concept", "index_name") for row in concept_rows) if item][:12],
+        "industries": [item for item in dict.fromkeys(_first_text(row, "industry_name", "index_name", "name", "level_name") for row in industry_rows) if item][:8],
+        "ths": [item for item in dict.fromkeys(_first_text(row, "ths_name", "index_name", "name") for row in ths_rows) if item][:8],
+        "dc": [item for item in dict.fromkeys(_first_text(row, "dc_name", "index_name", "name") for row in dc_rows) if item][:8],
+        "raw": {
+            "concept_detail": concept_rows[:20],
+            "industry_member": industry_rows[:20],
+            "ths_member": ths_rows[:20],
+            "dc_member": dc_rows[:20],
+        },
+    }
+    industry_source_dataset, industry_source_manifest = _source_choice(
+        ("reference.industry_member", industry_manifest),
+        ("reference.ths_member", ths_manifest),
+        ("reference.dc_member", dc_manifest),
+    )
+    source_cards = [
+        _source_card("公司画像", "reference.stock_company", company_manifest, f"{len(company_rows)} 条公司资料"),
+        _source_card("名称变更", "reference.namechange", namechange_manifest, f"{len(namechange_rows)} 条历史名称"),
+        _source_card("概念归属", "reference.concept_detail", concept_manifest, f"{len(concept_rows)} 个概念命中"),
+        _source_card("行业/板块", industry_source_dataset, industry_source_manifest, f"行业 {len(industry_rows)} / THS {len(ths_rows)} / DC {len(dc_rows)}"),
+        _source_card("主营构成", "financial.main_business", business_manifest, f"{len(business_rows)} 条构成记录"),
+    ]
+    available = any(card.get("available") for card in source_cards)
+    stale = bool(requested_trade_date and trade_date and _compact_date(trade_date) != _compact_date(requested_trade_date))
+    return _json_clean({
+        "available": available,
+        "section": "profile",
+        "code": normalized_code,
+        "trade_date": trade_date,
+        "requested_trade_date": requested_trade_date,
+        "data_trade_date": trade_date if available else None,
+        "stale": stale,
+        "freshness_status": "stale" if stale else ("current" if available else "missing"),
+        "provider": "tushare/tinyshare",
+        "headline": "公司画像已按需加载" if available else "暂未命中公司画像数据",
+        "summary": "公司资料、主题行业和主营构成单独加载，不触发完整档案构建。",
+        "profile": _compact_profile_for_section(profile),
+        "themes": {
+            "concepts": themes["concepts"],
+            "industries": themes["industries"],
+            "ths": themes["ths"],
+            "dc": themes["dc"],
+        },
+        "business_breakdown": _compact_business_breakdown_for_section(_business_breakdown(business_rows)),
+        "source_cards": _compact_source_cards(source_cards),
+    })
+
+
+def build_stock_formal_data_profile(code: str, trade_date: str | None = None) -> dict[str, Any]:
+    return _stock_formal_section_payload_with_fallback(_build_stock_formal_profile_for_date, code, trade_date)
+
+
+def _build_stock_formal_risk_for_date(
+    code: str,
+    trade_date: str,
+    *,
+    requested_trade_date: str,
+) -> dict[str, Any]:
+    normalized_code = _normalize_code(code)
+    block_trade_rows, block_trade_manifest = _load_code_rows_for_preferred_key("market.block_trade", trade_date, ("recent", "all"), normalized_code)
+    pledge_stat_rows, pledge_stat_manifest = _load_code_rows_for_preferred_key("corporate_action.pledge_stat", trade_date, ("recent", "all"), normalized_code)
+    pledge_detail_rows, pledge_detail_manifest = _load_code_rows_for_preferred_key("corporate_action.pledge_detail", trade_date, ("recent", "all"), normalized_code)
+    share_float_rows, share_float_manifest = _load_code_rows_for_preferred_key("corporate_action.share_float", trade_date, ("recent", "all"), normalized_code)
+    repurchase_rows, repurchase_manifest = _load_code_rows_for_preferred_key("corporate_action.repurchase", trade_date, ("recent", "all"), normalized_code)
+    audit_rows, audit_manifest = _load_code_rows_for_preferred_key("financial.audit", trade_date, ("hs300-zz500", "recent", "all"), normalized_code)
+    report_manifest = _load_manifest_only("research.report_rc", trade_date, "recent") or _load_manifest_only("research.report_rc", trade_date, "all")
+    top_list_manifest = _load_manifest_only("market.top_list", trade_date, "recent")
+    top_inst_manifest = _load_manifest_only("market.top_inst", trade_date, "recent")
+    margin_detail_manifest = _load_manifest_only("market.margin_detail", trade_date, "recent") or _load_manifest_only("market.margin_detail", trade_date, "all")
+    margin_sec_manifest = _load_manifest_only("market.margin_secs", trade_date, "recent") or _load_manifest_only("market.margin_secs", trade_date, "all")
+    stk_factor_manifest = _load_manifest_only("technical.stk_factor", trade_date, "hs300-zz500-recent") or _load_manifest_only("technical.stk_factor", trade_date, "recent")
+    cyq_perf_manifest = _load_manifest_only("technical.cyq_perf", trade_date, "hs300-zz500-recent") or _load_manifest_only("technical.cyq_perf", trade_date, "recent")
+    cyq_chips_manifest = _load_manifest_only("technical.cyq_chips", trade_date, "hs300-zz500-recent") or _load_manifest_only("technical.cyq_chips", trade_date, "recent")
+    margin_source_dataset, margin_source_manifest = _source_choice(
+        ("market.margin_detail", margin_detail_manifest),
+        ("market.margin_secs", margin_sec_manifest),
+    )
+    pledge_source_dataset, pledge_source_manifest = _source_choice(
+        ("corporate_action.pledge_stat", pledge_stat_manifest),
+        ("corporate_action.pledge_detail", pledge_detail_manifest),
+    )
+    technical_source_dataset, technical_source_manifest = _source_choice(
+        ("technical.stk_factor", stk_factor_manifest),
+        ("technical.cyq_perf", cyq_perf_manifest),
+        ("technical.cyq_chips", cyq_chips_manifest),
+    )
+    market_activity = {
+        "block_trade": _block_trade_summary(block_trade_rows),
+        "margin_deferred": bool(margin_source_manifest),
+        "top_list_deferred": bool(top_list_manifest),
+        "top_inst_deferred": bool(top_inst_manifest),
+        "deferred_endpoint": f"/api/stock/{normalized_code}/formal-data/full",
+    }
+    event_risks = _event_risk_summary(
+        pledge_stat_rows,
+        pledge_detail_rows,
+        share_float_rows,
+        repurchase_rows,
+        audit_rows,
+        [],
+    )
+    event_risks["research_deferred"] = bool(report_manifest)
+    event_risks["research_endpoint"] = f"/api/stock/{normalized_code}/formal-data/full" if report_manifest else ""
+    source_cards = [
+        _source_card("龙虎榜", "market.top_list", top_list_manifest, "完整档案按需过滤个股记录"),
+        _source_card("机构席位", "market.top_inst", top_inst_manifest, "完整档案按需过滤个股记录"),
+        _source_card("大宗交易", "market.block_trade", block_trade_manifest, f"{len(block_trade_rows)} 条近窗口记录"),
+        _source_card("两融明细", margin_source_dataset, margin_source_manifest, "完整档案按需过滤个股记录"),
+        _source_card("股权质押", pledge_source_dataset, pledge_source_manifest, f"统计 {len(pledge_stat_rows)} / 明细 {len(pledge_detail_rows)}"),
+        _source_card("限售解禁", "corporate_action.share_float", share_float_manifest, f"{len(share_float_rows)} 条解禁记录"),
+        _source_card("股份回购", "corporate_action.repurchase", repurchase_manifest, f"{len(repurchase_rows)} 条回购记录"),
+        _source_card("审计意见", "financial.audit", audit_manifest, f"{len(audit_rows)} 条审计记录"),
+        _source_card("研报评级", "research.report_rc", report_manifest, "完整档案按需过滤研报记录"),
+        _source_card("技术筹码", technical_source_dataset, technical_source_manifest, "完整档案按需过滤技术/筹码记录"),
+    ]
+    available = any(card.get("available") for card in source_cards)
+    stale = bool(requested_trade_date and trade_date and _compact_date(trade_date) != _compact_date(requested_trade_date))
+    return _json_clean({
+        "available": available,
+        "section": "risk",
+        "code": normalized_code,
+        "trade_date": trade_date,
+        "requested_trade_date": requested_trade_date,
+        "data_trade_date": trade_date if available else None,
+        "stale": stale,
+        "freshness_status": "stale" if stale else ("current" if available else "missing"),
+        "provider": "tushare/tinyshare",
+        "headline": "事件风险已按需加载" if available else "暂未命中事件风险数据",
+        "summary": "事件、两融、技术筹码和因子风险单独加载，不触发完整档案构建。",
+        "event_risks": _compact_event_risks_for_section(event_risks),
+        "market_activity": {
+            "block_trade": _compact_fields(
+                market_activity["block_trade"],
+                ("count", "recent_count", "total_amount", "average_discount_pct"),
+            ),
+            "margin_deferred": market_activity["margin_deferred"],
+            "top_list_deferred": market_activity["top_list_deferred"],
+            "top_inst_deferred": market_activity["top_inst_deferred"],
+            "deferred_endpoint": market_activity["deferred_endpoint"],
+        },
+        "technical_chips": {
+            "technical_deferred": bool(technical_source_manifest),
+            "chips_deferred": bool(cyq_chips_manifest),
+            "chips_endpoint": f"/api/stock/{normalized_code}/formal-data/full",
+        },
+        "factor_profile_deferred": True,
+        "factor_profile_endpoint": f"/api/stock/{normalized_code}/formal-data/full",
+        "source_cards": _compact_source_cards(source_cards),
+    })
+
+
+def build_stock_formal_data_risk(code: str, trade_date: str | None = None) -> dict[str, Any]:
+    return _stock_formal_section_payload_with_fallback(_build_stock_formal_risk_for_date, code, trade_date)
 
 
 def _build_stock_formal_data(

@@ -47,6 +47,19 @@ def test_next_rewrites_target_internal_backend_by_default() -> None:
     assert '"http://localhost:8000' not in content
 
 
+def test_web_api_client_uses_same_origin_proxy() -> None:
+    api_path = Path("apps/web/src/lib/api.ts")
+
+    assert api_path.exists()
+
+    content = api_path.read_text(encoding="utf-8")
+
+    assert "NEXT_PUBLIC_PRISM_BACKEND_ORIGIN" not in content
+    assert "PRISM_BACKEND_ORIGIN" not in content
+    assert "new URL(path" not in content
+    assert "fetch(path" in content
+
+
 def test_web_dev_script_uses_single_server_guard() -> None:
     package_path = Path("apps/web/package.json")
     wrapper_path = Path("apps/web/scripts/dev.mjs")

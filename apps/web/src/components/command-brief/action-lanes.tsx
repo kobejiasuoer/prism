@@ -69,15 +69,24 @@ export function ActionLanes({ lanes }: { lanes: CommandBriefLane[] }) {
           <div key={lane.key} className="rounded-md border border-[var(--border-subtle)] p-3">
             <div className="flex items-center justify-between gap-2">
               <span className="text-[12px] font-semibold text-[var(--text-primary)]">{lane.title}</span>
-              <Badge tone={lane.tone}>{lane.items.length}</Badge>
+              <Badge tone={lane.tone}>{lane.total_count ?? lane.items.length}</Badge>
             </div>
-            <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{lane.subtitle}</p>
+            {lane.subtitle ? (
+              <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{lane.subtitle}</p>
+            ) : null}
             {lane.items.length ? (
-              <ul className="mt-2 space-y-2">
-                {lane.items.map((item, idx) => (
-                  <ActionLine key={`${lane.key}-${idx}`} item={item} />
-                ))}
-              </ul>
+              <>
+                <ul className="mt-2 space-y-2">
+                  {lane.items.map((item, idx) => (
+                    <ActionLine key={`${lane.key}-${idx}`} item={item} />
+                  ))}
+                </ul>
+                {(lane.total_count ?? lane.items.length) > lane.items.length ? (
+                  <p className="mt-2 text-[11px] text-[var(--text-tertiary)]">
+                    另有 {(lane.total_count ?? lane.items.length) - lane.items.length} 条在动作队列中延迟加载。
+                  </p>
+                ) : null}
+              </>
             ) : (
               <p className="mt-2 text-[12px] text-[var(--text-tertiary)]">今天此项为空。</p>
             )}

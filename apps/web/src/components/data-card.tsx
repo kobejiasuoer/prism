@@ -1,4 +1,3 @@
-import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -103,20 +102,6 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
         </button>
       ) : null}
     </div>
-  );
-}
-
-export function DetailLink({ href }: { href?: string }) {
-  if (!href) {
-    return null;
-  }
-  return (
-    <Link
-      href={href}
-      className="focus-ring inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--text-tertiary)] hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]"
-    >
-      <ArrowRight size={14} />
-    </Link>
   );
 }
 

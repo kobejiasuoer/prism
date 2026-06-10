@@ -1,6 +1,7 @@
 # apps/control-panel/tests/test_stock_formal_data.py
 import json, sys
 from pathlib import Path
+from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
 
@@ -11,6 +12,38 @@ def _seed(root, dataset, date, key, payload, manifest_extra=None):
     manifest = {"trade_date": date, "provider": "tushare"}
     manifest.update(manifest_extra or {})
     (d / f"{key}.manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+
+COMPACT_SOURCE_CARD_FORBIDDEN_KEYS = {
+    "usage",
+    "feature_group",
+    "intended_surfaces",
+    "usage_explanation",
+    "source_lane",
+    "decision_scope",
+    "authority_provider",
+    "source_authority_ready",
+    "formal_decision_allowed",
+}
+
+COMPACT_SOURCE_CARD_DISPLAY_KEYS = {
+    "dataset",
+    "label",
+    "value",
+    "detail",
+    "available",
+    "stock_profile_use",
+    "decision_use",
+    "live_permission",
+}
+
+
+def _assert_compact_source_cards(cards):
+    assert cards
+    for card in cards:
+        assert COMPACT_SOURCE_CARD_FORBIDDEN_KEYS.isdisjoint(card)
+        assert COMPACT_SOURCE_CARD_DISPLAY_KEYS.issuperset(card)
+    assert any({"dataset", "label", "value", "available"}.issubset(card) for card in cards)
 
 
 def test_formal_data_includes_factor_profile(tmp_path, monkeypatch):
@@ -128,3 +161,43 @@ def test_formal_data_falls_back_to_recent_stale_evidence_without_formal_permissi
     assert cards["公司画像"]["stale"] is True
     assert "evidence_date_before_requested_trade_date" in cards["公司画像"]["stale_reasons"]
     assert cards["大宗交易"]["formal_decision_allowed"] is False
+
+
+def test_formal_data_sections_do_not_build_full_or_factor_bundle(tmp_path, monkeypatch):
+    root = tmp_path / "datasets"; root.mkdir()
+    monkeypatch.setenv("PRISM_DATASET_REPOSITORY_ROOT", str(root))
+    date = "2026-05-29"
+    code = "600519"
+    _seed(root, "reference.stock_company", date, "all", [{"ts_code": f"{code}.SH", "name": "贵州茅台"}])
+    _seed(root, "market.block_trade", date, "recent", [{"ts_code": f"{code}.SH", "trade_date": date, "discount_rate": -4.0}])
+    _seed(root, "technical.cyq_chips", date, "hs300-zz500-recent", [{"ts_code": f"{code}.SH", "trade_date": date, "price": 101.0}])
+
+    import importlib, data_assets
+    importlib.reload(data_assets); data_assets.DATASET_ROOT = root
+
+    with patch.object(data_assets, "_build_stock_formal_data", side_effect=AssertionError("section API must not build full formal data")), patch.object(
+        data_assets,
+        "_factor_profile",
+        side_effect=AssertionError("risk section must defer factor profile"),
+    ):
+        summary = data_assets.build_stock_formal_data_summary(code, date)
+        profile = data_assets.build_stock_formal_data_profile(code, date)
+        risk = data_assets.build_stock_formal_data_risk(code, date)
+        sources = data_assets.build_stock_formal_data_sources(code, date)
+
+    assert summary["summary_only"] is True
+    assert profile["section"] == "profile"
+    assert profile["profile"]["name"] == "贵州茅台"
+    assert "chairman" not in profile["profile"]
+    assert "raw" not in profile["themes"]
+    assert "latest" not in risk["market_activity"]["block_trade"]
+    assert "details" not in risk["event_risks"]["pledge"]
+    assert "recent" not in risk["event_risks"]["research"]
+    assert risk["section"] == "risk"
+    assert risk["factor_profile_deferred"] is True
+    assert risk["technical_chips"]["chips_deferred"] is True
+    assert sources["section"] == "sources"
+    _assert_compact_source_cards(summary["source_cards"])
+    _assert_compact_source_cards(profile["source_cards"])
+    _assert_compact_source_cards(risk["source_cards"])
+    assert any({"usage", "intended_surfaces", "usage_explanation", "decision_scope"} <= set(card) for card in sources["source_cards"])

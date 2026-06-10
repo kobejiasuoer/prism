@@ -94,6 +94,30 @@ class TushareProviderTests(unittest.TestCase):
         self.assertEqual(request_body["token"], "unit-test-token")
         self.assertEqual(request_body["params"]["ts_code"], "600690.SH")
 
+    def test_fetch_adjustment_factor_cross_section_uses_trade_date_scope(self) -> None:
+        provider = TushareProvider(token="unit-test-token")
+        response = FakeResponse({
+            "code": 0,
+            "msg": "",
+            "data": {
+                "fields": ["ts_code", "trade_date", "adj_factor"],
+                "items": [
+                    ["600690.SH", "20260507", 12.3456],
+                    ["600378.SH", "20260507", 9.8765],
+                ],
+            },
+        })
+        with mock.patch.object(provider.session, "post", return_value=response) as post:
+            result = provider.fetch_adjustment_factor_cross_section(trade_date="2026-05-07")
+
+        self.assertEqual(result.status, DatasetStatus.OK)
+        self.assertEqual(result.dataset, "adjustment.factor")
+        self.assertEqual(result.trade_date, "2026-05-07")
+        self.assertEqual({row["ts_code"] for row in result.data}, {"600690.SH", "600378.SH"})
+        request_body = post.call_args.kwargs["json"]
+        self.assertEqual(request_body["api_name"], "adj_factor")
+        self.assertEqual(request_body["params"], {"trade_date": "20260507"})
+
     def test_token_can_load_from_project_env_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             Path(tmpdir, ".env").write_text("PRISM_TUSHARE_TOKEN=unit-env-token\n", encoding="utf-8")

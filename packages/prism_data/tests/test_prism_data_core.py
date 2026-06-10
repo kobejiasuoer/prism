@@ -230,6 +230,29 @@ class GatewayTests(unittest.TestCase):
             self.assertFalse(result.manifest["formal_decision_allowed"])
             self.assertIn("target_authority_not_in_use:tushare", result.manifest["authority_flags"])
 
+    def test_gateway_isolates_non_target_authority_from_formal_request_key(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repository = DatasetRepository(tmpdir)
+            gateway = DataGateway(
+                providers={
+                    "sina": FakeProvider(
+                        "sina",
+                        data=[{"code": "600690", "trade_date": "2026-05-07", "close": 27.34}],
+                    ),
+                },
+                repository=repository,
+            )
+
+            result = gateway.fetch_kline("600690", trade_date="2026-05-07", key="600690", provider_name="sina")
+            canonical = repository.load_manifest("bars.daily", "2026-05-07", "600690")
+            display = repository.load_manifest("bars.daily", "2026-05-07", "600690__sina__display")
+
+            self.assertEqual(result.manifest["request_key"], "600690__sina__display")
+            self.assertIsNone(canonical)
+            self.assertIsNotNone(display)
+            self.assertTrue(display["isolated_non_authority_result"])
+            self.assertEqual(display["formal_request_key"], "600690")
+
     def test_gateway_allows_explicit_tushare_formal_bars(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             repository = DatasetRepository(tmpdir)

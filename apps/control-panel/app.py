@@ -3,9 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
+import time
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -42,30 +45,41 @@ from control_panel.dashboard_data import (
     build_ask_followup_view,
     build_ask_page_view,
     build_ask_suggestions,
-    build_candidate_detail_view,
-    build_confirmation_view,
-    build_overview,
+    build_overview_summary,
+    build_opportunities_context_view,
+    build_opportunities_source_cards_view,
     build_opportunities_view,
     build_portfolio_account_view,
-    build_review_detail_view,
+    build_review_evidence_view,
+    build_review_research_view,
+    build_review_source_cards_view,
+    build_shadow_replay_review_summary,
     build_review_view,
-    build_screening_batch_view,
+    build_shell_status_view,
     build_stock_profile_detail_view,
+    build_stock_profile_evidence_view,
     build_stock_profile_formal_data_section_view,
-    build_stock_profile_formal_data_view,
     build_stock_profile_learning_scorecard,
+    build_stock_profile_secondary_view,
     build_stock_profile_today_action_view,
-    build_stock_profile_view,
     build_stock_profile_summary_view,
+    build_today_action_contracts_view,
     build_today_actions_view,
+    build_today_command_brief_detail_view,
+    build_today_readiness_view,
+    build_today_source_cards_view,
     build_today_summary_view,
     build_today_view,
-    build_watchlist_page_view,
-    build_watchlist_detail_view,
+    build_watchlist_manager_api_view,
+    build_watchlist_source_cards_view,
+    build_watchlist_summary_view,
+    clear_today_base_inputs_cache,
+    clear_run_list_cache,
     clear_stock_profile_cache,
     ensure_runtime_dirs,
     list_runs,
     parse_timestamp,
+    public_today_summary_readiness,
     record_cash_adjustment,
     record_fill,
     record_no_fill_intent,
@@ -98,10 +112,12 @@ from refresh_policy import (
     current_market_mode,
     eligible_lightweight_task,
     evaluate_auto_refresh,
+    manifest_trigger_reasons,
     normalize_task_name,
     page_cooldown_state,
     page_policy,
     pick_recommended_task as policy_pick_recommended_task,
+    summarize_auto_decision,
     task_family,
     task_conflict_is_running,
     task_is_running,
@@ -136,6 +152,47 @@ SCHEDULER_SAFETY_GRACE_MINUTES = 2
 TASK_NAME_ALIASES = {
     "watchlist": "watchlist_refresh",
 }
+FEISHU_STATUS_CACHE_TTL_SECONDS = 300
+_FEISHU_STATUS_CACHE: tuple[float, dict[str, Any]] | None = None
+FORMAL_DATA_STATUS_CACHE_TTL_SECONDS = max(
+    0,
+    int(os.environ.get("PRISM_FORMAL_DATA_STATUS_CACHE_TTL_SECONDS", "10") or "10"),
+)
+_FORMAL_DATA_STATUS_CACHE: tuple[float, tuple[str, tuple[str, ...], int | None], dict[str, Any]] | None = None
+OPPORTUNITIES_API_CACHE_TTL_SECONDS = max(
+    0,
+    int(os.environ.get("PRISM_OPPORTUNITIES_API_CACHE_TTL_SECONDS", "30") or "30"),
+)
+_OPPORTUNITIES_COMPACT_API_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_OPPORTUNITIES_CONTEXT_API_CACHE: tuple[float, dict[str, Any]] | None = None
+_OPPORTUNITIES_SOURCE_CARDS_API_CACHE: tuple[float, dict[str, Any]] | None = None
+TODAY_SUMMARY_API_CACHE_TTL_SECONDS = max(
+    0,
+    int(os.environ.get("PRISM_TODAY_SUMMARY_API_CACHE_TTL_SECONDS", "20") or "20"),
+)
+_TODAY_SUMMARY_API_CACHE: tuple[float, dict[str, Any]] | None = None
+TODAY_ACTIONS_API_CACHE_TTL_SECONDS = max(
+    0,
+    int(os.environ.get("PRISM_TODAY_ACTIONS_API_CACHE_TTL_SECONDS", "20") or "20"),
+)
+_TODAY_ACTIONS_API_CACHE: tuple[float, dict[str, Any]] | None = None
+_TODAY_ACTION_CONTRACTS_API_CACHE: tuple[float, dict[str, Any]] | None = None
+_TODAY_COMMAND_BRIEF_DETAIL_API_CACHE: tuple[float, dict[str, Any]] | None = None
+WATCHLIST_API_CACHE_TTL_SECONDS = max(
+    0,
+    int(os.environ.get("PRISM_WATCHLIST_API_CACHE_TTL_SECONDS", "20") or "20"),
+)
+_WATCHLIST_API_CACHE: tuple[float, dict[str, Any]] | None = None
+PORTFOLIO_ACCOUNT_API_CACHE_TTL_SECONDS = max(
+    0,
+    int(os.environ.get("PRISM_PORTFOLIO_ACCOUNT_API_CACHE_TTL_SECONDS", "20") or "20"),
+)
+_PORTFOLIO_ACCOUNT_API_CACHE: dict[tuple[bool, bool], tuple[float, dict[str, Any]]] | None = None
+OVERVIEW_API_CACHE_TTL_SECONDS = max(
+    0,
+    int(os.environ.get("PRISM_OVERVIEW_API_CACHE_TTL_SECONDS", "20") or "20"),
+)
+_OVERVIEW_API_CACHE: dict[bool, tuple[float, dict[str, Any]]] | None = None
 
 app = FastAPI(title="Prism Control", version="0.1.0")
 
@@ -187,6 +244,15 @@ FORMAL_SOURCE_PLAN: dict[str, dict[str, Any]] = {
 }
 
 
+def _prewarm_control_panel_caches() -> None:
+    if str(os.environ.get("PRISM_CONTROL_PANEL_PREWARM", "1")).strip().lower() in {"0", "false", "no", "off"}:
+        return
+    try:
+        build_refresh_status_payload("today", auto=False, skip_auto=True, compact=True)
+    except Exception:
+        pass
+
+
 @asynccontextmanager
 async def _prism_lifespan(_app: FastAPI):
     # Best-effort background worker that backfills friendly stock names
@@ -195,6 +261,7 @@ async def _prism_lifespan(_app: FastAPI):
         _start_stock_name_backfill_worker()
     except Exception:
         pass
+    _prewarm_control_panel_caches()
     try:
         yield
     finally:
@@ -253,15 +320,42 @@ def canonical_task_name(task_name: str) -> str:
     return TASK_NAME_ALIASES.get(normalized, normalized)
 
 
-def feishu_channel_status() -> dict[str, Any]:
+def _remember_feishu_channel_status(payload: dict[str, Any]) -> dict[str, Any]:
+    global _FEISHU_STATUS_CACHE
+
+    _FEISHU_STATUS_CACHE = (time.monotonic(), payload)
+    return payload
+
+
+def feishu_channel_status(*, allow_probe: bool = True, force_probe: bool = False) -> dict[str, Any]:
+    global _FEISHU_STATUS_CACHE
+
+    now = time.monotonic()
+    if _FEISHU_STATUS_CACHE and not force_probe:
+        cached_at, cached_payload = _FEISHU_STATUS_CACHE
+        if now - cached_at <= FEISHU_STATUS_CACHE_TTL_SECONDS:
+            return {**cached_payload, "cached": True}
+
     openclaw_bin = shutil.which("openclaw")
     if not openclaw_bin:
-        return {
+        return _remember_feishu_channel_status({
             "available": False,
             "installed": False,
             "configured": False,
             "reason": "openclaw_missing",
             "detail": "未安装 openclaw，无法发送飞书。",
+        })
+
+    if not allow_probe:
+        cached_payload = _FEISHU_STATUS_CACHE[1] if _FEISHU_STATUS_CACHE else None
+        if cached_payload:
+            return {**cached_payload, "cached": True}
+        return {
+            "available": False,
+            "installed": True,
+            "configured": False,
+            "reason": "probe_skipped",
+            "detail": "健康检查跳过飞书通道深探测；运行任务时会再确认。",
         }
 
     try:
@@ -275,35 +369,35 @@ def feishu_channel_status() -> dict[str, Any]:
             check=False,
         )
     except Exception as exc:
-        return {
+        return _remember_feishu_channel_status({
             "available": False,
             "installed": True,
             "configured": False,
             "reason": "probe_failed",
             "detail": f"飞书通道探测失败：{exc}",
-        }
+        })
 
     output = (proc.stdout or "").strip()
     if proc.returncode != 0 or not output:
         detail = (proc.stderr or proc.stdout or "飞书通道未就绪").strip()
-        return {
+        return _remember_feishu_channel_status({
             "available": False,
             "installed": True,
             "configured": False,
             "reason": "probe_failed",
             "detail": detail,
-        }
+        })
 
     try:
         payload = json.loads(output)
     except json.JSONDecodeError:
-        return {
+        return _remember_feishu_channel_status({
             "available": False,
             "installed": True,
             "configured": False,
             "reason": "probe_invalid_json",
             "detail": output,
-        }
+        })
 
     chat = payload.get("chat") if isinstance(payload, dict) else None
     feishu = chat.get("feishu") if isinstance(chat, dict) else None
@@ -312,7 +406,7 @@ def feishu_channel_status() -> dict[str, Any]:
     configured = isinstance(accounts, list) and len(accounts) > 0
     available = installed and configured
     detail = "飞书通道可用。" if available else "飞书插件已安装，但还没有可用账号。"
-    return {
+    payload = {
         "available": available,
         "installed": installed,
         "configured": configured,
@@ -320,6 +414,7 @@ def feishu_channel_status() -> dict[str, Any]:
         "reason": "" if available else "not_configured",
         "detail": detail,
     }
+    return _remember_feishu_channel_status(payload)
 
 
 def web_redirect(path: str, *, query: str = "") -> RedirectResponse:
@@ -386,6 +481,9 @@ def launch_background_task(
         stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
+    clear_run_list_cache()
+    _clear_formal_data_status_cache()
+    _clear_overview_api_cache()
 
     return {
         "started": True,
@@ -819,6 +917,15 @@ def resolve_refresh_task(task_name: str) -> dict[str, Any]:
             "send_to_feishu": False,
         }
 
+    if normalized == "formal_data_refresh_postclose":
+        return {
+            "task_name": normalized,
+            "title": policy.title if policy else "正式日线复权盘后补齐",
+            "command": [*FORMAL_DATA_REFRESH_COMMAND, "--datasets", "bars.daily,adjustment.factor"],
+            "cwd": str(WORKSPACE_ROOT),
+            "send_to_feishu": False,
+        }
+
     if normalized.startswith("formal_data_refresh_index_"):
         return {
             "task_name": normalized,
@@ -869,13 +976,13 @@ def resolve_refresh_task(task_name: str) -> dict[str, Any]:
 
 def read_page_source_cards(page: str) -> list[dict[str, Any]]:
     if page == "today":
-        return list((build_today_view().get("source_cards") or []))
+        return list((build_today_source_cards_view().get("source_cards") or []))
     if page == "watchlist":
-        return list((build_watchlist_page_view().get("source_cards") or []))
+        return list((build_watchlist_source_cards_view().get("source_cards") or []))
     if page == "opportunities":
-        return list((build_opportunities_view().get("source_cards") or []))
+        return list((build_opportunities_source_cards_view().get("source_cards") or []))
     if page == "review":
-        return list((build_review_view().get("source_cards") or []))
+        return list((build_review_source_cards_view().get("source_cards") or []))
     return []
 
 
@@ -959,14 +1066,6 @@ def build_running_refresh_tasks(page: str) -> list[dict[str, Any]]:
     return rows
 
 
-def _latest_run_for_task_name(task_name: str) -> dict[str, Any] | None:
-    expected = normalize_task_name(task_name)
-    for item in list_runs(limit=80):
-        if normalize_task_name(str(item.get("task_name") or "")) == expected:
-            return item
-    return None
-
-
 def _latest_run_for_task_family(task_name: str) -> dict[str, Any] | None:
     expected_family = task_family(normalize_task_name(task_name))
     for item in list_runs(limit=80):
@@ -1019,8 +1118,24 @@ def _formal_action_for_state(state: str) -> str:
     }.get(state, "查看 manifest 和最近任务日志。")
 
 
-def build_formal_data_status_payload() -> dict[str, Any]:
-    load_project_env(root=REPO_ROOT)
+def _formal_data_status_cache_key(env_file: Path) -> tuple[str, tuple[str, ...], int | None]:
+    try:
+        env_mtime = env_file.stat().st_mtime_ns
+    except FileNotFoundError:
+        env_mtime = None
+    return (
+        str(env_file),
+        tuple(TushareProvider.configured_token_env_names()),
+        env_mtime,
+    )
+
+
+def _clear_formal_data_status_cache() -> None:
+    global _FORMAL_DATA_STATUS_CACHE
+    _FORMAL_DATA_STATUS_CACHE = None
+
+
+def _build_formal_data_status_payload_uncached() -> dict[str, Any]:
     current = datetime.now()
     expected_date = readiness_expected_trade_date(current)
     configured_token_names = TushareProvider.configured_token_env_names()
@@ -1100,6 +1215,257 @@ def build_formal_data_status_payload() -> dict[str, Any]:
             "title": "正式口径数据刷新",
         },
     }
+
+
+def build_formal_data_status_payload(*, fresh: bool = False) -> dict[str, Any]:
+    global _FORMAL_DATA_STATUS_CACHE
+
+    load_project_env(root=REPO_ROOT)
+    env_file = project_env_path(REPO_ROOT)
+    cache_key = _formal_data_status_cache_key(env_file)
+    if FORMAL_DATA_STATUS_CACHE_TTL_SECONDS > 0 and _FORMAL_DATA_STATUS_CACHE and not fresh:
+        cached_at, cached_key, cached_payload = _FORMAL_DATA_STATUS_CACHE
+        if cached_key == cache_key and time.monotonic() - cached_at <= FORMAL_DATA_STATUS_CACHE_TTL_SECONDS:
+            return deepcopy(cached_payload)
+
+    payload = _build_formal_data_status_payload_uncached()
+    if FORMAL_DATA_STATUS_CACHE_TTL_SECONDS > 0:
+        _FORMAL_DATA_STATUS_CACHE = (time.monotonic(), cache_key, deepcopy(payload))
+    return payload
+
+
+_FORMAL_DATA_STATUS_COMPACT_ROW_KEYS = (
+    "key",
+    "dataset",
+    "label",
+    "provider",
+    "authority_provider",
+    "target_authority_provider",
+    "trade_date",
+    "available",
+    "stale",
+    "freshness_status",
+    "age_label",
+    "setup_state",
+    "next_action",
+    "error",
+)
+
+
+def _compact_formal_data_status_list(value: Any, *, limit: int = 3) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if item not in (None, "")][:limit]
+
+
+def _compact_formal_data_status_row(row: Any) -> dict[str, Any]:
+    if not isinstance(row, dict):
+        return {}
+    payload = {
+        key: deepcopy(row[key])
+        for key in _FORMAL_DATA_STATUS_COMPACT_ROW_KEYS
+        if row.get(key) not in (None, "", [], {})
+    }
+    for key in ("quality_flags", "source_apis", "blocked_request_keys", "missing_request_keys"):
+        values = _compact_formal_data_status_list(row.get(key))
+        if values:
+            payload[key] = values
+    if row.get("required_permission") and row.get("setup_state") != "ready":
+        payload["required_permission"] = row.get("required_permission")
+    if row.get("manifest_path"):
+        payload["has_manifest"] = True
+    return payload
+
+
+def _compact_formal_data_status_blocker(blocker: Any) -> dict[str, Any]:
+    if not isinstance(blocker, dict):
+        return {}
+    payload = {
+        key: deepcopy(blocker[key])
+        for key in ("dataset", "label", "state", "next_action", "error", "required_permission")
+        if blocker.get(key) not in (None, "", [], {})
+    }
+    for key in ("quality_flags", "source_apis", "blocked_request_keys", "missing_request_keys"):
+        values = _compact_formal_data_status_list(blocker.get(key))
+        if values:
+            payload[key] = values
+    return payload
+
+
+def _compact_formal_data_status_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    provider = payload.get("provider") if isinstance(payload.get("provider"), dict) else {}
+    recommended_task = payload.get("recommended_task") if isinstance(payload.get("recommended_task"), dict) else {}
+    last_run = payload.get("last_run") if isinstance(payload.get("last_run"), dict) else None
+    compact: dict[str, Any] = {
+        "generated_at": payload.get("generated_at"),
+        "expected_trade_date": payload.get("expected_trade_date"),
+        "ready": payload.get("ready", False),
+        "ready_count": payload.get("ready_count", 0),
+        "total_count": payload.get("total_count", 0),
+        "blocked_count": payload.get("blocked_count", 0),
+        "provider": {
+            key: provider.get(key)
+            for key in (
+                "name",
+                "token_configured",
+                "token_env_names",
+                "configured_token_env_names",
+                "local_env_file_exists",
+            )
+            if provider.get(key) not in (None, "", [], {})
+        },
+        "datasets": [
+            item
+            for item in (_compact_formal_data_status_row(row) for row in (payload.get("datasets") or []))
+            if item
+        ],
+        "blockers": [
+            item
+            for item in (_compact_formal_data_status_blocker(row) for row in (payload.get("blockers") or [])[:4])
+            if item
+        ],
+        "running": payload.get("running", False),
+        "compact": True,
+    }
+    if last_run:
+        compact["last_run"] = {
+            key: last_run.get(key)
+            for key in (
+                "run_id",
+                "task_id",
+                "task_name",
+                "title",
+                "status",
+                "started_at",
+                "finished_at",
+                "checked_started_at",
+                "summary",
+            )
+            if last_run.get(key) not in (None, "", [], {})
+        }
+    if recommended_task:
+        compact["recommended_task"] = {
+            key: recommended_task.get(key)
+            for key in ("task_name", "title")
+            if recommended_task.get(key) not in (None, "", [], {})
+        }
+    return {key: value for key, value in compact.items() if value not in (None, "", [], {})}
+
+
+def _clear_today_api_cache() -> None:
+    global _TODAY_SUMMARY_API_CACHE, _TODAY_ACTIONS_API_CACHE, _TODAY_ACTION_CONTRACTS_API_CACHE
+    global _TODAY_COMMAND_BRIEF_DETAIL_API_CACHE
+    _TODAY_SUMMARY_API_CACHE = None
+    _TODAY_ACTIONS_API_CACHE = None
+    _TODAY_ACTION_CONTRACTS_API_CACHE = None
+    _TODAY_COMMAND_BRIEF_DETAIL_API_CACHE = None
+    clear_today_base_inputs_cache()
+
+
+def _clear_opportunities_api_cache() -> None:
+    global _OPPORTUNITIES_CONTEXT_API_CACHE, _OPPORTUNITIES_SOURCE_CARDS_API_CACHE
+    _OPPORTUNITIES_CONTEXT_API_CACHE = None
+    _OPPORTUNITIES_SOURCE_CARDS_API_CACHE = None
+    _OPPORTUNITIES_COMPACT_API_CACHE.clear()
+
+
+def _clear_watchlist_api_cache() -> None:
+    global _WATCHLIST_API_CACHE
+    _WATCHLIST_API_CACHE = None
+
+
+def _clear_portfolio_account_api_cache() -> None:
+    global _PORTFOLIO_ACCOUNT_API_CACHE
+    _PORTFOLIO_ACCOUNT_API_CACHE = None
+
+
+def _clear_overview_api_cache() -> None:
+    global _OVERVIEW_API_CACHE
+    _OVERVIEW_API_CACHE = None
+
+
+def _clear_portfolio_related_api_caches() -> None:
+    _clear_portfolio_account_api_cache()
+    _clear_today_api_cache()
+
+
+def _clear_watchlist_related_api_caches() -> None:
+    _clear_watchlist_api_cache()
+    _clear_portfolio_account_api_cache()
+    _clear_today_api_cache()
+    _clear_opportunities_api_cache()
+
+
+_STOCK_PROFILE_ACCOUNT_SENSITIVE_SECTIONS = (
+    "summary",
+    "detail-compact",
+    "evidence",
+    "secondary",
+    "source-details",
+    "source-details:learning",
+    "today-action",
+)
+
+
+def _clear_stock_profile_account_sensitive_cache(code: str | None = None) -> None:
+    clear_stock_profile_cache(code, sections=_STOCK_PROFILE_ACCOUNT_SENSITIVE_SECTIONS)
+
+
+def _clear_stock_profile_cache_when_fresh(code: str, fresh: bool) -> None:
+    if fresh:
+        clear_stock_profile_cache(code)
+
+
+def _stock_code_from_action_key(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    if not text:
+        return ""
+    direct = decision_ledger.normalize_stock_code(text)
+    if direct:
+        return direct
+    matches = re.findall(r"(?:sh|sz)?\d{6}", text)
+    for item in reversed(matches):
+        normalized = decision_ledger.normalize_stock_code(item)
+        if normalized:
+            return normalized
+    return ""
+
+
+def _build_portfolio_account_api_payload(
+    *,
+    refresh_quotes: bool = False,
+    include_holding_reviews: bool = False,
+    include_account_history: bool = True,
+    fresh_formal_status: bool = False,
+) -> dict[str, Any]:
+    global _PORTFOLIO_ACCOUNT_API_CACHE
+
+    payload = build_portfolio_account_view(
+        refresh_quotes=refresh_quotes,
+        formal_data_status=build_formal_data_status_payload(fresh=fresh_formal_status),
+        include_holding_reviews=include_holding_reviews,
+        include_account_history=include_account_history,
+    )
+    if PORTFOLIO_ACCOUNT_API_CACHE_TTL_SECONDS > 0:
+        if not isinstance(_PORTFOLIO_ACCOUNT_API_CACHE, dict):
+            _PORTFOLIO_ACCOUNT_API_CACHE = {}
+        cache_key = (include_holding_reviews, include_account_history)
+        _PORTFOLIO_ACCOUNT_API_CACHE[cache_key] = (time.monotonic(), deepcopy(payload))
+    return payload
+
+
+def _watchlist_api_payload(*, fresh: bool = False) -> dict[str, Any]:
+    global _WATCHLIST_API_CACHE
+
+    if WATCHLIST_API_CACHE_TTL_SECONDS > 0 and _WATCHLIST_API_CACHE and not fresh:
+        cached_at, cached_payload = _WATCHLIST_API_CACHE
+        if time.monotonic() - cached_at <= WATCHLIST_API_CACHE_TTL_SECONDS:
+            return deepcopy(cached_payload)
+
+    payload = build_watchlist_summary_view()
+    if WATCHLIST_API_CACHE_TTL_SECONDS > 0:
+        _WATCHLIST_API_CACHE = (time.monotonic(), deepcopy(payload))
+    return payload
 
 
 def _readiness_freshness_rows(
@@ -1200,6 +1566,69 @@ def _latest_audit_event(*, state: dict[str, Any], trigger_type: str | None = Non
             continue
         return event
     return None
+
+
+def _compact_audit_event_payload(event: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(event, dict):
+        return None
+    return {
+        "ts": str(event.get("ts") or ""),
+        "trigger_type": str(event.get("trigger_type") or ""),
+        "page": str(event.get("page") or ""),
+        "task_name": str(event.get("task_name") or ""),
+        "task_family": str(event.get("task_family") or ""),
+        "run_id": str(event.get("run_id") or ""),
+        "force": bool(event.get("force")),
+        "reason": str(event.get("reason") or ""),
+    }
+
+
+def _compact_cooldown_payload(cooldown: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "seconds": int(cooldown.get("seconds") or 0),
+        "remaining_seconds": int(cooldown.get("remaining_seconds") or 0),
+        "ready": bool(cooldown.get("ready")),
+        "next_allowed_at": str(cooldown.get("next_allowed_at") or ""),
+        "last_trigger_at": str(cooldown.get("last_trigger_at") or ""),
+        "last_task_name": str(cooldown.get("last_task_name") or ""),
+        "last_run_id": str(cooldown.get("last_run_id") or cooldown.get("page_last_run_id") or ""),
+        "last_reason": str(cooldown.get("last_reason") or ""),
+        "page_last_trigger_at": str(cooldown.get("page_last_trigger_at") or ""),
+        "page_last_run_id": str(cooldown.get("page_last_run_id") or ""),
+    }
+
+
+def _compact_auto_decision_payload(decision: dict[str, Any]) -> dict[str, Any]:
+    trigger = decision.get("trigger") if isinstance(decision.get("trigger"), dict) else None
+    return {
+        "enabled": bool(decision.get("enabled")),
+        "allowed": bool(decision.get("allowed")),
+        "should_trigger": bool(decision.get("should_trigger")),
+        "force": bool(decision.get("force")),
+        "page": str(decision.get("page") or ""),
+        "task_name": str(decision.get("task_name") or ""),
+        "task_kind": str(decision.get("task_kind") or ""),
+        "reason_codes": list(decision.get("reason_codes") or []),
+        "blocked_reasons": list(decision.get("blocked_reasons") or []),
+        "manifest_reasons": list(decision.get("manifest_reasons") or []),
+        "stale_count": int(decision.get("stale_count") or 0),
+        "cooldown_remaining_seconds": int(decision.get("cooldown_remaining_seconds") or 0),
+        "next_allowed_at": str(decision.get("next_allowed_at") or ""),
+        "summary": str(decision.get("summary") or ""),
+        "triggered": bool(decision.get("triggered")),
+        "trigger": (
+            {
+                "started": bool(trigger.get("started")),
+                "run_id": str(trigger.get("run_id") or ""),
+                "task_name": str(trigger.get("task_name") or ""),
+                "title": str(trigger.get("title") or ""),
+                "log_path": str(trigger.get("log_path") or ""),
+                "meta_path": str(trigger.get("meta_path") or ""),
+            }
+            if trigger
+            else None
+        ),
+    }
 
 
 _RECOVERY_TASK_METADATA: dict[str, dict[str, Any]] = {
@@ -1419,6 +1848,32 @@ def build_scheduler_status_payload(*, now: datetime | None = None) -> dict[str, 
     }
 
 
+def _scheduler_safety_status_payload(*, now: datetime | None = None) -> dict[str, Any]:
+    current = now or datetime.now()
+    state = load_scheduler_state()
+    required = set(SCHEDULER_REQUIRED_TASKS)
+    jobs: list[dict[str, Any]] = []
+    for policy in CRON_POLICIES:
+        if policy.task_name not in required:
+            continue
+        run_state = _public_run_state(policy.task_name, now=current)
+        jobs.append(
+            {
+                "task_name": policy.task_name,
+                "cron_expr": policy.cron_expr,
+                "run": {
+                    "running": bool(run_state.get("running")),
+                    "today_success": bool(run_state.get("today_success")),
+                },
+            }
+        )
+    return {
+        "calendar": calendar_status(current),
+        "scheduler": {"alive": scheduler_alive(state, now=current)},
+        "jobs": jobs,
+    }
+
+
 def _scheduler_safety_lightweight_task(
     *,
     page: str,
@@ -1450,6 +1905,7 @@ def build_refresh_status_payload(
     auto: bool = False,
     now: datetime | None = None,
     skip_auto: bool = False,
+    compact: bool = False,
 ) -> dict[str, Any]:
     current = now or datetime.now()
     market_mode, market_label = current_market_mode(current)
@@ -1460,11 +1916,11 @@ def build_refresh_status_payload(
     # Single source of truth for the today page: readiness drives freshness,
     # stale_count, recommended_task and the readiness_mode signature.  The
     # legacy ``build_page_freshness`` heuristic is bypassed entirely so the
-    # refresh widget cannot disagree with /api/today.
+    # refresh widget cannot disagree with the Today summary/readiness surfaces.
     readiness_payload: dict[str, Any] | None = None
     if page == "today":
         try:
-            today_view = build_today_view()
+            today_view = build_today_readiness_view()
             readiness_payload = today_view.get("readiness")
         except Exception:
             readiness_payload = None
@@ -1542,7 +1998,15 @@ def build_refresh_status_payload(
         now=current,
     )
     trigger_result: dict[str, Any] | None = None
-    scheduler_status = build_scheduler_status_payload(now=current)
+    scheduler_status: dict[str, Any] = {}
+    if auto and not skip_auto:
+        scheduler_status = (
+            _scheduler_safety_status_payload(now=current)
+            if compact
+            else build_scheduler_status_payload(now=current)
+        )
+    elif not compact:
+        scheduler_status = build_scheduler_status_payload(now=current)
     scheduler_safety_refresh: dict[str, Any] | None = None
     if auto and not skip_auto:
         scheduler_safety_refresh = maybe_trigger_scheduler_safety_refresh(
@@ -1555,7 +2019,11 @@ def build_refresh_status_payload(
         if scheduler_safety_refresh:
             state = load_refresh_state()
             running = build_running_refresh_tasks(page)
-            scheduler_status = build_scheduler_status_payload(now=current)
+            scheduler_status = (
+                _scheduler_safety_status_payload(now=current)
+                if compact
+                else build_scheduler_status_payload(now=current)
+            )
             suggested_poll_seconds = min(int(REFRESH_PAGE_CONFIG[page]["poll_seconds"][market_mode]), 25)
 
     if auto and not skip_auto and not scheduler_safety_refresh and auto_decision.get("should_trigger"):
@@ -1650,7 +2118,7 @@ def build_refresh_status_payload(
     if running:
         suggested_poll_seconds = min(suggested_poll_seconds, 25)
 
-    recovery_steps = _build_readiness_recovery_steps(
+    recovery_steps = [] if compact else _build_readiness_recovery_steps(
         page=page,
         readiness_payload=readiness_payload,
         recommended_task_name=recommended_task_name,
@@ -1676,6 +2144,8 @@ def build_refresh_status_payload(
     signature_seed = json.dumps(signature_payload, ensure_ascii=False, sort_keys=True)
     snapshot_signature = hashlib.sha1(signature_seed.encode("utf-8")).hexdigest()[:16]
 
+    last_auto_refresh = _latest_audit_event(state=state, trigger_type="auto")
+    last_refresh_event = _latest_audit_event(state=state)
     payload = {
         "page": page,
         "server_time": current.strftime("%Y-%m-%d %H:%M:%S"),
@@ -1694,25 +2164,37 @@ def build_refresh_status_payload(
             "cooldown_seconds": policy.cooldown_seconds if policy else cooldown.get("seconds"),
             "manifest_dependencies": list(policy.manifest_dependencies if policy else ()),
         },
-        "recovery_steps": recovery_steps,
         "cooldown": cooldown,
         "auto_refresh": auto_decision,
-        "last_auto_refresh": _latest_audit_event(state=state, trigger_type="auto"),
-        "last_refresh_event": _latest_audit_event(state=state),
-        "policy": {
-            "page": cfg.as_dict() if cfg else {},
-            "task": policy.as_dict() if policy else {},
-        },
-        "policy_catalog": build_policy_payload(),
-        "scheduler_status": scheduler_status,
-        "scheduler_safety_refresh": scheduler_safety_refresh,
-        "active_auto_windows": active_auto_windows(current),
         "snapshot_signature": snapshot_signature,
     }
+    if compact:
+        if page == "today":
+            payload.pop("freshness", None)
+            payload["freshness_deferred"] = True
+            payload["links_lazy"] = {"freshness": f"/api/refresh/status?page={page}&compact=0"}
+        payload["cooldown"] = _compact_cooldown_payload(cooldown)
+        payload["auto_refresh"] = _compact_auto_decision_payload(auto_decision)
+        payload["last_auto_refresh"] = _compact_audit_event_payload(last_auto_refresh)
+        if scheduler_safety_refresh:
+            payload["scheduler_safety_refresh"] = scheduler_safety_refresh
+    else:
+        payload["recovery_steps"] = recovery_steps
+        payload["last_auto_refresh"] = last_auto_refresh
+        payload["last_refresh_event"] = last_refresh_event
+        payload["policy"] = {
+            "page": cfg.as_dict() if cfg else {},
+            "task": policy.as_dict() if policy else {},
+        }
+        payload["policy_catalog"] = build_policy_payload()
+        payload["scheduler_status"] = scheduler_status
+        payload["scheduler_safety_refresh"] = scheduler_safety_refresh
+        payload["active_auto_windows"] = active_auto_windows(current)
     if readiness_payload:
-        payload["readiness"] = readiness_payload
         payload["readiness_mode"] = readiness_payload.get("readiness_mode")
         payload["recommended_tasks"] = readiness_recommendations
+        if not compact:
+            payload["readiness"] = readiness_payload
     return payload
 
 
@@ -1948,8 +2430,27 @@ async def index(request: Request) -> RedirectResponse:
 
 
 @app.get("/api/overview")
-def api_overview() -> JSONResponse:
-    return JSONResponse(build_overview())
+def api_overview(fresh: bool = False, compact: bool = True) -> JSONResponse:
+    global _OVERVIEW_API_CACHE
+
+    cache = _OVERVIEW_API_CACHE or {}
+    if OVERVIEW_API_CACHE_TTL_SECONDS > 0 and compact in cache and not fresh:
+        cached_at, cached_payload = cache[compact]
+        if time.monotonic() - cached_at <= OVERVIEW_API_CACHE_TTL_SECONDS:
+            return JSONResponse(deepcopy(cached_payload))
+
+    if fresh:
+        clear_run_list_cache()
+    payload = build_overview_summary(compact=compact)
+    if OVERVIEW_API_CACHE_TTL_SECONDS > 0:
+        cache[compact] = (time.monotonic(), deepcopy(payload))
+        _OVERVIEW_API_CACHE = cache
+    return JSONResponse(payload)
+
+
+@app.get("/api/shell/status")
+def api_shell_status() -> JSONResponse:
+    return JSONResponse(build_shell_status_view())
 
 
 @app.get("/today", include_in_schema=False)
@@ -1957,27 +2458,104 @@ async def today(request: Request) -> RedirectResponse:
     return web_redirect("/", query=request.url.query)
 
 
-@app.get("/api/today")
-def api_today() -> JSONResponse:
-    today_view = build_today_view()
-    readiness = today_view.get("readiness")
-    if isinstance(readiness, dict):
-        readiness["formal_data_status"] = build_formal_data_status_payload()
-    return JSONResponse(today_view)
+_TODAY_SUMMARY_READINESS_DEFERRED_KEYS = {
+    "blockers",
+    "warnings",
+    "formal_blockers",
+    "source_freshness",
+}
+
+
+def _today_summary_readiness_payload(
+    readiness: dict[str, Any],
+    formal_data_status: dict[str, Any],
+) -> dict[str, Any]:
+    payload = public_today_summary_readiness(readiness, formal_data_status)
+    return {
+        key: value
+        for key, value in payload.items()
+        if key not in _TODAY_SUMMARY_READINESS_DEFERRED_KEYS
+    }
 
 
 @app.get("/api/today/summary")
-def api_today_summary() -> JSONResponse:
+def api_today_summary(fresh: bool = False) -> JSONResponse:
+    global _TODAY_SUMMARY_API_CACHE
+
+    if TODAY_SUMMARY_API_CACHE_TTL_SECONDS > 0 and _TODAY_SUMMARY_API_CACHE and not fresh:
+        cached_at, cached_payload = _TODAY_SUMMARY_API_CACHE
+        if time.monotonic() - cached_at <= TODAY_SUMMARY_API_CACHE_TTL_SECONDS:
+            return JSONResponse(deepcopy(cached_payload))
+
+    if fresh:
+        clear_today_base_inputs_cache()
+
     today_view = build_today_summary_view()
     readiness = today_view.get("readiness")
     if isinstance(readiness, dict):
-        readiness["formal_data_status"] = build_formal_data_status_payload()
+        today_view["readiness"] = _today_summary_readiness_payload(
+            readiness,
+            build_formal_data_status_payload(fresh=fresh),
+        )
+        today_view["readiness_details_deferred"] = True
+    if TODAY_SUMMARY_API_CACHE_TTL_SECONDS > 0:
+        _TODAY_SUMMARY_API_CACHE = (time.monotonic(), deepcopy(today_view))
     return JSONResponse(today_view)
 
 
 @app.get("/api/today/actions")
-def api_today_actions() -> JSONResponse:
-    return JSONResponse(build_today_actions_view())
+def api_today_actions(fresh: bool = False) -> JSONResponse:
+    global _TODAY_ACTIONS_API_CACHE, _TODAY_ACTION_CONTRACTS_API_CACHE
+
+    if fresh:
+        _TODAY_ACTION_CONTRACTS_API_CACHE = None
+        clear_today_base_inputs_cache()
+
+    if TODAY_ACTIONS_API_CACHE_TTL_SECONDS > 0 and _TODAY_ACTIONS_API_CACHE and not fresh:
+        cached_at, cached_payload = _TODAY_ACTIONS_API_CACHE
+        if time.monotonic() - cached_at <= TODAY_ACTIONS_API_CACHE_TTL_SECONDS:
+            return JSONResponse(deepcopy(cached_payload))
+
+    payload = build_today_actions_view()
+    if TODAY_ACTIONS_API_CACHE_TTL_SECONDS > 0:
+        _TODAY_ACTIONS_API_CACHE = (time.monotonic(), deepcopy(payload))
+    return JSONResponse(payload)
+
+
+@app.get("/api/today/action-contracts")
+def api_today_action_contracts(fresh: bool = False) -> JSONResponse:
+    global _TODAY_ACTION_CONTRACTS_API_CACHE
+
+    if TODAY_ACTIONS_API_CACHE_TTL_SECONDS > 0 and _TODAY_ACTION_CONTRACTS_API_CACHE and not fresh:
+        cached_at, cached_payload = _TODAY_ACTION_CONTRACTS_API_CACHE
+        if time.monotonic() - cached_at <= TODAY_ACTIONS_API_CACHE_TTL_SECONDS:
+            return JSONResponse(deepcopy(cached_payload))
+
+    if fresh:
+        clear_today_base_inputs_cache()
+
+    payload = build_today_action_contracts_view()
+    if TODAY_ACTIONS_API_CACHE_TTL_SECONDS > 0:
+        _TODAY_ACTION_CONTRACTS_API_CACHE = (time.monotonic(), deepcopy(payload))
+    return JSONResponse(payload)
+
+
+@app.get("/api/today/command-brief-detail")
+def api_today_command_brief_detail(fresh: bool = False) -> JSONResponse:
+    global _TODAY_COMMAND_BRIEF_DETAIL_API_CACHE
+
+    if TODAY_ACTIONS_API_CACHE_TTL_SECONDS > 0 and _TODAY_COMMAND_BRIEF_DETAIL_API_CACHE and not fresh:
+        cached_at, cached_payload = _TODAY_COMMAND_BRIEF_DETAIL_API_CACHE
+        if time.monotonic() - cached_at <= TODAY_ACTIONS_API_CACHE_TTL_SECONDS:
+            return JSONResponse(deepcopy(cached_payload))
+
+    if fresh:
+        clear_today_base_inputs_cache()
+
+    payload = build_today_command_brief_detail_view()
+    if TODAY_ACTIONS_API_CACHE_TTL_SECONDS > 0:
+        _TODAY_COMMAND_BRIEF_DETAIL_API_CACHE = (time.monotonic(), deepcopy(payload))
+    return JSONResponse(payload)
 
 
 @app.get("/ask", include_in_schema=False)
@@ -2000,20 +2578,29 @@ async def api_ask(q: str | None = None) -> JSONResponse:
 
 @app.get("/api/ask/suggest")
 async def api_ask_suggest(q: str | None = None) -> JSONResponse:
-    ask_view = build_ask_page_view()
-    items = build_ask_suggestions(q, None, None, None)
-    if not str(q or "").strip():
-        message = "这里先给最近问过和系统里常见的候选。"
-    elif items:
+    query = str(q or "").strip()
+    digit_query = "".join(ch for ch in query if ch.isdigit())
+    if not query or (len(query) < 2 and len(digit_query) != 6):
+        return JSONResponse(
+            {
+                "query": query,
+                "items": [],
+                "message": "输入至少 2 个字符或 6 位代码后开始联想。",
+                "recent_queries": [],
+            }
+        )
+
+    items = build_ask_suggestions(query, None, None, None)
+    if items:
         message = f"找到 {len(items)} 个系统内/历史库/全市场候选。"
     else:
         message = "当前系统、历史库和全市场联想都没匹配，建议直接输入 6 位代码。"
     return JSONResponse(
         {
-            "query": str(q or "").strip(),
+            "query": query,
             "items": items,
             "message": message,
-            "recent_queries": ask_view.get("recent_queries") or [],
+            "recent_queries": [],
         }
     )
 
@@ -2049,13 +2636,22 @@ async def api_today_action_decision(request: Request) -> JSONResponse:
         update_today_action_decision(trade_date, key, decision)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    clear_stock_profile_cache()
+    parsed_code = _stock_code_from_action_key(key)
+    if trade_date and trade_date < readiness_expected_trade_date():
+        _clear_stock_profile_account_sensitive_cache()
+    else:
+        _clear_stock_profile_account_sensitive_cache(parsed_code or None)
+    _clear_portfolio_related_api_caches()
 
-    today_view = build_today_view()
+    actions_view = build_today_actions_view()
+    action_queue = actions_view.get("action_queue") or {}
     matched_item = next(
         (
             item
-            for item in ((today_view.get("action_queue") or {}).get("items") or [])
+            for item in [
+                *(action_queue.get("items") or []),
+                *(action_queue.get("stale_items") or []),
+            ]
             if item.get("key") == key
         ),
         None,
@@ -2090,7 +2686,7 @@ async def api_today_action_decision(request: Request) -> JSONResponse:
                 "tone": "watch",
                 "updated_at": "",
             },
-            "counts": ((today_view.get("action_queue") or {}).get("counts") or {}),
+            "counts": action_queue.get("counts") or {},
             "ledger": ledger_result,
         }
     )
@@ -2102,13 +2698,15 @@ async def watchlist(request: Request) -> RedirectResponse:
 
 
 @app.get("/api/watchlist")
-def api_watchlist() -> JSONResponse:
-    return JSONResponse(build_watchlist_page_view())
+def api_watchlist(fresh: bool = False) -> JSONResponse:
+    return JSONResponse(_watchlist_api_payload(fresh=fresh))
 
 
 @app.get("/api/watchlist/manage")
-def api_watchlist_manage() -> JSONResponse:
-    return JSONResponse({"manager": (build_watchlist_page_view().get("manager") or {})})
+def api_watchlist_manage(fresh: bool = False) -> JSONResponse:
+    if fresh:
+        _clear_watchlist_api_cache()
+    return JSONResponse({"manager": build_watchlist_manager_api_view()})
 
 
 @app.post("/api/watchlist/manage/add")
@@ -2127,7 +2725,8 @@ async def api_watchlist_manage_add(request: Request) -> JSONResponse:
         operation = upsert_watchlist_stock(code, name=name)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    clear_stock_profile_cache(code)
+    _clear_stock_profile_account_sensitive_cache(code)
+    _clear_watchlist_related_api_caches()
 
     trigger_refresh = parse_bool_value(payload.get("trigger_refresh"), True)
     refresh = {"started": False}
@@ -2141,7 +2740,7 @@ async def api_watchlist_manage_add(request: Request) -> JSONResponse:
             send_to_feishu=False,
         )
 
-    manager = build_watchlist_page_view().get("manager") or {}
+    manager = build_watchlist_manager_api_view()
     message = watchlist_message("add", str(operation.get("status") or ""), operation.get("stock") or {}, refresh["started"])
     return JSONResponse(
         {
@@ -2170,7 +2769,8 @@ async def api_watchlist_manage_archive(request: Request) -> JSONResponse:
         operation = archive_watchlist_stock(code)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    clear_stock_profile_cache(code)
+    _clear_stock_profile_account_sensitive_cache(code)
+    _clear_watchlist_related_api_caches()
 
     trigger_refresh = parse_bool_value(payload.get("trigger_refresh"), True)
     refresh = {"started": False}
@@ -2183,7 +2783,7 @@ async def api_watchlist_manage_archive(request: Request) -> JSONResponse:
             send_to_feishu=False,
         )
 
-    manager = build_watchlist_page_view().get("manager") or {}
+    manager = build_watchlist_manager_api_view()
     message = watchlist_message("archive", str(operation.get("status") or ""), operation.get("stock") or {}, refresh["started"])
     return JSONResponse(
         {
@@ -2212,7 +2812,8 @@ async def api_watchlist_manage_restore(request: Request) -> JSONResponse:
         operation = restore_watchlist_stock(code)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    clear_stock_profile_cache(code)
+    _clear_stock_profile_account_sensitive_cache(code)
+    _clear_watchlist_related_api_caches()
 
     trigger_refresh = parse_bool_value(payload.get("trigger_refresh"), True)
     refresh = {"started": False}
@@ -2225,7 +2826,7 @@ async def api_watchlist_manage_restore(request: Request) -> JSONResponse:
             send_to_feishu=False,
         )
 
-    manager = build_watchlist_page_view().get("manager") or {}
+    manager = build_watchlist_manager_api_view()
     message = watchlist_message("restore", str(operation.get("status") or ""), operation.get("stock") or {}, refresh["started"])
     return JSONResponse(
         {
@@ -2244,15 +2845,214 @@ async def opportunities(request: Request) -> RedirectResponse:
     return web_redirect("/discovery", query=request.url.query)
 
 
+def _opportunities_group_key(group: Any) -> str:
+    if not isinstance(group, dict):
+        return ""
+    return str(group.get("key") or group.get("title") or "").strip()
+
+
+def _select_opportunities_group_key(payload: dict[str, Any], requested_group: str | None) -> str:
+    groups = [group for group in payload.get("groups") or [] if isinstance(group, dict)]
+    available = {_opportunities_group_key(group) for group in groups}
+    requested = str(requested_group or "").strip()
+    if requested and requested in available:
+        return requested
+    for group in groups:
+        if int(group.get("count") or len(group.get("cards") or []) or 0) > 0:
+            return _opportunities_group_key(group)
+    return _opportunities_group_key(groups[0]) if groups else ""
+
+
+def _compact_opportunity_sidebar_payload(response: dict[str, Any]) -> None:
+    """Trim Discovery sidebar lists to what the page renders above the fold."""
+
+    if isinstance(response.get("learning_memories"), list):
+        response["learning_memories"] = response["learning_memories"][:3]
+    if isinstance(response.get("theme_cards"), list):
+        compact_theme_cards: list[Any] = []
+        for card in response["theme_cards"][:5]:
+            if isinstance(card, dict):
+                compact_card = dict(card)
+                if isinstance(compact_card.get("leaders"), list):
+                    compact_card["leaders"] = compact_card["leaders"][:6]
+                compact_theme_cards.append(compact_card)
+            else:
+                compact_theme_cards.append(card)
+        response["theme_cards"] = compact_theme_cards
+    if isinstance(response.get("lifecycle_cards"), list):
+        response["lifecycle_cards"] = response["lifecycle_cards"][:3]
+    if isinstance(response.get("lifecycle_groups"), list):
+        compact_groups: list[Any] = []
+        for item in response["lifecycle_groups"][:4]:
+            if isinstance(item, dict):
+                compact_item = dict(item)
+                if isinstance(compact_item.get("cards"), list):
+                    compact_item["cards"] = compact_item["cards"][:3]
+                compact_groups.append(compact_item)
+            else:
+                compact_groups.append(item)
+        response["lifecycle_groups"] = compact_groups
+
+
+_OPPORTUNITIES_CONTEXT_KEYS = (
+    "source_cards",
+    "learning_memories",
+    "lifecycle_groups",
+    "lifecycle_cards",
+    "lifecycle_note",
+    "theme_cards",
+)
+OPPORTUNITIES_DEFAULT_GROUP_CARD_LIMIT = 3
+
+
+def _opportunities_response_payload(
+    payload: dict[str, Any],
+    *,
+    group: str | None,
+) -> dict[str, Any]:
+    """Return a Discovery payload shaped for the current interaction.
+
+    The API keeps only one observation stage hydrated and leaves the rest as
+    count-only shells so the Discovery page can lazy-load them on demand.
+    """
+
+    response = {
+        key: value
+        for key, value in payload.items()
+        if key != "groups" and key not in _OPPORTUNITIES_CONTEXT_KEYS
+    }
+    groups = [item for item in payload.get("groups") or [] if isinstance(item, dict)]
+    selected_key = _select_opportunities_group_key(payload, group)
+    preview_selected_group = not str(group or "").strip()
+    compact_groups: list[dict[str, Any]] = []
+    for item in groups:
+        item_key = _opportunities_group_key(item)
+        cards = list(item.get("cards") or []) if isinstance(item.get("cards"), list) else []
+        count = int(item.get("count") or len(cards) or 0)
+        loaded = bool(item_key == selected_key or count == 0)
+        compact_item = dict(item)
+        if not loaded:
+            compact_item["cards"] = []
+            compact_item["deferred_cards"] = True
+        elif preview_selected_group and item_key == selected_key and len(cards) > OPPORTUNITIES_DEFAULT_GROUP_CARD_LIMIT:
+            compact_item["cards"] = cards[:OPPORTUNITIES_DEFAULT_GROUP_CARD_LIMIT]
+            compact_item["cards_preview_limit"] = OPPORTUNITIES_DEFAULT_GROUP_CARD_LIMIT
+            compact_item["deferred_cards"] = True
+            loaded = False
+        else:
+            compact_item["deferred_cards"] = False
+        compact_item["cards_loaded"] = loaded
+        compact_groups.append(compact_item)
+
+    response["groups"] = compact_groups
+    response.pop("learning_memories", None)
+    response.pop("lifecycle_groups", None)
+    response.pop("lifecycle_cards", None)
+    response.pop("lifecycle_note", None)
+    response.pop("theme_cards", None)
+    response["context_deferred"] = True
+    response["evidence_deferred"] = True
+    response["active_group_key"] = selected_key
+    response["compact"] = True
+    return response
+
+
+def _opportunities_context_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    response = {
+        key: payload[key]
+        for key in (
+            "generated_at",
+            "display_date",
+            "trade_date",
+            "source_cards",
+            "learning_memories",
+            "lifecycle_groups",
+            "lifecycle_cards",
+            "lifecycle_note",
+            "theme_cards",
+        )
+        if key in payload
+    }
+    _compact_opportunity_sidebar_payload(response)
+    return response
+
+
+def _opportunities_source_cards_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: payload[key]
+        for key in (
+            "generated_at",
+            "display_date",
+            "trade_date",
+            "expected_trade_date",
+            "data_trade_date",
+            "readiness_mode",
+            "source_cards",
+        )
+        if key in payload
+    }
+
+
 @app.get("/api/opportunities")
-def api_opportunities() -> JSONResponse:
-    return JSONResponse(build_opportunities_view())
+def api_opportunities(fresh: bool = False, group: str | None = None) -> JSONResponse:
+    cache_key = str(group or "").strip()
+    if OPPORTUNITIES_API_CACHE_TTL_SECONDS > 0 and not fresh:
+        cached = _OPPORTUNITIES_COMPACT_API_CACHE.get(cache_key)
+        if cached:
+            cached_at, cached_payload = cached
+            if time.monotonic() - cached_at <= OPPORTUNITIES_API_CACHE_TTL_SECONDS:
+                return JSONResponse(_opportunities_response_payload(cached_payload, group=group))
+
+    payload = build_opportunities_view(
+        hydrate_all_groups=False,
+        active_group_key=group,
+        include_context=False,
+        include_lifecycle=False,
+    )
+    if OPPORTUNITIES_API_CACHE_TTL_SECONDS > 0:
+        _OPPORTUNITIES_COMPACT_API_CACHE[cache_key] = (time.monotonic(), deepcopy(payload))
+    return JSONResponse(_opportunities_response_payload(payload, group=group))
+
+
+@app.get("/api/opportunities/context")
+def api_opportunities_context(fresh: bool = False) -> JSONResponse:
+    global _OPPORTUNITIES_CONTEXT_API_CACHE
+
+    if OPPORTUNITIES_API_CACHE_TTL_SECONDS > 0 and _OPPORTUNITIES_CONTEXT_API_CACHE and not fresh:
+        cached_at, cached_payload = _OPPORTUNITIES_CONTEXT_API_CACHE
+        if time.monotonic() - cached_at <= OPPORTUNITIES_API_CACHE_TTL_SECONDS:
+            return JSONResponse(_opportunities_context_payload(deepcopy(cached_payload)))
+
+    payload = build_opportunities_context_view()
+    if OPPORTUNITIES_API_CACHE_TTL_SECONDS > 0:
+        _OPPORTUNITIES_CONTEXT_API_CACHE = (time.monotonic(), deepcopy(payload))
+    return JSONResponse(_opportunities_context_payload(payload))
+
+
+@app.get("/api/opportunities/source-cards")
+def api_opportunities_source_cards(fresh: bool = False) -> JSONResponse:
+    global _OPPORTUNITIES_SOURCE_CARDS_API_CACHE
+
+    if OPPORTUNITIES_API_CACHE_TTL_SECONDS > 0 and _OPPORTUNITIES_CONTEXT_API_CACHE and not fresh:
+        cached_at, cached_payload = _OPPORTUNITIES_CONTEXT_API_CACHE
+        if time.monotonic() - cached_at <= OPPORTUNITIES_API_CACHE_TTL_SECONDS:
+            return JSONResponse(_opportunities_source_cards_payload(cached_payload))
+
+    if OPPORTUNITIES_API_CACHE_TTL_SECONDS > 0 and _OPPORTUNITIES_SOURCE_CARDS_API_CACHE and not fresh:
+        cached_at, cached_payload = _OPPORTUNITIES_SOURCE_CARDS_API_CACHE
+        if time.monotonic() - cached_at <= OPPORTUNITIES_API_CACHE_TTL_SECONDS:
+            return JSONResponse(_opportunities_source_cards_payload(deepcopy(cached_payload)))
+
+    payload = build_opportunities_source_cards_view()
+    if OPPORTUNITIES_API_CACHE_TTL_SECONDS > 0:
+        _OPPORTUNITIES_SOURCE_CARDS_API_CACHE = (time.monotonic(), deepcopy(payload))
+    return JSONResponse(_opportunities_source_cards_payload(payload))
 
 
 @app.get("/api/refresh/status")
-async def api_refresh_status(page: str, auto: bool = False) -> JSONResponse:
+async def api_refresh_status(page: str, auto: bool = False, compact: bool = False) -> JSONResponse:
     normalized_page = normalize_refresh_page(page)
-    return JSONResponse(build_refresh_status_payload(normalized_page, auto=auto))
+    return JSONResponse(build_refresh_status_payload(normalized_page, auto=auto, compact=compact))
 
 
 @app.get("/api/refresh/policy")
@@ -2296,13 +3096,14 @@ async def api_data_capability_matrix() -> JSONResponse:
 
 
 @app.get("/api/formal-data/status")
-def api_formal_data_status() -> JSONResponse:
-    return JSONResponse(build_formal_data_status_payload())
+def api_formal_data_status(fresh: bool = False, compact: bool = True) -> JSONResponse:
+    payload = build_formal_data_status_payload(fresh=fresh)
+    return JSONResponse(_compact_formal_data_status_payload(payload) if compact else payload)
 
 
 @app.get("/api/data-assets/status")
-def api_data_assets_status() -> JSONResponse:
-    return JSONResponse(build_data_assets_status(readiness_expected_trade_date()))
+def api_data_assets_status(fresh: bool = False, compact: bool = True) -> JSONResponse:
+    return JSONResponse(build_data_assets_status(readiness_expected_trade_date(), fresh=fresh, compact=compact))
 
 
 @app.get("/api/capabilities")
@@ -2313,8 +3114,8 @@ def api_capabilities() -> JSONResponse:
     ledger_capture) translated from the engineering-language readiness into
     operator-facing status, why_not and degraded_path. Strictly read-only.
     """
-    today_view = build_today_view()
-    readiness = today_view.get("readiness") or {}
+    readiness_view = build_today_readiness_view()
+    readiness = readiness_view.get("readiness") or {}
     return JSONResponse(
         {
             "checked_at": readiness.get("checked_at"),
@@ -2330,22 +3131,22 @@ def api_capabilities() -> JSONResponse:
 def api_readiness_live() -> JSONResponse:
     """Operator-facing readiness summary.
 
-    Returns the same readiness object that ``/api/today`` embeds, so the
+    Returns the same readiness object used by the Today summary, so the
     operator can hit one endpoint to know whether the system is fresh,
     aligned, and safe to act on.
     """
 
-    today_view = build_today_view()
-    readiness = today_view.get("readiness") or {}
+    readiness_view = build_today_readiness_view()
+    readiness = readiness_view.get("readiness") or {}
     matrix_payload = data_capability_matrix_as_dict()
     formal_status = build_formal_data_status_payload()
     return JSONResponse(
         {
-            "generated_at": today_view.get("generated_at"),
+            "generated_at": readiness_view.get("generated_at"),
             "expected_trade_date": readiness.get("expected_trade_date"),
             "data_trade_date": readiness.get("data_trade_date"),
-            "display_date": today_view.get("display_date"),
-            "trade_date": today_view.get("trade_date"),
+            "display_date": readiness_view.get("display_date"),
+            "trade_date": readiness_view.get("trade_date"),
             "readiness_mode": readiness.get("readiness_mode"),
             "ready": readiness.get("ready", False),
             "session": readiness.get("session"),
@@ -2439,7 +3240,7 @@ async def api_refresh_trigger(request: Request) -> JSONResponse:
                 "title": task["title"],
             },
             "trigger": result,
-            "status": build_refresh_status_payload(page, skip_auto=True),
+            "status": build_refresh_status_payload(page, skip_auto=True, compact=True),
         }
     )
 
@@ -2454,9 +3255,89 @@ async def review(request: Request) -> RedirectResponse:
     return web_redirect("/review", query=request.url.query)
 
 
+_REVIEW_API_COMPACT_KEYS = (
+    "generated_at",
+    "freshness_alerts",
+    "freshness_summary",
+    "comparison_cards",
+    "lifecycle_cards",
+    "research_panels_deferred",
+)
+
+
+def _compact_review_api_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    response = {
+        key: deepcopy(payload[key])
+        for key in _REVIEW_API_COMPACT_KEYS
+        if key in payload
+    }
+    response["compact"] = True
+    return response
+
+
+def _review_research_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: deepcopy(payload[key])
+        for key in (
+            "generated_at",
+            "active_baseline_id",
+            "active_window_id",
+            "research_panels",
+            "research_panels_deferred",
+        )
+        if key in payload
+    }
+
+
+def _review_evidence_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: deepcopy(payload[key])
+        for key in (
+            "generated_at",
+            "active_baseline_id",
+            "active_window_id",
+            "source_cards",
+            "artifacts",
+        )
+        if key in payload
+    }
+
+
 @app.get("/api/review")
-def api_review(baseline: str | None = None, window: str | None = None) -> JSONResponse:
-    return JSONResponse(build_review_view(baseline_id=baseline, window_id=window))
+def api_review(
+    baseline: str | None = None,
+    window: str | None = None,
+) -> JSONResponse:
+    payload = build_review_view(
+        baseline_id=baseline,
+        window_id=window,
+        include_evidence=False,
+        include_shadow_replay=False,
+    )
+    return JSONResponse(_compact_review_api_payload(payload))
+
+
+@app.get("/api/review/research")
+def api_review_research(baseline: str | None = None, window: str | None = None) -> JSONResponse:
+    return JSONResponse(
+        _review_research_payload(
+            build_review_research_view(baseline_id=baseline, window_id=window)
+        )
+    )
+
+
+@app.get("/api/review/evidence")
+def api_review_evidence(baseline: str | None = None, window: str | None = None) -> JSONResponse:
+    return JSONResponse(
+        _review_evidence_payload(
+            build_review_evidence_view(baseline_id=baseline, window_id=window)
+        )
+    )
+
+
+@app.get("/api/review/shadow-replay")
+def api_review_shadow_replay() -> JSONResponse:
+    return JSONResponse(build_shadow_replay_review_summary())
 
 
 @app.get("/review/detail", include_in_schema=False)
@@ -2470,30 +3351,9 @@ async def review_detail(
     return web_redirect("/review", query=request.url.query)
 
 
-@app.get("/api/review/detail")
-def api_review_detail(
-    section: str,
-    label: str,
-    baseline: str | None = None,
-    window: str | None = None,
-) -> JSONResponse:
-    try:
-        return JSONResponse(build_review_detail_view(section, label, baseline_id=baseline, window_id=window))
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-
 @app.get("/watchlist/{code}", include_in_schema=False)
 async def watchlist_detail(request: Request, code: str) -> RedirectResponse:
     return web_redirect(f"/stock/{code}", query=request.url.query)
-
-
-@app.get("/api/watchlist/{code}")
-def api_watchlist_detail(code: str, trade_date: str | None = None) -> JSONResponse:
-    try:
-        return JSONResponse(build_watchlist_detail_view(code, trade_date=trade_date))
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/today/watchlist/{code}", include_in_schema=False)
@@ -2501,41 +3361,38 @@ async def today_watchlist_detail(request: Request, code: str) -> RedirectRespons
     return web_redirect(f"/stock/{code}", query=request.url.query)
 
 
-@app.get("/api/today/watchlist/{code}")
-def api_today_watchlist_detail(code: str, trade_date: str | None = None) -> JSONResponse:
-    try:
-        return JSONResponse(build_watchlist_detail_view(code, trade_date=trade_date))
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-
-@app.get("/api/stock/{code}")
-def api_stock_profile(code: str, trade_date: str | None = None) -> JSONResponse:
-    return JSONResponse(build_stock_profile_view(code, trade_date=trade_date))
-
-
-@app.get("/api/stock/{code}/full")
-def api_stock_profile_full(code: str, trade_date: str | None = None) -> JSONResponse:
-    return JSONResponse(build_stock_profile_view(code, trade_date=trade_date))
-
-
 @app.get("/api/stock/{code}/summary")
-def api_stock_profile_summary(code: str, trade_date: str | None = None) -> JSONResponse:
+def api_stock_profile_summary(code: str, trade_date: str | None = None, fresh: bool = False) -> JSONResponse:
+    _clear_stock_profile_cache_when_fresh(code, fresh)
     return JSONResponse(build_stock_profile_summary_view(code, trade_date=trade_date))
 
 
 @app.get("/api/stock/{code}/detail")
-def api_stock_profile_detail(code: str, trade_date: str | None = None) -> JSONResponse:
+def api_stock_profile_detail(code: str, trade_date: str | None = None, fresh: bool = False) -> JSONResponse:
+    _clear_stock_profile_cache_when_fresh(code, fresh)
     return JSONResponse(build_stock_profile_detail_view(code, trade_date=trade_date))
 
 
-@app.get("/api/stock/{code}/formal-data")
-def api_stock_profile_formal_data(code: str, trade_date: str | None = None) -> JSONResponse:
-    return JSONResponse(build_stock_profile_formal_data_view(code, trade_date=trade_date))
+@app.get("/api/stock/{code}/evidence")
+def api_stock_profile_evidence(code: str, trade_date: str | None = None, fresh: bool = False) -> JSONResponse:
+    _clear_stock_profile_cache_when_fresh(code, fresh)
+    return JSONResponse(build_stock_profile_evidence_view(code, trade_date=trade_date))
+
+
+@app.get("/api/stock/{code}/secondary")
+def api_stock_profile_secondary(code: str, trade_date: str | None = None, fresh: bool = False) -> JSONResponse:
+    _clear_stock_profile_cache_when_fresh(code, fresh)
+    return JSONResponse(build_stock_profile_secondary_view(code, trade_date=trade_date))
 
 
 @app.get("/api/stock/{code}/formal-data/{section}")
-def api_stock_profile_formal_data_section(code: str, section: str, trade_date: str | None = None) -> JSONResponse:
+def api_stock_profile_formal_data_section(
+    code: str,
+    section: str,
+    trade_date: str | None = None,
+    fresh: bool = False,
+) -> JSONResponse:
+    _clear_stock_profile_cache_when_fresh(code, fresh)
     try:
         return JSONResponse(build_stock_profile_formal_data_section_view(code, section, trade_date=trade_date))
     except KeyError as exc:
@@ -2543,12 +3400,14 @@ def api_stock_profile_formal_data_section(code: str, section: str, trade_date: s
 
 
 @app.get("/api/stock/{code}/today-action")
-def api_stock_profile_today_action(code: str, trade_date: str | None = None) -> JSONResponse:
+def api_stock_profile_today_action(code: str, trade_date: str | None = None, fresh: bool = False) -> JSONResponse:
+    _clear_stock_profile_cache_when_fresh(code, fresh)
     return JSONResponse(build_stock_profile_today_action_view(code, trade_date=trade_date))
 
 
 @app.get("/api/stock/{code}/learning-scorecard")
-def api_stock_profile_learning_scorecard(code: str, trade_date: str | None = None) -> JSONResponse:
+def api_stock_profile_learning_scorecard(code: str, trade_date: str | None = None, fresh: bool = False) -> JSONResponse:
+    _clear_stock_profile_cache_when_fresh(code, fresh)
     return JSONResponse(build_stock_profile_learning_scorecard(code, trade_date=trade_date))
 
 
@@ -2557,26 +3416,9 @@ async def opportunities_batch_detail(request: Request, kind: str) -> RedirectRes
     return web_redirect("/discovery", query=request.url.query)
 
 
-@app.get("/api/opportunities/batch/{kind}")
-def api_opportunities_batch_detail(kind: str) -> JSONResponse:
-    if kind == "screener":
-        return JSONResponse(build_screening_batch_view())
-    if kind == "confirmation":
-        return JSONResponse(build_confirmation_view())
-    raise HTTPException(status_code=404, detail="unknown batch")
-
-
 @app.get("/opportunities/{code}", include_in_schema=False)
 async def opportunities_candidate_detail(request: Request, code: str) -> RedirectResponse:
     return web_redirect(f"/stock/{code}", query=request.url.query)
-
-
-@app.get("/api/opportunities/{code}")
-async def api_opportunities_candidate_detail(code: str) -> JSONResponse:
-    try:
-        return JSONResponse(build_candidate_detail_view(code))
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/today/candidates/{code}", include_in_schema=False)
@@ -2584,32 +3426,44 @@ async def today_candidate_detail(request: Request, code: str) -> RedirectRespons
     return web_redirect(f"/stock/{code}", query=request.url.query)
 
 
-@app.get("/api/today/candidates/{code}")
-async def api_today_candidate_detail(code: str) -> JSONResponse:
-    try:
-        return JSONResponse(build_candidate_detail_view(code))
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-
 @app.get("/today/batch/{kind}", include_in_schema=False)
 async def today_batch_detail(request: Request, kind: str) -> RedirectResponse:
     return web_redirect("/discovery", query=request.url.query)
 
 
-@app.get("/api/today/batch/{kind}")
-async def api_today_batch_detail(kind: str) -> JSONResponse:
-    if kind == "screener":
-        return JSONResponse(build_screening_batch_view())
-    if kind == "confirmation":
-        return JSONResponse(build_confirmation_view())
-    raise HTTPException(status_code=404, detail="unknown batch")
+_RUN_LIST_COMPACT_KEYS = (
+    "run_id",
+    "task_id",
+    "task_name",
+    "title",
+    "status",
+    "started_at",
+    "finished_at",
+    "checked_started_at",
+    "checked_finished_at",
+    "batch_label",
+    "summary",
+    "exit_code",
+    "log_path",
+    "meta_path",
+)
+
+
+def _compact_run_list_item(run: Any) -> dict[str, Any]:
+    if not isinstance(run, dict):
+        return {}
+    return {
+        key: deepcopy(run[key])
+        for key in _RUN_LIST_COMPACT_KEYS
+        if key in run
+    }
 
 
 @app.get("/api/runs")
-async def api_runs() -> JSONResponse:
-    overview = build_overview()
-    return JSONResponse({"runs": overview["runs"]})
+async def api_runs(fresh: bool = False) -> JSONResponse:
+    runs = list_runs(fresh=fresh)
+    runs = [item for item in (_compact_run_list_item(run) for run in runs) if item]
+    return JSONResponse({"runs": runs, "compact": True})
 
 
 @app.get("/api/parameters")
@@ -2797,7 +3651,7 @@ async def healthz() -> JSONResponse:
             "ok": True,
             "workspace": str(WORKSPACE_ROOT),
             "channels": {
-                "feishu": feishu_channel_status(),
+                "feishu": feishu_channel_status(allow_probe=False),
             },
         }
     )
@@ -2814,17 +3668,86 @@ async def portfolio_redirect() -> RedirectResponse:
 
 
 @app.get("/api/portfolio/account")
-def api_portfolio_account() -> JSONResponse:
+def api_portfolio_account(request: Request, fresh: bool = False) -> JSONResponse:
     """Canonical account view: mode, cash, positions, fills, readiness."""
 
-    return JSONResponse(build_portfolio_account_view())
+    compact = parse_bool_value(request.query_params.get("compact"), True)
+    include_holding_reviews = not compact
+    include_account_history = (not compact) or parse_bool_value(request.query_params.get("history"), False)
+    cache_key = (include_holding_reviews, include_account_history)
+    if (
+        PORTFOLIO_ACCOUNT_API_CACHE_TTL_SECONDS > 0
+        and isinstance(_PORTFOLIO_ACCOUNT_API_CACHE, dict)
+        and cache_key in _PORTFOLIO_ACCOUNT_API_CACHE
+        and not fresh
+    ):
+        cached_at, cached_payload = _PORTFOLIO_ACCOUNT_API_CACHE[cache_key]
+        if time.monotonic() - cached_at <= PORTFOLIO_ACCOUNT_API_CACHE_TTL_SECONDS:
+            return JSONResponse(deepcopy(cached_payload))
+
+    return JSONResponse(
+        _build_portfolio_account_api_payload(
+            include_holding_reviews=include_holding_reviews,
+            include_account_history=include_account_history,
+            fresh_formal_status=fresh,
+        )
+    )
+
+
+@app.get("/api/portfolio/holding-reviews")
+def api_portfolio_holding_reviews(fresh: bool = False) -> JSONResponse:
+    """Holding action desk payload, loaded separately from the account shell."""
+
+    cache_key = (True, False)
+    if (
+        PORTFOLIO_ACCOUNT_API_CACHE_TTL_SECONDS > 0
+        and isinstance(_PORTFOLIO_ACCOUNT_API_CACHE, dict)
+        and cache_key in _PORTFOLIO_ACCOUNT_API_CACHE
+        and not fresh
+    ):
+        cached_at, cached_payload = _PORTFOLIO_ACCOUNT_API_CACHE[cache_key]
+        if time.monotonic() - cached_at <= PORTFOLIO_ACCOUNT_API_CACHE_TTL_SECONDS:
+            payload = deepcopy(cached_payload)
+        else:
+            payload = _build_portfolio_account_api_payload(
+                include_holding_reviews=True,
+                include_account_history=False,
+                fresh_formal_status=fresh,
+            )
+    else:
+        payload = _build_portfolio_account_api_payload(
+            include_holding_reviews=True,
+            include_account_history=False,
+            fresh_formal_status=fresh,
+        )
+
+    return JSONResponse(
+        {
+            "generated_at": payload.get("generated_at"),
+            "trade_date": payload.get("trade_date"),
+            "expected_trade_date": payload.get("expected_trade_date"),
+            "data_trade_date": payload.get("data_trade_date"),
+            "readiness_mode": (payload.get("readiness") or {}).get("readiness_mode"),
+            "market_quotes": payload.get("market_quotes") or {},
+            "holding_reviews": payload.get("holding_reviews") or [],
+            "holding_action_summary": payload.get("holding_action_summary") or {},
+            "position_count": len(((payload.get("account") or {}).get("open_positions") or [])),
+        }
+    )
 
 
 @app.post("/api/portfolio/quotes/refresh")
 def api_portfolio_quotes_refresh() -> JSONResponse:
     """Refresh market quotes for current open positions and recompute P/L."""
 
-    return JSONResponse(build_portfolio_account_view(refresh_quotes=True))
+    _clear_portfolio_account_api_cache()
+    return JSONResponse(
+        _build_portfolio_account_api_payload(
+            refresh_quotes=True,
+            include_holding_reviews=True,
+            fresh_formal_status=True,
+        )
+    )
 
 
 @app.post("/api/portfolio/mode")
@@ -2849,9 +3772,10 @@ async def api_portfolio_mode(request: Request) -> JSONResponse:
         )
     except AccountBookError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    clear_stock_profile_cache()
+    _clear_stock_profile_account_sensitive_cache()
+    _clear_portfolio_related_api_caches()
 
-    return JSONResponse(build_portfolio_account_view())
+    return JSONResponse(_build_portfolio_account_api_payload())
 
 
 @app.post("/api/portfolio/cash")
@@ -2867,9 +3791,10 @@ async def api_portfolio_cash(request: Request) -> JSONResponse:
         record_cash_adjustment(delta=delta, reason=reason)
     except AccountBookError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    clear_stock_profile_cache()
+    _clear_stock_profile_account_sensitive_cache()
+    _clear_portfolio_related_api_caches()
 
-    return JSONResponse(build_portfolio_account_view())
+    return JSONResponse(_build_portfolio_account_api_payload())
 
 
 @app.post("/api/portfolio/fills")
@@ -2895,7 +3820,8 @@ async def api_portfolio_fill(request: Request) -> JSONResponse:
         )
     except AccountBookError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    clear_stock_profile_cache(str(payload.get("code") or "").strip() or None)
+    _clear_stock_profile_account_sensitive_cache()
+    _clear_portfolio_related_api_caches()
 
     qty_val = payload.get("qty")
     price_val = payload.get("price")
@@ -2918,7 +3844,7 @@ async def api_portfolio_fill(request: Request) -> JSONResponse:
         intent_key=payload.get("intent_key"),
         source="portfolio_writeback",
     )
-    view = build_portfolio_account_view()
+    view = _build_portfolio_account_api_payload()
     view["ledger"] = ledger_result
     return JSONResponse(view)
 
@@ -2946,10 +3872,11 @@ async def api_portfolio_holding_identity(request: Request) -> JSONResponse:
         )
     except AccountBookError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    clear_stock_profile_cache(from_code)
-    clear_stock_profile_cache(to_code)
+    _clear_stock_profile_account_sensitive_cache(from_code)
+    _clear_stock_profile_account_sensitive_cache(to_code)
+    _clear_portfolio_related_api_caches()
 
-    return JSONResponse(build_portfolio_account_view())
+    return JSONResponse(_build_portfolio_account_api_payload())
 
 
 @app.post("/api/portfolio/intent/no_fill")
@@ -2967,7 +3894,8 @@ async def api_portfolio_intent_no_fill(request: Request) -> JSONResponse:
         )
     except AccountBookError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    clear_stock_profile_cache()
+    _clear_stock_profile_account_sensitive_cache()
+    _clear_portfolio_related_api_caches()
 
     # The intent payload does not carry an explicit ``code``; we rely on
     # ``intent_key`` matching the captured decision's ``source.action_key``.
@@ -2979,7 +3907,7 @@ async def api_portfolio_intent_no_fill(request: Request) -> JSONResponse:
         intent_key=payload.get("intent_key"),
         source="portfolio_writeback",
     )
-    view = build_portfolio_account_view()
+    view = _build_portfolio_account_api_payload()
     view["ledger"] = ledger_result
     return JSONResponse(view)
 
@@ -3000,9 +3928,10 @@ async def api_portfolio_reconcile(request: Request) -> JSONResponse:
         )
     except AccountBookError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    clear_stock_profile_cache()
+    _clear_stock_profile_account_sensitive_cache()
+    _clear_portfolio_related_api_caches()
 
-    return JSONResponse(build_portfolio_account_view())
+    return JSONResponse(_build_portfolio_account_api_payload())
 
 
 # ---------------------------------------------------------------- decision ledger
@@ -3079,6 +4008,251 @@ def _parse_limit(value: Any, *, default: int = 20) -> int:
     return max(1, n)
 
 
+_DECISION_LEDGER_CALIBRATION_COMPACT_KEYS = (
+    "as_of",
+    "window_days",
+    "from_date",
+    "to_date",
+    "overall",
+    "review_workbench",
+    "review_queue",
+    "pending_reviews",
+    "needs_review_count",
+    "reviewed_case_count",
+    "review_case_summary",
+    "errors",
+)
+
+_DECISION_LEDGER_REVIEW_PATTERN_COMPACT_KEYS = (
+    "pattern_id",
+    "lane",
+    "action",
+    "action_label",
+    "review_reason_key",
+    "review_reason_label",
+    "primary_cause",
+    "primary_cause_label",
+    "sample_count",
+    "stock_count",
+    "dominant_primary_cause",
+    "dominant_primary_cause_label",
+    "dominant_secondary_causes",
+    "dominant_secondary_cause_labels",
+    "evidence_strength",
+    "evidence_strength_label",
+    "evidence_strength_detail",
+    "rule_action_allowed",
+    "stock_theme",
+    "market_regime",
+    "evidence_source",
+    "rule_hypothesis",
+    "follow_up_status",
+    "follow_up_status_label",
+    "dominant_conclusion_action",
+    "dominant_conclusion_action_label",
+    "learning_hint",
+    "learning_memory_scope",
+    "rule_candidate_allowed",
+)
+
+_DECISION_LEDGER_REVIEW_ROW_COMPACT_KEYS = (
+    "decision_id",
+    "trade_date",
+    "code",
+    "name",
+    "action",
+    "action_label",
+    "lane",
+    "surface",
+    "status",
+    "main_conclusion",
+    "latest_outcome",
+    "review_status",
+    "review_reason",
+    "review_reason_key",
+    "maturity_label",
+    "is_overdue",
+    "next_action_label",
+    "next_action_reason",
+    "priority_score",
+    "priority_label",
+    "calibration_action",
+    "calibration_action_label",
+    "calibration_action_reason",
+    "outcome_status",
+    "outcome_tone",
+    "execution_status",
+)
+
+_DECISION_LEDGER_READY_REVIEW_STATUSES = {"ready_review", "blocked_data"}
+
+
+def _compact_decision_review_row(item: Any) -> dict[str, Any]:
+    if not isinstance(item, dict):
+        return {}
+    return {
+        key: deepcopy(item[key])
+        for key in _DECISION_LEDGER_REVIEW_ROW_COMPACT_KEYS
+        if key in item
+    }
+
+
+def _compact_review_case_pattern(pattern: Any) -> dict[str, Any]:
+    if not isinstance(pattern, dict):
+        return {}
+    return {
+        key: deepcopy(pattern[key])
+        for key in _DECISION_LEDGER_REVIEW_PATTERN_COMPACT_KEYS
+        if key in pattern
+    }
+
+
+def _compact_decision_ledger_calibration_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return the Review page projection without low-frequency learning data."""
+
+    response = {
+        key: deepcopy(payload[key])
+        for key in _DECISION_LEDGER_CALIBRATION_COMPACT_KEYS
+        if key in payload
+    }
+    review_queue = [
+        item for item in (payload.get("review_queue") or [])
+        if str((item or {}).get("review_status") or "") in _DECISION_LEDGER_READY_REVIEW_STATUSES
+    ]
+    response["review_queue"] = [
+        item for item in (_compact_decision_review_row(row) for row in review_queue) if item
+    ]
+    response["pending_reviews"] = [
+        item for item in (_compact_decision_review_row(row) for row in (payload.get("pending_reviews") or [])[:5]) if item
+    ]
+    response["learning_patterns_deferred"] = True
+    response["links_lazy"] = {
+        "learning_patterns": "/api/decision-ledger/calibration-detail",
+    }
+    return response
+
+
+def _compact_decision_ledger_calibration_detail_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return Review learning-pattern data that is only needed after expand."""
+
+    response = {
+        key: deepcopy(payload[key])
+        for key in (
+            "as_of",
+            "window_days",
+            "from_date",
+            "to_date",
+            "overall",
+            "by_lane",
+            "by_action",
+            "review_case_summary",
+            "suggestion_cards",
+            "errors",
+        )
+        if key in payload
+    }
+    patterns = [
+        _compact_review_case_pattern(item)
+        for item in (payload.get("review_case_patterns") or [])[:8]
+    ]
+    response["review_case_patterns"] = [item for item in patterns if item]
+    return response
+
+
+_FACTOR_LEARNING_WINDOW_KEYS = (
+    "sample_count",
+    "win_rate",
+    "avg_return_pct",
+    "avg_excess_return_pct",
+    "sample_too_small",
+)
+
+
+def _compact_factor_learning_stats_row(row: Any) -> dict[str, Any]:
+    if not isinstance(row, dict):
+        return {}
+    response = {
+        key: deepcopy(row[key])
+        for key in ("key", "label", "sample_count", "mature_count", "sample_too_small")
+        if key in row
+    }
+    window_stats = row.get("window_stats") or {}
+    if isinstance(window_stats, dict):
+        compact_windows: dict[str, Any] = {}
+        for window, stats in window_stats.items():
+            if not isinstance(stats, dict):
+                continue
+            compact_windows[str(window)] = {
+                key: deepcopy(stats[key])
+                for key in _FACTOR_LEARNING_WINDOW_KEYS
+                if key in stats
+            }
+        response["window_stats"] = compact_windows
+    return response
+
+
+def _compact_factor_learning_summary(summary: Any) -> dict[str, Any] | None:
+    if not isinstance(summary, dict):
+        return None
+    response = {
+        key: deepcopy(summary[key])
+        for key in (
+            "version",
+            "generated_at",
+            "sample_window",
+            "sample_count",
+            "factor_record_count",
+            "min_sample_size",
+            "guardrail",
+        )
+        if key in summary
+    }
+    for key in ("best_positive_factors", "worst_risk_flags", "noisy_factors"):
+        response[key] = deepcopy((summary.get(key) or [])[:3])
+    response["score_bucket_performance"] = [
+        row
+        for row in (_compact_factor_learning_stats_row(item) for item in (summary.get("score_bucket_performance") or [])[:4])
+        if row
+    ]
+    response["recommendations_for_weights"] = deepcopy((summary.get("recommendations_for_weights") or [])[:3])
+    return response
+
+
+def _compact_factor_learning_loop_payload(payload: Any) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+    response = {
+        key: deepcopy(payload[key])
+        for key in ("version", "generated_at", "as_of", "outcome_windows", "samples_total", "dimensions")
+        if key in payload
+    }
+    summary = _compact_factor_learning_summary(payload.get("learning_summary"))
+    if summary is not None:
+        response["learning_summary"] = summary
+    return response
+
+
+def _compact_decision_ledger_learning_loop_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return the learning-loop summary the Review page actually renders."""
+
+    keys = (
+        "version",
+        "generated_at",
+        "as_of",
+        "ruleset_versions",
+        "samples_total",
+        "mature_samples",
+        "pending_review_count",
+        "suggestions",
+        "errors",
+    )
+    response = {key: deepcopy(payload[key]) for key in keys if key in payload}
+    factor_loop = _compact_factor_learning_loop_payload(payload.get("factor_learning_loop"))
+    if factor_loop is not None:
+        response["factor_learning_loop"] = factor_loop
+    return response
+
+
 @app.get("/api/decision-ledger/summary")
 async def api_decision_ledger_summary(request: Request) -> JSONResponse:
     """Aggregate ledger counts over a trailing ``window`` (default 7d).
@@ -3115,7 +4289,21 @@ async def api_decision_ledger_recent(request: Request) -> JSONResponse:
     """
 
     limit = _parse_limit(request.query_params.get("limit"), default=20)
-    payload = decision_ledger.list_recent_decisions(limit=limit)
+    codes_param = str(request.query_params.get("codes") or "").strip()
+    codes = [
+        item.strip()
+        for item in re.split(r"[,，\s]+", codes_param)
+        if item.strip()
+    ]
+    latest_per_code = parse_bool_value(
+        request.query_params.get("latest_per_code"),
+        False,
+    )
+    payload = decision_ledger.list_recent_decisions(
+        limit=limit,
+        codes=codes,
+        latest_per_code=latest_per_code,
+    )
     return JSONResponse(payload)
 
 
@@ -3126,7 +4314,8 @@ async def api_decision_ledger_calibration(request: Request) -> JSONResponse:
     This endpoint does not mutate the ledger.  It groups decisions by
     lane/action, highlights failed or questionable outcomes, and returns
     small suggestion cards so Review can guide the operator toward the
-    next useful inspection instead of dumping another raw list.
+    next useful inspection instead of dumping another raw list.  Low-frequency
+    learning and shadow samples are loaded through dedicated detail endpoints.
     """
 
     window_days = _parse_window_days(request.query_params.get("window") or "20d")
@@ -3136,13 +4325,42 @@ async def api_decision_ledger_calibration(request: Request) -> JSONResponse:
         window_days=window_days,
         as_of=as_of,
         limit=limit,
+        include_shadow_calibration=False,
+        include_review_case_patterns=False,
     )
-    return JSONResponse(payload)
+    return JSONResponse(_compact_decision_ledger_calibration_payload(payload))
+
+
+@app.get("/api/decision-ledger/calibration-detail")
+async def api_decision_ledger_calibration_detail(request: Request) -> JSONResponse:
+    """Low-frequency Review learning details, loaded after the fold opens."""
+
+    window_days = _parse_window_days(request.query_params.get("window") or "20d")
+    as_of = request.query_params.get("as_of") or None
+    limit = _parse_limit(request.query_params.get("limit"), default=12)
+    payload = decision_ledger.build_calibration_review(
+        window_days=window_days,
+        as_of=as_of,
+        limit=limit,
+        include_shadow_calibration=False,
+        include_review_case_patterns=True,
+    )
+    return JSONResponse(_compact_decision_ledger_calibration_detail_payload(payload))
+
+
+@app.get("/api/decision-ledger/shadow-calibration")
+async def api_decision_ledger_shadow_calibration() -> JSONResponse:
+    """Research-only shadow calibration hints, loaded on demand."""
+
+    return JSONResponse(decision_ledger.build_shadow_calibration_summary())
 
 
 @app.get("/api/decision-ledger/learning-loop")
 async def api_decision_ledger_learning_loop(request: Request) -> JSONResponse:
-    """Rule-versioned learning loop for Decision Ledger outcomes."""
+    """Rule-versioned learning loop for Decision Ledger outcomes.
+
+    The default response keeps only summary data needed by the Review page.
+    """
 
     as_of = request.query_params.get("as_of") or None
     records, errors = decision_ledger.scan_all_decisions()
@@ -3150,7 +4368,7 @@ async def api_decision_ledger_learning_loop(request: Request) -> JSONResponse:
     factor_learning_loop = decision_ledger.build_factor_learning_loop(records, as_of=as_of)
     payload["factor_learning_loop"] = factor_learning_loop
     payload["learning_summary"] = factor_learning_loop.get("learning_summary")
-    return JSONResponse(payload)
+    return JSONResponse(_compact_decision_ledger_learning_loop_payload(payload))
 
 
 @app.get("/api/decision-ledger/review-cases")
@@ -3307,4 +4525,6 @@ async def api_decision_ledger_health() -> JSONResponse:
     """
 
     payload = decision_ledger.build_ledger_health()
+    if isinstance(payload.get("learning_loop"), dict):
+        payload["learning_loop"] = _compact_decision_ledger_learning_loop_payload(payload["learning_loop"])
     return JSONResponse(payload)

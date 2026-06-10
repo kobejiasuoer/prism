@@ -575,17 +575,29 @@ class DataGateway:
             live_small_allowed=live_small_allowed,
         )
         data_path: str | None = None
+        display_key = self._display_request_key_for_non_authority_result(
+            result=result,
+            manifest=manifest,
+            expected_trade_date=expected_trade_date,
+            request_key=request_key,
+        )
+        manifest_formal_ready = self._manifest_is_formal_ready(manifest, expected_trade_date)
+        existing_formal_ready = self._existing_manifest_is_formal_ready(
+            dataset=result.dataset,
+            trade_date=expected_trade_date,
+            request_key=request_key,
+        )
         if result.status == DatasetStatus.OK and result.data is not None:
-            if self._existing_manifest_is_formal_ready(
-                dataset=result.dataset,
-                trade_date=expected_trade_date,
-                request_key=request_key,
-            ) and not self._manifest_is_formal_ready(manifest, expected_trade_date):
-                display_key = f"{request_key}__{result.provider}__display"
+            if (display_key or existing_formal_ready) and not manifest_formal_ready:
+                display_key = display_key or f"{request_key}__{result.provider}__display"
                 display_manifest = dict(manifest)
                 display_manifest["request_key"] = display_key
-                display_manifest["preserved_existing_formal_manifest"] = True
-                display_manifest["preserved_formal_request_key"] = request_key
+                if existing_formal_ready:
+                    display_manifest["preserved_existing_formal_manifest"] = True
+                    display_manifest["preserved_formal_request_key"] = request_key
+                else:
+                    display_manifest["isolated_non_authority_result"] = True
+                    display_manifest["formal_request_key"] = request_key
                 data_file, manifest_file = self.repository.save_dataset(
                     result.dataset,
                     expected_trade_date,
@@ -620,16 +632,26 @@ class DataGateway:
             manifest["data_path"] = data_path
             manifest["manifest_path"] = manifest_path
         else:
-            if self._existing_manifest_is_formal_ready(
-                dataset=result.dataset,
-                trade_date=expected_trade_date,
-                request_key=request_key,
-            ):
+            if existing_formal_ready:
                 manifest_path = str(
                     self.repository.dataset_paths(result.dataset, expected_trade_date, request_key)[1].resolve()
                 )
                 manifest["manifest_path"] = manifest_path
                 manifest["preserved_existing_formal_manifest"] = True
+            elif display_key:
+                display_manifest = dict(manifest)
+                display_manifest["request_key"] = display_key
+                display_manifest["isolated_non_authority_result"] = True
+                display_manifest["formal_request_key"] = request_key
+                manifest_file = self.repository.save_manifest(
+                    result.dataset,
+                    expected_trade_date,
+                    display_key,
+                    display_manifest,
+                )
+                manifest_path = str(manifest_file.resolve())
+                manifest = display_manifest
+                manifest["manifest_path"] = manifest_path
             else:
                 manifest_file = self.repository.save_manifest(result.dataset, expected_trade_date, request_key, manifest)
                 manifest_path = str(manifest_file.resolve())
@@ -666,6 +688,29 @@ class DataGateway:
             and bool(manifest.get("formal_decision_allowed"))
             and bool(manifest.get("payload_hash"))
         )
+
+    @staticmethod
+    def _display_request_key_for_non_authority_result(
+        *,
+        result: ProviderResult,
+        manifest: dict[str, Any],
+        expected_trade_date: str,
+        request_key: str,
+    ) -> str:
+        if DataGateway._manifest_is_formal_ready(manifest, expected_trade_date):
+            return ""
+        definition = get_dataset_definition(result.dataset)
+        if definition is None or definition.source_lane not in {"authoritative_daily", "execution"}:
+            return ""
+        target = (
+            definition.target_authority_provider
+            or definition.authority_provider
+            or definition.primary_provider
+            or ""
+        )
+        if not target or str(result.provider or "") == str(target):
+            return ""
+        return f"{request_key}__{result.provider}__display"
 
     def _effective_live_small_allowed(self, result: ProviderResult, expected_trade_date: str) -> bool:
         if result.provider_role == ProviderRole.FALLBACK and not bool(result.extra.get("allow_live_small_fallback")):

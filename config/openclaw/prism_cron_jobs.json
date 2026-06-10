@@ -62,6 +62,36 @@
       "state": {}
     },
     {
+      "id": "prism-formal_data_refresh_postclose",
+      "agentId": "invest",
+      "sessionKey": "agent:invest:main",
+      "name": "正式日线复权盘后补齐",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "35 16 * * 1-5",
+        "tz": "Asia/Shanghai"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "执行 正式日线复权盘后补齐。该任务只写本地状态文件；最终回复只允许写 `DONE` 或 `FAILED: ...`。\n\n直接执行：`python3 apps/scripts/refresh_formal_data.py --datasets bars.daily,adjustment.factor`\n如果 runner 已在运行或返回 running 状态，禁止重复执行。",
+        "timeoutSeconds": 600,
+        "toolsAllow": [
+          "exec"
+        ],
+        "thinking": "off",
+        "lightContext": true
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "feishu",
+        "to": ""
+      },
+      "state": {}
+    },
+    {
       "id": "prism-formal_data_refresh_index_morning",
       "agentId": "invest",
       "sessionKey": "agent:invest:main",
@@ -377,6 +407,66 @@
       "payload": {
         "kind": "agentTurn",
         "message": "执行 正式基准指数补刷-收盘二。该任务只写本地状态文件；最终回复只允许写 `DONE` 或 `FAILED: ...`。\n\n直接执行：`python3 apps/scripts/refresh_formal_data.py --datasets benchmark.index_daily`\n如果 runner 已在运行或返回 running 状态，禁止重复执行。",
+        "timeoutSeconds": 600,
+        "toolsAllow": [
+          "exec"
+        ],
+        "thinking": "off",
+        "lightContext": true
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "feishu",
+        "to": ""
+      },
+      "state": {}
+    },
+    {
+      "id": "prism-formal_data_refresh_index_postclose_third",
+      "agentId": "invest",
+      "sessionKey": "agent:invest:main",
+      "name": "正式基准指数补刷-收盘三",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "40 17 * * 1-5",
+        "tz": "Asia/Shanghai"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "执行 正式基准指数补刷-收盘三。该任务只写本地状态文件；最终回复只允许写 `DONE` 或 `FAILED: ...`。\n\n直接执行：`python3 apps/scripts/refresh_formal_data.py --datasets benchmark.index_daily`\n如果 runner 已在运行或返回 running 状态，禁止重复执行。",
+        "timeoutSeconds": 600,
+        "toolsAllow": [
+          "exec"
+        ],
+        "thinking": "off",
+        "lightContext": true
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "feishu",
+        "to": ""
+      },
+      "state": {}
+    },
+    {
+      "id": "prism-formal_data_refresh_index_postclose_fourth",
+      "agentId": "invest",
+      "sessionKey": "agent:invest:main",
+      "name": "正式基准指数补刷-收盘四",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "50 18 * * 1-5",
+        "tz": "Asia/Shanghai"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "执行 正式基准指数补刷-收盘四。该任务只写本地状态文件；最终回复只允许写 `DONE` 或 `FAILED: ...`。\n\n直接执行：`python3 apps/scripts/refresh_formal_data.py --datasets benchmark.index_daily`\n如果 runner 已在运行或返回 running 状态，禁止重复执行。",
         "timeoutSeconds": 600,
         "toolsAllow": [
           "exec"

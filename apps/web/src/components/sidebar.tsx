@@ -4,18 +4,20 @@ import {
   ChevronDown,
   Circle,
   Command,
-  Monitor,
-  Moon,
   Search,
-  Sun,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import { useTheme, type ThemeMode } from "@/components/theme-provider";
-import { TrustBanner } from "@/components/trust-banner";
-import { useOverview, useTodaySummary } from "@/lib/hooks";
+import { useTheme } from "@/components/theme-provider";
+import {
+  resolvedThemeLabel,
+  THEME_COPY,
+  THEME_OPTIONS,
+} from "@/components/theme-options";
+import { TrustCompactBadge } from "@/components/trust-compact-badge";
+import { useShellStatus } from "@/lib/hooks";
 import { cn, toneColor } from "@/lib/utils";
 
 export const navItems = [
@@ -25,24 +27,12 @@ export const navItems = [
   { href: "/review", label: "复盘", mark: "04" },
 ] as const;
 
-const themeOptions: Array<{ mode: ThemeMode; label: string; icon: typeof Sun }> = [
-  { mode: "system", label: "跟随系统", icon: Monitor },
-  { mode: "light", label: "白天", icon: Sun },
-  { mode: "dark", label: "黑夜", icon: Moon },
-];
-
-const themeCopy: Record<ThemeMode, { label: string; icon: typeof Sun }> = {
-  system: { label: "跟随系统", icon: Monitor },
-  dark: { label: "黑夜", icon: Moon },
-  light: { label: "白天", icon: Sun },
-};
-
 function ThemeSelectButton() {
   const { mode, resolvedTheme, setMode } = useTheme();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const Icon = themeCopy[mode].icon;
-  const resolvedCopy = mode === "system" ? (resolvedTheme === "dark" ? "系统黑夜" : "系统白天") : themeCopy[mode].label;
+  const Icon = THEME_COPY[mode].icon;
+  const resolvedCopy = resolvedThemeLabel(mode, resolvedTheme);
 
   useEffect(() => {
     if (!open) {
@@ -86,7 +76,7 @@ function ThemeSelectButton() {
       </button>
       {open ? (
         <div className="prism-theme-menu" role="menu" aria-label="主题选择">
-          {themeOptions.map((option) => {
+          {THEME_OPTIONS.map((option) => {
             const OptionIcon = option.icon;
             const active = option.mode === mode;
             return (
@@ -115,31 +105,35 @@ function ThemeSelectButton() {
 
 export function Sidebar({
   onOpenCommand,
+  onWarmCommand,
+  statusEnabled = true,
   className,
 }: {
   onOpenCommand: () => void;
+  onWarmCommand?: () => void;
+  statusEnabled?: boolean;
   className?: string;
 }) {
   const pathname = usePathname();
-  const overview = useOverview();
-  const today = useTodaySummary();
-  const daemonOk = !overview.isError;
-  const readiness = today.data?.readiness;
+  const shellStatus = useShellStatus({ enabled: statusEnabled });
+  const daemonOk = !shellStatus.isError;
+  const readiness = shellStatus.data?.readiness;
   const trust = readiness?.trust_level;
   const trustTone = trust?.tone || "warning";
   const trustColor = toneColor(trustTone);
-  const watchlistSource =
-    readiness?.source_freshness?.find((source) => source.key === "watchlist")
-    || overview.data?.freshness?.find((source) => source.label.includes("自选") || source.key?.includes("watch"));
-  const watchlistBlocked = readiness?.readiness_mode === "blocked" || Boolean(watchlistSource?.stale);
-  const watchlistLabel = watchlistSource?.age_label || (watchlistBlocked ? "不可用" : "待同步");
+  const watchlistSource = shellStatus.data?.watchlist_source;
+  const watchlistBlocked =
+    readiness?.readiness_mode === "blocked" || Boolean(watchlistSource?.stale);
+  const watchlistLabel =
+    watchlistSource?.age_label || (watchlistBlocked ? "不可用" : "待同步");
+  const briefGeneratedAt =
+    shellStatus.data?.brief?.generated_at ||
+    shellStatus.data?.generated_at ||
+    "";
 
   return (
     <aside
-      className={cn(
-        "prism-sidebar shrink-0",
-        className,
-      )}
+      className={cn("prism-sidebar shrink-0", className)}
       data-od-id="sidebar"
     >
       <Link href="/" className="prism-brand">
@@ -152,6 +146,8 @@ export function Sidebar({
         type="button"
         className="focus-ring prism-command-button"
         onClick={onOpenCommand}
+        onFocus={onWarmCommand}
+        onMouseEnter={onWarmCommand}
       >
         <span className="flex min-w-0 items-center gap-2">
           <Search size={15} className="shrink-0 opacity-60" />
@@ -164,7 +160,10 @@ export function Sidebar({
 
       <nav className="prism-nav" aria-label="主导航">
         {navItems.map((item) => {
-          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+          const active =
+            item.href === "/"
+              ? pathname === "/"
+              : pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
@@ -200,35 +199,51 @@ export function Sidebar({
             title={trust.headline}
           >
             <span className="flex items-center justify-between gap-2">
-              <span className="text-[10px] uppercase tracking-wide text-[var(--text-tertiary)]">今日可信度</span>
-              <TrustBanner trust={trust} compact />
+              <span className="text-[10px] uppercase tracking-wide text-[var(--text-tertiary)]">
+                今日可信度
+              </span>
+              <TrustCompactBadge trust={trust} />
             </span>
             <span className="line-clamp-2 text-[11px] leading-4 text-[var(--text-secondary)]">
               {trust.headline}
             </span>
             {trust.next_step_label && trust.level !== "trusted" ? (
-              <span className="text-[10px] text-[var(--text-tertiary)]">下一步：{trust.next_step_label}</span>
+              <span className="text-[10px] text-[var(--text-tertiary)]">
+                下一步：{trust.next_step_label}
+              </span>
             ) : null}
           </Link>
         ) : null}
         <div className="prism-status-line">
           <span>daemon</span>
-          <span className={cn("flex items-center gap-1.5", daemonOk ? "buy-text" : "sell-text")}>
+          <span
+            className={cn(
+              "flex items-center gap-1.5",
+              daemonOk ? "buy-text" : "sell-text",
+            )}
+          >
             <Circle
               size={7}
               fill={daemonOk ? "var(--positive)" : "var(--negative)"}
-              className={daemonOk ? "text-[var(--positive)]" : "text-[var(--negative)]"}
+              className={
+                daemonOk ? "text-[var(--positive)]" : "text-[var(--negative)]"
+              }
             />
             {daemonOk ? "已连接" : "未连接"}
           </span>
         </div>
         <div className="prism-status-line">
           <span>brief</span>
-          <span className="mono">{overview.data?.generated_at?.slice(11, 16) || "-"}</span>
+          <span className="mono">{briefGeneratedAt.slice(11, 16) || "-"}</span>
         </div>
         <div className="prism-status-line">
           <span>watchlist</span>
-          <span className={cn("mono", watchlistBlocked ? "sell-text" : "watch-text")}>
+          <span
+            className={cn(
+              "mono",
+              watchlistBlocked ? "sell-text" : "watch-text",
+            )}
+          >
             {watchlistBlocked ? `stale · ${watchlistLabel}` : watchlistLabel}
           </span>
         </div>
@@ -237,11 +252,15 @@ export function Sidebar({
             <Circle
               size={8}
               fill={daemonOk ? "var(--positive)" : "var(--negative)"}
-              className={daemonOk ? "text-[var(--positive)]" : "text-[var(--negative)]"}
+              className={
+                daemonOk ? "text-[var(--positive)]" : "text-[var(--negative)]"
+              }
             />
             <span className="truncate">
               {daemonOk ? "后端已连接" : "后端未连接"}
-              {overview.data?.generated_at ? ` · ${overview.data.generated_at.slice(11, 16)}` : ""}
+              {shellStatus.data?.generated_at
+                ? ` · ${shellStatus.data.generated_at.slice(11, 16)}`
+                : ""}
             </span>
           </span>
           <ThemeSelectButton />

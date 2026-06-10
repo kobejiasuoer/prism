@@ -5965,6 +5965,10 @@ def build_review_case_patterns(
     }
 
 
+def _review_case_pattern_count(cases: Iterable[Mapping[str, Any]]) -> int:
+    return len({_review_pattern_key(case) for case in cases})
+
+
 def build_review_case_workbench(decision_id: str) -> dict[str, Any]:
     record = load_decision(decision_id)
     if record is None:
@@ -6657,6 +6661,8 @@ def build_calibration_review(
     window_days: int = 20,
     as_of: str | None = None,
     limit: int = 12,
+    include_shadow_calibration: bool = True,
+    include_review_case_patterns: bool = True,
 ) -> dict[str, Any]:
     """Aggregate the ledger into a small review-and-calibration brief.
 
@@ -6792,12 +6798,31 @@ def build_calibration_review(
         or item.get("review_status") in _PENDING_REVIEW_STATUSES
     ][:review_limit]
     workbench = _build_review_workbench(learning_records, errors=errors)
-    shadow_calibration = build_shadow_calibration_summary()
+    shadow_calibration = (
+        build_shadow_calibration_summary()
+        if include_shadow_calibration
+        else None
+    )
     top_review_reasons: list[str] = []
     for item in review_items:
         reason = str(item.get("review_reason_key") or "")
         if reason and reason not in top_review_reasons:
             top_review_reasons.append(reason)
+    review_case_patterns_payload = (
+        build_review_case_patterns(cases=review_cases)
+        if include_review_case_patterns
+        else None
+    )
+    review_case_patterns = (
+        (review_case_patterns_payload or {}).get("patterns")
+        if isinstance(review_case_patterns_payload, Mapping)
+        else []
+    ) or []
+    review_case_pattern_count = (
+        int((review_case_patterns_payload or {}).get("count") or 0)
+        if isinstance(review_case_patterns_payload, Mapping)
+        else _review_case_pattern_count(review_cases)
+    )
 
     return {
         "as_of": as_of_norm,
@@ -6815,13 +6840,13 @@ def build_calibration_review(
         "needs_review": needs_review,
         "needs_review_count": len(review_items),
         "reviewed_case_count": len(review_cases_by_decision),
-        "review_case_patterns": build_review_case_patterns(cases=review_cases).get("patterns", []),
+        "review_case_patterns": review_case_patterns,
         "review_case_summary": {
             "total": len(review_cases),
             "attributed": len([case for case in review_cases if case.get("primary_cause")]),
-            "patterns": build_review_case_patterns(cases=review_cases).get("count", 0),
+            "patterns": review_case_pattern_count,
         },
-        "shadow_calibration": shadow_calibration,
+        **({"shadow_calibration": shadow_calibration} if shadow_calibration is not None else {}),
         "suggestion_cards": _calibration_suggestion_cards(
             by_lane=by_lane,
             by_action=by_action,
@@ -6835,7 +6860,21 @@ def build_calibration_review(
     }
 
 
-def list_recent_decisions(*, limit: int = 20) -> dict[str, Any]:
+def _canonical_code_set(codes: Iterable[Any] | None) -> set[str]:
+    out: set[str] = set()
+    for code in codes or []:
+        canonical = _canonical_code(code)
+        if canonical:
+            out.add(canonical)
+    return out
+
+
+def list_recent_decisions(
+    *,
+    limit: int = 20,
+    codes: Iterable[Any] | None = None,
+    latest_per_code: bool = False,
+) -> dict[str, Any]:
     """Return the most recent decisions plus their latest event summary.
 
     Sort order is ``(trade_date desc, decision_id desc)``.  The decision
@@ -6847,6 +6886,16 @@ def list_recent_decisions(*, limit: int = 20) -> dict[str, Any]:
         limit = 1
     limit = min(limit, 500)  # hard cap so /recent stays a thin API
     records, errors = scan_all_decisions()
+    requested_codes = [code for code in (codes or []) if str(code or "").strip()]
+    code_filter = _canonical_code_set(requested_codes)
+    if code_filter:
+        records = [
+            record
+            for record in records
+            if str((record.get("stock") or {}).get("code") or "") in code_filter
+        ]
+    elif requested_codes:
+        records = []
     records.sort(
         key=lambda r: (
             str(r.get("trade_date") or ""),
@@ -6854,11 +6903,23 @@ def list_recent_decisions(*, limit: int = 20) -> dict[str, Any]:
         ),
         reverse=True,
     )
+    if latest_per_code:
+        latest_records: list[dict[str, Any]] = []
+        seen_codes: set[str] = set()
+        for record in records:
+            code = str((record.get("stock") or {}).get("code") or "")
+            if not code or code in seen_codes:
+                continue
+            seen_codes.add(code)
+            latest_records.append(record)
+        records = latest_records
     items = [_decision_summary_card(r) for r in records[:limit]]
     return {
         "items": items,
         "count": len(items),
         "limit": limit,
+        "codes": sorted(code_filter),
+        "latest_per_code": bool(latest_per_code),
         "errors": errors,
     }
 

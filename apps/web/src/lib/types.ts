@@ -13,9 +13,9 @@ export type Tone =
   | "stale";
 
 export type DecisionValue = "pending" | "done" | "watch" | "skip";
-export type TodayActionDisplayValue = DecisionValue | "no_fill";
+type TodayActionDisplayValue = DecisionValue | "no_fill";
 
-export interface LinkMap {
+interface LinkMap {
   today?: string;
   watchlist?: string;
   opportunities?: string;
@@ -78,14 +78,14 @@ export interface SourceCardData {
 
 export type ReadinessMode = "live_ready" | "shadow_only" | "blocked";
 
-export interface ReadinessSession {
+interface ReadinessSession {
   key: string;
   label: string;
   is_trading_day: boolean;
   calendar_status?: "trading" | "weekend" | "holiday" | "unknown" | string;
 }
 
-export interface ReadinessIssue {
+interface ReadinessIssue {
   code: string;
   label: string;
   message: string;
@@ -113,6 +113,7 @@ export interface ReadinessSourceFreshness {
   fallback_used?: boolean;
   live_small_allowed?: boolean;
   manifest_path?: string;
+  has_manifest?: boolean;
   source_lane?: string;
   decision_scope?: string;
   authority_provider?: string;
@@ -124,7 +125,7 @@ export interface ReadinessSourceFreshness {
   dataset_manifest?: boolean;
 }
 
-export type FreshnessState =
+type FreshnessState =
   | "FRESH"
   | "USABLE"
   | "STALE"
@@ -132,9 +133,9 @@ export type FreshnessState =
   | "INVALID"
   | "BLOCKED";
 
-export type RiskLevel = "info" | "warn" | "degrade" | "block" | string;
+type RiskLevel = "info" | "warn" | "degrade" | "block" | string;
 
-export interface RiskEvidenceRef {
+interface RiskEvidenceRef {
   kind?: string;
   dataset?: string;
   label?: string;
@@ -145,7 +146,7 @@ export interface RiskEvidenceRef {
   hard_block?: boolean;
 }
 
-export interface RiskItem {
+interface RiskItem {
   code?: string;
   label?: string;
   level?: RiskLevel;
@@ -158,7 +159,7 @@ export interface RiskItem {
   display_only?: boolean;
 }
 
-export type CapabilityKey =
+type CapabilityKey =
   | "observe"
   | "review"
   | "approve"
@@ -166,20 +167,20 @@ export type CapabilityKey =
   | "notify"
   | "ledger_capture";
 
-export interface CapabilityReason {
+interface CapabilityReason {
   code: string;
   label?: string;
   message?: string;
   source?: string;
 }
 
-export interface CapabilityNextAction {
+interface CapabilityNextAction {
   task?: string;
   label?: string;
   detail?: string;
 }
 
-export interface CapabilityReport {
+interface CapabilityReport {
   capability: CapabilityKey | string;
   status: "ok" | "degraded" | "blocked" | string;
   granted: boolean;
@@ -190,7 +191,7 @@ export interface CapabilityReport {
   last_checked_at: string;
 }
 
-export type TrustLevelValue = "trusted" | "observe_only" | "unreliable";
+type TrustLevelValue = "trusted" | "observe_only" | "unreliable";
 
 export interface TrustLevel {
   level: TrustLevelValue | string;
@@ -208,7 +209,7 @@ export interface TrustLevel {
   last_checked_at: string;
 }
 
-export interface ReadinessQualityFreshness {
+interface ReadinessQualityFreshness {
   key: string;
   title: string;
   validation_status: string;
@@ -240,8 +241,8 @@ export interface ReadinessPayload {
   formal_blockers?: ReadinessIssue[];
   formal_base_blockers?: ReadinessIssue[];
   pipeline_formal_blockers?: ReadinessIssue[];
-  source_freshness: ReadinessSourceFreshness[];
-  quality_freshness: ReadinessQualityFreshness[];
+  source_freshness?: ReadinessSourceFreshness[];
+  quality_freshness?: ReadinessQualityFreshness[];
   recommended_tasks: string[];
   account_state?: AccountReadinessState;
   calendar_horizon?: string;
@@ -252,6 +253,30 @@ export interface ReadinessPayload {
   formal_data_status?: FormalDataStatus;
   capabilities?: Partial<Record<CapabilityKey, CapabilityReport>> & Record<string, CapabilityReport>;
   trust_level?: TrustLevel;
+}
+
+export interface ShellStatusResponse {
+  ok: boolean;
+  generated_at: string;
+  workspace_root?: string;
+  trade_date?: string;
+  expected_trade_date?: string;
+  data_trade_date?: string | null;
+  brief?: {
+    generated_at?: string | null;
+    trade_date?: string | null;
+    is_live?: boolean;
+  };
+  readiness?: {
+    checked_at?: string;
+    readiness_mode?: ReadinessMode | string;
+    ready?: boolean;
+    brief_is_live?: boolean;
+    session?: ReadinessSession;
+    stale_count?: number;
+    trust_level?: TrustLevel;
+  };
+  watchlist_source?: ReadinessSourceFreshness | null;
 }
 
 export type AccountMode = "research" | "shadow" | "live_small";
@@ -284,7 +309,7 @@ export interface AccountReadinessState {
   ready_for_live_small: boolean;
 }
 
-export interface AccountPosition {
+interface AccountPosition {
   code: string;
   name: string;
   qty: number;
@@ -304,7 +329,7 @@ export interface AccountPosition {
   fills: number;
 }
 
-export type HoldingReviewAction =
+type HoldingReviewAction =
   | "hold"
   | "clear_exit"
   | "defense_reduce"
@@ -318,7 +343,7 @@ export type HoldingReviewAction =
   | "missing_analysis"
   | "evidence_blocked";
 
-export interface HoldingReviewDecisionSummary {
+interface HoldingReviewDecisionSummary {
   decision_id?: string | null;
   trade_date?: string | null;
   code?: string | null;
@@ -348,7 +373,7 @@ export interface HoldingReviewDecisionSummary {
   } | null;
 }
 
-export interface HoldingEvidencePack {
+interface HoldingEvidencePack {
   stock?: {
     code?: string | null;
     name?: string | null;
@@ -437,7 +462,7 @@ export interface HoldingEvidencePack {
   };
 }
 
-export interface HoldingAiReview {
+interface HoldingAiReview {
   scene?: string;
   scene_label?: string;
   confidence?: number | null;
@@ -561,7 +586,7 @@ export interface HoldingReview {
   review_reason: string;
 }
 
-export interface HoldingActionSummary {
+interface HoldingActionSummary {
   total: number;
   must_review: number;
   clear_exit?: number;
@@ -583,7 +608,7 @@ export interface HoldingActionSummary {
   tone?: Tone | string;
 }
 
-export interface AccountFill {
+interface AccountFill {
   fill_id: string;
   ts: string;
   trade_date: string;
@@ -601,7 +626,7 @@ export interface AccountFill {
   note: string;
 }
 
-export interface AccountReconciliation {
+interface AccountReconciliation {
   ts: string;
   trade_date: string;
   broker_cash: number;
@@ -613,7 +638,7 @@ export interface AccountReconciliation {
   note: string;
 }
 
-export interface AccountIdentityCorrection {
+interface AccountIdentityCorrection {
   ts: string;
   from_code: string;
   to_code: string;
@@ -624,7 +649,7 @@ export interface AccountIdentityCorrection {
   fill_ids?: string[];
 }
 
-export interface AccountView {
+interface AccountView {
   mode: AccountMode | string;
   mode_label: string;
   mode_tone: string;
@@ -643,11 +668,11 @@ export interface AccountView {
   unrealized_pnl?: number | null;
   total_pnl?: number | null;
   open_positions: AccountPosition[];
-  closed_positions: AccountPosition[];
-  fills: AccountFill[];
+  closed_positions?: AccountPosition[];
+  fills?: AccountFill[];
   fills_count: number;
   last_fill_at: string;
-  reconciliations: AccountReconciliation[];
+  reconciliations?: AccountReconciliation[];
   no_fill_intents: Array<{ ts: string; trade_date: string; intent_key: string; reason: string }>;
   position_plans?: Array<HoldingReview["position_plan"]>;
   identity_corrections?: AccountIdentityCorrection[];
@@ -659,8 +684,38 @@ export interface AccountView {
     allow_unsafe?: boolean;
     note?: string;
   }>;
-  available_modes: AccountMode[];
+  available_modes?: AccountMode[];
   updated_at: string;
+}
+
+interface PortfolioMarketQuotes {
+  enabled: boolean;
+  status: string;
+  message?: string;
+  requested_codes?: string[];
+  updated_at?: string;
+  trade_date?: string;
+  provider?: string;
+  freshness_status?: string;
+  live_small_allowed?: boolean;
+  row_count?: number;
+  priced_count?: number;
+  missing_codes?: string[];
+  data_path?: string;
+  manifest_path?: string;
+  errors?: string[];
+}
+
+export interface PortfolioHoldingReviewsResponse {
+  generated_at: string;
+  trade_date: string;
+  expected_trade_date: string;
+  data_trade_date: string | null;
+  readiness_mode?: ReadinessMode | string;
+  market_quotes?: PortfolioMarketQuotes;
+  holding_reviews: HoldingReview[];
+  holding_action_summary: HoldingActionSummary;
+  position_count: number;
 }
 
 export interface PortfolioAccountResponse {
@@ -670,46 +725,17 @@ export interface PortfolioAccountResponse {
   data_trade_date: string | null;
   readiness: ReadinessPayload;
   account: AccountView;
-  market_quotes?: {
-    enabled: boolean;
-    status: string;
-    message?: string;
-    requested_codes?: string[];
-    updated_at?: string;
-    trade_date?: string;
-    provider?: string;
-    freshness_status?: string;
-    live_small_allowed?: boolean;
-    row_count?: number;
-    priced_count?: number;
-    missing_codes?: string[];
-    data_path?: string;
-    manifest_path?: string;
-    errors?: string[];
-  };
+  market_quotes?: PortfolioMarketQuotes;
   holding_reviews?: HoldingReview[];
   holding_action_summary?: HoldingActionSummary;
+  holding_reviews_deferred?: boolean;
+  account_history_deferred?: boolean;
   summary_cards: MetricCardData[];
   recent_fills: AccountFill[];
   unreconciled_intents: AccountReadinessState["unreconciled_intents"];
   reconciliation: AccountReadinessState["reconciliation"];
   ready_for_live_small: boolean;
   links: LinkMap;
-}
-
-export interface QualityCardData {
-  key?: string;
-  title: string;
-  status: string;
-  tone?: Tone | string;
-  checked_at?: string;
-  expected_timestamp?: string;
-  issue?: string;
-  path?: string;
-  url?: string;
-  timely?: boolean;
-  stale_reasons?: string[];
-  age_label?: string;
 }
 
 export interface BasicCard {
@@ -743,19 +769,19 @@ export interface BasicCard {
   leaders?: string[];
 }
 
-export interface ReviewSelectorOption {
+interface ReviewSelectorOption {
   label: string;
   url: string;
   active?: boolean;
 }
 
-export interface ReviewSelectorGroup {
+interface ReviewSelectorGroup {
   title: string;
   subtitle?: string;
   options: ReviewSelectorOption[];
 }
 
-export interface ReviewChangeEntry {
+interface ReviewChangeEntry {
   title: string;
   change: string;
   detail: string;
@@ -763,13 +789,13 @@ export interface ReviewChangeEntry {
   url?: string | null;
 }
 
-export interface ReviewChangeLog {
+interface ReviewChangeLog {
   note?: string;
   entries?: ReviewChangeEntry[];
   empty?: string;
 }
 
-export interface ReviewLifecycleCard {
+interface ReviewLifecycleCard {
   name: string;
   code?: string;
   tone?: Tone | string;
@@ -779,7 +805,7 @@ export interface ReviewLifecycleCard {
   foot?: string;
 }
 
-export interface ReviewLifecycleGroup {
+interface ReviewLifecycleGroup {
   key: string;
   title: string;
   subtitle?: string;
@@ -792,17 +818,7 @@ export interface ReviewResearchPanel {
   eyebrow?: string;
   title: string;
   summary?: string;
-  metric_cards?: MetricCardData[];
-  groups?: Array<{
-    title: string;
-    entries?: Array<{
-      label: string;
-      summary?: string;
-      detail_url?: string | null;
-    }>;
-  }>;
   artifact_url?: string;
-  artifact_path?: string;
 }
 
 export interface ShadowReplayReviewSummary {
@@ -825,40 +841,6 @@ export interface ShadowReplayReviewSummary {
   report_path?: string | null;
   panel_path?: string | null;
   labels_path?: string | null;
-}
-
-export interface ReviewComparisonPanel {
-  title: string;
-  subtitle?: string;
-  cards?: MetricCardData[];
-  empty?: string;
-  artifact_url?: string;
-  artifact_path?: string;
-}
-
-export interface ReviewDetailData {
-  generated_at: string;
-  section_key: string;
-  label: string;
-  hero?: {
-    eyebrow?: string;
-    title?: string;
-    summary?: string;
-  };
-  selector_groups?: ReviewSelectorGroup[];
-  comparison_note?: string;
-  missing_note?: string | null;
-  source_cards?: MetricCardData[];
-  summary_cards?: MetricCardData[];
-  comparison_panels?: ReviewComparisonPanel[];
-  artifacts?: BasicCard[];
-  risk_level?: RiskLevel;
-  risk_items?: RiskItem[];
-  degrade_reason?: string;
-  block_reason?: string;
-  risk_evidence_refs?: RiskEvidenceRef[];
-  risk_source_cards?: SourceCardData[];
-  links?: LinkMap;
 }
 
 export interface ReviewLearningMemory {
@@ -1014,39 +996,14 @@ export interface CardGroup<T = StockListCard> {
   subtitle?: string;
   count?: number;
   cards?: T[];
+  cards_loaded?: boolean;
+  deferred_cards?: boolean;
+  cards_preview_limit?: number;
   empty?: string;
   footer_link?: {
     title: string;
     url: string;
   } | null;
-}
-
-export interface TodayHero {
-  title: string;
-  summary: string;
-  gate_label?: string;
-  position_cap?: string;
-  main_theme?: string;
-  context_note?: string;
-}
-
-export interface TodayCommandHeroAction {
-  label: string;
-  title: string;
-  detail: string;
-  tone: Tone | string;
-  tier: string;
-  url?: string;
-}
-
-export interface TodayCommandHero {
-  eyebrow: string;
-  title: string;
-  summary: string;
-  trade_date: string;
-  context_note?: string;
-  source_state?: string;
-  actions?: TodayCommandHeroAction[];
 }
 
 export interface TodayActionDecision {
@@ -1057,7 +1014,7 @@ export interface TodayActionDecision {
   updated_at_raw?: string;
 }
 
-export interface TodayActionDisplayState {
+interface TodayActionDisplayState {
   value: TodayActionDisplayValue;
   label: string;
   tone: Tone | string;
@@ -1066,7 +1023,7 @@ export interface TodayActionDisplayState {
   reason?: string;
 }
 
-export interface TodayActionContext {
+interface TodayActionContext {
   value?: string;
   label?: string;
   status?: string;
@@ -1085,7 +1042,7 @@ export interface DecisionContractConstraint {
   why_not?: Array<{ code?: string; label?: string; message?: string }>;
 }
 
-export interface DecisionContractDataRequirement {
+interface DecisionContractDataRequirement {
   dataset: string;
   label?: string;
   role?: string;
@@ -1099,7 +1056,7 @@ export interface DecisionContractDataRequirement {
   failure_impact?: string;
 }
 
-export interface DecisionContractEvidenceRef {
+interface DecisionContractEvidenceRef {
   kind: string;
   key?: string;
   label?: string;
@@ -1111,7 +1068,7 @@ export interface DecisionContractEvidenceRef {
 }
 
 export interface DecisionContract {
-  schema_version: string;
+  schema_version?: string;
   contract_id: string;
   action_key: string;
   lane?: string;
@@ -1126,8 +1083,10 @@ export interface DecisionContract {
   readiness_ready?: boolean;
   required_capabilities?: string[];
   data_requirements?: DecisionContractDataRequirement[];
+  data_requirements_count?: number;
   evidence_refs?: DecisionContractEvidenceRef[];
   execution_constraints?: DecisionContractConstraint[];
+  execution_constraints_count?: number;
   requires_real_money?: boolean;
   allowed_for_real_money?: boolean;
   allowed_for_formal_action?: boolean;
@@ -1145,7 +1104,7 @@ export interface DecisionContract {
   };
 }
 
-export interface DecisionContractPayload {
+interface DecisionContractPayload {
   schema_version: string;
   trade_date?: string;
   expected_trade_date?: string;
@@ -1164,10 +1123,10 @@ export interface DecisionContractPayload {
 export interface TodayActionItem {
   key: string;
   title: string;
-  source: string;
-  status: string;
-  tone: Tone | string;
-  detail: string;
+  source?: string;
+  status?: string;
+  tone?: Tone | string;
+  detail?: string;
   foot?: string;
   metrics?: string[];
   url?: string;
@@ -1224,7 +1183,7 @@ export interface TodayActionItem {
   tushare_priority_adjustment?: number;
 }
 
-export interface TodayActionQueue {
+interface TodayActionQueue {
   title: string;
   subtitle?: string;
   note?: string;
@@ -1245,9 +1204,9 @@ export interface TodayActionQueue {
   decision_contracts?: DecisionContractPayload;
 }
 
-export type ActionRegisterWritebackStatus = "writable" | "read_only" | "stale" | string;
+type ActionRegisterWritebackStatus = "writable" | "read_only" | "stale" | string;
 
-export interface TodayActionRegisterItem {
+interface TodayActionRegisterItem {
   intent_key: string;
   title: string;
   code?: string;
@@ -1286,7 +1245,7 @@ export interface RiskRow {
   tone?: Tone | string;
 }
 
-export interface CanonicalDecision {
+interface CanonicalDecision {
   stock_id: string;
   stock_name: string;
   trade_date: string;
@@ -1307,7 +1266,7 @@ export interface CanonicalDecision {
   [key: string]: string | number | null | undefined;
 }
 
-export interface StockTrigger {
+interface StockTrigger {
   label?: string;
   name?: string;
   value?: string;
@@ -1316,17 +1275,8 @@ export interface StockTrigger {
   action?: string;
 }
 
-export interface TodayCounts {
-  watchlist_priority: number;
-  watchlist_total: number;
-  candidate_total: number;
-  confirmed: number;
-  downgraded: number;
-  fresh_candidates: number;
-}
-
-export type CommandBriefModeValue = "defense" | "observe" | "probe" | "offense";
-export type CommandBriefPermitValue =
+type CommandBriefModeValue = "defense" | "observe" | "probe" | "offense";
+type CommandBriefPermitValue =
   | "on" | "off" | "shadow" | "limited" | "none" | "observe" | "review" | "conditional" | "actionable";
 
 export interface CommandBriefPermit {
@@ -1341,12 +1291,12 @@ export interface CommandBriefMode {
   label: string;
   tone: string;
   summary: string;
-  reasons: string[];
+  reasons?: string[];
 }
 
 export interface CommandBriefPositionCap {
   value: string;
-  raw: string;
+  raw?: string;
   tone: string;
   note: string;
 }
@@ -1357,7 +1307,7 @@ export interface CommandBriefFirstAction {
   url: string;
   action_key?: string | null;
   tone: string;
-  kind: "stock" | "system" | "recover_data";
+  kind?: "stock" | "system" | "recover_data" | "review_only";
 }
 
 export interface CommandBriefForbidItem {
@@ -1379,8 +1329,8 @@ export interface CommandBriefJudgement {
   title: string;
   verdict: string;
   tone: string;
-  evidence: string[];
-  impact: string;
+  evidence?: string[];
+  impact?: string;
 }
 
 export interface CommandBriefLaneItem {
@@ -1403,26 +1353,27 @@ export interface CommandBriefLane {
   key: "must" | "conditional" | "observe" | "forbid";
   title: string;
   tone: string;
-  subtitle: string;
+  subtitle?: string;
+  total_count?: number;
   items: CommandBriefLaneItem[] | CommandBriefForbidItem[];
 }
 
 export interface CommandBriefMiddayCard {
-  name: string;
-  code: string;
-  reason: string;
-  url: string;
-  tone: string;
+  name?: string;
+  code?: string;
+  reason?: string;
+  url?: string;
+  tone?: string;
 }
 
 export interface CommandBriefMiddayVerify {
   available: boolean;
-  morning_takeaway: string;
-  midday_status: string;
-  fresh_candidates: CommandBriefMiddayCard[];
-  downgraded: CommandBriefMiddayCard[];
-  next_day_condition: string;
-  verified_at: string;
+  morning_takeaway?: string;
+  midday_status?: string;
+  fresh_candidates?: CommandBriefMiddayCard[];
+  downgraded?: CommandBriefMiddayCard[];
+  next_day_condition?: string;
+  verified_at?: string;
 }
 
 export interface CommandBriefTrust {
@@ -1434,7 +1385,14 @@ export interface CommandBriefTrust {
   auto_refresh_summary: string;
 }
 
-export interface TodayCommandBrief {
+interface TodayCommandBriefDetail {
+  forbid_today?: CommandBriefForbidItem[];
+  reclassify_when?: CommandBriefReclassifyRule[];
+  judgement_chain?: CommandBriefJudgement[];
+  midday_verify?: CommandBriefMiddayVerify;
+}
+
+interface TodayCommandBrief {
   trade_date: string;
   generated_at: string;
   mode: CommandBriefMode;
@@ -1445,51 +1403,49 @@ export interface TodayCommandBrief {
   };
   position_cap: CommandBriefPositionCap;
   first_action: CommandBriefFirstAction;
-  forbid_today: CommandBriefForbidItem[];
-  reclassify_when: CommandBriefReclassifyRule[];
-  judgement_chain: CommandBriefJudgement[];
+  forbid_today?: CommandBriefForbidItem[];
+  reclassify_when?: CommandBriefReclassifyRule[];
+  judgement_chain?: CommandBriefJudgement[];
   action_lanes: CommandBriefLane[];
-  midday_verify: CommandBriefMiddayVerify;
+  midday_verify?: CommandBriefMiddayVerify;
   trust: CommandBriefTrust;
+  details_deferred?: boolean;
+  links_lazy?: {
+    details?: string;
+  };
   errors?: Record<string, string>;
 }
 
-export interface TodayData {
+export interface TodaySummaryData {
   generated_at: string;
-  display_date?: string;
   trade_date: string;
   expected_trade_date?: string;
   data_trade_date?: string | null;
   brief_is_live: boolean;
   readiness?: ReadinessPayload;
-  hero: TodayHero;
-  command_hero?: TodayCommandHero;
-  radar_cards?: MetricCardData[];
-  action_queue: TodayActionQueue;
-  risk_rows?: RiskRow[];
-  source_cards: SourceCardData[];
-  summary_cards: MetricCardData[];
-  quality_cards?: QualityCardData[];
+  readiness_details_deferred?: boolean;
   command_brief?: TodayCommandBrief;
   command_brief_error?: string | null;
-  decision_contracts?: DecisionContractPayload;
-  action_register?: TodayActionRegister;
-  links: LinkMap;
-  counts: TodayCounts;
-}
-
-export type TodaySummaryData = Omit<
-  TodayData,
-  "action_queue" | "decision_contracts" | "risk_rows"
-> & {
   summary_only: true;
   action_queue?: never;
   decision_contracts?: never;
   links_lazy?: {
     actions?: string;
-    full?: string;
+    action_contracts?: string;
+    command_brief_detail?: string;
   };
-};
+}
+
+export interface TodayCommandBriefDetailData {
+  generated_at: string;
+  trade_date: string;
+  expected_trade_date?: string;
+  data_trade_date?: string | null;
+  brief_is_live: boolean;
+  command_brief_detail?: TodayCommandBriefDetail;
+  command_brief_error?: string | null;
+  details_deferred: false;
+}
 
 export interface TodayActionsData {
   generated_at: string;
@@ -1497,20 +1453,19 @@ export interface TodayActionsData {
   expected_trade_date?: string;
   data_trade_date?: string | null;
   readiness_mode?: ReadinessMode | string;
-  action_groups?: Array<Record<string, unknown>>;
   action_queue: TodayActionQueue;
+  decision_contracts_deferred?: boolean;
   decision_contracts?: DecisionContractPayload;
   action_register?: TodayActionRegister;
-  next_steps?: Record<string, unknown>;
-  top_rows?: RiskRow[];
-  primary_actions?: RiskRow[];
-  holdings_rows?: RiskRow[];
-  opportunity_rows?: RiskRow[];
-  risk_rows?: RiskRow[];
-  evidence_rows?: RiskRow[];
-  source_cards?: SourceCardData[];
-  artifacts?: Record<string, unknown>;
-  links?: LinkMap;
+}
+
+export interface TodayActionContractsData {
+  generated_at: string;
+  trade_date: string;
+  expected_trade_date?: string;
+  data_trade_date?: string | null;
+  readiness_mode?: ReadinessMode | string;
+  decision_contracts?: DecisionContractPayload;
 }
 
 export interface AskSuggestion {
@@ -1570,7 +1525,7 @@ export interface AskResponse {
   message?: string;
 }
 
-export interface AskFollowupPreset {
+interface AskFollowupPreset {
   label?: string;
   question: string;
 }
@@ -1591,7 +1546,7 @@ export interface AskFollowupShell {
   hint?: string;
 }
 
-export interface AskFollowupAnswer {
+interface AskFollowupAnswer {
   intent?: string;
   intent_label?: string;
   title?: string;
@@ -1619,38 +1574,8 @@ export interface AskFollowupResponse {
 export interface OverviewData {
   generated_at: string;
   workspace_root: string;
-  kpis?: MetricCardData[];
-  lanes?: unknown[];
   tasks?: TaskDefinition[];
-  runs?: RunItem[];
   freshness?: SourceCardData[];
-}
-
-export interface WatchlistDayOverDayChange {
-  code: string;
-  name: string;
-  before?: string | number | null;
-  after?: string | number | null;
-  field?: string;
-}
-
-export interface WatchlistDayOverDayPresence {
-  code: string;
-  name: string;
-  action?: string;
-  group?: string;
-}
-
-export interface WatchlistDayOverDayDiff {
-  today_trade_date: string | null;
-  previous_trade_date: string | null;
-  added: WatchlistDayOverDayPresence[];
-  removed: WatchlistDayOverDayPresence[];
-  action_changes: WatchlistDayOverDayChange[];
-  group_changes: WatchlistDayOverDayChange[];
-  boundary_changes: WatchlistDayOverDayChange[];
-  signal_changes: WatchlistDayOverDayChange[];
-  unchanged_count: number;
 }
 
 export interface WatchlistData {
@@ -1678,9 +1603,11 @@ export interface WatchlistData {
   source_cards?: SourceCardData[];
   focus_tags?: string[];
   avoid_points?: string[];
-  day_over_day_diff?: WatchlistDayOverDayDiff;
+  manager_deferred?: boolean;
+  links_lazy?: {
+    manager?: string;
+  };
   links?: LinkMap;
-  manager?: WatchlistManager;
 }
 
 export interface WatchlistManagerItem {
@@ -1693,13 +1620,13 @@ export interface WatchlistManagerItem {
   updated_at?: string;
 }
 
-export interface WatchlistRefreshStep {
+interface WatchlistRefreshStep {
   label?: string;
   state?: string;
   detail?: string;
 }
 
-export interface WatchlistManager {
+interface WatchlistManager {
   summary?: string;
   feedback_hint?: string;
   active_count?: number;
@@ -1748,7 +1675,15 @@ export interface OpportunitiesData {
   generated_at: string;
   display_date?: string;
   trade_date: string;
+  expected_trade_date?: string;
+  data_trade_date?: string | null;
+  readiness_mode?: ReadinessMode | string;
+  readiness?: ReadinessPayload;
   brief_is_live?: boolean;
+  compact?: boolean;
+  context_deferred?: boolean;
+  evidence_deferred?: boolean;
+  active_group_key?: string;
   hero?: {
     title?: string;
     summary?: string;
@@ -1762,26 +1697,13 @@ export interface OpportunitiesData {
     meta_pills?: Array<{ label: string; value: string }>;
     cta_links?: Array<{ label?: string; href?: string }>;
   };
-  summary_cards?: MetricCardData[];
   groups?: Array<CardGroup<StockListCard>>;
-  secondary_groups?: Array<CardGroup<StockListCard>>;
   lifecycle_groups?: Array<CardGroup<StockListCard>>;
   lifecycle_cards?: MetricCardData[];
   lifecycle_note?: string;
-  top_rows?: RiskRow[];
   theme_cards?: BasicCard[];
-  status_strip?: BasicCard[];
   source_cards?: SourceCardData[];
-  quality_cards?: BasicCard[];
   learning_memories?: ReviewLearningMemory[];
-  learning_memory_summary?: {
-    case_count?: number;
-    pattern_count?: number;
-    error?: string | null;
-  };
-  focus_tags?: string[];
-  avoid_points?: string[];
-  links?: LinkMap;
 }
 
 export interface ReviewData {
@@ -1827,12 +1749,29 @@ export interface ReviewData {
   lifecycle_cards?: MetricCardData[];
   lifecycle_groups?: ReviewLifecycleGroup[];
   research_panels?: ReviewResearchPanel[];
+  research_panels_deferred?: boolean;
   source_cards?: SourceCardData[];
   artifacts?: BasicCard[];
   verdict_note?: string;
   comparison_note?: string;
   lifecycle_note?: string;
   links?: LinkMap;
+}
+
+export interface ReviewResearchResponse {
+  generated_at: string;
+  active_baseline_id?: string | null;
+  active_window_id?: string | null;
+  research_panels: ReviewResearchPanel[];
+  research_panels_deferred?: boolean;
+}
+
+export interface ReviewEvidenceResponse {
+  generated_at: string;
+  active_baseline_id?: string | null;
+  active_window_id?: string | null;
+  source_cards?: SourceCardData[];
+  artifacts?: BasicCard[];
 }
 
 export interface StockDetailData {
@@ -1871,7 +1810,7 @@ export interface StockDetailData {
   links?: LinkMap;
 }
 
-export interface StockTodayActionContext {
+interface StockTodayActionContext {
   key: string;
   trade_date?: string;
   source?: string;
@@ -1890,6 +1829,8 @@ export interface StockTodayActionContext {
   display_state?: TodayActionDisplayState | null;
 }
 
+export type StockProfileSource = "watchlist" | "opportunity";
+
 export interface StockProfileData {
   generated_at?: string;
   summary_only?: boolean;
@@ -1899,24 +1840,56 @@ export interface StockProfileData {
   expected_trade_date?: string;
   data_trade_date?: string | null;
   readiness?: ReadinessPayload;
-  primary_source?: "watchlist" | "opportunity" | null;
+  primary_source?: StockProfileSource | null;
   primary_source_label?: string;
   primary_detail?: StockDetailData;
-  available_sources?: Array<"watchlist" | "opportunity">;
-  watchlist?: StockDetailData;
-  opportunity?: StockDetailData;
+  available_sources?: StockProfileSource[];
   formal_data?: StockFormalData;
   today_action?: StockTodayActionContext | null;
-  errors?: Partial<Record<"watchlist" | "opportunity", string>>;
+  errors?: Partial<Record<StockProfileSource, string>>;
   links?: LinkMap;
 }
 
 export type StockProfileSummaryData = Omit<
   StockProfileData,
-  "primary_detail" | "watchlist" | "opportunity" | "formal_data" | "today_action"
+  "primary_detail" | "formal_data" | "today_action"
 > & { summary_only: true };
 
-export type StockProfileDetailData = Omit<StockProfileData, "formal_data" | "today_action">;
+export type StockProfileDetailData = Omit<
+  StockProfileData,
+  "formal_data" | "today_action"
+>;
+
+export interface StockProfileEvidenceResponse {
+  generated_at?: string;
+  code: string;
+  name?: string | null;
+  trade_date?: string;
+  expected_trade_date?: string;
+  data_trade_date?: string | null;
+  primary_source?: StockProfileSource | null;
+  primary_source_label?: string;
+  available_sources?: StockProfileSource[];
+  source_cards?: SourceCardData[];
+  artifacts?: BasicCard[];
+  errors?: Partial<Record<StockProfileSource, string>>;
+  links?: LinkMap;
+}
+
+export interface StockProfileSecondaryResponse {
+  generated_at?: string;
+  code: string;
+  name?: string | null;
+  trade_date?: string;
+  expected_trade_date?: string;
+  data_trade_date?: string | null;
+  primary_source?: StockProfileSource | null;
+  primary_source_label?: string;
+  available_sources?: StockProfileSource[];
+  secondary_detail?: StockDetailData | null;
+  errors?: Partial<Record<StockProfileSource, string>>;
+  links?: LinkMap;
+}
 
 export interface StockProfileFormalDataResponse {
   generated_at?: string;
@@ -1939,20 +1912,20 @@ export interface StockProfileTodayActionResponse {
   links?: LinkMap;
 }
 
-export interface StockLearningScorecardMetric {
+interface StockLearningScorecardMetric {
   label: string;
   value: string | number;
   detail?: string;
   tone?: Tone | string;
 }
 
-export interface StockLearningScorecardPattern {
+interface StockLearningScorecardPattern {
   label: string;
   detail: string;
   tone?: Tone | string;
 }
 
-export interface StockLearningScorecardRecentDecision {
+interface StockLearningScorecardRecentDecision {
   decision_id?: string;
   trade_date?: string;
   action?: string;
@@ -1981,6 +1954,7 @@ export interface StockLearningScorecard {
   pending_count?: number;
   scorecards?: StockLearningScorecardMetric[];
   failure_patterns?: StockLearningScorecardPattern[];
+  learning_memories?: ReviewLearningMemory[];
   recent_decisions?: StockLearningScorecardRecentDecision[];
   similar_edge?: Record<string, unknown> | null;
 }
@@ -2017,7 +1991,11 @@ export interface RefreshStatus {
   market_mode: string;
   market_label: string;
   suggested_poll_seconds: number;
-  freshness: SourceCardData[];
+  freshness?: SourceCardData[];
+  freshness_deferred?: boolean;
+  links_lazy?: {
+    freshness?: string;
+  };
   stale_count: number;
   manifest_stale_count?: number;
   task_stale_count?: number;
@@ -2089,7 +2067,7 @@ export interface RefreshStatus {
   snapshot_signature: string;
 }
 
-export interface FormalDataRow extends ReadinessSourceFreshness {
+interface FormalDataRow extends ReadinessSourceFreshness {
   setup_state?: string;
   next_action?: string;
   error?: string | null;
@@ -2118,10 +2096,11 @@ export interface FormalDataRow extends ReadinessSourceFreshness {
 export interface FormalDataStatus {
   generated_at: string;
   expected_trade_date: string;
+  compact?: boolean;
   provider: {
     name: string;
     token_configured: boolean;
-    token_env_names: string[];
+    token_env_names?: string[];
     configured_token_env_names?: string[];
     api_url?: string;
     token_value_visible?: boolean;
@@ -2132,7 +2111,7 @@ export interface FormalDataStatus {
   ready_count: number;
   total_count: number;
   blocked_count: number;
-  datasets: FormalDataRow[];
+  datasets?: FormalDataRow[];
   blockers: Array<{
     dataset?: string;
     label?: string;
@@ -2163,7 +2142,7 @@ export interface FormalDataStatus {
   };
 }
 
-export interface DataAssetRow {
+interface DataAssetRow {
   dataset: string;
   label: string;
   purpose?: string;
@@ -2200,6 +2179,8 @@ export interface DataAssetsStatus {
   generated_at: string;
   expected_trade_date?: string | null;
   dataset_root?: string;
+  compact?: boolean;
+  datasets_deferred?: boolean;
   summary: {
     catalog_count: number;
     available_count: number;
@@ -2207,6 +2188,7 @@ export interface DataAssetsStatus {
     manifest_count: number;
     universe_count: number;
     trade_days: number;
+    displayed_dataset_count?: number;
   };
   visible_usage: string[];
   datasets: DataAssetRow[];
@@ -2235,13 +2217,13 @@ export interface DataAssetsStatus {
   } | null;
 }
 
-export interface TushareFactorEvidenceBlock {
+interface TushareFactorEvidenceBlock {
   values?: Record<string, number | string | boolean | null | Array<Record<string, unknown> | string | number | boolean | null>>;
   interpretation?: string;
   available?: boolean;
 }
 
-export interface TushareFactorExplanation {
+interface TushareFactorExplanation {
   entry_reason?: string;
   upgrade_condition?: string;
   abandon_condition?: string;
@@ -2260,7 +2242,7 @@ export interface TushareFactorExplanation {
   };
 }
 
-export interface TushareFactorProfile {
+interface TushareFactorProfile {
   tushare_score?: number | null;
   data_completeness?: number;
   tushare_score_breakdown?: Record<string, {
@@ -2287,6 +2269,7 @@ export interface TushareFactorProfile {
 export interface StockFormalData {
   available: boolean;
   summary_only?: boolean;
+  section?: "summary" | "profile" | "risk" | "sources" | "full" | string;
   code: string;
   trade_date?: string;
   requested_trade_date?: string;
@@ -2327,6 +2310,8 @@ export interface StockFormalData {
   shareholders?: Array<Record<string, unknown>>;
   source_cards?: SourceCardData[];
   factor_profile?: TushareFactorProfile;
+  factor_profile_deferred?: boolean;
+  factor_profile_endpoint?: string;
   coverage?: {
     stock_scoped_available?: number;
     stock_scoped_total?: number;
@@ -2341,7 +2326,7 @@ export interface StockFormalData {
   }>;
 }
 
-export interface ScheduledRunState {
+interface ScheduledRunState {
   task_name?: string;
   status?: string;
   same_day?: boolean;
@@ -2365,7 +2350,7 @@ export interface ScheduledRunState {
   meta_path?: string;
 }
 
-export interface SchedulerJobStatus {
+interface SchedulerJobStatus {
   task_name?: string;
   name?: string;
   cron_expr?: string;
@@ -2399,7 +2384,7 @@ export interface FreshnessGuardianDatasetState {
   };
 }
 
-export interface FreshnessGuardianStatus {
+interface FreshnessGuardianStatus {
   enabled?: boolean;
   last_checked_at?: string;
   last_skip_reason?: string;
@@ -2409,7 +2394,7 @@ export interface FreshnessGuardianStatus {
   [key: string]: unknown;
 }
 
-export interface SchedulerStatus {
+interface SchedulerStatus {
   server_time?: string;
   calendar?: Record<string, unknown>;
   scheduler?: {
@@ -2433,14 +2418,14 @@ export interface SchedulerStatus {
   jobs?: SchedulerJobStatus[];
 }
 
-export interface RefreshWindow {
+interface RefreshWindow {
   key: string;
   label: string;
   start: string;
   end: string;
 }
 
-export interface RefreshTaskPolicy {
+interface RefreshTaskPolicy {
   task_name?: string;
   title?: string;
   kind?: string;
@@ -2453,7 +2438,7 @@ export interface RefreshTaskPolicy {
   same_family?: string;
 }
 
-export interface RefreshPagePolicy {
+interface RefreshPagePolicy {
   page?: string;
   allowed_tasks?: string[];
   related_tasks?: string[];
@@ -2462,7 +2447,7 @@ export interface RefreshPagePolicy {
   auto_on_open?: boolean;
 }
 
-export interface RefreshAutoDecision {
+interface RefreshAutoDecision {
   enabled?: boolean;
   allowed?: boolean;
   should_trigger?: boolean;
@@ -2490,7 +2475,7 @@ export interface RefreshAutoDecision {
   } | null;
 }
 
-export interface RefreshAuditEvent {
+interface RefreshAuditEvent {
   ts?: string;
   trigger_type?: string;
   page?: string;
@@ -2544,7 +2529,7 @@ export interface PreviewPayload {
   preview_bytes?: number;
 }
 
-export interface ParameterGroupStatus {
+interface ParameterGroupStatus {
   key: string;
   label: string;
   required?: boolean;
@@ -2620,7 +2605,7 @@ export interface HealthResponse {
 // reports ``null`` rather than synthesising fake values.
 // ===========================================================================
 
-export interface DecisionLedgerLatestExecution {
+interface DecisionLedgerLatestExecution {
   status?: string;
   trade_date?: string;
   side?: string | null;
@@ -2630,7 +2615,7 @@ export interface DecisionLedgerLatestExecution {
   note?: string | null;
 }
 
-export interface DecisionLedgerLatestOutcome {
+interface DecisionLedgerLatestOutcome {
   window?: string;
   as_of_trade_date?: string;
   label?: string;
@@ -2656,12 +2641,12 @@ export interface DecisionLedgerCompactRecord {
   latest_outcome?: DecisionLedgerLatestOutcome | null;
 }
 
-export interface DecisionLedgerScanError {
+interface DecisionLedgerScanError {
   file: string;
   error: string;
 }
 
-export interface DecisionLedgerStatusError {
+interface DecisionLedgerStatusError {
   kind: string;
   file: string;
   error: string;
@@ -2671,6 +2656,8 @@ export interface DecisionLedgerRecentResponse {
   items: DecisionLedgerCompactRecord[];
   count: number;
   limit: number;
+  codes?: string[];
+  latest_per_code?: boolean;
   errors: DecisionLedgerScanError[];
 }
 
@@ -2678,24 +2665,6 @@ export interface DecisionLedgerStockResponse {
   code: string;
   items: DecisionLedgerCompactRecord[];
   count: number;
-  errors: DecisionLedgerScanError[];
-}
-
-export interface DecisionLedgerSummaryResponse {
-  as_of: string;
-  window_days: number;
-  from_date: string;
-  to_date: string;
-  decisions: {
-    total: number;
-    open: number;
-    superseded: number;
-  };
-  outcome_distribution: Record<string, number>;
-  execution_gap_count: number;
-  data_issue_count: number;
-  execution_events_total: number;
-  outcome_events_total: number;
   errors: DecisionLedgerScanError[];
 }
 
@@ -2781,7 +2750,7 @@ export interface ShadowCalibrationSummary {
   action_rows?: ShadowCalibrationRow[];
 }
 
-export type DecisionLedgerReviewStatus =
+type DecisionLedgerReviewStatus =
   | "pending_outcome"
   | "pending_execution"
   | "ready_review"
@@ -2789,7 +2758,7 @@ export type DecisionLedgerReviewStatus =
   | "blocked_data"
   | "low_priority";
 
-export interface DecisionLedgerMaturity {
+interface DecisionLedgerMaturity {
   maturity_due_at?: string | null;
   maturity_window?: string;
   maturity_label?: string;
@@ -2798,20 +2767,20 @@ export interface DecisionLedgerMaturity {
   missing_due_date?: boolean;
 }
 
-export interface DecisionLedgerQualityAxis {
+interface DecisionLedgerQualityAxis {
   label: string;
   score: number;
   tone: Tone | string;
   reason: string;
 }
 
-export interface DecisionLedgerQualityAxes {
+interface DecisionLedgerQualityAxes {
   judgment_quality?: DecisionLedgerQualityAxis;
   execution_quality?: DecisionLedgerQualityAxis;
   learning_quality?: DecisionLedgerQualityAxis;
 }
 
-export interface DecisionLedgerReviewCase {
+interface DecisionLedgerReviewCase {
   schema_version?: number;
   review_case_id: string;
   decision_id: string;
@@ -2963,7 +2932,7 @@ export interface DecisionLedgerAttributionDraft {
   rule_action_allowed?: boolean;
 }
 
-export interface DecisionLedgerAttributionFinal {
+interface DecisionLedgerAttributionFinal {
   primary_cause?: string;
   secondary_causes?: string[];
   review_note?: string;
@@ -3011,12 +2980,6 @@ export interface DecisionLedgerAutoReviewResponse {
   workbench: DecisionLedgerReviewCaseWorkbench;
 }
 
-export interface DecisionLedgerReviewCasesResponse {
-  items: DecisionLedgerReviewCase[];
-  count: number;
-  patterns: DecisionLedgerReviewCasePattern[];
-}
-
 export interface DecisionLedgerReviewRecord extends DecisionLedgerCompactRecord {
   review_status?: DecisionLedgerReviewStatus | string;
   review_reason?: string;
@@ -3042,7 +3005,7 @@ export interface DecisionLedgerReviewRecord extends DecisionLedgerCompactRecord 
   review_case?: DecisionLedgerReviewCase;
 }
 
-export interface DecisionLedgerReviewWorkbench {
+interface DecisionLedgerReviewWorkbench {
   today_queue_count: number;
   ready_review_count: number;
   blocked_data_count?: number;
@@ -3060,28 +3023,44 @@ export interface DecisionLedgerCalibrationResponse {
   from_date: string;
   to_date: string;
   overall: DecisionLedgerCalibrationGroup;
-  by_lane: DecisionLedgerCalibrationGroup[];
-  by_action: DecisionLedgerCalibrationGroup[];
+  by_lane?: DecisionLedgerCalibrationGroup[];
+  by_action?: DecisionLedgerCalibrationGroup[];
   review_workbench: DecisionLedgerReviewWorkbench;
-  review_records: DecisionLedgerReviewRecord[];
   review_queue: DecisionLedgerReviewRecord[];
-  ready_reviews: DecisionLedgerReviewRecord[];
   pending_reviews: DecisionLedgerReviewRecord[];
-  needs_review: DecisionLedgerReviewRecord[];
   needs_review_count: number;
   reviewed_case_count?: number;
+  review_case_summary?: {
+    total?: number;
+    attributed?: number;
+    patterns?: number;
+  };
+  learning_patterns_deferred?: boolean;
+  links_lazy?: {
+    learning_patterns?: string;
+  };
+  errors: DecisionLedgerScanError[];
+}
+
+export interface DecisionLedgerCalibrationDetailResponse {
+  as_of: string;
+  window_days: number;
+  from_date: string;
+  to_date: string;
+  overall?: DecisionLedgerCalibrationGroup;
+  by_lane: DecisionLedgerCalibrationGroup[];
+  by_action: DecisionLedgerCalibrationGroup[];
   review_case_patterns?: DecisionLedgerReviewCasePattern[];
   review_case_summary?: {
     total?: number;
     attributed?: number;
     patterns?: number;
   };
-  shadow_calibration?: ShadowCalibrationSummary;
   suggestion_cards: DecisionLedgerSuggestionCard[];
   errors: DecisionLedgerScanError[];
 }
 
-export interface DecisionLedgerExecutionEvent {
+interface DecisionLedgerExecutionEvent {
   event_id?: string;
   decision_id?: string;
   created_at?: string;
@@ -3190,7 +3169,7 @@ export interface DecisionLedgerDetailResponse {
   outcome_events: DecisionLedgerOutcomeEvent[];
 }
 
-export interface DecisionLedgerStorageStatus {
+interface DecisionLedgerStorageStatus {
   mode?: string;
   primary_root?: string;
   legacy_root?: string;
@@ -3202,22 +3181,7 @@ export interface DecisionLedgerStorageStatus {
   reads_from?: string[];
 }
 
-export interface DecisionLedgerLearningBucket {
-  ruleset_version: string;
-  lane: string;
-  action: string;
-  samples: number;
-  mature_samples: number;
-  outcomes: Record<string, number>;
-  execution_events: number;
-  pending_outcome: number;
-  needs_review: number;
-  review_rate?: number;
-  sample_stage?: string;
-  decision_ids?: string[];
-}
-
-export interface DecisionLedgerLearningSuggestion {
+interface DecisionLedgerLearningSuggestion {
   ruleset_version: string;
   lane: string;
   action: string;
@@ -3228,7 +3192,7 @@ export interface DecisionLedgerLearningSuggestion {
   review_rate: number;
 }
 
-export interface DecisionLedgerFactorWindowStats {
+interface DecisionLedgerFactorWindowStats {
   sample_count: number;
   win_rate?: number | null;
   positive_label_rate?: number | null;
@@ -3245,7 +3209,6 @@ export interface DecisionLedgerFactorStatsRow {
   label?: string;
   sample_count: number;
   mature_count: number;
-  decision_ids?: string[];
   window_stats: Record<string, DecisionLedgerFactorWindowStats>;
   sample_too_small?: boolean;
 }
@@ -3265,7 +3228,7 @@ export interface DecisionLedgerFactorSummaryItem {
   reason?: string;
 }
 
-export interface DecisionLedgerWeightRecommendation {
+interface DecisionLedgerWeightRecommendation {
   kind?: string;
   target?: string;
   suggested_action?: string;
@@ -3274,7 +3237,7 @@ export interface DecisionLedgerWeightRecommendation {
   auto_apply?: boolean;
 }
 
-export interface DecisionLedgerFactorLearningSummary {
+interface DecisionLedgerFactorLearningSummary {
   version?: string;
   generated_at?: string;
   sample_window?: {
@@ -3304,10 +3267,6 @@ export interface DecisionLedgerFactorLearningLoop {
   outcome_windows?: string[];
   samples_total?: number;
   dimensions?: string[];
-  buckets?: Record<string, unknown>;
-  factor_tag_stats?: DecisionLedgerFactorStatsRow[];
-  risk_flag_stats?: DecisionLedgerFactorStatsRow[];
-  score_bucket_performance?: DecisionLedgerFactorStatsRow[];
   learning_summary?: DecisionLedgerFactorLearningSummary;
 }
 
@@ -3319,14 +3278,12 @@ export interface DecisionLedgerLearningLoopResponse {
   samples_total: number;
   mature_samples: number;
   pending_review_count: number;
-  buckets: DecisionLedgerLearningBucket[];
   suggestions: DecisionLedgerLearningSuggestion[];
   errors: DecisionLedgerScanError[];
   factor_learning_loop?: DecisionLedgerFactorLearningLoop;
-  learning_summary?: DecisionLedgerFactorLearningSummary;
 }
 
-export interface DecisionLedgerCaptureStatus {
+interface DecisionLedgerCaptureStatus {
   recorded_at?: string;
   task_name?: string;
   status?: "success" | "failed" | string;
@@ -3340,7 +3297,7 @@ export interface DecisionLedgerCaptureStatus {
   status_write_error?: string;
 }
 
-export interface DecisionLedgerOutcomeStatus {
+interface DecisionLedgerOutcomeStatus {
   recorded_at?: string;
   status?: "success" | "failed" | "no_provider" | string;
   task_name?: string;

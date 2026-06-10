@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 export type ThemeMode = "light" | "dark" | "system";
-export type ResolvedTheme = "light" | "dark";
+type ResolvedTheme = "light" | "dark";
 
 const THEME_STORAGE_KEY = "prism-web-theme-mode";
 const THEME_MODES: ThemeMode[] = ["light", "dark", "system"];

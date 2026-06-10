@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 
 INVEST_FLOW_ROOT = Path(__file__).resolve().parents[2]
@@ -86,6 +87,42 @@ class CapabilitiesEndpointTests(unittest.TestCase):
             self.assertIn(field, trust, f"trust_level missing {field}")
         self.assertIn(trust["level"], {"trusted", "observe_only", "unreliable"})
 
+    def test_uses_lightweight_readiness_view(self) -> None:
+        route = next(
+            route
+            for route in app.routes
+            if getattr(route, "path", "") == "/api/capabilities" and "GET" in getattr(route, "methods", set())
+        )
+        endpoint_globals = route.endpoint.__globals__
+        readiness_build = Mock(
+            return_value={
+                "readiness": {
+                    "checked_at": "2026-05-15 09:30:00",
+                    "session": "morning",
+                    "readiness_mode": "live_ready",
+                    "trust_level": {"level": "trusted"},
+                    "capabilities": {"observe": {"granted": True}},
+                }
+            }
+        )
+        full_build = Mock(side_effect=AssertionError("capabilities must not build full today view"))
+
+        with patch.dict(
+            endpoint_globals,
+            {
+                "build_today_readiness_view": readiness_build,
+                "build_today_view": full_build,
+            },
+        ):
+            response = self.client.get("/api/capabilities")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["readiness_mode"], "live_ready")
+        self.assertEqual(body["capabilities"], {"observe": {"granted": True}})
+        self.assertEqual(readiness_build.call_count, 1)
+        self.assertEqual(full_build.call_count, 0)
+
 
 class ReadinessLiveExtensionTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -141,6 +178,62 @@ class ReadinessLiveExtensionTests(unittest.TestCase):
             self.assertIn(key, summary, f"missing {key} in data_capability_summary")
         self.assertGreaterEqual(summary["total"], 15)
         self.assertEqual(summary["registry_issues"], [])
+
+    def test_uses_lightweight_readiness_view(self) -> None:
+        route = next(
+            route
+            for route in app.routes
+            if getattr(route, "path", "") == "/api/readiness/live" and "GET" in getattr(route, "methods", set())
+        )
+        endpoint_globals = route.endpoint.__globals__
+        readiness_build = Mock(
+            return_value={
+                "generated_at": "2026-05-15 09:30:00",
+                "display_date": "2026-05-15",
+                "trade_date": "2026-05-15",
+                "readiness": {
+                    "expected_trade_date": "2026-05-15",
+                    "data_trade_date": "2026-05-15",
+                    "readiness_mode": "live_ready",
+                    "ready": True,
+                    "session": "morning",
+                    "stale_count": 0,
+                    "blockers": [],
+                    "warnings": [],
+                    "source_freshness": [],
+                    "quality_freshness": [],
+                    "dataset_freshness": [],
+                    "formal_freshness": [],
+                    "recommended_tasks": [],
+                    "source_states": {},
+                    "capabilities": {"observe": {"granted": True}},
+                    "trust_level": {"level": "trusted"},
+                },
+            }
+        )
+        full_build = Mock(side_effect=AssertionError("readiness/live must not build full today view"))
+        matrix_build = Mock(return_value={"summary": {"total": 18}, "registry_issues": []})
+        formal_status = Mock(return_value={"ready": True})
+
+        with patch.dict(
+            endpoint_globals,
+            {
+                "build_today_readiness_view": readiness_build,
+                "build_today_view": full_build,
+                "data_capability_matrix_as_dict": matrix_build,
+                "build_formal_data_status_payload": formal_status,
+            },
+        ):
+            response = self.client.get("/api/readiness/live")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["generated_at"], "2026-05-15 09:30:00")
+        self.assertEqual(body["readiness_mode"], "live_ready")
+        self.assertEqual(body["capabilities"], {"observe": {"granted": True}})
+        self.assertEqual(body["data_capability_summary"], {"total": 18, "registry_issues": []})
+        self.assertEqual(readiness_build.call_count, 1)
+        self.assertEqual(full_build.call_count, 0)
 
 
 if __name__ == "__main__":
