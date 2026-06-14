@@ -6,9 +6,12 @@ from screener.triage import (
     GATE_CAPPED,
     GATE_CLOSED,
     GATE_OPEN,
+    VALVE_OFF,
+    VALVE_ON,
     _RISK_DEGRADE,
     compute_action_state,
     compute_gate_state,
+    triage_fields_for_card,
 )
 
 
@@ -186,3 +189,68 @@ def test_action_watch_for_shadow_review_observe():
             )
             == ACTION_WATCH
         )
+
+
+# ---- triage_fields_for_card tests (Task A3) ----
+
+
+def _card(**overrides):
+    base = {
+        "suggested_action": "actionable",
+        "risk_level": "info",
+        "hard_gate_block_reason": "",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_triage_fields_open_focus():
+    out = triage_fields_for_card(
+        _card(),
+        valve_status=VALVE_ON,
+        can_trade_live=True,
+        trust_level="trusted",
+        eliminated=False,
+    )
+    assert out == {
+        "triage_action_state": "focus",
+        "triage_gate_state": "open",
+        "triage_gate_blocker": None,
+        "triage_legacy": False,
+    }
+
+
+def test_triage_fields_closed_blocker_is_operator_language():
+    out = triage_fields_for_card(
+        _card(),
+        valve_status=VALVE_OFF,
+        can_trade_live=True,
+        trust_level="trusted",
+        eliminated=False,
+    )
+    assert out["triage_gate_state"] == "closed"
+    assert out["triage_gate_blocker"] == "进攻阀门关闭，今天不开新仓"
+
+
+def test_triage_fields_legacy_flag_when_legacy():
+    out = triage_fields_for_card(
+        _card(suggested_action=""),  # no V2 action -> legacy-style
+        valve_status=VALVE_ON,
+        can_trade_live=True,
+        trust_level="trusted",
+        eliminated=False,
+        legacy=True,
+    )
+    assert out["triage_legacy"] is True
+    assert out["triage_action_state"] == "watch"
+
+
+def test_triage_fields_eliminated_drops():
+    out = triage_fields_for_card(
+        _card(),
+        valve_status=VALVE_ON,
+        can_trade_live=True,
+        trust_level="trusted",
+        eliminated=True,
+    )
+    assert out["triage_action_state"] == "drop"
