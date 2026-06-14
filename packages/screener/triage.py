@@ -35,3 +35,21 @@ def compute_gate_state(*, valve_status, can_trade_live, trust_level, risk_level)
     if valve_status == VALVE_LIMITED or trust_level != "trusted":
         return GATE_CAPPED
     return GATE_OPEN
+
+
+def compute_action_state(*, v2_action, gate_state, risk_level, eliminated):
+    """Triage axis: should I prioritise this stock? See spec §8.5.
+
+    gate is the permission filter; action_state is the priority that survives it.
+    A closed/capped gate degrades priority to watch (protocol §10.5).
+    """
+    if eliminated:
+        return ACTION_DROP
+    if risk_level == _RISK_DEGRADE:
+        # degrade demotes to watch even when actionable (resolves spec ambiguity).
+        return ACTION_WATCH
+    if v2_action == "actionable" and gate_state == GATE_OPEN:
+        return ACTION_FOCUS
+    if v2_action == "trial" and gate_state != GATE_CLOSED:
+        return ACTION_ON_TRIGGER
+    return ACTION_WATCH
