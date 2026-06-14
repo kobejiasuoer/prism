@@ -45,6 +45,10 @@ import {
 import {
   bucketByFunnel,
   FUNNEL_LAYER_LABELS,
+  triageActionState,
+  triageGateBlocker,
+  triageGateState,
+  triageLegacy,
   type FunnelBucket,
   type FunnelLayer,
   valveLabel,
@@ -111,45 +115,29 @@ const DiscoveryV2AiTelemetry = dynamic<DiscoveryV2AiTelemetryProps>(
   },
 );
 
-function clarifyUpgradeCopy(text: string) {
-  return text
-    .replace(/(^|；)升级：/g, "$1确认：")
-    .replace(/观察升级：/g, "还差：");
+function triageActionStateLabel(stock: StockListCard) {
+  const state = triageActionState(stock);
+  return state === "focus"
+    ? "可执行待复核"
+    : state === "on_trigger"
+      ? "试错待触发"
+      : state === "drop"
+        ? "已淘汰"
+        : "只观察";
 }
 
 function stockInstruction(stock: StockListCard) {
-  if (hasV2(stock)) {
-    const missing = v2MissingText(stock);
-    return [
-      stock.name
-        ? `${stock.name}：${v2ActionLabel(stock) || "只观察"}`
-        : v2ActionLabel(stock) || "只观察",
-      stock.why_now ? `现在：${stock.why_now}` : "",
-      missing ? `还差：${missing}` : "",
-      stock.invalidation ? `失效：${stock.invalidation}` : "",
-    ]
-      .filter(Boolean)
-      .join("；");
-  }
-  if (stock.observation_instruction) {
-    return clarifyUpgradeCopy(stock.observation_instruction);
-  }
+  const blocker = triageGateBlocker(stock);
+  const missing = stock.missing_confirmation?.slice(0, 2).join("；") || "";
+  const invalidation = stock.invalidation || stock.invalid_condition || "";
   return [
-    stock.name ? `${stock.name}：只观察，不追` : "只观察，不追",
-    stock.upgrade_condition
-      ? `还差：${stock.upgrade_condition}`
-      : stock.setup_label
-        ? `还差：${stock.setup_label}`
-        : "",
-    stock.invalid_condition
-      ? `失效：${stock.invalid_condition}`
-      : stock.foot
-        ? `失效：${stock.foot}`
-        : "",
+    stock.name ? `${stock.name}：${triageActionStateLabel(stock)}` : triageActionStateLabel(stock),
+    blocker ? `闸门：${blocker}` : "",
+    missing ? `还差：${missing}` : "",
+    invalidation ? `失效：${invalidation}` : "",
   ]
     .filter(Boolean)
-    .join("；")
-    .replace(/。；/g, "；");
+    .join("；");
 }
 
 function riskLevelLabel(level?: string) {
@@ -201,10 +189,6 @@ function formatMetric(value: unknown, suffix = "") {
   return `${String(value).trim()}${suffix}`;
 }
 
-function includesAny(text: string, tokens: string[]) {
-  return tokens.some((token) => text.includes(token));
-}
-
 function entryPlanTexts(stock: StockListCard) {
   const plan = stock.entry_plan || {};
   return uniqueTexts([
@@ -216,6 +200,11 @@ function entryPlanTexts(stock: StockListCard) {
     plan.avoid,
     plan.invalidate,
   ]);
+}
+
+/** @deprecated Kept only for buyGateMeta (B5b will remove). */
+function includesAny(text: string, tokens: string[]) {
+  return tokens.some((token) => text.includes(token));
 }
 
 function stockStageLabel(
@@ -234,6 +223,29 @@ function stockStageLabel(
   return displayGroupTitle(text);
 }
 
+function buyGateFromTriage(stock: StockListCard) {
+  const state = triageGateState(stock);
+  const legacy = triageLegacy(stock);
+  const blocker = triageGateBlocker(stock);
+  const label =
+    state === "closed"
+      ? blocker
+        ? "买入未放行"
+        : "不可买入"
+      : state === "capped"
+        ? "仓位受限"
+        : "可执行待复核";
+  const tone =
+    state === "open" ? "positive" : state === "capped" ? "watch" : "risk";
+  const detail =
+    blocker ??
+    (legacy
+      ? "legacy 候选，闸门由 risk_level 推断"
+      : "结构、触发和失效位已相对清楚，仍需人工复核");
+  return { label, tone, detail };
+}
+
+/** @deprecated Kept only for groupDecisionMeta (B5b will remove). Per-card path uses buyGateFromTriage. */
 function buyGateMeta(stock: StockListCard, group?: CardGroup<StockListCard>) {
   const planTexts = entryPlanTexts(stock);
   const stageText = [
@@ -456,16 +468,12 @@ function buyGateMeta(stock: StockListCard, group?: CardGroup<StockListCard>) {
 
 function BuyGateCell({
   stock,
-  group,
-  gate,
   compact = false,
 }: {
   stock: StockListCard;
-  group?: CardGroup<StockListCard>;
-  gate?: ReturnType<typeof buyGateMeta>;
   compact?: boolean;
 }) {
-  const resolvedGate = gate ?? buyGateMeta(stock, group);
+  const resolvedGate = buyGateFromTriage(stock);
   return (
     <div className="max-w-[190px]">
       <Badge tone={resolvedGate.tone}>{resolvedGate.label}</Badge>
@@ -491,9 +499,8 @@ function opportunityRowKey(
 function opportunityEvidenceCopy(
   stock: StockListCard,
   group?: CardGroup<StockListCard>,
-  gate?: ReturnType<typeof buyGateMeta>,
 ) {
-  const resolvedGate = gate ?? buyGateMeta(stock, group);
+  const resolvedGate = buyGateFromTriage(stock);
   const poolReason =
     stock.thesis || stock.reason || stock.detail || "等待更多确认";
   const confirmation =
@@ -583,19 +590,17 @@ function RiskEvidenceCell({ stock }: { stock: StockListCard }) {
 function OpportunityEvidenceCell({
   stock,
   group,
-  gate,
   expanded,
   onToggle,
   className,
 }: {
   stock: StockListCard;
   group?: CardGroup<StockListCard>;
-  gate?: ReturnType<typeof buyGateMeta>;
   expanded: boolean;
   onToggle: () => void;
   className?: string;
 }) {
-  const evidence = opportunityEvidenceCopy(stock, group, gate);
+  const evidence = opportunityEvidenceCopy(stock, group);
   return (
     <div className={cn("max-w-[360px]", className)}>
       <p className="prism-clamp-2 text-[12px] leading-5 text-[var(--text-primary)]">
@@ -632,7 +637,7 @@ function stageTone(stock: StockListCard, group?: CardGroup<StockListCard>) {
   if (hasV2(stock)) {
     return v2ActionTone(stock);
   }
-  const gate = buyGateMeta(stock, group);
+  const gate = buyGateFromTriage(stock);
   if (gate.tone === "risk") {
     return "risk";
   }
@@ -1311,7 +1316,6 @@ function ObservationWorkbench({
                 {cards.map((stock) => {
                   const rowKey = opportunityRowKey(group, stock);
                   const expanded = expandedEvidenceKey === rowKey;
-                  const gate = buyGateMeta(stock, group);
                   return (
                     <Fragment key={rowKey}>
                       <tr className="align-top hover:bg-[var(--bg-secondary)]">
@@ -1346,8 +1350,6 @@ function ObservationWorkbench({
                         <td className="px-3 py-3">
                           <BuyGateCell
                             stock={stock}
-                            group={group}
-                            gate={gate}
                             compact
                           />
                         </td>
@@ -1355,7 +1357,6 @@ function ObservationWorkbench({
                           <OpportunityEvidenceCell
                             stock={stock}
                             group={group}
-                            gate={gate}
                             expanded={expanded}
                             onToggle={() =>
                               setExpandedEvidenceKey(expanded ? null : rowKey)
@@ -1380,7 +1381,6 @@ function ObservationWorkbench({
                             <DiscoveryOpportunityEvidenceDetails
                               stock={stock}
                               group={group}
-                              gate={gate}
                             />
                           </td>
                         </tr>
@@ -1396,7 +1396,6 @@ function ObservationWorkbench({
             {cards.map((stock) => {
               const rowKey = opportunityRowKey(group, stock);
               const expanded = expandedEvidenceKey === rowKey;
-              const gate = buyGateMeta(stock, group);
               return (
                 <div
                   key={`${group?.title}-${stock.code}-mobile`}
@@ -1449,12 +1448,11 @@ function ObservationWorkbench({
                       <span className="text-[var(--text-tertiary)]">
                         买入：
                       </span>
-                      <BuyGateCell stock={stock} group={group} gate={gate} />
+                      <BuyGateCell stock={stock} />
                     </div>
                     <OpportunityEvidenceCell
                       stock={stock}
                       group={group}
-                      gate={gate}
                       expanded={expanded}
                       onToggle={() =>
                         setExpandedEvidenceKey(expanded ? null : rowKey)
@@ -1465,7 +1463,6 @@ function ObservationWorkbench({
                       <DiscoveryOpportunityEvidenceDetails
                         stock={stock}
                         group={group}
-                        gate={gate}
                         className="bg-[var(--bg-primary)]"
                       />
                     ) : null}
