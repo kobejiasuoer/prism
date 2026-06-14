@@ -410,15 +410,12 @@ export function DiscoveryWorkspace() {
 
         <DiscoveryObservationWorkbench
           groups={groups}
-          activeGroup={activeGroup}
-          activeIndex={resolvedActiveIndex}
           loading={
             (opportunities.isLoading && !data) ||
             loadingGroupKey === activeGroupKey
           }
           initialLoading={opportunities.isLoading && !data}
           activeGroupLoadError={activeGroupLoadError}
-          onSelectGroup={setActiveIndex}
           onLoadGroup={
             activeGroupDeferred
               ? () => void loadOpportunityGroup(activeGroupKey)

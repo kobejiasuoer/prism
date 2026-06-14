@@ -53,12 +53,9 @@ import {
 
 export type DiscoveryObservationWorkbenchProps = {
   groups: CardGroup<StockListCard>[];
-  activeGroup?: CardGroup<StockListCard>;
-  activeIndex: number;
   loading: boolean;
   initialLoading: boolean;
   activeGroupLoadError?: string;
-  onSelectGroup: (index: number) => void;
   onLoadGroup?: () => void;
   onRetryLoadGroup?: () => void;
   tradeDate?: string;
@@ -412,7 +409,6 @@ function groupDecisionMeta(group?: CardGroup<StockListCard>) {
     return null;
   }
   const layer = group?.key as FunnelLayer | undefined;
-  const layerLabel = layer ? FUNNEL_LAYER_LABELS[layer] : "本组";
   const blockers = cards
     .map(triageGateBlocker)
     .filter((b): b is string => Boolean(b));
@@ -1105,12 +1101,9 @@ function ObservationWorkbench({
 
 export function DiscoveryObservationWorkbench({
   groups,
-  activeGroup,
-  activeIndex,
   loading,
   initialLoading,
   activeGroupLoadError = "",
-  onSelectGroup,
   onLoadGroup,
   onRetryLoadGroup,
   tradeDate,
@@ -1118,7 +1111,6 @@ export function DiscoveryObservationWorkbench({
   sidePanel,
   valveStatus,
 }: DiscoveryObservationWorkbenchProps) {
-  // TODO(B5/cleanup): activeGroup/activeIndex/onSelectGroup superseded by funnel layer state
   const [aiTelemetryOpen, setAiTelemetryOpen] = useState(false);
   const cards = useMemo(() => taskCards(groups), [groups]);
   const hasDeferredGroups = useMemo(
@@ -1189,6 +1181,10 @@ export function DiscoveryObservationWorkbench({
           <ObservationWorkbench
             group={activeFunnelGroup}
             loading={loading}
+            // NOTE: onLoadGroup loads by the workspace's old group-key model. For funnel
+            // synthetic groups (deferred_cards undefined) the deferred-load UI never
+            // triggers, so this is dormant. If deferred per-layer loading is needed later,
+            // onLoadGroup must be rewired to the active funnel layer.
             onLoadGroup={onLoadGroup}
             tradeDate={tradeDate}
             onFeedback={onFeedback}
