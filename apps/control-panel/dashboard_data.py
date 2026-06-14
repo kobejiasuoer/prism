@@ -9004,6 +9004,25 @@ def build_opportunities_view(
                 "theme_cards": build_theme_cards(screening_batch, limit=4),
             }
         )
+    # --- Stamp triage fields on every candidate card (Discovery Triage Funnel A5) ---
+    from screener.triage import triage_fields_for_card  # type: ignore  # noqa: E402
+    _valve_status = gate.get("status") or "off"
+    _trust_payload = readiness_for_opps.get("trust_level") or {}
+    _can_trade_live = bool(_trust_payload.get("can_trade_live"))
+    _trust_level = str(_trust_payload.get("level") or "unreliable")
+    for _group in response.get("groups") or []:
+        _eliminated = _group.get("key") == "eliminated"
+        for _card in _group.get("cards", []):
+            _card.update(
+                triage_fields_for_card(
+                    _card,
+                    valve_status=_valve_status,
+                    can_trade_live=_can_trade_live,
+                    trust_level=_trust_level,
+                    eliminated=_eliminated,
+                    legacy=not _card.get("suggested_action"),
+                )
+            )
     return response
 
 

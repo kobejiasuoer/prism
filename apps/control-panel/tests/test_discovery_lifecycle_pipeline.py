@@ -472,5 +472,140 @@ class DiscoveryLifecyclePipelineTest(unittest.TestCase):
         self.assertEqual(payload["valve_status"], "off")
 
 
+    def test_opportunities_cards_carry_triage_fields(self) -> None:
+        """Every candidate card carries structured triage fields after A5 stamping."""
+        dashboard_data = self.dashboard_data()
+        lifecycle_context = {
+            "latest_lifecycle": None,
+            "active_lifecycle": None,
+            "display_lifecycle": {},
+            "lifecycle_note": "",
+        }
+
+        # Screening batch with: a V2 approved candidate and a legacy approved
+        # candidate.
+        screening_batch = {
+            "candidates": [
+                {
+                    "code": "600001",
+                    "name": "V2候选",
+                    "screening_status": "approved",
+                    "suggested_action": "actionable",
+                    "risk_level": "info",
+                    "score": 88,
+                },
+                {
+                    "code": "600002",
+                    "name": "旧版候选",
+                    "screening_status": "approved",
+                    "risk_level": "caution",
+                    "score": 72,
+                },
+            ],
+            "market_regime": {
+                "execution_gate": {
+                    "status": "on",
+                    "allow_new_positions": True,
+                    "label": "开放",
+                },
+            },
+        }
+        confirmation = {
+            "confirmed": [],
+            "fresh_candidates": [],
+            "downgraded": [
+                {
+                    "code": "600003",
+                    "name": "淘汰候选",
+                    "suggested_action": "drop",
+                    "risk_level": "block",
+                },
+            ],
+        }
+
+        with patch.object(dashboard_data, "expected_trade_date", return_value="2026-06-14"), patch.object(
+            dashboard_data,
+            "load_decision_brief",
+            side_effect=FileNotFoundError,
+        ), patch.object(
+            dashboard_data,
+            "load_watchlist_snapshot",
+            side_effect=FileNotFoundError,
+        ), patch.object(
+            dashboard_data,
+            "load_screening_batch",
+            return_value=screening_batch,
+        ), patch.object(
+            dashboard_data,
+            "load_confirmation",
+            return_value=confirmation,
+        ), patch.object(
+            dashboard_data,
+            "load_quality_status",
+            side_effect=FileNotFoundError,
+        ), patch.object(
+            dashboard_data,
+            "resolve_lifecycle_context",
+            return_value=lifecycle_context,
+        ), patch.object(
+            dashboard_data,
+            "build_review_learning_memory_index",
+            return_value={"cases": [], "patterns": []},
+        ), patch.object(
+            dashboard_data,
+            "compute_readiness",
+            return_value={
+                "expected_trade_date": "2026-06-14",
+                "data_trade_date": "2026-06-14",
+                "brief_is_live": True,
+                "trust_level": {
+                    "level": "trusted",
+                    "can_trade_live": True,
+                },
+            },
+        ), patch.object(
+            dashboard_data,
+            "load_account_book",
+            return_value={},
+        ), patch.object(
+            dashboard_data,
+            "load_today_action_decision_store",
+            return_value={},
+        ), patch.object(
+            dashboard_data,
+            "build_dataset_freshness_rows",
+            return_value=[],
+        ), patch.object(
+            dashboard_data,
+            "build_formal_freshness_rows",
+            return_value=[],
+        ):
+            payload = dashboard_data.build_opportunities_view()
+
+        all_cards = [c for g in payload.get("groups") or [] for c in g.get("cards", [])]
+        self.assertGreaterEqual(len(all_cards), 2, f"Expected >= 2 cards, got {len(all_cards)}")
+        valid_action_states = {"focus", "on_trigger", "watch", "drop"}
+        valid_gate_states = {"open", "capped", "closed"}
+        for card in all_cards:
+            self.assertIn("triage_action_state", card)
+            self.assertIn(card["triage_action_state"], valid_action_states, f"Unexpected action_state for {card.get('code')}: {card['triage_action_state']}")
+            self.assertIn("triage_gate_state", card)
+            self.assertIn(card["triage_gate_state"], valid_gate_states, f"Unexpected gate_state for {card.get('code')}: {card['triage_gate_state']}")
+            self.assertIn("triage_gate_blocker", card)
+            self.assertIn("triage_legacy", card)
+
+        # V2 card should have triage_legacy=False
+        v2_card = next(c for c in all_cards if c.get("code") == "600001")
+        self.assertFalse(v2_card["triage_legacy"])
+
+        # Legacy card (no suggested_action) should have triage_legacy=True
+        legacy_card = next(c for c in all_cards if c.get("code") == "600002")
+        self.assertTrue(legacy_card["triage_legacy"])
+
+        # Eliminated card should have action_state=drop
+        eliminated_card = next(c for c in all_cards if c.get("code") == "600003")
+        self.assertEqual(eliminated_card["triage_action_state"], "drop")
+
+
 if __name__ == "__main__":
     unittest.main()
