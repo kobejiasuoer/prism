@@ -743,6 +743,203 @@ class DiscoveryLifecyclePipelineTest(unittest.TestCase):
         self.assertEqual(len(metal_cards), 1)
         self.assertEqual(metal_cards[0]["triage_rank_in_theme"], 1)
 
+    def test_build_yesterday_trial_review_pure_function(self) -> None:
+        """Pure-function test: identify yesterday's trial candidates from lifecycle deltas."""
+        dashboard_data = self.dashboard_data()
+        fn = dashboard_data.build_yesterday_trial_review
+
+        # Today's cards keyed by code.
+        today_cards = {
+            "600001": {"code": "600001", "name": "试错延续", "triage_action_state": "on_trigger"},
+            "600002": {"code": "600002", "name": "已淘汰票", "triage_action_state": "drop"},
+        }
+
+        # Lifecycle with: one continued trial, one exited trial, one continued observe.
+        display_lifecycle = {
+            "groups": {
+                "continued": [
+                    {"code": "600001", "name": "试错延续", "prev_suggested_action": "trial",
+                     "curr_suggested_action": "actionable"},
+                    {"code": "600003", "name": "观察票", "prev_suggested_action": "observe",
+                     "curr_suggested_action": "observe"},
+                ],
+                "exited": [
+                    {"code": "600004", "name": "昨日试错退出", "suggested_action": "trial"},
+                    {"code": "600005", "name": "昨日观察退出", "suggested_action": "observe"},
+                ],
+                "entered": [],
+                "upgraded": [],
+                "downgraded": [],
+                "handed_off": [],
+            },
+        }
+
+        result = fn(today_cards, display_lifecycle)
+
+        # Should find exactly 2 trial candidates (one continued, one exited).
+        self.assertEqual(len(result), 2)
+        codes = {r["code"] for r in result}
+        self.assertEqual(codes, {"600001", "600004"})
+
+        # Continued trial: still_listed=True, today_action_state from card.
+        continued_trial = next(r for r in result if r["code"] == "600001")
+        self.assertEqual(continued_trial["yesterday_action"], "trial")
+        self.assertTrue(continued_trial["still_listed"])
+        self.assertEqual(continued_trial["today_action_state"], "on_trigger")
+
+        # Exited trial: still_listed=False, today_action_state="drop".
+        exited_trial = next(r for r in result if r["code"] == "600004")
+        self.assertEqual(exited_trial["yesterday_action"], "trial")
+        self.assertFalse(exited_trial["still_listed"])
+        self.assertEqual(exited_trial["today_action_state"], "drop")
+
+    def test_build_yesterday_trial_review_empty_when_no_lifecycle(self) -> None:
+        """Returns empty list when no lifecycle data is available."""
+        dashboard_data = self.dashboard_data()
+        fn = dashboard_data.build_yesterday_trial_review
+        result = fn({}, None)
+        self.assertEqual(result, [])
+
+    def test_opportunities_response_includes_yesterday_trial_review(self) -> None:
+        """Integration test: build_opportunities_view emits yesterday_trial_review."""
+        dashboard_data = self.dashboard_data()
+
+        lifecycle_payload = {
+            "current_timestamp": "2026-06-13 14:30:00",
+            "summary": {"current_pool_size": 2, "previous_pool_size": 3},
+            "groups": {
+                "continued": [
+                    {
+                        "code": "600010",
+                        "name": "昨日试错今日仍在",
+                        "prev_suggested_action": "trial",
+                        "curr_suggested_action": "actionable",
+                        "theme": "机器人",
+                    },
+                ],
+                "exited": [
+                    {
+                        "code": "600011",
+                        "name": "昨日试错今日退出",
+                        "suggested_action": "trial",
+                        "theme": "算力",
+                    },
+                ],
+                "entered": [],
+                "upgraded": [],
+                "downgraded": [],
+                "handed_off": [],
+            },
+            "activity_count": 2,
+            "midday_matches_current_ai": True,
+        }
+        lifecycle_context = {
+            "latest_lifecycle": lifecycle_payload,
+            "active_lifecycle": lifecycle_payload,
+            "display_lifecycle": lifecycle_payload,
+            "lifecycle_note": "test lifecycle note",
+        }
+
+        # Today's screening has the continued trial candidate (600010) but not the
+        # exited one (600011).
+        screening_batch = {
+            "candidates": [
+                {
+                    "code": "600010",
+                    "name": "昨日试错今日仍在",
+                    "screening_status": "approved",
+                    "suggested_action": "actionable",
+                    "risk_level": "info",
+                    "score": 88,
+                    "priority_score": 88,
+                    "themes": ["机器人"],
+                },
+            ],
+            "market_regime": {
+                "execution_gate": {
+                    "status": "on",
+                    "allow_new_positions": True,
+                    "label": "开放",
+                },
+            },
+        }
+        confirmation = {"confirmed": [], "fresh_candidates": [], "downgraded": []}
+
+        with patch.object(dashboard_data, "expected_trade_date", return_value="2026-06-14"), patch.object(
+            dashboard_data,
+            "load_decision_brief",
+            side_effect=FileNotFoundError,
+        ), patch.object(
+            dashboard_data,
+            "load_watchlist_snapshot",
+            side_effect=FileNotFoundError,
+        ), patch.object(
+            dashboard_data,
+            "load_screening_batch",
+            return_value=screening_batch,
+        ), patch.object(
+            dashboard_data,
+            "load_confirmation",
+            return_value=confirmation,
+        ), patch.object(
+            dashboard_data,
+            "load_quality_status",
+            side_effect=FileNotFoundError,
+        ), patch.object(
+            dashboard_data,
+            "resolve_lifecycle_context",
+            return_value=lifecycle_context,
+        ), patch.object(
+            dashboard_data,
+            "build_review_learning_memory_index",
+            return_value={"cases": [], "patterns": []},
+        ), patch.object(
+            dashboard_data,
+            "compute_readiness",
+            return_value={
+                "expected_trade_date": "2026-06-14",
+                "data_trade_date": "2026-06-14",
+                "brief_is_live": True,
+                "trust_level": {
+                    "level": "trusted",
+                    "can_trade_live": True,
+                },
+            },
+        ), patch.object(
+            dashboard_data,
+            "load_account_book",
+            return_value={},
+        ), patch.object(
+            dashboard_data,
+            "load_today_action_decision_store",
+            return_value={},
+        ), patch.object(
+            dashboard_data,
+            "build_dataset_freshness_rows",
+            return_value=[],
+        ), patch.object(
+            dashboard_data,
+            "build_formal_freshness_rows",
+            return_value=[],
+        ):
+            payload = dashboard_data.build_opportunities_view()
+
+        self.assertIn("yesterday_trial_review", payload)
+        review = payload["yesterday_trial_review"]
+        self.assertEqual(len(review), 2)
+
+        review_by_code = {r["code"]: r for r in review}
+
+        # 600010: was trial yesterday, still listed today.
+        self.assertIn("600010", review_by_code)
+        self.assertTrue(review_by_code["600010"]["still_listed"])
+        self.assertEqual(review_by_code["600010"]["yesterday_action"], "trial")
+
+        # 600011: was trial yesterday, exited today.
+        self.assertIn("600011", review_by_code)
+        self.assertFalse(review_by_code["600011"]["still_listed"])
+        self.assertEqual(review_by_code["600011"]["today_action_state"], "drop")
+
 
 if __name__ == "__main__":
     unittest.main()

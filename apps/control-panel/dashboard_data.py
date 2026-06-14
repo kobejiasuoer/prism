@@ -8699,6 +8699,66 @@ def build_opportunities_context_view() -> dict[str, Any]:
     }
 
 
+def build_yesterday_trial_review(
+    today_cards_by_code: dict[str, dict[str, Any]],
+    display_lifecycle: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Candidates that were trial-grade yesterday: are they still alive today?
+
+    Reconstructs yesterday's trial pool from the lifecycle delta groups:
+    - ``continued`` items carry ``prev_suggested_action`` (yesterday's action).
+    - ``exited`` items carry ``suggested_action`` from the previous snapshot.
+
+    Returns a list of {code, name, yesterday_action, today_action_state, still_listed}.
+    """
+    if not display_lifecycle:
+        return []
+
+    groups = (display_lifecycle.get("groups") or {})
+    continued = groups.get("continued") or []
+    exited = groups.get("exited") or []
+
+    review: list[dict[str, Any]] = []
+    seen_codes: set[str] = set()
+
+    for item in continued:
+        code = item.get("code")
+        if not code or code in seen_codes:
+            continue
+        prev_action = str(item.get("prev_suggested_action") or "")
+        if prev_action != "trial":
+            continue
+        today = today_cards_by_code.get(code)
+        review.append({
+            "code": code,
+            "name": (today or item).get("name", code),
+            "yesterday_action": "trial",
+            "today_action_state": today["triage_action_state"] if today else "drop",
+            "still_listed": today is not None,
+        })
+        seen_codes.add(code)
+
+    for item in exited:
+        code = item.get("code")
+        if not code or code in seen_codes:
+            continue
+        prev_action = str(item.get("suggested_action") or "")
+        if prev_action != "trial":
+            continue
+        # Exited candidates are, by definition, no longer in today's active
+        # shortlist — even if lifecycle merge injects them into the sidebar.
+        review.append({
+            "code": code,
+            "name": item.get("name", code),
+            "yesterday_action": "trial",
+            "today_action_state": "drop",
+            "still_listed": False,
+        })
+        seen_codes.add(code)
+
+    return review
+
+
 def build_opportunities_view(
     *,
     hydrate_all_groups: bool = True,
@@ -9032,6 +9092,11 @@ def build_opportunities_view(
     for _card in _all_cards:
         _theme_phase = str(_card.get("theme_phase_value") or "").strip()
         _card["triage_theme_in_play"] = _theme_phase not in ("", "exited")
+    # --- Yesterday trial-grade review (Discovery Triage Funnel P1 C2a) ---
+    _today_by_code = {_card.get("code"): _card for _card in _all_cards if _card.get("code")}
+    response["yesterday_trial_review"] = build_yesterday_trial_review(
+        _today_by_code, display_lifecycle
+    )
     return response
 
 
