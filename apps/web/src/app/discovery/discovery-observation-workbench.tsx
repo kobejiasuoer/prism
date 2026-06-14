@@ -25,7 +25,6 @@ import type {
   DiscoveryV2AiTelemetryProps,
 } from "./discovery-v2-details";
 import {
-  V2_ACTION_LABELS,
   hasV2,
   uniqueTexts,
   v2Action,
@@ -35,12 +34,8 @@ import {
   v2AiTone,
   v2CalibrationMeta,
   v2ConfidenceLabel,
-  v2HardBlocks,
-  v2HardMax,
   v2HardReason,
-  v2MissingItems,
   v2MissingText,
-  v2Rank,
 } from "./discovery-v2-utils";
 import {
   bucketByFunnel,
@@ -189,24 +184,6 @@ function formatMetric(value: unknown, suffix = "") {
   return `${String(value).trim()}${suffix}`;
 }
 
-function entryPlanTexts(stock: StockListCard) {
-  const plan = stock.entry_plan || {};
-  return uniqueTexts([
-    stock.action_intent,
-    stock.position_guidance,
-    plan.action,
-    plan.sizing,
-    plan.trigger,
-    plan.avoid,
-    plan.invalidate,
-  ]);
-}
-
-/** @deprecated Kept only for buyGateMeta (B5b will remove). */
-function includesAny(text: string, tokens: string[]) {
-  return tokens.some((token) => text.includes(token));
-}
-
 function stockStageLabel(
   stock: StockListCard,
   group?: CardGroup<StockListCard>,
@@ -243,227 +220,6 @@ function buyGateFromTriage(stock: StockListCard) {
       ? "legacy 候选，闸门由 risk_level 推断"
       : "结构、触发和失效位已相对清楚，仍需人工复核");
   return { label, tone, detail };
-}
-
-/** @deprecated Kept only for groupDecisionMeta (B5b will remove). Per-card path uses buyGateFromTriage. */
-function buyGateMeta(stock: StockListCard, group?: CardGroup<StockListCard>) {
-  const planTexts = entryPlanTexts(stock);
-  const stageText = [
-    group?.key,
-    group?.title,
-    stock.status,
-    stock.action,
-    stock.action_intent,
-    stock.position_guidance,
-    stock.observation_instruction,
-    stock.detail,
-    stock.foot,
-    stock.risk,
-    stock.upgrade_condition,
-    stock.invalid_condition,
-    ...planTexts,
-  ].join(" ");
-  const riskReasons = uniqueTexts([
-    stock.block_reason,
-    stock.degrade_reason,
-    stock.avoid_condition,
-    stock.risk_tags,
-    stock.factor_risk_flags,
-    stock.foot,
-    stock.risk,
-  ]);
-  const primaryRisk =
-    stock.block_reason || stock.degrade_reason || riskReasons[0] || "";
-  const eliminated = includesAny(stageText, [
-    "已淘汰",
-    "降级",
-    "退出",
-    "剔除",
-    "排除",
-    "excluded",
-    "downgraded",
-    "exited",
-  ]);
-
-  if (hasV2(stock)) {
-    const action = v2Action(stock) || "observe";
-    const label = v2ActionLabel(stock) || V2_ACTION_LABELS[action] || "只观察";
-    const hardReason = v2HardReason(stock);
-    const hardMax = v2HardMax(stock);
-    const missing = v2MissingText(stock);
-    const confidence = v2ConfidenceLabel(stock);
-    const trigger = stock.entry_plan?.trigger || stock.upgrade_condition || "";
-    const hardCap = hardMax
-      ? `最大允许：${V2_ACTION_LABELS[hardMax] || hardMax}`
-      : "";
-    const primaryDetail = uniqueTexts([
-      hardReason ? `不能买：${hardReason}` : "",
-      missing ? `还差：${missing}` : "",
-      trigger && action !== "observe" ? `触发：${trigger}` : "",
-      hardCap && action !== "actionable" ? hardCap : "",
-      confidence ? `置信 ${confidence}` : "",
-    ]).join("；");
-    if (eliminated) {
-      return {
-        label: "不可买入",
-        tone: "risk",
-        detail: compactRiskText(
-          stock.invalidation ||
-            stock.invalid_condition ||
-            hardReason ||
-            primaryRisk ||
-            "原假设已被破坏",
-        ),
-      };
-    }
-    if (hardReason && v2Rank(action) <= v2Rank("shadow")) {
-      return {
-        label: "买入未放行",
-        tone: "risk",
-        detail: compactRiskText(
-          primaryDetail || stock.invalidation || "硬闸门限制真实动作",
-          64,
-        ),
-      };
-    }
-    if (action === "actionable") {
-      return {
-        label: v2HardBlocks(stock) ? "买入未放行" : label,
-        tone: v2HardBlocks(stock) ? "watch" : "positive",
-        detail: compactRiskText(
-          primaryDetail ||
-            stock.why_now ||
-            "结构、触发和失效位已相对清楚，仍需人工复核",
-          64,
-        ),
-      };
-    }
-    if (action === "trial") {
-      return {
-        label,
-        tone: "positive",
-        detail: compactRiskText(
-          primaryDetail || stock.why_now || "等触发、承接和账户阀门同时满足",
-          64,
-        ),
-      };
-    }
-    if (action === "shadow") {
-      return {
-        label,
-        tone: "watch",
-        detail: compactRiskText(
-          primaryDetail ||
-            stock.upgrade_reason ||
-            stock.why_now ||
-            "结构假设可跟踪，但暂不进入买入动作",
-          64,
-        ),
-      };
-    }
-    if (action === "review") {
-      return {
-        label,
-        tone: "watch",
-        detail: compactRiskText(
-          primaryDetail || stock.upgrade_reason || "结构有线索，但关键确认不足",
-          64,
-        ),
-      };
-    }
-    return {
-      label: hardReason ? "买入未放行" : label,
-      tone: hardReason ? "risk" : "info",
-      detail: compactRiskText(
-        primaryDetail ||
-          stock.invalidation ||
-          stock.upgrade_reason ||
-          "结构假设仍不完整",
-        64,
-      ),
-    };
-  }
-
-  if (eliminated) {
-    return {
-      label: "不可买入",
-      tone: "risk",
-      detail: compactRiskText(
-        stock.invalid_condition || primaryRisk || "已退出今日观察链路",
-      ),
-    };
-  }
-  if (stock.risk_level === "block" || stock.block_reason) {
-    return {
-      label: "买入拦截",
-      tone: "risk",
-      detail: compactRiskText(
-        stock.block_reason || primaryRisk || "存在硬执行约束",
-      ),
-    };
-  }
-
-  const trialAction =
-    stock.action_intent === "trial_buy" ||
-    includesAny(stageText, [
-      "试错",
-      "轻仓",
-      "小仓位",
-      "开仓",
-      "买入",
-      "0.3-0.5",
-      "0.5-0.8",
-      "0.3 成",
-      "0.3成",
-    ]);
-
-  if (trialAction) {
-    const sizing = stock.position_guidance || stock.entry_plan?.sizing || "";
-    const trigger = stock.entry_plan?.trigger || stock.upgrade_condition || "";
-    const pending =
-      uniqueTexts([trigger, primaryRisk || riskReasons[0]]).join("；") ||
-      "等待触发、承接和资金确认";
-    return {
-      label: "试错待触发",
-      tone: "positive",
-      detail: compactRiskText([sizing, pending].filter(Boolean).join("；"), 54),
-    };
-  }
-
-  const waitingForGate =
-    includesAny(stageText, [
-      "只观察",
-      "不追",
-      "先观察",
-      "不急着",
-      "等待",
-      "先等",
-      "未确认",
-      "不执行",
-      "先不开新仓",
-      "不直接升级执行",
-    ]) || displayGroupTitle(group?.title).includes("结构验证");
-
-  if (
-    stock.risk_level === "degrade" ||
-    stock.degrade_reason ||
-    stock.avoid_condition ||
-    riskReasons.length ||
-    waitingForGate
-  ) {
-    return {
-      label: "买入未放行",
-      tone: "watch",
-      detail: compactRiskText(
-        primaryRisk || stock.upgrade_condition || "等待触发、承接和阀门确认",
-      ),
-    };
-  }
-  return {
-    label: "仅观察",
-    tone: "info",
-    detail: compactRiskText(stock.upgrade_condition || "尚未形成买入动作"),
-  };
 }
 
 function BuyGateCell({
@@ -655,142 +411,51 @@ function groupDecisionMeta(group?: CardGroup<StockListCard>) {
   if (!cards.length) {
     return null;
   }
-  const v2Cards = cards.filter(hasV2);
-  if (v2Cards.length) {
-    const actionable = v2Cards.filter(
-      (stock) => v2Action(stock) === "actionable",
-    );
-    const realActionable = actionable.filter(
-      (stock) => !v2HardBlocks(stock),
-    ).length;
-    const blockedActionable = actionable.length - realActionable;
-    const trial = v2Cards.filter((stock) => v2Action(stock) === "trial").length;
-    const shadowReview = v2Cards.filter(
-      (stock) => v2Action(stock) === "shadow" || v2Action(stock) === "review",
-    ).length;
-    const missing = v2Cards
-      .flatMap((stock) => v2MissingItems(stock))
-      .slice(0, 2)
-      .join("；");
-    const firstHardReason = v2HardReason(
-      v2Cards.find(v2HardBlocks) || v2Cards[0],
-    );
-    const top = [...v2Cards].sort((left, right) => {
-      const actionDelta = v2Rank(v2Action(right)) - v2Rank(v2Action(left));
-      if (actionDelta) {
-        return actionDelta;
-      }
-      return Number(right.confidence ?? 0) - Number(left.confidence ?? 0);
-    })[0];
-    if (realActionable > 0) {
-      return {
-        label: `本组结论：${realActionable} 只可执行待复核`,
-        detail: [
-          top ? `先看 ${top.name || top.code} 的结构假设和失效位` : "",
-          blockedActionable ? `${blockedActionable} 只被硬闸门压低` : "",
-          "真实买入仍以账户、仓位、停牌/ST/涨跌停和午盘状态最终裁决。",
-        ]
-          .filter(Boolean)
-          .join("；"),
-        tone: "positive",
-      };
-    }
-    if (actionable.length && blockedActionable === actionable.length) {
-      return {
-        label: `本组结论：结构够强，但 ${blockedActionable} 只买入未放行`,
-        detail: firstHardReason
-          ? `不能买：${firstHardReason}`
-          : "硬闸门把最大允许动作压低，先影子跟踪。",
-        tone: "warning",
-      };
-    }
-    if (trial > 0) {
-      return {
-        label: `本组结论：${trial} 只条件试错`,
-        detail: missing
-          ? `还差：${missing}；未满足前不买。`
-          : "必须等触发、承接、资金和失效位同时清楚后再复核。",
-        tone: "positive",
-      };
-    }
-    if (shadowReview > 0) {
-      return {
-        label: `本组结论：${shadowReview} 只影子/复核`,
-        detail: firstHardReason
-          ? `不能买：${firstHardReason}`
-          : missing
-            ? `还差：${missing}`
-            : "假设可看，但尚未形成买入动作。",
-        tone: "watch",
-      };
-    }
+  const layer = group?.key as FunnelLayer | undefined;
+  const layerLabel = layer ? FUNNEL_LAYER_LABELS[layer] : "本组";
+  const blockers = cards
+    .map(triageGateBlocker)
+    .filter((b): b is string => Boolean(b));
+  const firstBlocker = blockers[0];
+  const missing = cards
+    .flatMap((s) => s.missing_confirmation ?? [])
+    .slice(0, 2)
+    .join("；");
+
+  if (layer === "focus") {
     return {
-      label: "本组结论：只观察",
-      detail: firstHardReason
-        ? `不能买：${firstHardReason}`
-        : missing
-          ? `还差：${missing}`
-          : "结构假设仍不完整。",
-      tone: "info",
+      label: `本组结论：${cards.length} 只可执行待复核`,
+      detail: firstBlocker
+        ? `${cards.length - blockers.length} 只已放行，${blockers.length} 只买入未放行：${firstBlocker}`
+        : "先看结构假设和失效位；真实买入仍以账户、仓位和午盘状态最终裁决。",
+      tone: "positive" as const,
     };
   }
-  const gates = cards.map((stock) => buyGateMeta(stock, group));
-  const blocked = gates.filter(
-    (gate) => gate.label === "不可买入" || gate.label === "买入拦截",
-  ).length;
-  const trial = gates.filter((gate) => gate.label === "试错待触发").length;
-  const waiting = gates.filter((gate) => gate.label === "买入未放行").length;
-  const rankedTrialCards = cards
-    .filter(
-      (stock) =>
-        buyGateMeta(stock, group).label === "试错待触发" && stock.decision_rank,
-    )
-    .sort(
-      (left, right) =>
-        Number(left.decision_rank || 999) - Number(right.decision_rank || 999),
-    );
-  if (rankedTrialCards.length) {
-    const first = rankedTrialCards[0];
-    const backups = rankedTrialCards
-      .slice(1, 3)
-      .map((stock) => stock.name || stock.code)
-      .filter(Boolean);
-    const later = rankedTrialCards
-      .slice(3)
-      .map((stock) => stock.name || stock.code)
-      .filter(Boolean);
+  if (layer === "on_trigger") {
     return {
-      label: `本组选择：先看 ${first.name || first.code}`,
-      detail: [
-        backups.length ? `候补：${backups.join("、")}` : "",
-        later.length ? `${later.join("、")}靠后` : "",
-        "只在各自触发位满足后复核；当前不是直接买入。",
-      ]
-        .filter(Boolean)
-        .join("；"),
-      tone: "positive",
+      label: `本组结论：${cards.length} 只条件试错`,
+      detail: missing
+        ? `还差：${missing}；未满足前不买。`
+        : "必须等触发、承接、资金和失效位同时清楚后再复核。",
+      tone: "positive" as const,
     };
   }
-  if (trial > 0) {
+  if (layer === "drop") {
     return {
-      label: `本组结论：${trial} 只条件试错`,
-      detail:
-        "不是直接买入；先等触发、承接、资金和成交额复核，满足后再进买入动作。",
-      tone: "positive",
+      label: `本组结论：${cards.length} 只已淘汰`,
+      detail: firstBlocker ?? "原始假设被破坏或确认失败，仅保留复盘价值。",
+      tone: "risk" as const,
     };
   }
-  if (blocked + waiting === cards.length) {
-    return {
-      label: "本组结论：不买，等确认",
-      detail:
-        "先看买入闸门，不看观察阶段；触发、承接、资金和成交额未同时确认前不进场。",
-      tone: "warning",
-    };
-  }
+  // watch (default)
   return {
-    label: "本组结论：逐只复核闸门",
-    detail: "只有买入闸门从未放行切到触发后复核，才进入下一步执行判断。",
-    tone: "info",
+    label: `本组结论：${cards.length} 只只观察`,
+    detail: firstBlocker
+      ? `不能买：${firstBlocker}`
+      : missing
+        ? `还差：${missing}`
+        : "假设可看，但尚未形成买入动作。",
+    tone: "watch" as const,
   };
 }
 
@@ -1001,81 +666,29 @@ function formatChange(value: StockListCard["change_pct"]) {
 
 function taskCards(groups: CardGroup<StockListCard>[]) {
   const allCards = groups.flatMap((group) => group.cards || []);
-  const v2Cards = allCards.filter(hasV2);
-  const hasDeferredGroups = groups.some(groupHasDeferredCards);
-  if (v2Cards.length && !hasDeferredGroups) {
-    const actionable = v2Cards.filter(
-      (stock) => v2Action(stock) === "actionable" && !v2HardBlocks(stock),
-    ).length;
-    const trial = v2Cards.filter((stock) => v2Action(stock) === "trial").length;
-    const blocked = v2Cards.filter(v2HardBlocks).length;
-    const eliminated = groups
-      .filter((group) =>
-        ["eliminated", "lifecycle_downgraded", "lifecycle_exited"].some(
-          (hint) => String(group.key || "").includes(hint),
-        ),
-      )
-      .reduce((sum, group) => sum + groupCount(group), 0);
-    return [
-      {
-        label: "可执行待复核",
-        value: actionable,
-        detail: "仍需硬闸门和人工复核最终放行",
-      },
-      {
-        label: "条件试错",
-        value: trial,
-        detail: "触发、承接、失效位同时满足后才买",
-      },
-      {
-        label: "硬闸门封顶",
-        value: blocked,
-        detail: "结构可以看，但最大动作被风控压低",
-      },
-      {
-        label: "应剔除",
-        value: eliminated,
-        detail: "原始假设被破坏或确认失败",
-      },
-    ];
-  }
-  const findCount = (keywords: string[], keyHints: string[] = []) =>
-    groups
-      .filter((group) => {
-        const title = group.title || "";
-        const key = group.key || "";
-        return (
-          keywords.some(
-            (keyword) =>
-              title.includes(keyword) ||
-              displayGroupTitle(title).includes(keyword),
-          ) || keyHints.some((hint) => key.includes(hint))
-        );
-      })
-      .reduce((sum, group) => sum + groupCount(group), 0);
-  const watching = findCount(["继续观察"], ["watching"]);
-  const midday = findCount(["午盘新增"], ["midday_new"]);
-  const upgrade = findCount(
-    ["可升级", "仍可跟踪", "升级", "结构验证", "条件试错"],
-    ["upgrade", "lifecycle_upgraded"],
-  );
-  const eliminated = findCount(
-    ["已淘汰", "剔除", "降级", "退出"],
-    ["eliminated", "lifecycle_downgraded", "lifecycle_exited"],
-  );
+  const count = (state: FunnelLayer) =>
+    allCards.filter((c) => triageActionState(c) === state).length;
   return [
     {
-      label: "必须复核",
-      value: watching + midday + upgrade,
-      detail: "今天需要看完的观察任务",
+      label: "可执行待复核",
+      value: count("focus"),
+      detail: "仍需硬闸门和人工复核最终放行",
     },
-    { label: "午盘新增", value: midday, detail: "午盘新进入观察视野" },
     {
-      label: "结构验证",
-      value: upgrade,
-      detail: "看假设、承接和失效，不等于买入",
+      label: "等触发",
+      value: count("on_trigger"),
+      detail: "触发、承接、失效位同时满足后才买",
     },
-    { label: "应剔除", value: eliminated, detail: "失效或降级的观察项" },
+    {
+      label: "只观察",
+      value: count("watch"),
+      detail: "假设可看，但尚未形成买入动作",
+    },
+    {
+      label: "应剔除",
+      value: count("drop"),
+      detail: "原始假设被破坏或确认失败",
+    },
   ];
 }
 

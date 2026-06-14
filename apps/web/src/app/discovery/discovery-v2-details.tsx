@@ -20,7 +20,6 @@ import {
 export type DiscoveryOpportunityEvidenceDetailsProps = {
   stock: StockListCard;
   group?: CardGroup<StockListCard>;
-  gate?: { label: string; tone: string; detail?: string };
   className?: string;
 };
 
@@ -106,7 +105,6 @@ function v2AiProviderLabel(stock: StockListCard) {
 
 function opportunityEvidenceCopy(
   stock: StockListCard,
-  gate?: { label: string; tone: string; detail?: string },
 ) {
   const poolReason =
     stock.thesis || stock.reason || stock.detail || "等待更多确认";
@@ -147,7 +145,7 @@ function opportunityEvidenceCopy(
     ? uniqueTexts([v2AiTitle(stock), v2AiDetail(stock)]).join("；")
     : "";
   const calibration = v2CalibrationReason(stock);
-  const summary = stock.decision_summary || gate?.detail || poolReason;
+  const summary = stock.decision_summary || poolReason;
   const fields = [
     structure
       ? {
@@ -272,10 +270,9 @@ function v2AiTelemetry(groups: CardGroup<StockListCard>[]) {
 
 export function DiscoveryOpportunityEvidenceDetails({
   stock,
-  gate,
   className,
 }: DiscoveryOpportunityEvidenceDetailsProps) {
-  const evidence = opportunityEvidenceCopy(stock, gate);
+  const evidence = opportunityEvidenceCopy(stock);
   return (
     <div
       className={cn(
@@ -285,7 +282,6 @@ export function DiscoveryOpportunityEvidenceDetails({
     >
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <Badge tone="info">完整依据</Badge>
-        {gate ? <Badge tone={gate.tone}>{gate.label}</Badge> : null}
         {v2AiChangedFields(stock).length ? (
           <Badge tone="info">
             AI 改动 {v2AiChangedFields(stock).join("/")}
