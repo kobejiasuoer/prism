@@ -42,7 +42,15 @@ import {
   v2MissingText,
   v2Rank,
 } from "./discovery-v2-utils";
-import { valveLabel, valveTone, type ValveStatus } from "./discovery-triage-utils";
+import {
+  bucketByFunnel,
+  FUNNEL_LAYER_LABELS,
+  type FunnelBucket,
+  type FunnelLayer,
+  valveLabel,
+  valveTone,
+  type ValveStatus,
+} from "./discovery-triage-utils";
 
 export type DiscoveryObservationWorkbenchProps = {
   groups: CardGroup<StockListCard>[];
@@ -1066,63 +1074,41 @@ function taskCards(groups: CardGroup<StockListCard>[]) {
   ];
 }
 
-function PipelineFlow({
-  groups,
-  activeIndex,
+function FunnelHeader({
+  funnel,
+  activeLayer,
   onSelect,
 }: {
-  groups: CardGroup<StockListCard>[];
-  activeIndex: number;
-  onSelect: (index: number) => void;
+  funnel: FunnelBucket[];
+  activeLayer: FunnelLayer;
+  onSelect: (layer: FunnelLayer) => void;
 }) {
   return (
     <section className="mb-6">
       <div className="mb-2 flex items-center justify-between gap-3">
         <div>
-          <div className="text-[11px] font-medium uppercase text-[var(--text-tertiary)]">
-            Pipeline
-          </div>
-          <h2 className="text-base font-semibold text-[var(--text-primary)]">
-            观察状态流
-          </h2>
+          <div className="text-[11px] font-medium uppercase text-[var(--text-tertiary)]">Funnel</div>
+          <h2 className="text-base font-semibold text-[var(--text-primary)]">遴选漏斗</h2>
         </div>
-        <Badge tone="info">空阶段保留为状态说明</Badge>
       </div>
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {groups.map((group, index) => {
-          const count = groupCount(group);
-          const active = index === activeIndex;
+      <div className="flex flex-wrap gap-2">
+        {funnel.map((bucket) => {
+          const active = bucket.layer === activeLayer;
           return (
-            <div
-              key={`${group.title}-${index}`}
-              className="flex shrink-0 items-center gap-2"
+            <button
+              key={bucket.layer}
+              type="button"
+              className={cn(
+                "focus-ring min-w-[120px] rounded-md border px-3 py-2 text-left transition-colors",
+                active
+                  ? "border-[var(--border-default)] bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
+                  : "border-[var(--border-subtle)] bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
+              )}
+              onClick={() => onSelect(bucket.layer)}
             >
-              <button
-                type="button"
-                className={cn(
-                  "focus-ring min-w-[132px] rounded-md border px-3 py-2 text-left transition-colors",
-                  active
-                    ? "border-[var(--border-default)] bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
-                    : count
-                      ? "border-[var(--border-subtle)] bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                      : "border-[var(--border-subtle)] bg-[var(--bg-secondary)] text-[var(--text-tertiary)] opacity-75",
-                )}
-                onClick={() => onSelect(index)}
-              >
-                <span className="block text-[13px] font-medium">
-                  {displayGroupTitle(group.title)}
-                </span>
-                <span className="mono mt-1 block text-[11px] text-[var(--text-tertiary)]">
-                  {count} 只
-                </span>
-              </button>
-              {index < groups.length - 1 ? (
-                <ArrowRight
-                  size={14}
-                  className="shrink-0 text-[var(--text-tertiary)]"
-                />
-              ) : null}
-            </div>
+              <span className="block text-[13px] font-medium">{FUNNEL_LAYER_LABELS[bucket.layer]}</span>
+              <span className="mono mt-1 block text-[11px] text-[var(--text-tertiary)]">{bucket.cards.length} 只</span>
+            </button>
           );
         })}
       </div>
@@ -1522,6 +1508,7 @@ export function DiscoveryObservationWorkbench({
   sidePanel,
   valveStatus,
 }: DiscoveryObservationWorkbenchProps) {
+  // TODO(B5/cleanup): activeGroup/activeIndex/onSelectGroup superseded by funnel layer state
   const [aiTelemetryOpen, setAiTelemetryOpen] = useState(false);
   const cards = useMemo(() => taskCards(groups), [groups]);
   const hasDeferredGroups = useMemo(
@@ -1532,6 +1519,14 @@ export function DiscoveryObservationWorkbench({
     () => groups.some((group) => (group.cards || []).some(hasV2)),
     [groups],
   );
+
+  // Funnel state: bucket all cards by triage_action_state, manage active layer locally
+  const funnel = useMemo(() => bucketByFunnel(groups), [groups]);
+  const [activeLayer, setActiveLayer] = useState<FunnelLayer>("focus");
+  const activeBucket = funnel.find((b) => b.layer === activeLayer) ?? funnel[0];
+  const activeFunnelGroup: CardGroup<StockListCard> | undefined = activeBucket
+    ? { key: activeBucket.layer, title: FUNNEL_LAYER_LABELS[activeBucket.layer], cards: activeBucket.cards }
+    : undefined;
 
   return (
     <>
@@ -1570,17 +1565,19 @@ export function DiscoveryObservationWorkbench({
       ) : null}
 
       {groups.length ? (
-        <PipelineFlow
-          groups={groups}
-          activeIndex={activeIndex}
-          onSelect={onSelectGroup}
-        />
+        <FunnelHeader funnel={funnel} activeLayer={activeLayer} onSelect={setActiveLayer} />
+      ) : null}
+
+      {funnel[0].cards.length === 0 ? (
+        <div className="mb-4 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-4 py-2 text-[12px] text-[var(--text-secondary)]">
+          今天没有可执行候选（值得专注为空），整页进入观察模式。
+        </div>
       ) : null}
 
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex min-w-0 flex-col gap-3">
           <ObservationWorkbench
-            group={activeGroup}
+            group={activeFunnelGroup}
             loading={loading}
             onLoadGroup={onLoadGroup}
             tradeDate={tradeDate}

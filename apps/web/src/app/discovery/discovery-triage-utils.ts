@@ -1,4 +1,4 @@
-import type { StockListCard } from "@/lib/types";
+import type { CardGroup, StockListCard } from "@/lib/types";
 
 export type TriageActionState = "focus" | "on_trigger" | "watch" | "drop";
 export type TriageGateState = "open" | "capped" | "closed";
@@ -32,6 +32,27 @@ export function triageLegacy(stock: StockListCard): boolean {
 
 export function funnelLayer(stock: StockListCard): FunnelLayer {
   return triageActionState(stock);
+}
+
+export interface FunnelBucket {
+  layer: FunnelLayer;
+  cards: StockListCard[];
+}
+
+export function bucketByFunnel(groups: CardGroup<StockListCard>[]): FunnelBucket[] {
+  const order: FunnelLayer[] = ["focus", "on_trigger", "watch", "drop"];
+  const buckets: Record<FunnelLayer, StockListCard[]> = {
+    focus: [],
+    on_trigger: [],
+    watch: [],
+    drop: [],
+  };
+  for (const group of groups) {
+    for (const card of group.cards ?? []) {
+      buckets[funnelLayer(card)].push(card);
+    }
+  }
+  return order.map((layer) => ({ layer, cards: buckets[layer] }));
 }
 
 // Valve light copy (spec S7). Status comes straight from the backend payload.
