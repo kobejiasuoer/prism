@@ -988,6 +988,10 @@ export interface StockListCard {
   tushare_positive_adjustment?: number;
   tushare_risk_penalty?: number;
   tushare_priority_adjustment?: number;
+  triage_action_state?: "focus" | "on_trigger" | "watch" | "drop";
+  triage_gate_state?: "open" | "capped" | "closed";
+  triage_gate_blocker?: string | null;
+  triage_legacy?: boolean;
 }
 
 export interface CardGroup<T = StockListCard> {
@@ -1704,6 +1708,7 @@ export interface OpportunitiesData {
   theme_cards?: BasicCard[];
   source_cards?: SourceCardData[];
   learning_memories?: ReviewLearningMemory[];
+  valve_status?: "on" | "limited" | "off";
 }
 
 export interface ReviewData {
