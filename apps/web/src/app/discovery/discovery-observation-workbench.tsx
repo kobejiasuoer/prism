@@ -42,6 +42,7 @@ import {
   v2MissingText,
   v2Rank,
 } from "./discovery-v2-utils";
+import { valveLabel, valveTone, type ValveStatus } from "./discovery-triage-utils";
 
 export type DiscoveryObservationWorkbenchProps = {
   groups: CardGroup<StockListCard>[];
@@ -56,6 +57,7 @@ export type DiscoveryObservationWorkbenchProps = {
   tradeDate?: string;
   onFeedback: (message: string) => void;
   sidePanel: ReactNode;
+  valveStatus?: ValveStatus;
 };
 
 const DiscoveryObservationActions = dynamic<DiscoveryObservationActionsProps>(
@@ -1518,6 +1520,7 @@ export function DiscoveryObservationWorkbench({
   tradeDate,
   onFeedback,
   sidePanel,
+  valveStatus,
 }: DiscoveryObservationWorkbenchProps) {
   const [aiTelemetryOpen, setAiTelemetryOpen] = useState(false);
   const cards = useMemo(() => taskCards(groups), [groups]);
@@ -1532,6 +1535,20 @@ export function DiscoveryObservationWorkbench({
 
   return (
     <>
+      <section className="mb-5 flex flex-wrap items-center gap-3 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-4 py-3">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] uppercase text-[var(--text-tertiary)]">进攻阀门</span>
+          <Badge tone={valveTone(valveStatus)}>{valveLabel(valveStatus)}</Badge>
+        </div>
+        <div className="text-[12px] leading-5 text-[var(--text-secondary)]">
+          {valveStatus === "on"
+            ? "阀门开启，可按仓位上限开新仓"
+            : valveStatus === "limited"
+              ? "阀门半开，仅小仓位试错"
+              : "阀门关闭，今天不开新仓，整页进入观察模式"}
+        </div>
+      </section>
+
       <section className="mb-7 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {initialLoading
           ? Array.from({ length: 4 }).map((_, index) => (

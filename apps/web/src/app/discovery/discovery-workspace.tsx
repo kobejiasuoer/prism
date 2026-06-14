@@ -428,6 +428,7 @@ export function DiscoveryWorkspace() {
           tradeDate={data?.trade_date}
           onFeedback={setFeedback}
           sidePanel={sidePanel}
+          valveStatus={data?.valve_status}
         />
       </div>
     </main>
