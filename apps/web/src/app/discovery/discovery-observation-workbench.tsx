@@ -943,6 +943,16 @@ function ObservationWorkbench({
                               {stock.theme_phase_theme || stock.theme}
                             </div>
                           ) : null}
+                          {typeof stock.triage_rank_in_theme === "number" ? (
+                            <Badge
+                              tone={stock.triage_theme_in_play ? "positive" : "risk"}
+                              className="mt-1.5"
+                            >
+                              {stock.triage_theme_in_play
+                                ? `主线RS #${stock.triage_rank_in_theme}`
+                                : "主线走弱"}
+                            </Badge>
+                          ) : null}
                         </td>
                         <td className="px-3 py-3">
                           <div className="flex max-w-[160px] flex-wrap gap-1.5">
@@ -1018,6 +1028,16 @@ function ObservationWorkbench({
                       <div className="mono mt-0.5 text-[11px] text-[var(--text-tertiary)]">
                         {stock.code}
                       </div>
+                      {typeof stock.triage_rank_in_theme === "number" ? (
+                        <Badge
+                          tone={stock.triage_theme_in_play ? "positive" : "risk"}
+                          className="mt-1"
+                        >
+                          {stock.triage_theme_in_play
+                            ? `主线RS #${stock.triage_rank_in_theme}`
+                            : "主线走弱"}
+                        </Badge>
+                      ) : null}
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       {stock.decision_rank_label ? (

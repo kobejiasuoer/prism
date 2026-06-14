@@ -992,6 +992,8 @@ export interface StockListCard {
   triage_gate_state?: "open" | "capped" | "closed";
   triage_gate_blocker?: string | null;
   triage_legacy?: boolean;
+  triage_rank_in_theme?: number;
+  triage_theme_in_play?: boolean;
 }
 
 export interface CardGroup<T = StockListCard> {
