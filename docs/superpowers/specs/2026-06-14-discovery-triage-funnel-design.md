@@ -42,6 +42,8 @@ Evidence in current code:
 - `stockInstruction()` patches copy at render (`升级` → `确认`, `观察升级` → `还差`).
 - The first screen renders five lifecycle groups (早盘进入 / 继续观察 / 午盘新增 / 结构验证 / 已淘汰) at equal weight, mixing a time axis (早盘/午盘) with an action axis (进入/观察/淘汰).
 
+**Refinement (verified against code):** the V2 path already carries structured gate fields on `StockListCard` — `hard_gate_blocks_action` (boolean), `hard_gate_max_action`, `hard_gate_block_reason`, `hard_gate_reasons[]` — and the screening pipeline already produces a structured valve `execution_gate.status ∈ {on, limited, off}` (`ai_screening.execution_gate_of`). The root defect is narrower than "the verdict does not exist": the workbench **ignores** these structured fields and re-derives a verdict from prose via `buyGateMeta()`. The legacy (non-V2) path genuinely lacks structured gate fields, which is why the prose-grep exists for it. So P0 is largely "read what already exists" for V2; extending structure to legacy is sized separately (§11 P0.5).
+
 This is the "surface consistency but model inconsistency" failure the decision protocol §2 names as the top danger. No column reshuffle fixes it. The fix is upstream.
 
 ## 4. Design Principle
@@ -121,6 +123,8 @@ Replace five equal-weight lifecycle groups with one action-axis funnel. The time
 丢弃 (…)              collapsed; kept as review control group
 ```
 
+**Closed-valve behaviour:** when `execution_gate.status == off` (or `can_trade_live == false`), the 值得专注 layer is empty **by design** — no candidate can be `focus` or `on_trigger` (§8.5 degrades them to `watch`). The page enters observation mode: header states "今天不开新仓" + the single blocker reason, and the first screen shows only 等触发 / 只观察. This matches observed reality (valve closed ~7 of 9 days).
+
 Mapping to the protocol's action tiers:
 
 | Funnel layer | `action_state` | Protocol action tier |
@@ -140,7 +144,7 @@ The first screen shows five things. Two of them are separate lights (see §8 for
 
 1. **Two separate lights at the top:**
    - **数据可信度 (data trust)** — `readiness.trust_level` consumed from `TrustBanner`, three states only: `trusted` / `observe_only` / `unreliable`. Answers "is the data trustworthy?" The page imports `TrustBanner`; it does not re-derive verdict text.
-   - **进攻阀门 (portfolio valve)** — `can_trade_live` + `market_phase` + `position_cap`, states `开 / 半开 / 关闭`. Answers "is the account allowed to act, and at what size?" These are **separate** booleans from trust (per the trust-level single-source contract); they stay separate in copy.
+   - **进攻阀门 (portfolio valve)** — `execution_gate.status` ∈ {`on` / `limited` / `off`} → 开 / 半开 / 关闭, consumed from the screening pipeline (`ai_screening.execution_gate_of`), **not** recomputed. `position_cap` is the display string derived from this status. Account permission (`can_trade_live`, from the trust payload) is shown by TrustBanner and folded into the per-stock gate (§8.4); it is a separate axis from the valve.
 2. **Funnel narrow end — 值得专注 (2–4)**: the only candidates shown expanded on first screen.
 3. **One-sentence verdict per candidate**: `action_state` + the single blocker / need, in operator language. Not a wall of badges.
 4. **Two prices per candidate**: `trigger_price` and `invalidation_price`, pre-registered.
@@ -161,48 +165,75 @@ trust_level ∈ { trusted | observe_only | unreliable }
 ### 8.2 Portfolio valve (consumed, not computed)
 
 ```
-valve ∈ { open | half | closed }
-# Composed from can_trade_live (account mode), market_phase, position_cap.
-# Already exists in readiness payload; the page reads it.
+valve = execution_gate.status ∈ { on | limited | off }
+# Source: ai_screening.execution_gate_of(market_regime) -> gate["status"],
+#          surfaced per screening batch (NOT the readiness payload).
+# on -> 开 (0.5-0.8成), limited -> 半开 (0.3-0.5成), off -> 关闭 (0成).
+# position_cap is the display string DERIVED from this status; the page reads status.
 ```
 
-### 8.3 Per-stock gate (derived, Stage-1 signals only)
+### 8.3 Two axes, kept separate
+
+The biggest conceptual fix. Two questions must not be merged:
+
+- **gate (can I buy? — permission)** — closed / capped / open.
+- **action_state (should I prioritise? — triage)** — focus / on_trigger / watch / drop.
+
+A downgraded stock (`risk_level = degrade`) is still *buyable* if the valve is open; it is only *deprioritised*. So degrade belongs to `action_state`, **not** to `gate`. The prior draft put degrade in `gate = capped`; that was wrong and is corrected here.
+
+### 8.4 gate.state — permission only
 
 ```
 gate.state =
-  closed  if NOT can_trade_live
-        OR market_phase == risk_off
-        OR stock.risk_level == block        # 硬拦截 — existing hard signal
-  capped  if trust_level != trusted
-        OR market_phase == risk_capped
-        OR remaining position_cap == 0
-        OR stock.risk_level == degrade      # 降级 — e.g. 审计意见异常 (existing signal)
+  closed  if NOT can_trade_live                      # account mode (from trust payload)
+        OR execution_gate.status == off              # valve closed
+        OR stock.risk_level == block                 # 硬拦截
+  capped  if execution_gate.status == limited        # valve half-open
+        OR trust_level != trusted                    # data not fully trusted
   open    otherwise
 
-gate.blocker = the FIRST single reason that set closed/capped (operator language)
+gate.blocker = the FIRST single reason (operator language)
 ```
 
-This follows the system's existing `risk_level` semantics: `block` → 硬拦截 → closed; `degrade` (e.g. 审计意见异常) → 降级 → capped; `warn` → 提醒 → open but flagged. Stage-1 hard filters are limited to the signals the system already has (`risk_level`, existing `factor_risk_flags` as supporting context). Richer filters (suspend status, limit-up/down, lock-up expiry, earnings windows) arrive with Stage 2 / Stage 3 data and are added to this derivation then — not now.
+Stage-1 signals only: `can_trade_live` (trust payload, via TrustBanner), `execution_gate.status` (screening pipeline), `trust_level` (TrustBanner), `risk_level` (the `RiskLevel` enum is `info | warn | degrade | block` — four values, not three). Richer filters (suspend, limit-up/down, lock-up expiry, earnings windows) arrive with Stage 2 / 3 data and extend this derivation then.
 
-### 8.4 Why three separate signals
+### 8.5 action_state — triage, gated by permission
 
-The trust-level single-source contract exists precisely because a prior bug let the sidebar say "系统正常" while `readiness_mode` was `shadow_only`. Merging trust + valve + gate into one recomputed "gate" string would reintroduce that class of bug. The page **composes** three signals into the visible verdict but never **merges** them into one recomputed field.
+```
+action_state =
+  drop        if lifecycle eliminated                       # overrides everything
+  focus       if V2 action == actionable AND gate.state == open
+  on_trigger  if V2 action == trial        AND gate.state != closed
+  watch       otherwise
+              (includes: V2 shadow / review / observe,
+                         risk_level == degrade,             # 降级 -> deprioritise, not block
+                         risk_level == warn,
+                         gate.state closed / capped)        # can't act -> only watch
+```
 
-## 9. Field Convergence Map
+Per protocol §10.5 (weak context must downgrade, not overstate): a closed or capped gate degrades `action_state` to `watch` rather than inventing a stronger conclusion. This is exactly why gate and action_state **compose** instead of **merge** — gate is the permission filter, action_state is the priority that survives it.
 
-The same concept is currently spread across 3–4 prose fields. Each concept collapses to one structured field.
+### 8.6 Why three separate signals
 
-| Concept | Current scattered fields | Converges to |
+The trust-level single-source contract exists precisely because a prior bug let the sidebar say "系统正常" while `readiness_mode` was `shadow_only`. Merging trust + valve + gate into one recomputed "gate" string would reintroduce that class of bug. The page **composes** these signals into the visible verdict but never **merges** them into one recomputed field.
+
+## 9. Field Convergence Map (display, not deletion)
+
+The triage card shows fewer fields than `StockListCard` carries. This is a **display** convergence: protocol-mandated fields stay in the canonical object (e.g. `why_now` is its own required field per protocol §6); the card composes several into one displayed element. Verified against `StockListCard` (`apps/web/src/lib/types.ts:876`).
+
+| Triage element | Drawn from (real `StockListCard` fields) | Note |
 |---|---|---|
-| Thesis | `thesis` + `entry_reason` + `why_now` + `decision_summary` | `thesis` (one sentence) |
-| Invalidation | `invalidation` + `main_risk` + `invalid_condition` + `foot` | `invalidation_price` + one sentence |
-| What is missing | `missing_confirmation` + `watch_condition` + `upgrade_condition` + `needs` | `needs[]` (enum) |
-| Score / rank | `priority_score` + `best_score` + `score` + `decision_rank` | `rs.rank_in_theme` |
-| Status | `screening_status` + `tier` + `tier_rank` + `status` + `action` + `suggested_action` | `action_state` (enum) |
-| Theme | `theme` + `themes` + `theme_phase` + `theme_phase_theme` + `theme_in_play` | `theme` + `rs.theme_in_play` |
-| Gate | `hard_gate_max_action` + `hard_gate_block_reason` + `risk_level` + `block_reason` | `gate.state` + `gate.blocker` |
+| One-sentence verdict | `thesis` + `why_now` + `decision_summary` | composed for display; underlying fields kept (protocol §6) |
+| action_state | V2 action (in `opportunity_v2`) + `decision_rank` + `risk_level` + lifecycle | enum; see §8.5 |
+| gate | `hard_gate_blocks_action` (bool) + `hard_gate_max_action` + `hard_gate_block_reason` + `risk_level` + `block_reason` | **`hard_gate_blocks_action` already exists structured** — read it, do not grep |
+| trigger_price / invalidation_price | `entry_plan.levels` + `entry_plan.trigger` / `entry_plan.invalidate` + `resistance` / `support` / `stop_loss` | two numbers |
+| needs[] | `missing_confirmation[]` + `upgrade_condition` | enum |
+| theme + theme_in_play | `theme` + `theme_phase` / `theme_phase_value` (label/value pair) + `theme_phase_theme` | label/value pair **preserved**, not collapsed |
+| rs.rank_in_theme | `decision_rank` + `priority_score` / `best_score` within the theme cohort | Stage-1 ranking only (vs-index is Stage 2) |
 
-Field names and the migration path from the existing `StockListCard` / V2 fields are fixed at implementation time, but the **contract** above is fixed now: one structured field per concept.
+Demoted off the card into the expandable detail layer: `factor_tags[]`, `factor_risk_flags[]`, `tushare_score`, `execution_quality_*`, `consistency_*`, `crowding_risk`, `fake_breakout_risk`, `ai_*`, `v2_calibration_*`.
+
+**Correction from verification:** the prior draft's field map named `entry_reason`, `main_risk`, `watch_condition`, `screening_status`, `tier`, `tier_rank`, `themes` — none of these exist on `StockListCard` (they were raw-pipeline / sample-prose names). This table uses only real card fields, and it does not collapse the label/value pairs (`*_phase` / `*_value`), which are display companions, not duplicates.
 
 ## 10. Interaction Flow
 
@@ -230,16 +261,20 @@ Two current gaps closed as decision-structure work (Stage 1):
 
 ### P0 — root fix (Stage 1, in scope)
 
-1. Build the `TriageDecision` object; compute `action_state` and `gate` once upstream.
-2. Delete `buyGateMeta()` text-grepping; read `gate.state` instead. Collapse the `hasV2` / legacy split.
-3. First screen becomes "two lights + funnel narrow end"; delete the five equal-weight groups.
-4. Converge redundant fields (thesis / invalidation / needs each collapse per §9).
+1. Make the page read the **already-structured** V2 gate fields (`hard_gate_blocks_action`, `hard_gate_max_action`, `hard_gate_block_reason`) and `execution_gate.status`, instead of `buyGateMeta()` text-grepping. The structured fields already exist; the workbench ignored them.
+2. Build the `TriageDecision` view-object for V2 candidates; compute `action_state` (§8.5) and `gate` (§8.4) once, upstream of render.
+3. First screen becomes "trust light (TrustBanner) + valve light (`execution_gate.status`) + funnel narrow end"; delete the five equal-weight groups.
+4. Display convergence per §9 (one-sentence verdict, two prices, `needs[]`).
+
+### P0.5 — legacy path migration (Stage 1, separate card)
+
+5. The non-V2 candidate path has no structured gate fields — that is why `buyGateMeta()` greps prose for it. Migrate it to emit the same structured fields. Sized as a **separate card** because it is a screener-package change of unknown size; P0 must not block on it. Until migrated, legacy candidates render with `gate` derived from `risk_level` only, plus a visible "legacy, gate inferred" tag.
 
 ### P1 — decision-structure gaps (Stage 1, in scope)
 
-5. `rs.rank_in_theme` and `rs.theme_in_play` become first-class, fed into the funnel's theme-strength layer (existing data only).
-6. Exit prompt: daily "昨日 trial 复核" line.
-7. Concentration / correlation hint when >3 candidates share a theme ("隐含同一宏观下注") — derivable from the candidate set, no new source.
+6. `rs.rank_in_theme` and `rs.theme_in_play` become first-class, fed into the funnel's theme-strength layer (existing data only; vs-index RS stays Stage 2).
+7. Exit prompt: daily "昨日 trial 复核" line. **Infra confirmed** — `candidate_lifecycle.find_previous_snapshot` + `compute_lifecycle(current, previous, ...)` already support cross-day comparison.
+8. Same-theme concentration hint when >3 candidates share a theme (trivially derivable from `theme`). Cross-theme macro correlation (e.g. 化工 + 有色 = same beta) needs a theme→macro map that may not exist — deferred to a later refinement, not this card.
 
 ### P2 — formal data sources (Stage 2, deferred)
 
@@ -252,6 +287,14 @@ Dragon-tiger list, large-order / block-trade flow, limit-up seal strength, lock-
 - Rule-compliance tracking — did the user take the trades the system flagged (Stage 3 execution reality).
 
 P2 and P3 are written down so they stay visible (anchor: "keep the next stage visible"), but they are **not** worked in Stage 1.
+
+### Definition of Done (P0)
+
+- `buyGateMeta()` and its keyword lists are deleted; no text-grep derives a buy verdict anywhere in the discovery page.
+- Every V2 candidate card reads `gate.state` / `action_state` from one structured source.
+- First screen shows the trust light (TrustBanner) + valve light (`execution_gate.status`) + funnel narrow end only; the five equal-weight groups are gone.
+- `JargonLeakTests` still pass (first-screen copy stays in operator language).
+- The closed-valve path renders observation mode with a single blocker reason (no empty focus layer).
 
 ## 12. Relationship to the Decision Protocol
 
