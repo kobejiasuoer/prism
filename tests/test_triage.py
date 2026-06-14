@@ -6,10 +6,13 @@ from screener.triage import (
     GATE_CAPPED,
     GATE_CLOSED,
     GATE_OPEN,
+    VALVE_LIMITED,
     VALVE_OFF,
     VALVE_ON,
+    _RISK_BLOCK,
     _RISK_DEGRADE,
     compute_action_state,
+    compute_gate_blocker,
     compute_gate_state,
     triage_fields_for_card,
 )
@@ -254,3 +257,90 @@ def test_triage_fields_eliminated_drops():
         eliminated=True,
     )
     assert out["triage_action_state"] == "drop"
+
+
+# --- compute_gate_blocker priority ordering (direct tests) ---
+
+
+def test_blocker_research_mode_overrides_valve_off():
+    # can_trade_live=False wins over valve off
+    assert compute_gate_blocker(
+        valve_status=VALVE_OFF,
+        can_trade_live=False,
+        trust_level="trusted",
+        risk_level="info",
+        hard_gate_block_reason="",
+    ) == "账户处于研究态，不能真钱执行"
+
+
+def test_blocker_valve_off_overrides_risk_block():
+    assert compute_gate_blocker(
+        valve_status=VALVE_OFF,
+        can_trade_live=True,
+        trust_level="trusted",
+        risk_level=_RISK_BLOCK,
+        hard_gate_block_reason="",
+    ) == "进攻阀门关闭，今天不开新仓"
+
+
+def test_blocker_risk_block_before_valve_limited():
+    assert compute_gate_blocker(
+        valve_status=VALVE_LIMITED,
+        can_trade_live=True,
+        trust_level="trusted",
+        risk_level=_RISK_BLOCK,
+        hard_gate_block_reason="",
+    ) == "硬拦截"
+
+
+def test_blocker_valve_limited_returns_capped_reason():
+    assert compute_gate_blocker(
+        valve_status=VALVE_LIMITED,
+        can_trade_live=True,
+        trust_level="trusted",
+        risk_level="info",
+        hard_gate_block_reason="",
+    ) == "进攻阀门半开，仓位受限"
+
+
+def test_blocker_trust_untrusted_before_hard_reason():
+    # trust != trusted shadows a downstream hard_gate_block_reason
+    assert compute_gate_blocker(
+        valve_status=VALVE_ON,
+        can_trade_live=True,
+        trust_level="observe_only",
+        risk_level="info",
+        hard_gate_block_reason="some upstream reason",
+    ) == "数据未完全可信"
+
+
+def test_blocker_hard_reason_as_fallback():
+    assert compute_gate_blocker(
+        valve_status=VALVE_ON,
+        can_trade_live=True,
+        trust_level="trusted",
+        risk_level="info",
+        hard_gate_block_reason="个股硬闸门",
+    ) == "个股硬闸门"
+
+
+def test_blocker_none_when_all_clear():
+    assert compute_gate_blocker(
+        valve_status=VALVE_ON,
+        can_trade_live=True,
+        trust_level="trusted",
+        risk_level="info",
+        hard_gate_block_reason="",
+    ) is None
+
+
+def test_triage_fields_defaults_missing_card_keys():
+    # empty card exercises the defensive defaults (risk_level -> info, v2_action -> "")
+    out = triage_fields_for_card(
+        {},
+        valve_status=VALVE_ON,
+        can_trade_live=True,
+        trust_level="trusted",
+    )
+    assert out["triage_gate_state"] == "open"
+    assert out["triage_action_state"] == "watch"
