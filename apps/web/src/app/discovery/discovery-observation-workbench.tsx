@@ -62,6 +62,13 @@ export type DiscoveryObservationWorkbenchProps = {
   onFeedback: (message: string) => void;
   sidePanel: ReactNode;
   valveStatus?: ValveStatus;
+  yesterdayTrialReview?: Array<{
+    code: string;
+    name: string;
+    yesterday_action: string;
+    today_action_state: string;
+    still_listed: boolean;
+  }>;
 };
 
 const DiscoveryObservationActions = dynamic<DiscoveryObservationActionsProps>(
@@ -1130,6 +1137,7 @@ export function DiscoveryObservationWorkbench({
   onFeedback,
   sidePanel,
   valveStatus,
+  yesterdayTrialReview,
 }: DiscoveryObservationWorkbenchProps) {
   const [aiTelemetryOpen, setAiTelemetryOpen] = useState(false);
   const cards = useMemo(() => taskCards(groups), [groups]);
@@ -1165,6 +1173,18 @@ export function DiscoveryObservationWorkbench({
               : "阀门关闭，今天不开新仓，整页进入观察模式"}
         </div>
       </section>
+
+      {yesterdayTrialReview && yesterdayTrialReview.length > 0 ? (
+        <div className="mb-4 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-4 py-2 text-[12px] text-[var(--text-secondary)]">
+          {"昨日试错待复核："}
+          {yesterdayTrialReview.map((t) => {
+            const todayLabel = t.still_listed
+              ? `今日 ${FUNNEL_LAYER_LABELS[t.today_action_state as FunnelLayer] ?? t.today_action_state}`
+              : "今日已退出";
+            return `${t.name}（${todayLabel}）`;
+          }).join("、")}
+        </div>
+      ) : null}
 
       <section className="mb-7 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {initialLoading

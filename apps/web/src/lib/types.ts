@@ -1711,6 +1711,13 @@ export interface OpportunitiesData {
   source_cards?: SourceCardData[];
   learning_memories?: ReviewLearningMemory[];
   valve_status?: "on" | "limited" | "off";
+  yesterday_trial_review?: Array<{
+    code: string;
+    name: string;
+    yesterday_action: string;
+    today_action_state: string;
+    still_listed: boolean;
+  }>;
 }
 
 export interface ReviewData {

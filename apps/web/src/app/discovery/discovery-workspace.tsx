@@ -426,6 +426,7 @@ export function DiscoveryWorkspace() {
           onFeedback={setFeedback}
           sidePanel={sidePanel}
           valveStatus={data?.valve_status}
+          yesterdayTrialReview={data?.yesterday_trial_review}
         />
       </div>
     </main>
