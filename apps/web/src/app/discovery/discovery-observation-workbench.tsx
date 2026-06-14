@@ -695,6 +695,17 @@ function taskCards(groups: CardGroup<StockListCard>[]) {
   ];
 }
 
+function concentrationWarnings(cards: StockListCard[]): string[] {
+  const counts: Record<string, number> = {};
+  for (const c of cards) {
+    const t = c.theme || "—";
+    counts[t] = (counts[t] || 0) + 1;
+  }
+  return Object.entries(counts)
+    .filter(([, n]) => n > 3)
+    .map(([theme, n]) => `${theme} 同主题 ${n} 只，隐含同一宏观下注`);
+}
+
 function FunnelHeader({
   funnel,
   activeLayer,
@@ -1158,6 +1169,18 @@ export function DiscoveryObservationWorkbench({
     ? { key: activeBucket.layer, title: FUNNEL_LAYER_LABELS[activeBucket.layer], cards: activeBucket.cards }
     : undefined;
 
+  const activeForConcentration = useMemo(
+    () =>
+      funnel
+        .filter((f) => f.layer === "focus" || f.layer === "on_trigger")
+        .flatMap((f) => f.cards),
+    [funnel],
+  );
+  const concentration = useMemo(
+    () => concentrationWarnings(activeForConcentration),
+    [activeForConcentration],
+  );
+
   return (
     <>
       <section className="mb-5 flex flex-wrap items-center gap-3 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-4 py-3">
@@ -1183,6 +1206,12 @@ export function DiscoveryObservationWorkbench({
               : "今日已退出";
             return `${t.name}（${todayLabel}）`;
           }).join("、")}
+        </div>
+      ) : null}
+
+      {concentration.length > 0 ? (
+        <div className="mb-4 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-4 py-2 text-[12px] text-[var(--text-secondary)]">
+          {concentration.join("；")}
         </div>
       ) : null}
 
