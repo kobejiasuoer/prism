@@ -800,6 +800,56 @@ class DiscoveryLifecyclePipelineTest(unittest.TestCase):
         result = fn({}, None)
         self.assertEqual(result, [])
 
+    def test_build_yesterday_trial_review_covers_upgraded_and_downgraded(self) -> None:
+        """Upgraded (trial→actionable) and downgraded (trial→observe) yesterday-trial
+        candidates must also be surfaced, not just continued/exited."""
+        dashboard_data = self.dashboard_data()
+        fn = dashboard_data.build_yesterday_trial_review
+
+        today_cards = {
+            "600010": {"code": "600010", "name": "试错升级", "triage_action_state": "actionable"},
+            "600011": {"code": "600011", "name": "试错降级", "triage_action_state": "observe"},
+            "600012": {"code": "600012", "name": "观察升级非试错", "triage_action_state": "actionable"},
+        }
+
+        display_lifecycle = {
+            "groups": {
+                "continued": [],
+                "exited": [],
+                "entered": [],
+                "handed_off": [],
+                "upgraded": [
+                    {"code": "600010", "name": "试错升级",
+                     "prev_suggested_action": "trial", "curr_suggested_action": "actionable"},
+                    {"code": "600012", "name": "观察升级非试错",
+                     "prev_suggested_action": "observe", "curr_suggested_action": "actionable"},
+                ],
+                "downgraded": [
+                    {"code": "600011", "name": "试错降级",
+                     "prev_suggested_action": "trial", "curr_suggested_action": "observe"},
+                ],
+            },
+        }
+
+        result = fn(today_cards, display_lifecycle)
+
+        # Should find 2 trial candidates: upgraded trial→actionable, downgraded trial→observe.
+        self.assertEqual(len(result), 2)
+        codes = {r["code"] for r in result}
+        self.assertEqual(codes, {"600010", "600011"})
+
+        # Upgraded trial→actionable: still_listed=True, today_action_state from card.
+        upgraded_trial = next(r for r in result if r["code"] == "600010")
+        self.assertEqual(upgraded_trial["yesterday_action"], "trial")
+        self.assertTrue(upgraded_trial["still_listed"])
+        self.assertEqual(upgraded_trial["today_action_state"], "actionable")
+
+        # Downgraded trial→observe: still_listed=True, today_action_state from card.
+        downgraded_trial = next(r for r in result if r["code"] == "600011")
+        self.assertEqual(downgraded_trial["yesterday_action"], "trial")
+        self.assertTrue(downgraded_trial["still_listed"])
+        self.assertEqual(downgraded_trial["today_action_state"], "observe")
+
     def test_opportunities_response_includes_yesterday_trial_review(self) -> None:
         """Integration test: build_opportunities_view emits yesterday_trial_review."""
         dashboard_data = self.dashboard_data()

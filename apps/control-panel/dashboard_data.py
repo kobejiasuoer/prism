@@ -8707,6 +8707,8 @@ def build_yesterday_trial_review(
 
     Reconstructs yesterday's trial pool from the lifecycle delta groups:
     - ``continued`` items carry ``prev_suggested_action`` (yesterday's action).
+    - ``upgraded`` items carry ``prev_suggested_action`` (trial → actionable).
+    - ``downgraded`` items carry ``prev_suggested_action`` (trial → observe/review/shadow).
     - ``exited`` items carry ``suggested_action`` from the previous snapshot.
 
     Returns a list of {code, name, yesterday_action, today_action_state, still_listed}.
@@ -8716,12 +8718,51 @@ def build_yesterday_trial_review(
 
     groups = (display_lifecycle.get("groups") or {})
     continued = groups.get("continued") or []
+    upgraded = groups.get("upgraded") or []
+    downgraded = groups.get("downgraded") or []
     exited = groups.get("exited") or []
 
     review: list[dict[str, Any]] = []
     seen_codes: set[str] = set()
 
     for item in continued:
+        code = item.get("code")
+        if not code or code in seen_codes:
+            continue
+        prev_action = str(item.get("prev_suggested_action") or "")
+        if prev_action != "trial":
+            continue
+        today = today_cards_by_code.get(code)
+        review.append({
+            "code": code,
+            "name": (today or item).get("name", code),
+            "yesterday_action": "trial",
+            "today_action_state": today["triage_action_state"] if today else "drop",
+            "still_listed": today is not None,
+        })
+        seen_codes.add(code)
+
+    # Upgraded and downgraded items also carry prev_suggested_action.
+    # A trial candidate that was upgraded (trial → actionable) or
+    # downgraded (trial → observe/review/shadow) must be surfaced too.
+    for item in upgraded:
+        code = item.get("code")
+        if not code or code in seen_codes:
+            continue
+        prev_action = str(item.get("prev_suggested_action") or "")
+        if prev_action != "trial":
+            continue
+        today = today_cards_by_code.get(code)
+        review.append({
+            "code": code,
+            "name": (today or item).get("name", code),
+            "yesterday_action": "trial",
+            "today_action_state": today["triage_action_state"] if today else "drop",
+            "still_listed": today is not None,
+        })
+        seen_codes.add(code)
+
+    for item in downgraded:
         code = item.get("code")
         if not code or code in seen_codes:
             continue
