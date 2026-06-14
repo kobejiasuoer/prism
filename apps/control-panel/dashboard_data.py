@@ -8941,6 +8941,7 @@ def build_opportunities_view(
         "generated_at": generated_at,
         "display_date": current_display_date(),
         "trade_date": trade_date,
+        "valve_status": gate.get("status") or "off",
         "expected_trade_date": readiness_for_opps.get("expected_trade_date"),
         "data_trade_date": readiness_for_opps.get("data_trade_date"),
         "readiness_mode": readiness_for_opps.get("readiness_mode"),

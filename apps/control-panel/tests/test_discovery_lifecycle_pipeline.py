@@ -326,5 +326,151 @@ class DiscoveryLifecyclePipelineTest(unittest.TestCase):
         self.assertEqual(readiness_mock.call_args.kwargs["formal_freshness"], [])
 
 
+    def test_opportunities_response_includes_valve_status(self) -> None:
+        """valve_status is surfaced from the execution gate status field."""
+        dashboard_data = self.dashboard_data()
+        lifecycle_context = {
+            "latest_lifecycle": None,
+            "active_lifecycle": None,
+            "display_lifecycle": {},
+            "lifecycle_note": "",
+        }
+
+        for gate_status in ("on", "limited", "off"):
+            with self.subTest(gate_status=gate_status):
+                screening_batch = {
+                    "candidates": [],
+                    "market_regime": {
+                        "execution_gate": {"status": gate_status, "allow_new_positions": gate_status != "off", "label": "test"},
+                    },
+                }
+                with patch.object(dashboard_data, "expected_trade_date", return_value="2026-06-01"), patch.object(
+                    dashboard_data,
+                    "load_decision_brief",
+                    side_effect=FileNotFoundError,
+                ), patch.object(
+                    dashboard_data,
+                    "load_watchlist_snapshot",
+                    side_effect=FileNotFoundError,
+                ), patch.object(
+                    dashboard_data,
+                    "load_screening_batch",
+                    return_value=screening_batch,
+                ), patch.object(
+                    dashboard_data,
+                    "load_confirmation",
+                    side_effect=FileNotFoundError,
+                ), patch.object(
+                    dashboard_data,
+                    "load_quality_status",
+                    side_effect=FileNotFoundError,
+                ), patch.object(
+                    dashboard_data,
+                    "resolve_lifecycle_context",
+                    return_value=lifecycle_context,
+                ), patch.object(
+                    dashboard_data,
+                    "build_review_learning_memory_index",
+                    return_value={"cases": [], "patterns": []},
+                ), patch.object(
+                    dashboard_data,
+                    "compute_readiness",
+                    return_value={
+                        "expected_trade_date": "2026-06-01",
+                        "data_trade_date": "2026-06-01",
+                        "brief_is_live": False,
+                        "trust_level": {"level": "unavailable"},
+                    },
+                ), patch.object(
+                    dashboard_data,
+                    "load_account_book",
+                    return_value={},
+                ), patch.object(
+                    dashboard_data,
+                    "load_today_action_decision_store",
+                    return_value={},
+                ), patch.object(
+                    dashboard_data,
+                    "build_dataset_freshness_rows",
+                    return_value=[],
+                ), patch.object(
+                    dashboard_data,
+                    "build_formal_freshness_rows",
+                    return_value=[],
+                ):
+                    payload = dashboard_data.build_opportunities_view()
+
+                self.assertIn("valve_status", payload)
+                self.assertEqual(payload["valve_status"], gate_status)
+
+    def test_opportunities_valve_status_defaults_to_off_when_gate_missing(self) -> None:
+        """When execution gate is absent, valve_status defaults to 'off'."""
+        dashboard_data = self.dashboard_data()
+        lifecycle_context = {
+            "latest_lifecycle": None,
+            "active_lifecycle": None,
+            "display_lifecycle": {},
+            "lifecycle_note": "",
+        }
+
+        with patch.object(dashboard_data, "expected_trade_date", return_value="2026-06-01"), patch.object(
+            dashboard_data,
+            "load_decision_brief",
+            side_effect=FileNotFoundError,
+        ), patch.object(
+            dashboard_data,
+            "load_watchlist_snapshot",
+            side_effect=FileNotFoundError,
+        ), patch.object(
+            dashboard_data,
+            "load_screening_batch",
+            side_effect=FileNotFoundError,
+        ), patch.object(
+            dashboard_data,
+            "load_confirmation",
+            side_effect=FileNotFoundError,
+        ), patch.object(
+            dashboard_data,
+            "load_quality_status",
+            side_effect=FileNotFoundError,
+        ), patch.object(
+            dashboard_data,
+            "resolve_lifecycle_context",
+            return_value=lifecycle_context,
+        ), patch.object(
+            dashboard_data,
+            "build_review_learning_memory_index",
+            return_value={"cases": [], "patterns": []},
+        ), patch.object(
+            dashboard_data,
+            "compute_readiness",
+            return_value={
+                "expected_trade_date": "2026-06-01",
+                "data_trade_date": None,
+                "brief_is_live": False,
+                "trust_level": {"level": "unavailable"},
+            },
+        ), patch.object(
+            dashboard_data,
+            "load_account_book",
+            return_value={},
+        ), patch.object(
+            dashboard_data,
+            "load_today_action_decision_store",
+            return_value={},
+        ), patch.object(
+            dashboard_data,
+            "build_dataset_freshness_rows",
+            return_value=[],
+        ), patch.object(
+            dashboard_data,
+            "build_formal_freshness_rows",
+            return_value=[],
+        ):
+            payload = dashboard_data.build_opportunities_view()
+
+        self.assertEqual(payload["valve_status"], "off")
+
+
 if __name__ == "__main__":
     unittest.main()
