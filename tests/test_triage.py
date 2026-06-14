@@ -11,6 +11,7 @@ from screener.triage import (
     VALVE_ON,
     _RISK_BLOCK,
     _RISK_DEGRADE,
+    assign_theme_ranks,
     compute_action_state,
     compute_gate_blocker,
     compute_gate_state,
@@ -344,3 +345,29 @@ def test_triage_fields_defaults_missing_card_keys():
     )
     assert out["triage_gate_state"] == "open"
     assert out["triage_action_state"] == "watch"
+
+
+# ---- assign_theme_ranks tests (Task C1a) ----
+
+
+def test_assign_theme_ranks_orders_by_score_within_theme():
+    cards = [
+        {"code": "A", "theme": "AI", "priority_score": 50},
+        {"code": "B", "theme": "AI", "priority_score": 80},
+        {"code": "C", "theme": "AI", "priority_score": 65},
+        {"code": "D", "theme": "有色", "priority_score": 90},
+    ]
+    ranked = assign_theme_ranks(cards)
+    by_code = {c["code"]: c["triage_rank_in_theme"] for c in ranked}
+    assert by_code == {"A": 3, "B": 1, "C": 2, "D": 1}
+
+
+def test_assign_theme_ranks_handles_missing_theme_and_score():
+    cards = [
+        {"code": "X"},  # no theme, no score
+        {"code": "Y", "theme": "AI", "priority_score": 30},
+    ]
+    ranked = assign_theme_ranks(cards)
+    by_code = {c["code"]: c.get("triage_rank_in_theme") for c in ranked}
+    # X falls into the "—" theme bucket, rank 1; Y is rank 1 in AI
+    assert by_code == {"X": 1, "Y": 1}

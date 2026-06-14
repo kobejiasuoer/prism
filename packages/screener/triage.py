@@ -126,3 +126,18 @@ def triage_fields_for_card(
         "triage_gate_blocker": blocker,
         "triage_legacy": bool(legacy),
     }
+
+
+def assign_theme_ranks(cards):
+    """Stamp triage_rank_in_theme (1 = strongest) within each theme, by priority_score.
+
+    Uses existing priority_score only (vs-index RS is Stage 2). Mutates and returns cards.
+    """
+    by_theme = {}
+    for card in cards:
+        by_theme.setdefault(card.get("theme") or "—", []).append(card)
+    for group in by_theme.values():
+        group.sort(key=lambda c: -float(c.get("priority_score") or 0))
+        for idx, card in enumerate(group, start=1):
+            card["triage_rank_in_theme"] = idx
+    return cards

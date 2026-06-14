@@ -9023,6 +9023,15 @@ def build_opportunities_view(
                     legacy=not _card.get("suggested_action"),
                 )
             )
+    # --- Stamp theme-internal RS + theme_in_play (Discovery Triage Funnel C1a) ---
+    from screener.triage import assign_theme_ranks as _assign_theme_ranks  # type: ignore  # noqa: E402
+    _all_cards = [
+        _card for _group in (response.get("groups") or []) for _card in _group.get("cards", [])
+    ]
+    _assign_theme_ranks(_all_cards)
+    for _card in _all_cards:
+        _theme_phase = str(_card.get("theme_phase_value") or "").strip()
+        _card["triage_theme_in_play"] = _theme_phase not in ("", "exited")
     return response
 
 

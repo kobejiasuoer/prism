@@ -606,6 +606,143 @@ class DiscoveryLifecyclePipelineTest(unittest.TestCase):
         eliminated_card = next(c for c in all_cards if c.get("code") == "600003")
         self.assertEqual(eliminated_card["triage_action_state"], "drop")
 
+    def test_opportunities_cards_carry_theme_rank(self) -> None:
+        """Every candidate card carries triage_rank_in_theme and triage_theme_in_play (C1a)."""
+        dashboard_data = self.dashboard_data()
+        lifecycle_context = {
+            "latest_lifecycle": None,
+            "active_lifecycle": None,
+            "display_lifecycle": {},
+            "lifecycle_note": "",
+        }
+
+        # Two candidates sharing the same theme with distinct priority_scores.
+        screening_batch = {
+            "candidates": [
+                {
+                    "code": "700001",
+                    "name": "AI龙头",
+                    "screening_status": "approved",
+                    "suggested_action": "actionable",
+                    "risk_level": "info",
+                    "score": 92,
+                    "priority_score": 92,
+                    "themes": ["AI"],
+                },
+                {
+                    "code": "700002",
+                    "name": "AI跟随",
+                    "screening_status": "approved",
+                    "suggested_action": "trial",
+                    "risk_level": "info",
+                    "score": 65,
+                    "priority_score": 65,
+                    "themes": ["AI"],
+                },
+                {
+                    "code": "700003",
+                    "name": "有色龙头",
+                    "screening_status": "approved",
+                    "suggested_action": "actionable",
+                    "risk_level": "info",
+                    "score": 88,
+                    "priority_score": 88,
+                    "themes": ["有色"],
+                },
+            ],
+            "market_regime": {
+                "execution_gate": {
+                    "status": "on",
+                    "allow_new_positions": True,
+                    "label": "开放",
+                },
+            },
+        }
+        confirmation = {"confirmed": [], "fresh_candidates": [], "downgraded": []}
+
+        with patch.object(dashboard_data, "expected_trade_date", return_value="2026-06-14"), patch.object(
+            dashboard_data,
+            "load_decision_brief",
+            side_effect=FileNotFoundError,
+        ), patch.object(
+            dashboard_data,
+            "load_watchlist_snapshot",
+            side_effect=FileNotFoundError,
+        ), patch.object(
+            dashboard_data,
+            "load_screening_batch",
+            return_value=screening_batch,
+        ), patch.object(
+            dashboard_data,
+            "load_confirmation",
+            return_value=confirmation,
+        ), patch.object(
+            dashboard_data,
+            "load_quality_status",
+            side_effect=FileNotFoundError,
+        ), patch.object(
+            dashboard_data,
+            "resolve_lifecycle_context",
+            return_value=lifecycle_context,
+        ), patch.object(
+            dashboard_data,
+            "build_review_learning_memory_index",
+            return_value={"cases": [], "patterns": []},
+        ), patch.object(
+            dashboard_data,
+            "compute_readiness",
+            return_value={
+                "expected_trade_date": "2026-06-14",
+                "data_trade_date": "2026-06-14",
+                "brief_is_live": True,
+                "trust_level": {
+                    "level": "trusted",
+                    "can_trade_live": True,
+                },
+            },
+        ), patch.object(
+            dashboard_data,
+            "load_account_book",
+            return_value={},
+        ), patch.object(
+            dashboard_data,
+            "load_today_action_decision_store",
+            return_value={},
+        ), patch.object(
+            dashboard_data,
+            "build_dataset_freshness_rows",
+            return_value=[],
+        ), patch.object(
+            dashboard_data,
+            "build_formal_freshness_rows",
+            return_value=[],
+        ):
+            payload = dashboard_data.build_opportunities_view()
+
+        all_cards = [c for g in payload.get("groups") or [] for c in g.get("cards", [])]
+        self.assertGreaterEqual(len(all_cards), 3, f"Expected >= 3 cards, got {len(all_cards)}")
+
+        # Every card must carry both new fields.
+        for card in all_cards:
+            self.assertIn("triage_rank_in_theme", card)
+            self.assertIsInstance(card["triage_rank_in_theme"], int)
+            self.assertIn("triage_theme_in_play", card)
+            self.assertIsInstance(card["triage_theme_in_play"], bool)
+
+        # Verify rank ordering within the shared "AI" theme.
+        ai_cards = [c for c in all_cards if c.get("theme") == "AI"]
+        self.assertGreaterEqual(len(ai_cards), 2, "Expected >= 2 AI cards for rank check")
+        ranks = sorted(c["triage_rank_in_theme"] for c in ai_cards)
+        self.assertEqual(ranks, [1, 2])
+        # Highest priority_score gets rank 1.
+        best = max(ai_cards, key=lambda c: c.get("priority_score") or 0)
+        self.assertEqual(best["triage_rank_in_theme"], 1)
+
+        # "有色" theme only has one card, so rank is 1.
+        metal_cards = [c for c in all_cards if c.get("theme") == "有色"]
+        self.assertEqual(len(metal_cards), 1)
+        self.assertEqual(metal_cards[0]["triage_rank_in_theme"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
