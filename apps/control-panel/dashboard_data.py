@@ -14538,7 +14538,7 @@ def build_portfolio_account_view(
         {
             "label": "可用现金",
             "value": f"¥{cash_balance:,.2f}",
-            "detail": f"起始 ¥{account_view['starting_cash']:,.2f}",
+            "detail": f"本金 ¥{account_view['starting_cash'] + account_view['deposits_total']:,.2f}",
             "tone": "risk" if cash_balance < 0 else "info",
         },
         {
