@@ -4,10 +4,12 @@ from .akshare import AkshareProvider
 from .eastmoney import EastmoneyProvider
 from .sina import SinaProvider
 from .ths import THSProvider
+from .tushare import TushareProvider
 
 __all__ = [
     "AkshareProvider",
     "EastmoneyProvider",
     "SinaProvider",
     "THSProvider",
+    "TushareProvider",
 ]

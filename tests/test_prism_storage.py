@@ -6,6 +6,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from unittest.mock import Mock
 
 from prism_storage import AppStateRepository, ArtifactRepository, TaskRunRepository
 from prism_storage import WatchlistConfigRepository
@@ -16,6 +17,7 @@ from prism_storage.history import export_history, sanitize_for_history
 from prism_storage.json_store import atomic_write_json
 from prism_storage.mirror import mirror_analyzer_artifacts, mirror_file_to_artifact_store
 from prism_storage.paths import command_brief_paths, control_panel_run_paths
+import prism_storage.repositories as repositories
 from prism_storage.sqlite_store import connection
 
 
@@ -96,6 +98,48 @@ def test_task_run_repository_reads_multiple_legacy_dirs(tmp_path):
         "new_run",
         "legacy_run",
     ]
+
+
+def test_task_run_repository_skips_unchanged_legacy_metadata(tmp_path, monkeypatch):
+    db_path = tmp_path / "runtime" / "prism.db"
+    runs_dir = tmp_path / "runs"
+    runs_dir.mkdir()
+    legacy_path = runs_dir / "command_brief_1.json"
+    atomic_write_json(
+        legacy_path,
+        {
+            "task_id": "command_brief_1",
+            "task_name": "command_brief",
+            "title": "first",
+            "status": "success",
+            "started_at": "2026-04-21 09:00:00",
+            "command": [],
+        },
+    )
+    repo = TaskRunRepository(db_path)
+
+    assert repo.list(legacy_dir=runs_dir, limit=1)[0]["title"] == "first"
+
+    original_load_json = repositories.load_json_or_default
+    load_json = Mock(side_effect=AssertionError("unchanged legacy run should not be read again"))
+    monkeypatch.setattr(repositories, "load_json_or_default", load_json)
+    assert repo.list(legacy_dir=runs_dir, limit=1)[0]["title"] == "first"
+    load_json.assert_not_called()
+
+    time.sleep(0.01)
+    atomic_write_json(
+        legacy_path,
+        {
+            "task_id": "command_brief_1",
+            "task_name": "command_brief",
+            "title": "updated",
+            "status": "success",
+            "started_at": "2026-04-21 09:00:00",
+            "command": [],
+        },
+    )
+    monkeypatch.setattr(repositories, "load_json_or_default", original_load_json)
+    assert repo.list(legacy_dir=runs_dir, limit=1)[0]["title"] == "updated"
 
 
 def test_artifact_repository_registers_workspace_relative_file(tmp_path):

@@ -9,10 +9,10 @@ export function StockCard({ stock }: { stock: StockListCard }) {
   const color = toneColor(stock.tone);
   const href = stock.detail_url || (stock.code ? `/stock/${stock.code}` : "#");
   const instruction =
-    stock.observation_instruction ||
+    stock.observation_instruction?.replace(/(^|；)升级：/g, "$1观察升级：") ||
     [
       stock.name ? `${stock.name}：只观察，不追。` : "只观察，不追。",
-      stock.upgrade_condition ? `升级：${stock.upgrade_condition}` : "",
+      stock.upgrade_condition ? `观察升级：${stock.upgrade_condition}` : "",
       stock.invalid_condition ? `失效：${stock.invalid_condition}` : "",
     ]
       .filter(Boolean)

@@ -73,6 +73,10 @@ def _dataset_repository():
 
 
 def _today_trade_date() -> str:
+    for env_name in ("PRISM_EXPECTED_TRADE_DATE", "TRADE_DATE", "RUN_DATE"):
+        value = str(os.environ.get(env_name) or "").strip()
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", value):
+            return value
     return datetime.now().strftime("%Y-%m-%d")
 
 
@@ -1697,6 +1701,9 @@ def write_watchlist_quality_gate(today, snapshot_path, records):
 
     payload = {
         "checked_at": checked_at,
+        "trade_date": today,
+        "checked_trade_date": today,
+        "expected_trade_date": today,
         "mode": "watchlist",
         "validation_status": "ok" if not errors else "failed",
         "errors": errors,
@@ -2017,7 +2024,7 @@ def main():
 
     selected_codes = set(args.codes or [])
     config = load_config(selected_codes=selected_codes if selected_codes else None)
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = _today_trade_date()
     previous_snapshots = load_previous_snapshots(
         today,
         target_codes={stock["code"] for stock in config["stocks"]},

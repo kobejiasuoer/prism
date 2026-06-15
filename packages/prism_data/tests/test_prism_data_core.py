@@ -28,12 +28,13 @@ from prism_data.repositories import DatasetRepository  # noqa: E402
 
 
 class FakeProvider:
-    def __init__(self, name: str, *, status: DatasetStatus = DatasetStatus.OK, data=None, trade_date: str = "2026-05-07", live_small_allowed: bool = True):
+    def __init__(self, name: str, *, status: DatasetStatus = DatasetStatus.OK, data=None, trade_date: str = "2026-05-07", live_small_allowed: bool = True, extra=None):
         self.name = name
         self.status = status
         self.data = data if data is not None else {"code": "600690", "price": 27.34}
         self.trade_date = trade_date
         self.live_small_allowed = live_small_allowed
+        self.extra = extra or {}
 
     def fetch_quote(self, code: str, **kwargs):
         now = datetime.now()
@@ -50,6 +51,7 @@ class FakeProvider:
             error=None if self.status == DatasetStatus.OK else "boom",
             payload_hash="",
             live_small_allowed=self.live_small_allowed,
+            extra=dict(self.extra),
         )
 
     def fetch_quotes_batch(self, codes: list[str], **kwargs):
@@ -66,6 +68,7 @@ class FakeProvider:
             asof=now,
             ttl_seconds=900,
             live_small_allowed=True,
+            extra=dict(self.extra),
         )
 
     def fetch_kline(self, code: str, period: str = "daily", count: int = 120, **kwargs):
@@ -83,6 +86,7 @@ class FakeProvider:
             ttl_seconds=3600,
             error=None if self.status == DatasetStatus.OK else "boom",
             live_small_allowed=self.live_small_allowed,
+            extra=dict(self.extra),
         )
 
 
@@ -132,7 +136,9 @@ class ContractsTests(unittest.TestCase):
         execution = get_dataset_definition("execution.flags")
         self.assertIsNotNone(execution)
         self.assertEqual(execution.source_lane, "execution")
-        self.assertEqual(execution.primary_provider, "ricequant")
+        self.assertEqual(execution.primary_provider, "tushare")
+        self.assertEqual(execution.authority_provider, "tushare")
+        self.assertIn("ricequant", execution.fallback_providers)
         self.assertIn("joinquant", execution.fallback_providers)
 
         benchmark = get_dataset_definition("benchmark.index_daily")
@@ -223,6 +229,138 @@ class GatewayTests(unittest.TestCase):
             self.assertFalse(result.manifest["source_authority_ready"])
             self.assertFalse(result.manifest["formal_decision_allowed"])
             self.assertIn("target_authority_not_in_use:tushare", result.manifest["authority_flags"])
+
+    def test_gateway_isolates_non_target_authority_from_formal_request_key(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repository = DatasetRepository(tmpdir)
+            gateway = DataGateway(
+                providers={
+                    "sina": FakeProvider(
+                        "sina",
+                        data=[{"code": "600690", "trade_date": "2026-05-07", "close": 27.34}],
+                    ),
+                },
+                repository=repository,
+            )
+
+            result = gateway.fetch_kline("600690", trade_date="2026-05-07", key="600690", provider_name="sina")
+            canonical = repository.load_manifest("bars.daily", "2026-05-07", "600690")
+            display = repository.load_manifest("bars.daily", "2026-05-07", "600690__sina__display")
+
+            self.assertEqual(result.manifest["request_key"], "600690__sina__display")
+            self.assertIsNone(canonical)
+            self.assertIsNotNone(display)
+            self.assertTrue(display["isolated_non_authority_result"])
+            self.assertEqual(display["formal_request_key"], "600690")
+
+    def test_gateway_allows_explicit_tushare_formal_bars(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repository = DatasetRepository(tmpdir)
+            gateway = DataGateway(
+                providers={
+                    "tushare": FakeProvider(
+                        "tushare",
+                        data=[{"code": "sh600690", "trade_date": "2026-05-07", "close": 27.34}],
+                        extra={"authority_provider_override": "tushare"},
+                    ),
+                },
+                repository=repository,
+            )
+            result = gateway.fetch_kline(
+                "600690",
+                trade_date="2026-05-07",
+                key="600690",
+                allow_fallback=False,
+                provider_name="tushare",
+            )
+            self.assertEqual(result.manifest["dataset"], "bars.daily")
+            self.assertEqual(result.manifest["provider"], "tushare")
+            self.assertEqual(result.manifest["authority_provider"], "tushare")
+            self.assertEqual(result.manifest["target_authority_provider"], "tushare")
+            self.assertTrue(result.manifest["source_authority_ready"])
+            self.assertTrue(result.manifest["formal_decision_allowed"])
+            self.assertNotIn("target_authority_not_in_use:tushare", result.manifest["authority_flags"])
+
+    def test_gateway_preserves_existing_formal_manifest_from_display_overwrite(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repository = DatasetRepository(tmpdir)
+            gateway = DataGateway(
+                providers={
+                    "tushare": FakeProvider(
+                        "tushare",
+                        data=[{"code": "sh600690", "trade_date": "2026-05-07", "close": 27.34}],
+                        extra={"authority_provider_override": "tushare"},
+                    ),
+                    "sina": FakeProvider(
+                        "sina",
+                        data=[{"code": "600690", "trade_date": "2026-05-07", "close": 27.34}],
+                    ),
+                },
+                repository=repository,
+            )
+            formal = gateway.fetch_kline(
+                "600690",
+                trade_date="2026-05-07",
+                key="600690",
+                provider_name="tushare",
+            )
+            display = gateway.fetch_kline(
+                "600690",
+                trade_date="2026-05-07",
+                key="600690",
+                provider_name="sina",
+            )
+            preserved = repository.load_manifest("bars.daily", "2026-05-07", "600690")
+
+            self.assertEqual(formal.manifest["provider"], "tushare")
+            self.assertEqual(display.manifest["provider"], "sina")
+            self.assertTrue(display.manifest["preserved_existing_formal_manifest"])
+            self.assertEqual(display.manifest["request_key"], "600690__sina__display")
+            self.assertEqual(preserved["provider"], "tushare")
+            self.assertTrue(preserved["formal_decision_allowed"])
+
+    def test_failed_refresh_does_not_overwrite_existing_formal_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repository = DatasetRepository(tmpdir)
+            gateway = DataGateway(
+                providers={
+                    "tushare": FakeProvider(
+                        "tushare",
+                        data=[{"code": "sh600690", "trade_date": "2026-05-07", "close": 27.34}],
+                        extra={"authority_provider_override": "tushare"},
+                    ),
+                },
+                repository=repository,
+            )
+            ok = gateway.fetch_kline(
+                "600690",
+                trade_date="2026-05-07",
+                key="600690",
+                allow_fallback=False,
+                provider_name="tushare",
+            )
+            self.assertTrue(ok.manifest["formal_decision_allowed"])
+
+            gateway.providers["tushare"] = FakeProvider(
+                "tushare",
+                status=DatasetStatus.UNAVAILABLE,
+                trade_date="2026-05-07",
+                extra={"authority_provider_override": "tushare"},
+            )
+            failed = gateway.fetch_kline(
+                "600690",
+                trade_date="2026-05-07",
+                key="600690",
+                allow_fallback=False,
+                provider_name="tushare",
+            )
+
+            self.assertEqual(failed.provider_result.status, DatasetStatus.UNAVAILABLE)
+            self.assertTrue(failed.manifest["preserved_existing_formal_manifest"])
+            persisted = repository.load_manifest("bars.daily", "2026-05-07", "600690")
+            self.assertIsNotNone(persisted)
+            self.assertEqual(persisted["status"], "ok")
+            self.assertTrue(persisted["formal_decision_allowed"])
 
     def test_pipeline_manifest_requires_group_presence(self) -> None:
         manifest = build_pipeline_manifest(

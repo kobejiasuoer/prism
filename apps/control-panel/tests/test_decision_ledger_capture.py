@@ -217,6 +217,34 @@ class TodayActionCaptureTests(unittest.TestCase):
         self.assertEqual(rb["recommendation"]["action"], "hold")
         self.assertEqual(ra["decision_id"], rb["decision_id"])
 
+    def test_build_decision_record_carries_factor_snapshot(self) -> None:
+        record = self.ledger.build_decision_record(
+            trade_date="2026-05-15",
+            code="sh600519",
+            name="贵州茅台",
+            lane="screening",
+            surface="today_action",
+            action_key="screening:600519",
+            action="observe",
+            factor_snapshot={
+                "tushare_score": 72.0,
+                "factor_snapshot": {"valuation": {"pe_ttm": 28.0}},
+            },
+        )
+        self.assertEqual(record["factor_snapshot"]["tushare_score"], 72.0)
+
+    def test_build_decision_record_factor_snapshot_defaults_none(self) -> None:
+        record = self.ledger.build_decision_record(
+            trade_date="2026-05-15",
+            code="sh600519",
+            name="贵州茅台",
+            lane="screening",
+            surface="today_action",
+            action_key="screening:600519",
+            action="observe",
+        )
+        self.assertIsNone(record["factor_snapshot"])
+
     def test_build_decision_record_from_today_item_basic_fields(self) -> None:
         item = _make_action_item(
             key="watchlist:600690",
@@ -404,6 +432,41 @@ class TodayActionCaptureTests(unittest.TestCase):
         codes = sorted(rec["stock"]["code"] for rec in stored)
         self.assertEqual(codes, ["sh600690", "sz000001"])
 
+    def test_capture_persists_candidate_factor_snapshot_payload(self) -> None:
+        item = _make_action_item(
+            key="screening:600519",
+            title="贵州茅台 600519",
+            status="重点观察",
+            detail="质量因子较强，先观察触发。",
+            lane_key="aggressive",
+        )
+        item.update({
+            "tushare_score": 72.0,
+            "data_completeness": 0.92,
+            "factor_tags": ["高ROE", "主力净流入"],
+            "factor_risk_flags": ["大宗折价"],
+            "tushare_score_breakdown": {"quality": {"score": 90}},
+            "factor_snapshot": {"valuation": {"pe_ttm": 28.0}},
+            "trade_date_used": "2026-05-15",
+            "risk_level": "warn",
+            "degrade_reason": "大宗折价仅提示，不硬阻断",
+        })
+
+        summary = self.ledger.capture_today_action_queue(_today_view_with_items(items=[item]))
+
+        self.assertEqual(summary["captured"], 1)
+        stored = self.ledger.load_decisions("2026-05-15")[0]
+        factors = stored["factor_snapshot"]
+        self.assertEqual(factors["tushare_score"], 72.0)
+        self.assertEqual(factors["data_completeness"], 0.92)
+        self.assertEqual(factors["factor_tags"], ["高ROE", "主力净流入"])
+        self.assertEqual(factors["risk_flags"], ["大宗折价"])
+        self.assertEqual(factors["tushare_score_breakdown"]["quality"]["score"], 90)
+        self.assertEqual(factors["factor_snapshot"]["valuation"]["pe_ttm"], 28.0)
+        self.assertEqual(factors["trade_date_used"], "2026-05-15")
+        self.assertEqual(factors["risk_level"], "warn")
+        self.assertEqual(factors["degrade_reason"], "大宗折价仅提示，不硬阻断")
+
     def test_capture_is_idempotent_on_rerun(self) -> None:
         view = _today_view_with_items(
             items=[
@@ -460,6 +523,62 @@ class TodayActionCaptureTests(unittest.TestCase):
         self.assertEqual(summary["decision_ids"], [])
         # No file written for an empty no-op.
         self.assertFalse((self.ledger_root / "decisions" / "2026-05-15.json").exists())
+
+    def test_capture_opportunity_v2_tracking_records_for_review_loop(self) -> None:
+        view = _today_view_with_items(items=[])
+        view["opportunity_v2_tracking"] = {
+            "schema_version": "opportunity_v2_tracking.1",
+            "generated_at": "2026-05-15 10:00:00",
+            "trade_date": "2026-05-15",
+            "source_artifact": "/tmp/prism/screening.json",
+            "records": [
+                {
+                    "code": "600001",
+                    "name": "样本股份",
+                    "trade_date": "2026-05-15",
+                    "suggested_action": "trial",
+                    "action_label": "试错待触发",
+                    "thesis": "AI 主线回踩后出现承接结构。",
+                    "trigger": "站回 12.30 且资金不转负",
+                    "invalidation": "跌破 11.80 取消",
+                    "confidence": 0.72,
+                    "hard_gate_block_reason": "仓位上限只允许试错",
+                    "hard_gate_max_action": "trial",
+                    "source_artifact": "/tmp/prism/screening.json",
+                    "judge_source": "deterministic_baseline",
+                    "ai_status": "not_configured",
+                    "ai_summary": {
+                        "status": "not_configured",
+                        "label": "AI 未配置，fallback 到 deterministic baseline",
+                        "detail": "缺少 provider/key/model，V2 自动使用 deterministic baseline。",
+                    },
+                    "ai_delta": {"changed": False, "changed_fields": []},
+                    "market_phase": "selective_risk_on",
+                    "theme_phase": "mainline_diverging",
+                    "stock_role": "acceptance_candidate",
+                    "opportunity_type": "pullback_acceptance",
+                }
+            ],
+        }
+
+        summary = self.ledger.capture_today_action_queue(view)
+
+        self.assertEqual(summary["captured"], 1)
+        self.assertEqual(summary["opportunity_v2"]["captured"], 1)
+        stored = self.ledger.load_decisions("2026-05-15")
+        self.assertEqual(len(stored), 1)
+        record = stored[0]
+        self.assertEqual(record["source"]["lane"], "opportunity_v2")
+        self.assertEqual(record["source"]["surface"], "opportunity_v2_tracking")
+        self.assertEqual(record["recommendation"]["action"], "trial_buy")
+        self.assertEqual(record["recommendation"]["action_label"], "试错待触发")
+        self.assertIn("承接结构", record["recommendation"]["main_conclusion"])
+        contract = record["decision_contract"]
+        self.assertEqual(contract["suggested_action"], "trial")
+        self.assertEqual(contract["hard_gate_block_reason"], "仓位上限只允许试错")
+        self.assertEqual(contract["opportunity_type"], "pullback_acceptance")
+        self.assertEqual(contract["ai_status"], "not_configured")
+        self.assertEqual(contract["ai_summary"]["status"], "not_configured")
 
     def test_capture_does_not_overwrite_existing_recommendation(self) -> None:
         """If the morning capture writes a record and the midday view

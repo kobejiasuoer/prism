@@ -122,16 +122,29 @@ def migrate(conn: sqlite3.Connection) -> None:
             command_json TEXT NOT NULL,
             log_path TEXT,
             meta_path TEXT,
+            source_path TEXT,
             payload_json TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             source_mtime_ns INTEGER NOT NULL DEFAULT 0
         )
         """
     )
+    task_run_columns = {
+        str(row["name"])
+        for row in conn.execute("PRAGMA table_info(task_runs)").fetchall()
+    }
+    if "source_path" not in task_run_columns:
+        conn.execute("ALTER TABLE task_runs ADD COLUMN source_path TEXT")
     conn.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_task_runs_task_started
         ON task_runs(task_name, started_at DESC)
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_task_runs_source_path
+        ON task_runs(source_path)
         """
     )
     conn.execute(

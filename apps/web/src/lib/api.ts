@@ -4,33 +4,48 @@ import type {
   AskResponse,
   AskSuggestResponse,
   DecisionLedgerAttributionDraftResponse,
+  DecisionLedgerAutoReviewResponse,
+  DecisionLedgerCalibrationDetailResponse,
   DecisionLedgerCalibrationResponse,
-  DecisionLedgerDetailResponse,
   DecisionLedgerHealthResponse,
+  DecisionLedgerLearningLoopResponse,
   DecisionLedgerRecentResponse,
   DecisionLedgerReviewCaseSavePayload,
   DecisionLedgerReviewCaseSaveResponse,
   DecisionLedgerReviewCaseWorkbench,
-  DecisionLedgerReviewCasesResponse,
   DecisionLedgerStockResponse,
-  DecisionLedgerSummaryResponse,
+  DataAssetsStatus,
   DecisionValue,
+  FormalDataStatus,
   HealthResponse,
   OpportunitiesData,
   OverviewData,
   ParametersResponse,
   PortfolioAccountResponse,
+  PortfolioHoldingReviewsResponse,
   PreviewPayload,
-  ReadinessPayload,
   RefreshStatus,
   RefreshTriggerResponse,
   ReviewData,
-  ReviewDetailData,
+  ReviewEvidenceResponse,
+  ReviewResearchResponse,
   RunItem,
-  SchedulerStatus,
-  StockProfileData,
+  ShellStatusResponse,
+  ShadowCalibrationSummary,
+  ShadowReplayReviewSummary,
+  StockProfileDetailData,
+  StockProfileEvidenceResponse,
+  StockProfileFormalDataResponse,
+  StockProfileSecondaryResponse,
+  StockLearningScorecard,
+  StockProfileSummaryData,
+  StockProfileTodayActionResponse,
   TaskRunResponse,
-  TodayData,
+  TodayActionDecision,
+  TodayActionContractsData,
+  TodayActionsData,
+  TodayCommandBriefDetailData,
+  TodaySummaryData,
   WatchlistData,
   WatchlistManageResponse,
   WatchlistManagerResponse,
@@ -49,16 +64,6 @@ export class ApiError extends Error {
 }
 
 type JsonBody = Record<string, unknown> | unknown[];
-
-const backendOrigin =
-  process.env.NEXT_PUBLIC_PRISM_BACKEND_ORIGIN || process.env.PRISM_BACKEND_ORIGIN || "";
-
-function resolveApiUrl(path: string) {
-  if (!backendOrigin) {
-    return path;
-  }
-  return new URL(path, backendOrigin).toString();
-}
 
 async function readPayload(response: Response) {
   const text = await response.text();
@@ -112,7 +117,7 @@ async function fetchJson<T>(path: string, init?: RequestInit & { json?: JsonBody
     request.body = JSON.stringify(init.json);
   }
 
-  const response = await fetch(resolveApiUrl(path), request);
+  const response = await fetch(path, request);
   const payload = await readPayload(response);
 
   if (!response.ok) {
@@ -123,7 +128,7 @@ async function fetchJson<T>(path: string, init?: RequestInit & { json?: JsonBody
 }
 
 async function fetchText(path: string): Promise<string> {
-  const response = await fetch(resolveApiUrl(path));
+  const response = await fetch(path);
   const text = await response.text();
 
   if (!response.ok) {
@@ -134,17 +139,42 @@ async function fetchText(path: string): Promise<string> {
 }
 
 export const api = {
-  getToday() {
-    return fetchJson<TodayData>("/api/today");
+  getShellStatus() {
+    return fetchJson<ShellStatusResponse>("/api/shell/status");
   },
-  getOverview() {
-    return fetchJson<OverviewData>("/api/overview");
+  getTodaySummary(options: { fresh?: boolean } = {}) {
+    return fetchJson<TodaySummaryData>(`/api/today/summary${options.fresh ? "?fresh=1" : ""}`);
   },
-  getWatchlist() {
-    return fetchJson<WatchlistData>("/api/watchlist");
+  getTodayActions(options: { fresh?: boolean } = {}) {
+    return fetchJson<TodayActionsData>(`/api/today/actions${options.fresh ? "?fresh=1" : ""}`);
   },
-  getWatchlistManager() {
-    return fetchJson<WatchlistManagerResponse>("/api/watchlist/manage");
+  getTodayActionContracts(options: { fresh?: boolean } = {}) {
+    return fetchJson<TodayActionContractsData>(`/api/today/action-contracts${options.fresh ? "?fresh=1" : ""}`);
+  },
+  getTodayCommandBriefDetail(options: { fresh?: boolean } = {}) {
+    return fetchJson<TodayCommandBriefDetailData>(`/api/today/command-brief-detail${options.fresh ? "?fresh=1" : ""}`);
+  },
+  getOverview(options: { fresh?: boolean; compact?: boolean } = {}) {
+    const params = new URLSearchParams();
+    if (options.fresh) {
+      params.set("fresh", "1");
+    }
+    if (options.compact === false) {
+      params.set("compact", "0");
+    }
+    const query = params.toString();
+    return fetchJson<OverviewData>(`/api/overview${query ? `?${query}` : ""}`);
+  },
+  getWatchlist(options: { fresh?: boolean } = {}) {
+    const params = new URLSearchParams();
+    if (options.fresh) {
+      params.set("fresh", "1");
+    }
+    const query = params.toString();
+    return fetchJson<WatchlistData>(`/api/watchlist${query ? `?${query}` : ""}`);
+  },
+  getWatchlistManager(options: { fresh?: boolean } = {}) {
+    return fetchJson<WatchlistManagerResponse>(`/api/watchlist/manage${options.fresh ? "?fresh=1" : ""}`);
   },
   addWatchlistStock(payload: { code: string; name?: string; trigger_refresh?: boolean }) {
     return fetchJson<WatchlistManageResponse>("/api/watchlist/manage/add", {
@@ -164,17 +194,48 @@ export const api = {
       json: payload,
     });
   },
-  getWatchlistDetail(code: string) {
-    return fetchJson<StockProfileData["watchlist"]>(`/api/watchlist/${encodeURIComponent(code)}`);
+  getOpportunities(options: { fresh?: boolean; group?: string } = {}) {
+    const params = new URLSearchParams();
+    if (options.fresh) {
+      params.set("fresh", "1");
+    }
+    if (options.group) {
+      params.set("group", options.group);
+    }
+    const query = params.toString();
+    return fetchJson<OpportunitiesData>(`/api/opportunities${query ? `?${query}` : ""}`);
   },
-  getOpportunities() {
-    return fetchJson<OpportunitiesData>("/api/opportunities");
+  getOpportunitiesContext(options: { fresh?: boolean } = {}) {
+    return fetchJson<OpportunitiesData>(`/api/opportunities/context${options.fresh ? "?fresh=1" : ""}`);
   },
-  getOpportunityDetail(code: string) {
-    return fetchJson<StockProfileData["opportunity"]>(`/api/opportunities/${encodeURIComponent(code)}`);
+  getOpportunitiesSourceCards(options: { fresh?: boolean } = {}) {
+    return fetchJson<OpportunitiesData>(`/api/opportunities/source-cards${options.fresh ? "?fresh=1" : ""}`);
   },
-  getStockProfile(code: string) {
-    return fetchJson<StockProfileData>(`/api/stock/${encodeURIComponent(code)}`);
+  getStockProfileSummary(code: string) {
+    return fetchJson<StockProfileSummaryData>(`/api/stock/${encodeURIComponent(code)}/summary`);
+  },
+  getStockProfileDetail(code: string) {
+    return fetchJson<StockProfileDetailData>(`/api/stock/${encodeURIComponent(code)}/detail`);
+  },
+  getStockProfileEvidence(code: string) {
+    return fetchJson<StockProfileEvidenceResponse>(`/api/stock/${encodeURIComponent(code)}/evidence`);
+  },
+  getStockProfileSecondary(code: string) {
+    return fetchJson<StockProfileSecondaryResponse>(`/api/stock/${encodeURIComponent(code)}/secondary`);
+  },
+  getStockProfileFormalData(code: string) {
+    return fetchJson<StockProfileFormalDataResponse>(`/api/stock/${encodeURIComponent(code)}/formal-data/full`);
+  },
+  getStockProfileFormalDataSection(code: string, section: string) {
+    return fetchJson<StockProfileFormalDataResponse>(
+      `/api/stock/${encodeURIComponent(code)}/formal-data/${encodeURIComponent(section)}`,
+    );
+  },
+  getStockProfileTodayAction(code: string) {
+    return fetchJson<StockProfileTodayActionResponse>(`/api/stock/${encodeURIComponent(code)}/today-action`);
+  },
+  getStockProfileLearningScorecard(code: string) {
+    return fetchJson<StockLearningScorecard>(`/api/stock/${encodeURIComponent(code)}/learning-scorecard`);
   },
   getReview(params: { baseline?: string; window?: string } = {}) {
     const query = new URLSearchParams();
@@ -187,18 +248,30 @@ export const api = {
     const suffix = query.toString() ? `?${query.toString()}` : "";
     return fetchJson<ReviewData>(`/api/review${suffix}`);
   },
-  getReviewDetail(params: { section: string; label: string; baseline?: string; window?: string }) {
-    const query = new URLSearchParams({
-      section: params.section,
-      label: params.label,
-    });
+  getReviewResearch(params: { baseline?: string; window?: string } = {}) {
+    const query = new URLSearchParams();
     if (params.baseline) {
       query.set("baseline", params.baseline);
     }
     if (params.window) {
       query.set("window", params.window);
     }
-    return fetchJson<ReviewDetailData>(`/api/review/detail?${query.toString()}`);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return fetchJson<ReviewResearchResponse>(`/api/review/research${suffix}`);
+  },
+  getReviewEvidence(params: { baseline?: string; window?: string } = {}) {
+    const query = new URLSearchParams();
+    if (params.baseline) {
+      query.set("baseline", params.baseline);
+    }
+    if (params.window) {
+      query.set("window", params.window);
+    }
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return fetchJson<ReviewEvidenceResponse>(`/api/review/evidence${suffix}`);
+  },
+  getReviewShadowReplay() {
+    return fetchJson<ShadowReplayReviewSummary>("/api/review/shadow-replay");
   },
   ask(query: string) {
     const q = query ? `?q=${encodeURIComponent(query)}` : "";
@@ -223,8 +296,9 @@ export const api = {
       ok: boolean;
       trade_date: string;
       key: string;
-      decision: unknown;
-      counts: TodayData["action_queue"]["counts"];
+      decision: TodayActionDecision;
+      counts: TodayActionsData["action_queue"]["counts"];
+      ledger?: Record<string, unknown>;
     }>("/api/today/actions/decision", {
       method: "POST",
       json: payload,
@@ -246,8 +320,13 @@ export const api = {
       json: payload,
     });
   },
-  getRuns() {
-    return fetchJson<{ runs: RunItem[] }>("/api/runs");
+  getRuns(options: { fresh?: boolean } = {}) {
+    const params = new URLSearchParams();
+    if (options.fresh) {
+      params.set("fresh", "1");
+    }
+    const query = params.toString();
+    return fetchJson<{ runs: RunItem[]; compact: boolean }>(`/api/runs${query ? `?${query}` : ""}`);
   },
   getRunDetail(runId: string) {
     return fetchJson<RunItem>(`/api/runs/${encodeURIComponent(runId)}`);
@@ -258,17 +337,32 @@ export const api = {
   preview(path: string) {
     return fetchJson<PreviewPayload>(`/api/preview?path=${encodeURIComponent(path)}`);
   },
-  getRefreshStatus(page: string, options: { auto?: boolean } = {}) {
+  getRefreshStatus(page: string, options: { auto?: boolean; compact?: boolean } = {}) {
     const auto = options.auto ? "&auto=1" : "";
-    return fetchJson<RefreshStatus>(`/api/refresh/status?page=${encodeURIComponent(page)}${auto}`);
+    const compact = options.compact ? "&compact=1" : "";
+    return fetchJson<RefreshStatus>(`/api/refresh/status?page=${encodeURIComponent(page)}${auto}${compact}`);
   },
-  getSchedulerStatus() {
-    return fetchJson<SchedulerStatus>("/api/scheduler/status");
+  getFormalDataStatus(options: { fresh?: boolean; compact?: boolean } = {}) {
+    const params = new URLSearchParams();
+    if (options.fresh) {
+      params.set("fresh", "1");
+    }
+    if (options.compact === false) {
+      params.set("compact", "0");
+    }
+    const query = params.toString();
+    return fetchJson<FormalDataStatus>(`/api/formal-data/status${query ? `?${query}` : ""}`);
   },
-  getReadinessLive() {
-    return fetchJson<ReadinessPayload & { generated_at?: string; trade_date?: string }>(
-      "/api/readiness/live",
-    );
+  getDataAssetsStatus(options: { fresh?: boolean; compact?: boolean } = {}) {
+    const params = new URLSearchParams();
+    if (options.fresh) {
+      params.set("fresh", "1");
+    }
+    if (options.compact === false) {
+      params.set("compact", "0");
+    }
+    const query = params.toString();
+    return fetchJson<DataAssetsStatus>(`/api/data-assets/status${query ? `?${query}` : ""}`);
   },
   triggerRefresh(payload: { page: string; task_name?: string; force?: boolean; reason?: string }) {
     return fetchJson<RefreshTriggerResponse>("/api/refresh/trigger", {
@@ -279,8 +373,24 @@ export const api = {
   health() {
     return fetchJson<HealthResponse>("/healthz");
   },
-  getPortfolioAccount() {
-    return fetchJson<PortfolioAccountResponse>("/api/portfolio/account");
+  getPortfolioAccount(options: { fresh?: boolean; compact?: boolean; history?: boolean } = {}) {
+    const query = new URLSearchParams();
+    if (options.fresh) {
+      query.set("fresh", "1");
+    }
+    if (options.compact === false) {
+      query.set("compact", "0");
+    }
+    if (options.history) {
+      query.set("history", "1");
+    }
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return fetchJson<PortfolioAccountResponse>(`/api/portfolio/account${suffix}`);
+  },
+  getPortfolioHoldingReviews(options: { fresh?: boolean } = {}) {
+    return fetchJson<PortfolioHoldingReviewsResponse>(
+      `/api/portfolio/holding-reviews${options.fresh ? "?fresh=1" : ""}`,
+    );
   },
   refreshPortfolioQuotes() {
     return fetchJson<PortfolioAccountResponse>("/api/portfolio/quotes/refresh", {
@@ -349,21 +459,17 @@ export const api = {
       json: payload,
     });
   },
-  getDecisionLedgerSummary(params: { window?: string; as_of?: string } = {}) {
-    const query = new URLSearchParams();
-    if (params.window) {
-      query.set("window", params.window);
-    }
-    if (params.as_of) {
-      query.set("as_of", params.as_of);
-    }
-    const suffix = query.toString() ? `?${query.toString()}` : "";
-    return fetchJson<DecisionLedgerSummaryResponse>(`/api/decision-ledger/summary${suffix}`);
-  },
-  getDecisionLedgerRecent(params: { limit?: number } = {}) {
+  getDecisionLedgerRecent(params: { limit?: number; codes?: string[]; latestPerCode?: boolean } = {}) {
     const query = new URLSearchParams();
     if (params.limit !== undefined) {
       query.set("limit", String(params.limit));
+    }
+    const codes = (params.codes || []).map((code) => String(code || "").trim()).filter(Boolean);
+    if (codes.length) {
+      query.set("codes", codes.join(","));
+    }
+    if (params.latestPerCode) {
+      query.set("latest_per_code", "1");
     }
     const suffix = query.toString() ? `?${query.toString()}` : "";
     return fetchJson<DecisionLedgerRecentResponse>(`/api/decision-ledger/recent${suffix}`);
@@ -382,8 +488,32 @@ export const api = {
     const suffix = query.toString() ? `?${query.toString()}` : "";
     return fetchJson<DecisionLedgerCalibrationResponse>(`/api/decision-ledger/calibration${suffix}`);
   },
-  getDecisionLedgerReviewCases() {
-    return fetchJson<DecisionLedgerReviewCasesResponse>("/api/decision-ledger/review-cases");
+  getDecisionLedgerCalibrationDetail(params: { window?: string; as_of?: string; limit?: number } = {}) {
+    const query = new URLSearchParams();
+    if (params.window) {
+      query.set("window", params.window);
+    }
+    if (params.as_of) {
+      query.set("as_of", params.as_of);
+    }
+    if (params.limit !== undefined) {
+      query.set("limit", String(params.limit));
+    }
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return fetchJson<DecisionLedgerCalibrationDetailResponse>(
+      `/api/decision-ledger/calibration-detail${suffix}`,
+    );
+  },
+  getDecisionLedgerLearningLoop(params: { as_of?: string } = {}) {
+    const query = new URLSearchParams();
+    if (params.as_of) {
+      query.set("as_of", params.as_of);
+    }
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return fetchJson<DecisionLedgerLearningLoopResponse>(`/api/decision-ledger/learning-loop${suffix}`);
+  },
+  getDecisionLedgerShadowCalibration() {
+    return fetchJson<ShadowCalibrationSummary>("/api/decision-ledger/shadow-calibration");
   },
   getDecisionLedgerReviewCase(decisionId: string) {
     return fetchJson<DecisionLedgerReviewCaseWorkbench>(
@@ -393,6 +523,14 @@ export const api = {
   generateDecisionLedgerAttributionDraft(decisionId: string) {
     return fetchJson<DecisionLedgerAttributionDraftResponse>(
       `/api/decision-ledger/review-case/${encodeURIComponent(decisionId)}/attribution-draft`,
+      {
+        method: "POST",
+      },
+    );
+  },
+  autoReviewDecisionLedgerCase(decisionId: string) {
+    return fetchJson<DecisionLedgerAutoReviewResponse>(
+      `/api/decision-ledger/review-case/${encodeURIComponent(decisionId)}/auto-review`,
       {
         method: "POST",
       },
@@ -410,11 +548,6 @@ export const api = {
   getDecisionLedgerStock(code: string) {
     return fetchJson<DecisionLedgerStockResponse>(
       `/api/decision-ledger/stock/${encodeURIComponent(code)}`,
-    );
-  },
-  getDecisionLedgerDetail(decisionId: string) {
-    return fetchJson<DecisionLedgerDetailResponse>(
-      `/api/decision-ledger/decision/${encodeURIComponent(decisionId)}`,
     );
   },
   getDecisionLedgerHealth() {

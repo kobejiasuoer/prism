@@ -178,6 +178,14 @@ def _scan_upstream_manifests(trade_date, *, pool, stage1_codes, stage2_codes):
 
 
 def _today_trade_date():
+    control_panel_dir = Path(__file__).resolve().parents[2] / 'apps' / 'control-panel'
+    if str(control_panel_dir) not in sys.path:
+        sys.path.insert(0, str(control_panel_dir))
+    try:
+        from readiness import expected_trade_date
+        return expected_trade_date()
+    except Exception:
+        pass
     return datetime.now().strftime('%Y-%m-%d')
 
 
@@ -488,12 +496,12 @@ def fetch_fundamentals_batch(codes):
         for code, item in data.items():
             normalized = _normalize_fundamentals({
                 'pe_ttm': item.get('pe_ttm') or item.get('pe'),
-                'pb': None,
-                'roe': None,
-                'margin': None,
+                'pb': item.get('pb'),
+                'roe': item.get('roe') or item.get('roe_waa') or item.get('roe_yearly'),
+                'margin': item.get('margin') or item.get('netprofit_margin') or item.get('gross_margin'),
                 'total_mv': item.get('total_mv') or item.get('total_mv_yi'),
-                'industry': None,
-                'concept': None,
+                'industry': item.get('industry'),
+                'concept': item.get('concept'),
             })
             if normalized:
                 snapshot[code] = normalized
@@ -1028,7 +1036,7 @@ def stage1_screener(raw_stocks):
 
 def fetch_capital_flow(code, prefetched_today=None):
     """资金流主路：优先批量/缓存拿到今日快照，失败时回退历史或旧快照。"""
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = _today_trade_date()
     cache_entry = _load_capital_flow_cache(code)
     cached_flows = cache_entry['flows'] if cache_entry else None
 
@@ -1120,7 +1128,7 @@ def fetch_fundamentals(code, prefetched=None):
         )
         primary_payload = primary_result.data if isinstance(primary_result.data, dict) else {}
         normalized = _normalize_fundamentals(primary_payload)
-        merged = _merge_fundamentals(cached_funda, snapshot, normalized)
+        merged = _merge_fundamentals(cached_funda, normalized)
         if merged:
             if merged.get('pe_ttm') or merged.get('pb'):
                 _save_fundamentals_cache(code, merged)
@@ -1403,6 +1411,30 @@ def stage2_enrich(candidates):
             print(f'    精选进度: {i + 1}/{len(candidates)}', file=sys.stderr)
 
     enriched.sort(key=lambda x: x['final_score'], reverse=True)
+
+    # --- Tushare factor layer (research-only; does not affect final_score) ---
+    try:
+        from tushare_factors import extract_factor_values, compute_pool_stats, compute_factor_bundle
+    except ImportError:
+        from screener.tushare_factors import extract_factor_values, compute_pool_stats, compute_factor_bundle
+    trade_date = _today_trade_date()
+    values_by_code = {}
+    for c in enriched:
+        try:
+            values_by_code[c["code"]] = extract_factor_values(c["code"], trade_date)
+        except Exception:
+            values_by_code[c["code"]] = None
+    pool_stats = compute_pool_stats([v for v in values_by_code.values() if v])
+    for c in enriched:
+        v = values_by_code.get(c["code"])
+        if v is None:
+            continue
+        try:
+            c["tushare_factors"] = compute_factor_bundle(c["code"], trade_date, pool_stats=pool_stats, values=v)
+        except Exception:
+            c["tushare_factors"] = None
+    stage2_enrich._last_pool_stats = pool_stats   # stash for main() to write top-level
+
     return enriched
 
 
@@ -2306,6 +2338,7 @@ def format_output(stocks, strategy_name, top_n):
             'theme': s.get('theme'),
             'announcements': s.get('announcements', [])[:3],
             'notice_risk_tags': s.get('notice_risk_tags', []),
+            'tushare_factors': s.get('tushare_factors'),
         })
     return out
 
@@ -2350,8 +2383,10 @@ def main():
     strategies = ['conservative', 'growth', 'rebound', 'hot', 'combined']
     market_regime = build_market_regime_context(stocks, enriched)
     market_themes = assess_market_themes(enriched)
+    trade_date = _today_trade_date()
     result = {
         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'trade_date': trade_date,
         'pool': args.pool,
         'pool_label': pool_label,
         'stage1_count': len(candidates),
@@ -2359,6 +2394,7 @@ def main():
         'market_regime': market_regime,
         'market_themes': market_themes,
         'verification_universe': format_output(enriched, 'combined', len(enriched)),
+        'tushare_factor_pool_stats': getattr(stage2_enrich, "_last_pool_stats", {}),
     }
 
 
@@ -2384,7 +2420,7 @@ def main():
     latest_file = DATA_DIR / 'scan_result.json'
     latest_file.write_text(output)
 
-    trade_date = result['timestamp'][:10]
+    trade_date = result.get('trade_date') or result['timestamp'][:10]
     upstream_manifests, manifest_flags = _scan_upstream_manifests(
         trade_date,
         pool=args.pool,

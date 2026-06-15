@@ -18,6 +18,10 @@ for path in (str(REPO_ROOT), str(PACKAGES_ROOT), str(CONTROL_PANEL_ROOT)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
+from prism_data.env import load_project_env  # noqa: E402
+
+load_project_env(root=REPO_ROOT)
+
 from refresh_policy import (  # noqa: E402
     CRON_POLICIES,
     DECISION_LEDGER_CAPTURE_AFTER_TASKS,
@@ -47,6 +51,12 @@ def stamp() -> str:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run one scheduled Prism task.")
     parser.add_argument("--task-name", required=True, choices=sorted(POLICIES))
+    parser.add_argument(
+        "--task-arg",
+        action="append",
+        default=[],
+        help="Append one argument to the scheduled task command. Repeat for multiple arguments.",
+    )
     parser.add_argument("--allow-non-trading-day", action="store_true")
     parser.add_argument("--send-to-feishu", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
@@ -209,6 +219,7 @@ def main() -> int:
     args = parse_args()
     policy = POLICIES[args.task_name]
     task_policy = TASK_POLICIES.get(args.task_name)
+    command = [*list(policy.command), *list(args.task_arg or [])]
     run_stamp = stamp()
     run_id = f"{args.task_name}_{run_stamp}"
     log_path = RUN_ROOT / "logs" / f"{run_id}.log"
@@ -224,7 +235,7 @@ def main() -> int:
         "task_name": args.task_name,
         "title": task_policy.title if task_policy else policy.name,
         "schedule_name": policy.name,
-        "command": list(policy.command),
+        "command": command,
         "cwd": str(REPO_ROOT),
         "status": "starting",
         "started_at": now_str(),
@@ -293,7 +304,7 @@ def main() -> int:
         with log_path.open("w", encoding="utf-8") as log_file:
             log_file.write(f"[{now_str()}] start {policy.name}\n")
             log_file.write(f"[{now_str()}] run_id: {run_id}\n")
-            log_file.write(f"[{now_str()}] command: {' '.join(policy.command)}\n")
+            log_file.write(f"[{now_str()}] command: {' '.join(command)}\n")
             log_file.write(f"[{now_str()}] calendar: {json.dumps(today_status, ensure_ascii=False)}\n")
             log_file.flush()
 
@@ -302,7 +313,7 @@ def main() -> int:
                 log_file.write(f"[{now_str()}] dry-run, command not executed\n")
             else:
                 proc = subprocess.run(
-                    list(policy.command),
+                    command,
                     cwd=REPO_ROOT,
                     env=env,
                     stdout=log_file,

@@ -153,6 +153,8 @@ class BaseProvider:
         asof: datetime | None = None,
         quality_flags: list[str] | None = None,
         live_small_allowed: bool = True,
+        license_scope: str = "internal_research",
+        extra: dict[str, Any] | None = None,
     ) -> ProviderResult:
         row_count = len(data) if isinstance(data, (list, tuple, set, dict)) else int(data is not None)
         return ProviderResult(
@@ -170,7 +172,9 @@ class BaseProvider:
             payload_hash=payload_hash or hash_payload(data),
             row_count=row_count,
             quality_flags=list(quality_flags or []),
+            license_scope=license_scope,
             live_small_allowed=live_small_allowed,
+            extra=dict(extra or {}),
         )
 
     def _error(
@@ -183,9 +187,12 @@ class BaseProvider:
         params_hash: str = "",
         payload_hash: str = "",
         quality_flags: list[str] | None = None,
+        status: DatasetStatus = DatasetStatus.FAILED,
+        license_scope: str = "internal_research",
+        extra: dict[str, Any] | None = None,
     ) -> ProviderResult:
         return ProviderResult(
-            status=DatasetStatus.FAILED,
+            status=status,
             data=None,
             provider=self.provider_name,
             provider_role=ProviderRole.PRIMARY,
@@ -199,7 +206,9 @@ class BaseProvider:
             payload_hash=payload_hash,
             row_count=0,
             quality_flags=list(quality_flags or ["fetch_failed"]),
+            license_scope=license_scope,
             live_small_allowed=False,
+            extra=dict(extra or {}),
         )
 
 

@@ -3,11 +3,15 @@
 The provider sits between ``decision_ledger.evaluate_decision_outcome``
 and ``packages/prism_data.DataGateway.fetch_kline``.  The contract is:
 
-* Gateway returns rows -> filtered window list, sorted by trade_date.
+* Gateway returns rows that cover the window -> filtered window list,
+  sorted by trade_date.
 * Gateway raises -> ``PriceProviderUnavailable`` (transient, retry).
 * Gateway returns empty data or non-OK status -> ``PriceProviderUnavailable``.
 * Gateway returns rows that do not overlap the window -> empty list
   (terminal "we know there is no data here").
+* Gateway returns rows that overlap the window but miss either edge date
+  -> ``PriceProviderUnavailable`` so the evaluator retries later instead
+  of freezing a premature ``data_issue``.
 
 We hand the provider a fake gateway in every test so no real network or
 on-disk cache is touched.
@@ -157,6 +161,25 @@ class PrismDataPriceProviderTests(unittest.TestCase):
         # the window has no data.  Empty list is the right answer; the
         # evaluator interprets that as data_issue.
         self.assertEqual(out, [])
+
+    def test_partial_overlap_raises_unavailable(self) -> None:
+        gateway = _RecordingGateway(
+            responses=_FakeGatewayResult(
+                data=[
+                    _row("2026-05-15", 10.0),
+                    _row("2026-05-18", 10.5),
+                    # Missing the requested end_date. This is the
+                    # transient "close bar has not landed yet" shape we
+                    # must not persist as a permanent data_issue.
+                ],
+                provider_result=_FakeProviderResult(status=_FakeStatus("ok")),
+            ),
+        )
+        provider = self.PrismDataPriceProvider(gateway=gateway)
+        with self.assertRaises(self.ledger.PriceProviderUnavailable):
+            provider.fetch_window(
+                "sh600690", start_date="2026-05-15", end_date="2026-05-19",
+            )
 
     def test_gateway_exception_raises_unavailable(self) -> None:
         gateway = _RecordingGateway(raise_on_call=True)

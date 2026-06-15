@@ -1,26 +1,22 @@
 "use client";
 
-import { AlertCircle, FileDown, RefreshCw } from "lucide-react";
-import { useRuns, useRefreshStatus, useTodayData } from "@/lib/hooks";
+import dynamic from "next/dynamic";
+import { FileDown, RefreshCw } from "lucide-react";
 
-import {
-  CommandHeader,
-  JudgementChain,
-  ActionLanes,
-  MiddayVerify,
-  TrustFold,
-} from "@/components/command-brief";
-import { TrustBanner } from "@/components/trust-banner";
+import { SkeletonBlock } from "@/components/data-card";
 
-export default function CommandCenterPage() {
-  const today = useTodayData();
-  const runsQuery = useRuns();
-  const refreshStatus = useRefreshStatus("today", true, { auto: true });
-  const data = today.data;
-  const brief = data?.command_brief;
-  const trust = data?.readiness?.trust_level;
-  const tradeDate = brief?.trade_date || data?.expected_trade_date || data?.trade_date || "-";
+const CommandCenterWorkspace = dynamic(
+  () =>
+    import("./command-center-workspace").then(
+      (module) => module.CommandCenterWorkspace,
+    ),
+  {
+    ssr: false,
+    loading: () => <CommandCenterPageFallback />,
+  },
+);
 
+function CommandCenterPageFallback() {
   return (
     <main className="war-room">
       <div className="war-room-inner">
@@ -33,71 +29,37 @@ export default function CommandCenterPage() {
             <button
               type="button"
               className="focus-ring war-tool-btn"
-              onClick={() => void today.refetch()}
+              disabled
             >
-              <RefreshCw size={14} className={today.isFetching ? "animate-spin" : ""} />
+              <RefreshCw size={14} className="animate-spin" />
               刷新
             </button>
             <button
               type="button"
               className="focus-ring war-tool-btn"
-              onClick={() => window.print()}
+              disabled
             >
               <FileDown size={14} />
               导出简报
             </button>
           </div>
         </header>
-
-        {trust ? <TrustBanner trust={trust} className="mb-4" /> : null}
-
-        {today.isError ? (
-          <div className="war-error">
-            <AlertCircle size={17} className="mt-0.5 shrink-0 text-[var(--warning)]" />
-            <div className="min-w-0 flex-1">
-              <div className="font-medium text-[var(--text-primary)]">后端数据暂不可用</div>
-              <div className="mt-1">命令台骨架已加载，FastAPI 启动后会自动重新获取 `/api/today`。</div>
-            </div>
-            <button
-              type="button"
-              className="focus-ring rounded-md border border-[var(--border-subtle)] px-2.5 py-1 text-[12px] text-[var(--text-primary)]"
-              onClick={() => void today.refetch()}
-            >
-              重试
-            </button>
+        <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-4">
+          <div className="mb-3 flex items-center gap-2 text-[13px] text-[var(--text-secondary)]">
+            <RefreshCw size={14} className="animate-spin" />
+            正在读取今日命令台和数据可信度
           </div>
-        ) : null}
-
-        {brief ? (
-          <>
-            <CommandHeader
-              mode={brief.mode}
-              permits={brief.permits}
-              positionCap={brief.position_cap}
-              firstAction={brief.first_action}
-              forbid={brief.forbid_today}
-              reclassify={brief.reclassify_when}
-              tradeDate={tradeDate}
-            />
-            <JudgementChain items={brief.judgement_chain} />
-            <ActionLanes lanes={brief.action_lanes} />
-            <MiddayVerify payload={brief.midday_verify} />
-            <TrustFold trust={brief.trust}>
-              <div className="text-[12px] text-[var(--text-secondary)]">
-                运行记录 {runsQuery.data?.runs?.length ?? 0} 条 · 自动刷新 {refreshStatus.data?.recommended_task?.title ?? "-"}
-              </div>
-            </TrustFold>
-          </>
-        ) : (
-          <div className="war-error">
-            <AlertCircle size={17} className="mt-0.5 shrink-0 text-[var(--warning)]" />
-            <div className="min-w-0 flex-1">
-              <div className="font-medium text-[var(--text-primary)]">命令台数据未到位</div>
-              <div className="mt-1">后端尚未返回 `command_brief`；先到 Settings 跑安全刷新。</div>
-            </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <SkeletonBlock key={index} className="h-28 w-full" />
+            ))}
           </div>
-        )}
+        </div>
       </div>
     </main>
   );
+}
+
+export default function CommandCenterPage() {
+  return <CommandCenterWorkspace />;
 }

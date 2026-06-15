@@ -17,7 +17,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex max-w-full items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium leading-5",
+        "inline-flex min-w-0 max-w-full items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium leading-5",
         className,
       )}
       style={{
@@ -26,7 +26,7 @@ export function Badge({
         borderColor: `color-mix(in srgb, ${color} 20%, transparent)`,
       }}
     >
-      <span className="truncate">{children}</span>
+      <span className="min-w-0 truncate">{children}</span>
     </span>
   );
 }

@@ -25,26 +25,36 @@
 
 ### 后端 API 评估
 
-好消息是：后端已经有完整的 JSON API 层，每个页面路由都有对应的 `/api/*` 端点。这意味着前后端分离的改造成本很低，不需要重写后端。
+好消息是：后端已经有完整的 JSON API 层。瘦身后，旧聚合 JSON 入口逐步收敛到更轻的拆分端点，前端只按当前主用接口取数。
 
-**现有 API 清单（25 个端点）：**
+**当前主用 API 清单：**
 
 | 分类 | 端点 | 用途 |
 |---|---|---|
 | 总览 | `GET /api/overview` | 系统健康、任务、运行历史 |
-| 今日 | `GET /api/today` | 当日决策全景 |
+| 今日 | `GET /api/today/summary` | 当日决策摘要 |
+| 今日 | `GET /api/today/actions` | 当日动作列表 |
+| 今日 | `GET /api/today/action-contracts` | 动作契约 |
+| 今日 | `GET /api/today/command-brief-detail` | 总控详情 |
 | 今日 | `POST /api/today/actions/decision` | 更新动作决策状态 |
 | 问股 | `GET /api/ask?q=` | 单股分析 |
 | 问股 | `GET /api/ask/suggest?q=` | 搜索联想 |
 | 问股 | `POST /api/ask/followup` | 追问对话 |
 | 持仓 | `GET /api/watchlist` | 持仓全景 |
-| 持仓 | `GET /api/watchlist/{code}` | 单股持仓详情 |
 | 持仓管理 | `POST /api/watchlist/manage/add\|archive\|restore` | 增删改 |
 | 观察池 | `GET /api/opportunities` | 候选全景 |
-| 观察池 | `GET /api/opportunities/{code}` | 单股候选详情 |
-| 观察池 | `GET /api/opportunities/batch/{kind}` | 批次详情 |
+| 观察池 | `GET /api/opportunities/context` | 候选上下文 |
+| 观察池 | `GET /api/opportunities/source-cards` | 候选来源卡 |
 | 复盘 | `GET /api/review` | 历史优势分析 |
-| 复盘 | `GET /api/review/detail` | 分组明细 |
+| 复盘 | `GET /api/review/research` | 研究窗口 |
+| 复盘 | `GET /api/review/evidence` | 证据侧栏 |
+| 复盘 | `GET /api/review/shadow-replay` | 影子回放摘要 |
+| 个股 | `GET /api/stock/{code}/summary` | 单股首屏摘要 |
+| 个股 | `GET /api/stock/{code}/detail` | 单股详情 |
+| 个股 | `GET /api/stock/{code}/evidence` | 单股证据 |
+| 个股 | `GET /api/stock/{code}/secondary` | 持仓/发现二级信息 |
+| 个股 | `GET /api/stock/{code}/formal-data/{section}` | 正式数据分段 |
+| 个股 | `GET /api/stock/{code}/today-action` | 当日动作上下文 |
 | 参数 | `GET /api/parameters` | 参数配置 |
 | 参数 | `POST /api/parameters` | 保存参数 |
 | 刷新 | `GET /api/refresh/status?page=` | 数据新鲜度 |

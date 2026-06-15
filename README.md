@@ -154,8 +154,8 @@ If you want to explore Prism locally, start the full stack with one command:
 ./start_prism.sh
 ```
 
-By default this starts the Next frontend at `http://127.0.0.1:8000`, the FastAPI backend API at `http://127.0.0.1:8001`, and the Prism internal scheduler that runs the fixed refresh workflows.
-The scheduler only runs on confirmed A-share trading days and skips jobs due in its own startup minute so restarting Prism at an exact cron time does not backfill by surprise. You can override the bind addresses with environment variables such as `PRISM_WEB_PORT`, `PRISM_BACKEND_PORT`, and `PRISM_BACKEND_ORIGIN`. Set `PRISM_ENABLE_SCHEDULER=0` if you want to start only the web/API stack without scheduled refreshes.
+By default this starts the Next frontend at `http://127.0.0.1:8000`, the FastAPI backend API at `http://127.0.0.1:8001`, and the Prism internal scheduler.
+The scheduler runs fixed workflows on confirmed A-share trading days, skips jobs due in its own startup minute, and continuously guards lightweight market-data freshness. During active refresh windows it checks `quotes.batch` and `capital_flow.batch` against the business freshness budgets and starts `quotes_light` / `capital_flow_light` when those datasets go stale, so opening Prism later in the morning does not depend on a single cron time. If a key morning workflow is still missing shortly after its due time, the Today page auto-refresh check remains a safety recovery. You can override bind addresses with environment variables such as `PRISM_WEB_PORT`, `PRISM_BACKEND_PORT`, and `PRISM_BACKEND_ORIGIN`. Set `PRISM_ENABLE_SCHEDULER=0` if you want to start only the web/API stack without scheduled refreshes; set `PRISM_SCHEDULER_FRESHNESS_GUARDIAN=0` only when you intentionally want to disable the lightweight freshness guard.
 
 Useful routes after startup:
 
@@ -201,7 +201,7 @@ python apps\scripts\prism_scheduler.py
 ```
 
 The scheduler uses the same task policy as the rest of Prism; it does not depend on macOS `launchd`, Windows Task Scheduler, or OpenClaw.
-It uses the same non-trading-day and startup-minute guards as the Unix startup script.
+It uses the same non-trading-day, startup-minute, cooldown, and lightweight freshness guards as the Unix startup script.
 
 If PowerShell blocks virtualenv activation, enable scripts for the current shell only:
 

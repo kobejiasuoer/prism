@@ -33,6 +33,22 @@ _MODE_TONES = {
     "offense": "positive",
 }
 
+V2_ACTION_ORDER = {
+    "observe": 0,
+    "review": 1,
+    "shadow": 2,
+    "trial": 3,
+    "actionable": 4,
+}
+
+V2_ACTION_LABELS = {
+    "observe": "只观察",
+    "review": "人工复核",
+    "shadow": "影子跟踪",
+    "trial": "试错待触发",
+    "actionable": "可执行待复核",
+}
+
 
 def _label_kind(label: str) -> str:
     text = label or ""
@@ -41,6 +57,177 @@ def _label_kind(label: str) -> str:
     if any(token in text for token in _OFFENSE_LABEL_KEYWORDS):
         return "offense"
     return "other"
+
+
+def _text_items(values: Any) -> list[str]:
+    if isinstance(values, list):
+        return [str(value).strip() for value in values if str(value or "").strip()]
+    text = str(values or "").strip()
+    return [text] if text else []
+
+
+def _v2_judgment(item: dict[str, Any]) -> dict[str, Any]:
+    judgment = item.get("opportunity_v2")
+    return dict(judgment) if isinstance(judgment, dict) else {}
+
+
+def _v2_nested(judgment: dict[str, Any], key: str) -> dict[str, Any]:
+    value = judgment.get(key)
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _v2_action(item: dict[str, Any]) -> str:
+    judgment = _v2_judgment(item)
+    action = str(item.get("suggested_action") or judgment.get("suggested_action") or "").strip()
+    return action if action in V2_ACTION_ORDER else ""
+
+
+def _v2_label(item: dict[str, Any]) -> str:
+    judgment = _v2_judgment(item)
+    action = _v2_action(item)
+    return str(item.get("suggested_action_label") or judgment.get("action_label") or V2_ACTION_LABELS.get(action, "")).strip()
+
+
+def _v2_hard_gate(item: dict[str, Any]) -> dict[str, Any]:
+    return _v2_nested(_v2_judgment(item), "hard_gate")
+
+
+def _v2_hard_max(item: dict[str, Any]) -> str:
+    gate = _v2_hard_gate(item)
+    value = str(item.get("hard_gate_max_action") or gate.get("maximum_allowed_action") or "").strip()
+    return value if value in V2_ACTION_ORDER else ""
+
+
+def _v2_hard_reason(item: dict[str, Any]) -> str:
+    gate = _v2_hard_gate(item)
+    block_reasons = gate.get("block_reasons") if isinstance(gate.get("block_reasons"), list) else []
+    return str(item.get("hard_gate_block_reason") or "；".join(_text_items(block_reasons)) or "").strip()
+
+
+def _v2_rank(action: str) -> int:
+    return V2_ACTION_ORDER.get(str(action or "").strip(), -1)
+
+
+def _v2_hard_blocked(item: dict[str, Any]) -> bool:
+    action = _v2_action(item)
+    desired = str(_v2_judgment(item).get("desired_action") or "").strip()
+    max_action = _v2_hard_max(item)
+    return bool(
+        action
+        and max_action
+        and (
+            _v2_rank(max_action) < _v2_rank(desired or action)
+            or _v2_hard_reason(item)
+        )
+    )
+
+
+def _v2_missing(item: dict[str, Any]) -> list[str]:
+    return _text_items(item.get("missing_confirmation") or _v2_judgment(item).get("missing_confirmation"))
+
+
+def _v2_calibration(item: dict[str, Any]) -> dict[str, Any]:
+    return _v2_nested(_v2_judgment(item), "calibration")
+
+
+def _v2_ai_summary(item: dict[str, Any]) -> dict[str, Any]:
+    direct = item.get("ai_summary")
+    if isinstance(direct, dict):
+        return dict(direct)
+    return _v2_nested(_v2_judgment(item), "ai_summary")
+
+
+def _v2_ai_status(item: dict[str, Any]) -> str:
+    return str(item.get("ai_status") or _v2_judgment(item).get("ai_status") or _v2_ai_summary(item).get("status") or "").strip()
+
+
+def _v2_ai_label(item: dict[str, Any]) -> str:
+    summary = _v2_ai_summary(item)
+    status = _v2_ai_status(item)
+    return str(item.get("ai_status_label") or summary.get("label") or status or "").strip()
+
+
+def _v2_ai_detail(item: dict[str, Any]) -> str:
+    summary = _v2_ai_summary(item)
+    label = _v2_ai_label(item)
+    detail = str(summary.get("detail") or "").strip()
+    if detail and label and label not in detail:
+        return f"{label}：{detail}"
+    return detail or label
+
+
+def _v2_ai_counts(items: list[dict[str, Any]]) -> dict[str, int]:
+    buckets = {"used": 0, "shadow_recorded": 0, "fallback": 0, "not_requested": 0, "disabled": 0, "other": 0}
+    for item in items:
+        status = _v2_ai_status(item) or "not_requested"
+        if status in {"not_configured", "fallback"}:
+            buckets["fallback"] += 1
+        elif status in buckets:
+            buckets[status] += 1
+        else:
+            buckets["other"] += 1
+    return buckets
+
+
+def _v2_mode_guard(item: dict[str, Any]) -> dict[str, Any]:
+    return _v2_nested(_v2_judgment(item), "mode_guard")
+
+
+def _v2_calibration_summary(item: dict[str, Any]) -> str:
+    judgment = _v2_judgment(item)
+    calibration = _v2_calibration(item)
+    mode_guard = _v2_mode_guard(item)
+    requested = str(
+        item.get("v2_mode_requested")
+        or judgment.get("mode_requested")
+        or mode_guard.get("requested_mode")
+        or ""
+    ).strip()
+    effective = str(
+        item.get("v2_mode_effective")
+        or judgment.get("mode_effective")
+        or mode_guard.get("effective_mode")
+        or judgment.get("mode")
+        or ""
+    ).strip()
+    stage = str(item.get("v2_calibration_stage") or calibration.get("sample_stage") or mode_guard.get("sample_stage") or "").strip()
+    reason = str(item.get("v2_calibration_guard_reason") or calibration.get("guard_reason") or mode_guard.get("guard_reason") or "").strip()
+    playbook_adjustment = calibration.get("playbook_adjustment") if isinstance(calibration.get("playbook_adjustment"), dict) else {}
+    playbook_reason = str(playbook_adjustment.get("reason") or "").strip()
+    if requested == "active" and effective and effective != "active":
+        return reason or f"V2 active 未放开，当前按 {effective} 模式辅助判断"
+    if playbook_reason:
+        return playbook_reason
+    if stage in {"cold_start", "needs_recalibration"}:
+        return reason or f"V2 校准阶段={stage}，动作阈值已收紧"
+    return ""
+
+
+def _v2_collect_candidates(
+    screening_batch: dict[str, Any] | None,
+    confirmation: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for lane, source in (
+        ("screening", (screening_batch or {}).get("candidates") or []),
+        ("confirmed", (confirmation or {}).get("confirmed") or []),
+        ("fresh", (confirmation or {}).get("fresh_candidates") or []),
+        ("downgraded", (confirmation or {}).get("downgraded") or []),
+    ):
+        for item in source:
+            if not isinstance(item, dict) or not _v2_action(item):
+                continue
+            key = (lane, str(item.get("code") or item.get("title") or ""))
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(item)
+    return rows
+
+
+def _v2_counts(items: list[dict[str, Any]]) -> dict[str, int]:
+    return {action: sum(1 for item in items if _v2_action(item) == action) for action in V2_ACTION_ORDER}
 
 
 def derive_mode(
@@ -104,6 +291,34 @@ _PERMIT_DATA = {
 }
 
 
+def _capability(readiness: dict[str, Any], key: str) -> dict[str, Any]:
+    item = (readiness.get("capabilities") or {}).get(key)
+    return item if isinstance(item, dict) else {}
+
+
+def _capability_granted(readiness: dict[str, Any], key: str) -> bool:
+    return bool(_capability(readiness, key).get("granted"))
+
+
+def _trust_level(readiness: dict[str, Any]) -> dict[str, Any]:
+    trust = readiness.get("trust_level")
+    return trust if isinstance(trust, dict) else {}
+
+
+def _first_capability_reason(readiness: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        cap = _capability(readiness, key)
+        for entry in cap.get("why_not") or []:
+            message = str((entry or {}).get("message") or "").strip()
+            if message:
+                return message
+    for reason in _trust_level(readiness).get("blocking_reasons") or []:
+        text = str(reason).strip()
+        if text:
+            return text
+    return ""
+
+
 def derive_permits(
     *,
     readiness: dict[str, Any],
@@ -114,6 +329,17 @@ def derive_permits(
     readiness_mode = str(readiness.get("readiness_mode") or "blocked")
     data_value, data_label = _PERMIT_DATA.get(readiness_mode, ("off", "未就绪"))
     data_why = _readiness_why(readiness)
+    has_capabilities = bool(readiness.get("capabilities"))
+    can_review = _capability_granted(readiness, "review") if has_capabilities else data_value == "on"
+    can_approve = _capability_granted(readiness, "approve") if has_capabilities else data_value == "on"
+    can_trade = _capability_granted(readiness, "trade") if has_capabilities else data_value == "on"
+    trust_level = str(_trust_level(readiness).get("level") or "").strip()
+    if data_value == "on" and not can_approve and can_review:
+        data_value, data_label = "review", "可观察/复核"
+        data_why = _first_capability_reason(readiness, "approve", "trade") or "数据链路已恢复，但正式放行/真钱买入未通过。"
+    elif data_value == "on" and trust_level == "observe_only":
+        data_value, data_label = "observe", "仅可观察"
+        data_why = _first_capability_reason(readiness, "approve", "trade") or "当前只能观察，不能直接买入。"
 
     if data_value != "on":
         market_value, market_label = "off", "进攻阀门关闭"
@@ -134,21 +360,68 @@ def derive_permits(
     approved = int(
         (((screening_batch or {}).get("screening_summary") or {}).get("approved_count") or 0)
     )
+    v2_items = _v2_collect_candidates(screening_batch, confirmation)
+    v2_counts = _v2_counts(v2_items)
+    v2_hard_blocked = sum(1 for item in v2_items if _v2_hard_blocked(item))
 
-    if data_value == "off":
-        opp_value = "none"
-        opp_label = "今天不输出机会判断"
-    elif market_value == "off":
-        opp_value = "observe"
-        opp_label = "只观察，不直接开仓"
-    elif market_value == "limited":
-        opp_value = "conditional" if (confirmed_count + fresh) >= 1 else "observe"
-        opp_label = "条件触发" if opp_value == "conditional" else "只观察"
-    else:  # on
-        opp_value = "actionable" if (confirmed_count + fresh) >= 1 else "observe"
-        opp_label = "可执行" if opp_value == "actionable" else "等更清晰确认"
-
-    opp_why = f"午盘新增 {fresh}，确认 {confirmed_count}，候选 {approved}"
+    if v2_items:
+        if data_value == "off":
+            opp_value = "none"
+            opp_label = "今天不输出机会判断"
+        elif not can_approve:
+            opp_value = "observe"
+            opp_label = "只观察，不可买入"
+        elif market_value == "off":
+            opp_value = "observe"
+            opp_label = "只观察，不直接开仓"
+        elif v2_counts.get("actionable") and can_trade and market_value == "on":
+            opp_value = "actionable"
+            opp_label = "可执行待复核"
+        elif v2_counts.get("actionable") or v2_counts.get("trial"):
+            opp_value = "conditional"
+            opp_label = "条件触发"
+        else:
+            opp_value = "observe"
+            opp_label = "只观察"
+        opp_why = (
+            f"V2 可执行 {v2_counts.get('actionable') or 0}，试错 {v2_counts.get('trial') or 0}，"
+            f"影子/复核 {(v2_counts.get('shadow') or 0) + (v2_counts.get('review') or 0)}，"
+            f"硬闸门封顶 {v2_hard_blocked}"
+        )
+        blocker = next((_v2_hard_reason(item) for item in v2_items if _v2_hard_reason(item)), "")
+        missing = next(("；".join(_v2_missing(item)[:2]) for item in v2_items if _v2_missing(item)), "")
+        calibration = next((_v2_calibration_summary(item) for item in v2_items if _v2_calibration_summary(item)), "")
+        if blocker:
+            opp_why = f"{opp_why}；不能买原因：{blocker}"
+        elif calibration:
+            opp_why = f"{opp_why}；校准护栏：{calibration}"
+        elif missing and opp_value != "actionable":
+            opp_why = f"{opp_why}；还差：{missing}"
+    else:
+        if data_value == "off":
+            opp_value = "none"
+            opp_label = "今天不输出机会判断"
+        elif not can_approve:
+            opp_value = "observe"
+            opp_label = "只观察，不可买入"
+        elif market_value == "off":
+            opp_value = "observe"
+            opp_label = "只观察，不直接开仓"
+        elif market_value == "limited":
+            opp_value = "conditional" if (confirmed_count + fresh) >= 1 else "observe"
+            opp_label = "条件触发" if opp_value == "conditional" else "只观察"
+        else:  # on
+            opp_value = "actionable" if (confirmed_count + fresh) >= 1 else "observe"
+            opp_label = "可执行" if opp_value == "actionable" else "等更清晰确认"
+        opp_why = f"午盘新增 {fresh}，确认 {confirmed_count}，候选 {approved}"
+    if not can_approve:
+        reason = _first_capability_reason(readiness, "approve", "trade")
+        if reason:
+            opp_why = f"{opp_why}；{reason}"
+    if not can_trade and can_approve:
+        reason = _first_capability_reason(readiness, "trade")
+        if reason:
+            opp_why = f"{opp_why}；买入仍未放行：{reason}"
 
     return {
         "data":        {"value": data_value, "label": data_label, "tone": _permit_tone(data_value), "why": data_why},
@@ -170,7 +443,7 @@ def _readiness_why(readiness: dict[str, Any]) -> str:
 def _permit_tone(value: str) -> str:
     if value in {"off", "none"}:
         return "risk"
-    if value in {"shadow", "limited", "observe", "conditional"}:
+    if value in {"shadow", "limited", "observe", "review", "conditional"}:
         return "watch"
     if value in {"on", "actionable"}:
         return "positive"
@@ -199,11 +472,18 @@ def derive_position_cap(
     gate: dict[str, Any],
     decision_brief: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    gate_cap = str(gate.get("position_cap") or "").strip()
+    if gate_cap == _DEFENSE_POSITION_CAP:
+        return {
+            "value": _DEFENSE_POSITION_CAP,
+            "raw": gate_cap,
+            "tone": "risk",
+            "note": _POSITION_CAP_NOTES["defense"],
+        }
     if mode_value == "defense":
         raw, value = _DEFENSE_POSITION_CAP, _DEFENSE_POSITION_CAP
     else:
         brief_cap = ((decision_brief or {}).get("summary") or {}).get("position_cap")
-        gate_cap = gate.get("position_cap")
         raw = str(brief_cap or gate_cap or _DEFAULT_POSITION_CAPS[mode_value])
         value = raw
     note = _POSITION_CAP_NOTES.get(mode_value, "按仓位纪律执行。")
@@ -225,6 +505,18 @@ def derive_first_action(
     action_queue: dict[str, Any],
     readiness: dict[str, Any],
 ) -> dict[str, Any]:
+    can_approve = _capability_granted(readiness, "approve") if readiness.get("capabilities") else mode_value != "defense"
+    if mode_value != "defense" and not can_approve:
+        reason = _first_capability_reason(readiness, "approve", "trade") or _readiness_why(readiness)
+        return {
+            "title": "先复核观察名单",
+            "reason": reason or "当前未放行买入，只做观察和复核。",
+            "url": "#judgement-chain",
+            "action_key": None,
+            "tone": "watch",
+            "kind": "review_only",
+        }
+
     if mode_value == "defense":
         msg = _readiness_why(readiness)
         return {
@@ -398,7 +690,7 @@ def derive_judgement_chain(
         _market_dimension(gate),
         _main_theme_dimension(screening_batch),
         _holdings_pressure_dimension(watchlist, confirmation),
-        _new_quality_dimension(confirmation),
+        _new_quality_dimension(confirmation, screening_batch),
     ]
 
 
@@ -450,7 +742,64 @@ def _holdings_pressure_dimension(
     return {"dim": "holdings_pressure", "title": "持仓压力", "verdict": verdict, "tone": tone, "evidence": evidence, "impact": impact}
 
 
-def _new_quality_dimension(confirmation: dict[str, Any] | None) -> dict[str, Any]:
+def _new_quality_dimension(
+    confirmation: dict[str, Any] | None,
+    screening_batch: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    v2_items = _v2_collect_candidates(screening_batch, confirmation)
+    if v2_items:
+        counts = _v2_counts(v2_items)
+        hard_blocked = sum(1 for item in v2_items if _v2_hard_blocked(item))
+        actionable = counts.get("actionable") or 0
+        trial = counts.get("trial") or 0
+        shadow_review = (counts.get("shadow") or 0) + (counts.get("review") or 0)
+        if actionable > 0 and hard_blocked == 0:
+            verdict, tone = "可执行", "positive"
+            impact = "只在触发/失效/硬闸门都复核后允许进入动作"
+        elif actionable > 0 or trial > 0:
+            verdict, tone = "条件", "watch"
+            impact = "有结构假设，但还要等触发、承接或硬闸门放行"
+        elif shadow_review > 0:
+            verdict, tone = "观察", "watch"
+            impact = "只做影子跟踪或人工复核，不直接买"
+        else:
+            verdict, tone = "弱", "risk"
+            impact = "没有可切到动作的结构假设"
+        evidence = [
+            f"actionable={actionable}",
+            f"trial={trial}",
+            f"shadow_review={shadow_review}",
+            f"hard_gate_blocked={hard_blocked}",
+        ]
+        ai_counts = _v2_ai_counts(v2_items)
+        evidence.append(
+            "AI="
+            f"采用{ai_counts['used']}/"
+            f"影子{ai_counts['shadow_recorded']}/"
+            f"fallback{ai_counts['fallback']}/"
+            f"未调用{ai_counts['not_requested'] + ai_counts['disabled']}"
+        )
+        first_missing = next(("；".join(_v2_missing(item)[:2]) for item in v2_items if _v2_missing(item)), "")
+        first_block = next((_v2_hard_reason(item) for item in v2_items if _v2_hard_reason(item)), "")
+        first_ai = next((_v2_ai_detail(item) for item in v2_items if _v2_ai_detail(item)), "")
+        first_calibration = next((_v2_calibration_summary(item) for item in v2_items if _v2_calibration_summary(item)), "")
+        if first_block:
+            evidence.append(f"不能买={first_block}")
+        if first_ai:
+            evidence.append(f"AI判读={first_ai}")
+        if not first_block and first_calibration:
+            evidence.append(f"校准护栏={first_calibration}")
+        elif not first_block and first_missing:
+            evidence.append(f"还差={first_missing}")
+        return {
+            "dim": "new_quality",
+            "title": "V2 机会质量",
+            "verdict": verdict,
+            "tone": tone,
+            "evidence": evidence,
+            "impact": impact,
+        }
+
     counts = (confirmation or {}).get("counts") or {}
     confirmed = int(counts.get("confirmed") or 0)
     fresh = int(counts.get("fresh_candidates") or 0)
@@ -506,6 +855,17 @@ _WORKFLOW_STATE_LABELS = {"pending", "approved", "rejected", "snoozed", "done", 
 
 
 def _infer_action_type(item: dict[str, Any]) -> str:
+    v2_action = _v2_action(item)
+    if v2_action:
+        if v2_action == "actionable":
+            return "可执行复核"
+        if v2_action == "trial":
+            return "等触发"
+        if v2_action == "shadow":
+            return "影子跟踪"
+        if v2_action == "review":
+            return "人工复核"
+        return "仅观察"
     explicit = item.get("action_type")
     if not explicit:
         decision_label = (item.get("decision") or {}).get("label")
@@ -513,13 +873,30 @@ def _infer_action_type(item: dict[str, Any]) -> str:
             explicit = decision_label
     if explicit:
         return str(explicit)
-    text = str(item.get("title") or "") + " " + str(item.get("detail") or "")
-    if any(token in text for token in ("减仓", "止损", "清仓", "卖", "降")):
-        return "减仓"
-    if item.get("setup_label") or any(token in text for token in ("突破", "触发", "加观察")):
-        return "等触发"
+    entry_plan = item.get("entry_plan") if isinstance(item.get("entry_plan"), dict) else {}
+    text = " ".join(
+        str(value or "")
+        for value in (
+            item.get("title"),
+            item.get("status"),
+            item.get("detail"),
+            item.get("foot"),
+            item.get("trigger"),
+            entry_plan.get("action"),
+            entry_plan.get("trigger"),
+            entry_plan.get("sizing"),
+        )
+    )
     tone = str(item.get("tone") or "")
     if tone == "sell":
+        return "减仓"
+    if (
+        entry_plan.get("trigger")
+        or any(token in text for token in ("试错待触发", "突破", "触发", "站回", "回踩", "加观察"))
+        or item.get("setup_label")
+    ):
+        return "等触发"
+    if any(token in text for token in ("减仓", "止损", "清仓", "卖出", "降仓", "降低仓位", "退出")):
         return "减仓"
     if tone == "positive":
         return "等突破"
@@ -529,29 +906,91 @@ def _infer_action_type(item: dict[str, Any]) -> str:
 def _normalize_action_item(item: dict[str, Any]) -> dict[str, Any]:
     code = _extract_code(item)
     name = _extract_name(item)
+    entry_plan = item.get("entry_plan") if isinstance(item.get("entry_plan"), dict) else {}
+    levels = entry_plan.get("levels") if isinstance(entry_plan.get("levels"), dict) else {}
+    missing = _v2_missing(item)
+    hard_reason = _v2_hard_reason(item)
     trigger = (
-        item.get("trigger")
+        entry_plan.get("trigger")
+        or item.get("trigger")
+        or item.get("upgrade_condition")
         or item.get("setup_label")
+        or levels.get("trigger")
+        or levels.get("pullback")
         or item.get("support")
         or item.get("resistance")
     )
-    invalidate = item.get("invalidate_when") or item.get("stop_loss") or item.get("failure_condition")
+    invalidate = (
+        item.get("invalidation")
+        or entry_plan.get("invalidate")
+        or levels.get("invalidate")
+        or item.get("invalidate_when")
+        or item.get("stop_loss")
+        or item.get("failure_condition")
+    )
+    reason = str(item.get("thesis") or item.get("why_now") or item.get("detail") or item.get("foot") or item.get("source") or "")
+    rank_label = str(item.get("decision_rank_label") or "").strip()
+    summary = str(item.get("decision_summary") or "").strip()
+    if rank_label and rank_label not in reason:
+        reason = f"{rank_label} · {reason}" if reason else rank_label
+    if summary and summary not in reason:
+        reason = f"{reason} · {summary}" if reason else summary
+    if hard_reason and f"不能买：{hard_reason}" not in reason:
+        reason = f"{reason} · 不能买：{hard_reason}" if reason else f"不能买：{hard_reason}"
+    elif missing:
+        missing_text = "；".join(missing[:2])
+        if missing_text and missing_text not in reason:
+            reason = f"{reason} · 还差：{missing_text}" if reason else f"还差：{missing_text}"
+    calibration = _v2_calibration_summary(item)
+    if calibration and calibration not in reason:
+        reason = f"{reason} · 校准护栏：{calibration}" if reason else f"校准护栏：{calibration}"
+    ai_detail = _v2_ai_detail(item)
+    if ai_detail and ai_detail not in reason:
+        reason = f"{reason} · AI：{ai_detail}" if reason else f"AI：{ai_detail}"
     return {
         "key": str(item.get("key") or ""),
         "code": code,
         "name": name,
         "action_type": _infer_action_type(item),
-        "reason": str(item.get("detail") or item.get("foot") or item.get("source") or ""),
+        "reason": reason,
         "trigger": str(trigger or "无明确触发"),
         "invalidate_when": str(invalidate or "-"),
         "source": str(item.get("source") or item.get("group_title") or ""),
         "url": item.get("url") or None,
         "tone": str(item.get("tone") or "watch"),
+        "suggested_action": _v2_action(item),
+        "suggested_action_label": _v2_label(item),
+        "confidence": item.get("confidence") if item.get("confidence") is not None else _v2_judgment(item).get("confidence"),
+        "thesis": item.get("thesis") or _v2_judgment(item).get("thesis") or "",
+        "why_now": item.get("why_now") or _v2_judgment(item).get("why_now") or "",
+        "missing_confirmation": missing,
+        "hard_gate_max_action": _v2_hard_max(item),
+        "hard_gate_block_reason": hard_reason,
+        "decision_rank": item.get("decision_rank"),
+        "decision_rank_label": item.get("decision_rank_label"),
+        "decision_summary": item.get("decision_summary"),
+        "judge_source": item.get("judge_source") or _v2_judgment(item).get("judge_source"),
+        "ai_status": _v2_ai_status(item),
+        "ai_status_label": _v2_ai_label(item),
+        "ai_summary": _v2_ai_summary(item),
     }
 
 
 def _has_explicit_trigger(item: dict[str, Any]) -> bool:
-    return bool(item.get("setup_label") or item.get("breakout_price") or item.get("stop_loss"))
+    entry_plan = item.get("entry_plan") if isinstance(item.get("entry_plan"), dict) else {}
+    levels = entry_plan.get("levels") if isinstance(entry_plan.get("levels"), dict) else {}
+    if _v2_action(item) in {"review", "shadow", "observe"}:
+        return False
+    return bool(
+        entry_plan.get("trigger")
+        or item.get("trigger")
+        or item.get("upgrade_condition")
+        or item.get("setup_label")
+        or item.get("breakout_price")
+        or item.get("stop_loss")
+        or levels.get("trigger")
+        or levels.get("pullback")
+    )
 
 
 def derive_action_lanes(
@@ -577,16 +1016,34 @@ def derive_action_lanes(
         seen_keys.add(key)
         items.append(_normalize_action_item(raw))
 
+    def add_v2_or_fallback(raw: dict[str, Any], *, default: str) -> bool:
+        v2_action = _v2_action(raw)
+        if not v2_action:
+            return False
+        if v2_action == "actionable":
+            add(must_items, raw)
+        elif v2_action == "trial":
+            add(conditional_items, raw)
+        else:
+            add(observe_items, raw)
+        return True
+
     for raw in do_now:
+        if add_v2_or_fallback(raw, default="must"):
+            continue
         tone = str(raw.get("tone") or "")
-        if tone in {"sell", "positive"}:
+        if tone == "sell":
             add(must_items, raw)
         elif _has_explicit_trigger(raw):
             add(conditional_items, raw)
+        elif tone == "positive":
+            add(must_items, raw)
         else:
             add(must_items, raw)
 
     for raw in watch:
+        if add_v2_or_fallback(raw, default="observe"):
+            continue
         if _has_explicit_trigger(raw):
             add(conditional_items, raw)
         else:
@@ -658,8 +1115,31 @@ def derive_midday_verify(
     confirmed = int(counts.get("confirmed") or 0)
     fresh = int(counts.get("fresh_candidates") or 0)
     downgraded = int(counts.get("downgraded") or 0)
-    validation = str(confirmation.get("validation_status") or "ok")
-    midday_status = f"{validation}：确认 {confirmed} · 新增 {fresh} · 降级 {downgraded}"
+    validation = str(confirmation.get("validation_status") or "ok").strip().lower()
+    validation_errors = [
+        str(item).strip()
+        for item in (confirmation.get("validation_errors") or [])
+        if str(item).strip()
+    ]
+    runner_status = str(confirmation.get("runner_status") or "").strip().lower()
+    failure_statuses = {"failed", "invalid", "quality_blocked", "scan_failed", "verify_failed", "workflow_failed"}
+    validation_label = {
+        "ok": "午盘已确认",
+        "verify_failed": "午盘确认执行失败",
+        "invalid": "午盘链路无效",
+        "failed": "午盘链路失败",
+        "workflow_failed": "午盘链路失败",
+        "quality_blocked": "午盘确认质检拦截",
+        "scan_failed": "午盘扫描失败",
+        "unknown": "午盘待核",
+    }.get(validation, validation or "午盘待核")
+    if validation in failure_statuses or runner_status == "failed" or validation_errors:
+        reason = validation_errors[0] if validation_errors else "请查看午盘确认任务日志"
+        midday_status = f"{validation_label}：{reason}，请重跑午盘确认"
+    elif validation == "ok" and confirmed == 0 and fresh == 0:
+        midday_status = "午盘已确认：确认 0 · 新增 0，今天不触发买入"
+    else:
+        midday_status = f"{validation_label}：确认 {confirmed} · 新增 {fresh} · 降级 {downgraded}"
 
     morning = (
         ((decision_brief or {}).get("summary") or {}).get("gate_summary")

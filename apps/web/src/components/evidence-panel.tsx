@@ -1,6 +1,12 @@
 "use client";
 
-import { ExternalLink, Eye, FileText, LoaderCircle, RefreshCw } from "lucide-react";
+import {
+  ExternalLink,
+  Eye,
+  FileText,
+  LoaderCircle,
+  RefreshCw,
+} from "lucide-react";
 import { useState } from "react";
 
 import { Badge } from "./badge";
@@ -9,7 +15,12 @@ import { PreviewDrawer, type PreviewDrawerState } from "./preview-drawer";
 import { SourceCard } from "./source-card";
 import { api } from "@/lib/api";
 import { useRefreshStatus, useTriggerRefresh } from "@/lib/hooks";
-import { formatCooldown, readinessModeCopy, refreshReasonCopy, refreshReasonLabel } from "@/lib/readiness-copy";
+import {
+  formatCooldown,
+  readinessModeCopy,
+  refreshReasonCopy,
+  refreshReasonLabel,
+} from "@/lib/readiness-copy";
 import type { BasicCard, SourceCardData } from "@/lib/types";
 
 type EvidenceRefreshPage = "today" | "watchlist" | "opportunities" | "review";
@@ -50,7 +61,11 @@ export function EvidencePanel({
   compact?: boolean;
 }) {
   const refreshPage = mode === "standard" ? page || "" : "";
-  const refresh = useRefreshStatus(refreshPage, Boolean(refreshPage), { auto: true });
+  const refresh = useRefreshStatus(refreshPage, Boolean(refreshPage), {
+    auto: true,
+    compact: true,
+    poll: false,
+  });
   const trigger = useTriggerRefresh(refreshPage, { stockCode });
   const [message, setMessage] = useState("");
   const [preview, setPreview] = useState<PreviewDrawerState>({
@@ -58,9 +73,15 @@ export function EvidencePanel({
     title: "",
   });
 
-  const mergedSources = refresh.data?.freshness?.length ? refresh.data.freshness : sources || [];
-  const artifactCards = (artifacts || []).filter((card) => artifactPath(card) || card.url);
-  const canRefresh = Boolean(refreshPage && refresh.data?.recommended_task?.task_name);
+  const mergedSources = refresh.data?.freshness?.length
+    ? refresh.data.freshness
+    : sources || [];
+  const artifactCards = (artifacts || []).filter(
+    (card) => artifactPath(card) || card.url,
+  );
+  const canRefresh = Boolean(
+    refreshPage && refresh.data?.recommended_task?.task_name,
+  );
   const isCooling = Boolean(refresh.data && !refresh.data.cooldown?.ready);
   const runningCount = refresh.data?.running?.length || 0;
   const autoDecision = refresh.data?.auto_refresh;
@@ -69,17 +90,26 @@ export function EvidencePanel({
   const lastAuto = refresh.data?.last_auto_refresh;
   const readinessCopy = readinessModeCopy(refresh.data?.readiness_mode);
   const firstReason = (blockedReasons.length ? blockedReasons : autoReasons)[0];
-  const firstReasonDetail = firstReason ? refreshReasonCopy(firstReason).detail : "";
+  const firstReasonDetail = firstReason
+    ? refreshReasonCopy(firstReason).detail
+    : "";
   const staleCount =
     refresh.data?.stale_count ??
-    mergedSources.filter((source) => source.stale || source.available === false).length;
+    mergedSources.filter(
+      (source) =>
+        source.stale || (!source.deferred && source.available === false),
+    ).length;
   const healthTitle = staleCount ? "数据有降级" : "数据可用";
   const healthDetail = refresh.data
     ? [
         refresh.data.market_label,
-        refresh.data.recommended_task?.title ? `建议 ${refresh.data.recommended_task.title}` : "",
+        refresh.data.recommended_task?.title
+          ? `建议 ${refresh.data.recommended_task.title}`
+          : "",
         runningCount ? `运行中 ${runningCount}` : "",
-        isCooling ? `冷却 ${refresh.data.cooldown?.remaining_seconds ?? 0}s` : "",
+        isCooling
+          ? `冷却 ${refresh.data.cooldown?.remaining_seconds ?? 0}s`
+          : "",
       ]
         .filter(Boolean)
         .join(" · ")
@@ -157,7 +187,12 @@ export function EvidencePanel({
     }
     setMessage("");
     trigger.mutate(
-      { force, reason: force ? "manual_force_from_evidence_panel" : "manual_from_evidence_panel" },
+      {
+        force,
+        reason: force
+          ? "manual_force_from_evidence_panel"
+          : "manual_from_evidence_panel",
+      },
       {
         onSuccess: (payload) => {
           setMessage(`${payload.task.title || payload.task.task_name} 已启动`);
@@ -183,7 +218,11 @@ export function EvidencePanel({
                 onClick={() => startRefresh(false)}
                 disabled={trigger.isPending || runningCount > 0 || isCooling}
               >
-                {trigger.isPending ? <LoaderCircle size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                {trigger.isPending ? (
+                  <LoaderCircle size={13} className="animate-spin" />
+                ) : (
+                  <RefreshCw size={13} />
+                )}
                 刷新
               </button>
             ) : null
@@ -193,15 +232,29 @@ export function EvidencePanel({
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <Badge tone={staleCount ? "warning" : "positive"}>{healthTitle}</Badge>
-                  {refresh.data?.readiness_mode ? <Badge tone={readinessCopy.tone}>{readinessCopy.title}</Badge> : null}
-                  {staleCount ? <Badge tone="warning">降级源 {staleCount}</Badge> : null}
-                  {autoDecision?.triggered ? <Badge tone="positive">已自动补刷</Badge> : null}
+                  <Badge tone={staleCount ? "warning" : "positive"}>
+                    {healthTitle}
+                  </Badge>
+                  {refresh.data?.readiness_mode ? (
+                    <Badge tone={readinessCopy.tone}>
+                      {readinessCopy.title}
+                    </Badge>
+                  ) : null}
+                  {staleCount ? (
+                    <Badge tone="warning">降级源 {staleCount}</Badge>
+                  ) : null}
+                  {autoDecision?.triggered ? (
+                    <Badge tone="positive">已自动补刷</Badge>
+                  ) : null}
                 </div>
                 <p className="text-[12px] leading-5 text-[var(--text-secondary)]">
                   {healthDetail || "来源状态可用，必要时展开看明细。"}
                 </p>
-                {message ? <p className="mt-2 text-[12px] text-[var(--text-tertiary)]">{message}</p> : null}
+                {message ? (
+                  <p className="mt-2 text-[12px] text-[var(--text-tertiary)]">
+                    {message}
+                  </p>
+                ) : null}
               </div>
               {isCooling ? (
                 <button
@@ -223,11 +276,20 @@ export function EvidencePanel({
                 <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-2">
                   <div className="rounded-md border border-[var(--border-subtle)] px-3 py-2">
                     <div className="flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-secondary)]">
-                      <span className="font-medium text-[var(--text-primary)]">自动刷新</span>
-                      <Badge tone={autoDecision?.allowed ? "positive" : "watch"}>
+                      <span className="font-medium text-[var(--text-primary)]">
+                        自动刷新
+                      </span>
+                      <Badge
+                        tone={autoDecision?.allowed ? "positive" : "watch"}
+                      >
                         {autoDecision?.allowed ? "允许自动补刷" : "未自动补刷"}
                       </Badge>
-                      <span>冷却 {formatCooldown(refresh.data.cooldown?.remaining_seconds)}</span>
+                      <span>
+                        冷却{" "}
+                        {formatCooldown(
+                          refresh.data.cooldown?.remaining_seconds,
+                        )}
+                      </span>
                     </div>
                     <div className="mt-1 text-[12px] leading-5 text-[var(--text-tertiary)]">
                       {autoDecision?.summary || "等待刷新策略判断。"}
@@ -241,11 +303,19 @@ export function EvidencePanel({
 
                   <div className="rounded-md border border-[var(--border-subtle)] px-3 py-2">
                     <div className="flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-secondary)]">
-                      <span className="font-medium text-[var(--text-primary)]">最近自动刷新</span>
-                      {lastAuto?.task_name ? <Badge tone="info">{lastAuto.task_name}</Badge> : <Badge tone="watch">暂无</Badge>}
+                      <span className="font-medium text-[var(--text-primary)]">
+                        最近自动刷新
+                      </span>
+                      {lastAuto?.task_name ? (
+                        <Badge tone="info">{lastAuto.task_name}</Badge>
+                      ) : (
+                        <Badge tone="watch">暂无</Badge>
+                      )}
                     </div>
                     <div className="mt-1 text-[12px] leading-5 text-[var(--text-tertiary)]">
-                      {lastAuto ? `${lastAuto.ts || "-"} · ${lastAuto.reason || "-"}` : "还没有自动刷新审计事件。"}
+                      {lastAuto
+                        ? `${lastAuto.ts || "-"} · ${lastAuto.reason || "-"}`
+                        : "还没有自动刷新审计事件。"}
                     </div>
                   </div>
                 </div>
@@ -253,26 +323,40 @@ export function EvidencePanel({
 
               <div className="mt-3 grid grid-cols-1 gap-4 xl:grid-cols-2">
                 <div>
-                  <div className="mb-2 text-[12px] font-medium text-[var(--text-primary)]">新鲜度</div>
+                  <div className="mb-2 text-[12px] font-medium text-[var(--text-primary)]">
+                    新鲜度
+                  </div>
                   <div className="flex flex-col gap-2">
                     {mergedSources.map((source, index) => (
-                      <SourceCard key={`${source.label}-${index}`} source={source} />
+                      <SourceCard
+                        key={`${source.label}-${index}`}
+                        source={source}
+                      />
                     ))}
-                    {!mergedSources.length ? <EmptyState>暂无新鲜度状态。</EmptyState> : null}
+                    {!mergedSources.length ? (
+                      <EmptyState>暂无新鲜度状态。</EmptyState>
+                    ) : null}
                   </div>
                 </div>
 
                 <div>
-                  <div className="mb-2 text-[12px] font-medium text-[var(--text-primary)]">回源入口</div>
+                  <div className="mb-2 text-[12px] font-medium text-[var(--text-primary)]">
+                    回源入口
+                  </div>
                   <div className="flex flex-col gap-2">
                     {artifactCards.map((card, index) => (
                       <div
                         key={`${artifactTitle(card)}-${index}`}
                         className="flex items-center gap-3 rounded-md border border-[var(--border-subtle)] px-3 py-2"
                       >
-                        <FileText size={14} className="shrink-0 text-[var(--text-tertiary)]" />
+                        <FileText
+                          size={14}
+                          className="shrink-0 text-[var(--text-tertiary)]"
+                        />
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-[12px] text-[var(--text-primary)]">{artifactTitle(card)}</div>
+                          <div className="truncate text-[12px] text-[var(--text-primary)]">
+                            {artifactTitle(card)}
+                          </div>
                           <div className="mono truncate text-[11px] text-[var(--text-tertiary)]">
                             {artifactPath(card) || card.url}
                           </div>
@@ -302,19 +386,32 @@ export function EvidencePanel({
                       <button
                         type="button"
                         className="focus-ring flex items-center gap-3 rounded-md border border-[var(--border-subtle)] px-3 py-2 text-left hover:border-[var(--border-default)]"
-                        onClick={() => void openRunLog(String(refresh.data?.cooldown?.last_run_id))}
+                        onClick={() =>
+                          void openRunLog(
+                            String(refresh.data?.cooldown?.last_run_id),
+                          )
+                        }
                       >
-                        <FileText size={14} className="shrink-0 text-[var(--text-tertiary)]" />
+                        <FileText
+                          size={14}
+                          className="shrink-0 text-[var(--text-tertiary)]"
+                        />
                         <span className="min-w-0 flex-1">
-                          <span className="block text-[12px] text-[var(--text-primary)]">最近刷新日志</span>
+                          <span className="block text-[12px] text-[var(--text-primary)]">
+                            最近刷新日志
+                          </span>
                           <span className="mono block truncate text-[11px] text-[var(--text-tertiary)]">
                             {refresh.data.cooldown.last_run_id}
                           </span>
                         </span>
-                        <Eye size={14} className="text-[var(--text-tertiary)]" />
+                        <Eye
+                          size={14}
+                          className="text-[var(--text-tertiary)]"
+                        />
                       </button>
                     ) : null}
-                    {!artifactCards.length && !refresh.data?.cooldown?.last_run_id ? (
+                    {!artifactCards.length &&
+                    !refresh.data?.cooldown?.last_run_id ? (
                       <EmptyState>暂无 artifacts 或日志入口。</EmptyState>
                     ) : null}
                   </div>
@@ -323,7 +420,10 @@ export function EvidencePanel({
             </details>
           </div>
         </Panel>
-        <PreviewDrawer state={preview} onClose={() => setPreview((current) => ({ ...current, open: false }))} />
+        <PreviewDrawer
+          state={preview}
+          onClose={() => setPreview((current) => ({ ...current, open: false }))}
+        />
       </>
     );
   }
@@ -352,7 +452,11 @@ export function EvidencePanel({
                 onClick={() => startRefresh(false)}
                 disabled={trigger.isPending || runningCount > 0 || isCooling}
               >
-                {trigger.isPending ? <LoaderCircle size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                {trigger.isPending ? (
+                  <LoaderCircle size={13} className="animate-spin" />
+                ) : (
+                  <RefreshCw size={13} />
+                )}
                 刷新
               </button>
             </div>
@@ -369,17 +473,33 @@ export function EvidencePanel({
                 <Badge tone={refresh.data.stale_count ? "warning" : "positive"}>
                   过期源 {refresh.data.stale_count}
                 </Badge>
-                {refresh.data.readiness_mode ? <Badge tone={readinessCopy.tone}>{readinessCopy.title}</Badge> : null}
+                {refresh.data.readiness_mode ? (
+                  <Badge tone={readinessCopy.tone}>{readinessCopy.title}</Badge>
+                ) : null}
                 {refresh.data.recommended_task?.task_name ? (
-                  <Badge tone={refresh.data.recommended_task.kind === "lightweight" ? "info" : "watch"}>
-                    建议 {refresh.data.recommended_task.title || refresh.data.recommended_task.task_name}
+                  <Badge
+                    tone={
+                      refresh.data.recommended_task.kind === "lightweight"
+                        ? "info"
+                        : "watch"
+                    }
+                  >
+                    建议{" "}
+                    {refresh.data.recommended_task.title ||
+                      refresh.data.recommended_task.task_name}
                   </Badge>
                 ) : null}
-                {runningCount ? <Badge tone="watch">运行中 {runningCount}</Badge> : null}
-                {isCooling ? (
-                  <Badge tone="watch">冷却 {refresh.data.cooldown.remaining_seconds}s</Badge>
+                {runningCount ? (
+                  <Badge tone="watch">运行中 {runningCount}</Badge>
                 ) : null}
-                {autoDecision?.triggered ? <Badge tone="positive">已自动补刷</Badge> : null}
+                {isCooling ? (
+                  <Badge tone="watch">
+                    冷却 {refresh.data.cooldown.remaining_seconds}s
+                  </Badge>
+                ) : null}
+                {autoDecision?.triggered ? (
+                  <Badge tone="positive">已自动补刷</Badge>
+                ) : null}
               </>
             ) : mode === "ask" ? (
               <>
@@ -394,19 +514,30 @@ export function EvidencePanel({
             ) : (
               <Badge tone="info">页内证据</Badge>
             )}
-            {message ? <span className="text-[12px] text-[var(--text-tertiary)]">{message}</span> : null}
+            {message ? (
+              <span className="text-[12px] text-[var(--text-tertiary)]">
+                {message}
+              </span>
+            ) : null}
           </div>
 
           {refreshPage && refresh.data ? (
             <div className="mb-4 grid grid-cols-1 gap-2 lg:grid-cols-2">
               <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
                 <div className="flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-secondary)]">
-                  <span className="font-medium text-[var(--text-primary)]">自动刷新</span>
+                  <span className="font-medium text-[var(--text-primary)]">
+                    自动刷新
+                  </span>
                   <Badge tone={autoDecision?.allowed ? "positive" : "watch"}>
                     {autoDecision?.allowed ? "允许自动补刷" : "未自动补刷"}
                   </Badge>
-                  <span>冷却 {formatCooldown(refresh.data.cooldown?.remaining_seconds)}</span>
-                  {refresh.data.cooldown?.next_allowed_at ? <span>下次 {refresh.data.cooldown.next_allowed_at}</span> : null}
+                  <span>
+                    冷却{" "}
+                    {formatCooldown(refresh.data.cooldown?.remaining_seconds)}
+                  </span>
+                  {refresh.data.cooldown?.next_allowed_at ? (
+                    <span>下次 {refresh.data.cooldown.next_allowed_at}</span>
+                  ) : null}
                 </div>
                 <div className="mt-1 text-[12px] leading-5 text-[var(--text-tertiary)]">
                   {autoDecision?.summary || "等待刷新策略判断。"}
@@ -419,13 +550,17 @@ export function EvidencePanel({
                 {blockedReasons.length ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {blockedReasons.slice(0, 4).map((reason) => (
-                      <Badge key={reason} tone="warning">{refreshReasonLabel(reason)}</Badge>
+                      <Badge key={reason} tone="warning">
+                        {refreshReasonLabel(reason)}
+                      </Badge>
                     ))}
                   </div>
                 ) : autoReasons.length ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {autoReasons.slice(0, 4).map((reason) => (
-                      <Badge key={reason} tone="info">{refreshReasonLabel(reason)}</Badge>
+                      <Badge key={reason} tone="info">
+                        {refreshReasonLabel(reason)}
+                      </Badge>
                     ))}
                   </div>
                 ) : null}
@@ -433,19 +568,32 @@ export function EvidencePanel({
 
               <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2">
                 <div className="flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-secondary)]">
-                  <span className="font-medium text-[var(--text-primary)]">最近自动刷新</span>
-                  {lastAuto?.task_name ? <Badge tone="info">{lastAuto.task_name}</Badge> : <Badge tone="watch">暂无</Badge>}
+                  <span className="font-medium text-[var(--text-primary)]">
+                    最近自动刷新
+                  </span>
+                  {lastAuto?.task_name ? (
+                    <Badge tone="info">{lastAuto.task_name}</Badge>
+                  ) : (
+                    <Badge tone="watch">暂无</Badge>
+                  )}
                   {lastAuto?.force ? <Badge tone="warning">force</Badge> : null}
                 </div>
                 <div className="mt-1 text-[12px] leading-5 text-[var(--text-tertiary)]">
-                  {lastAuto ? `${lastAuto.ts || "-"} · ${lastAuto.reason || "-"}` : "还没有自动刷新审计事件。"}
+                  {lastAuto
+                    ? `${lastAuto.ts || "-"} · ${lastAuto.reason || "-"}`
+                    : "还没有自动刷新审计事件。"}
                 </div>
                 {refresh.data.active_auto_windows?.length ? (
                   <div className="mt-2 text-[11px] text-[var(--text-tertiary)]">
-                    当前窗口：{refresh.data.active_auto_windows.map((window) => window.label).join(" / ")}
+                    当前窗口：
+                    {refresh.data.active_auto_windows
+                      .map((window) => window.label)
+                      .join(" / ")}
                   </div>
                 ) : (
-                  <div className="mt-2 text-[11px] text-[var(--text-tertiary)]">当前不在自动刷新窗口。</div>
+                  <div className="mt-2 text-[11px] text-[var(--text-tertiary)]">
+                    当前不在自动刷新窗口。
+                  </div>
                 )}
               </div>
             </div>
@@ -453,26 +601,40 @@ export function EvidencePanel({
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <div>
-              <div className="mb-2 text-[12px] font-medium text-[var(--text-primary)]">新鲜度</div>
+              <div className="mb-2 text-[12px] font-medium text-[var(--text-primary)]">
+                新鲜度
+              </div>
               <div className="flex flex-col gap-2">
                 {mergedSources.map((source, index) => (
-                  <SourceCard key={`${source.label}-${index}`} source={source} />
+                  <SourceCard
+                    key={`${source.label}-${index}`}
+                    source={source}
+                  />
                 ))}
-                {!mergedSources.length ? <EmptyState>暂无新鲜度状态。</EmptyState> : null}
+                {!mergedSources.length ? (
+                  <EmptyState>暂无新鲜度状态。</EmptyState>
+                ) : null}
               </div>
             </div>
 
             <div>
-              <div className="mb-2 text-[12px] font-medium text-[var(--text-primary)]">回源入口</div>
+              <div className="mb-2 text-[12px] font-medium text-[var(--text-primary)]">
+                回源入口
+              </div>
               <div className="flex flex-col gap-2">
                 {artifactCards.map((card, index) => (
                   <div
                     key={`${artifactTitle(card)}-${index}`}
                     className="flex items-center gap-3 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2"
                   >
-                    <FileText size={14} className="shrink-0 text-[var(--text-tertiary)]" />
+                    <FileText
+                      size={14}
+                      className="shrink-0 text-[var(--text-tertiary)]"
+                    />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[12px] text-[var(--text-primary)]">{artifactTitle(card)}</div>
+                      <div className="truncate text-[12px] text-[var(--text-primary)]">
+                        {artifactTitle(card)}
+                      </div>
                       <div className="mono truncate text-[11px] text-[var(--text-tertiary)]">
                         {artifactPath(card) || card.url}
                       </div>
@@ -502,11 +664,20 @@ export function EvidencePanel({
                   <button
                     type="button"
                     className="focus-ring flex items-center gap-3 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2 text-left hover:border-[var(--border-default)]"
-                    onClick={() => void openRunLog(String(refresh.data?.cooldown?.last_run_id))}
+                    onClick={() =>
+                      void openRunLog(
+                        String(refresh.data?.cooldown?.last_run_id),
+                      )
+                    }
                   >
-                    <FileText size={14} className="shrink-0 text-[var(--text-tertiary)]" />
+                    <FileText
+                      size={14}
+                      className="shrink-0 text-[var(--text-tertiary)]"
+                    />
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[12px] text-[var(--text-primary)]">最近刷新日志</span>
+                      <span className="block text-[12px] text-[var(--text-primary)]">
+                        最近刷新日志
+                      </span>
                       <span className="mono block truncate text-[11px] text-[var(--text-tertiary)]">
                         {refresh.data.cooldown.last_run_id}
                       </span>
@@ -514,7 +685,8 @@ export function EvidencePanel({
                     <Eye size={14} className="text-[var(--text-tertiary)]" />
                   </button>
                 ) : null}
-                {!artifactCards.length && !refresh.data?.cooldown?.last_run_id ? (
+                {!artifactCards.length &&
+                !refresh.data?.cooldown?.last_run_id ? (
                   <EmptyState>暂无 artifacts 或日志入口。</EmptyState>
                 ) : null}
               </div>
@@ -522,7 +694,10 @@ export function EvidencePanel({
           </div>
         </div>
       </Panel>
-      <PreviewDrawer state={preview} onClose={() => setPreview((current) => ({ ...current, open: false }))} />
+      <PreviewDrawer
+        state={preview}
+        onClose={() => setPreview((current) => ({ ...current, open: false }))}
+      />
     </>
   );
 }

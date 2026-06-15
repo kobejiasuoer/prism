@@ -19,6 +19,8 @@ from typing import Optional
 # ── tier ordering (higher = better) ──
 TIER_ORDER = {"A": 3, "B": 2, "C": 1, "D": 0}
 STATUS_ORDER = {"approved": 3, "caution": 2, "excluded": 1}
+V2_ACTION_ORDER = {"observe": 0, "review": 1, "shadow": 2, "trial": 3, "actionable": 4}
+V2_RISK_ORDER = {"low": 0, "medium": 1, "high": 2}
 
 
 def parse_args():
@@ -51,6 +53,231 @@ def parse_timestamp(value: str) -> Optional[datetime]:
         return None
 
 
+def safe_float(value, default=0.0):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _factor_fields_from_item(item: dict) -> dict:
+    factors = item.get("tushare_factors") or {}
+    return {
+        "tushare_score": factors.get("tushare_score"),
+        "data_completeness": factors.get("data_completeness"),
+        "factor_tags": factors.get("factor_tags") or [],
+        "risk_flags": factors.get("risk_flags") or [],
+        "risk_level": item.get("risk_level") or factors.get("risk_level") or "info",
+        "risk_items": item.get("risk_items") or factors.get("risk_items") or [],
+        "degrade_reason": item.get("degrade_reason") or factors.get("degrade_reason") or "",
+        "block_reason": item.get("block_reason") or factors.get("block_reason") or "",
+        "risk_evidence_refs": item.get("risk_evidence_refs") or factors.get("risk_evidence_refs") or [],
+        "tushare_score_breakdown": factors.get("tushare_score_breakdown") or {},
+        "factor_snapshot": factors.get("factor_snapshot") or {},
+        "trade_date_used": factors.get("trade_date_used"),
+        "risk_level": factors.get("risk_level"),
+        "degrade_reason": factors.get("degrade_reason"),
+        "tushare_positive_adjustment": item.get("tushare_positive_adjustment"),
+        "tushare_risk_penalty": item.get("tushare_risk_penalty"),
+        "tushare_priority_adjustment": item.get("tushare_priority_adjustment"),
+    }
+
+
+def _factor_snapshot_for_event(item: dict) -> dict:
+    return {
+        "tushare_score": item.get("tushare_score"),
+        "data_completeness": item.get("data_completeness"),
+        "factor_tags": item.get("factor_tags") or [],
+        "risk_flags": item.get("risk_flags") or [],
+        "risk_level": item.get("risk_level") or "info",
+        "risk_items": item.get("risk_items") or [],
+        "degrade_reason": item.get("degrade_reason") or "",
+        "block_reason": item.get("block_reason") or "",
+        "risk_evidence_refs": item.get("risk_evidence_refs") or [],
+        "tushare_score_breakdown": item.get("tushare_score_breakdown") or {},
+        "factor_snapshot": item.get("factor_snapshot") or {},
+        "trade_date_used": item.get("trade_date_used"),
+        "risk_level": item.get("risk_level"),
+        "degrade_reason": item.get("degrade_reason"),
+        "tushare_positive_adjustment": item.get("tushare_positive_adjustment"),
+        "tushare_risk_penalty": item.get("tushare_risk_penalty"),
+        "tushare_priority_adjustment": item.get("tushare_priority_adjustment"),
+    }
+
+
+def _v2_value(judgment: dict, *keys: str, default=""):
+    value = judgment
+    for key in keys:
+        if not isinstance(value, dict):
+            return default
+        value = value.get(key)
+    return value if value not in (None, "", [], {}) else default
+
+
+def _opportunity_v2_fields_from_item(item: dict) -> dict:
+    judgment = item.get("opportunity_v2") if isinstance(item.get("opportunity_v2"), dict) else {}
+    hard_gate = judgment.get("hard_gate") if isinstance(judgment.get("hard_gate"), dict) else {}
+    block_reasons = hard_gate.get("block_reasons") if isinstance(hard_gate.get("block_reasons"), list) else []
+    missing = item.get("missing_confirmation") or judgment.get("missing_confirmation") or []
+    return {
+        "suggested_action": item.get("suggested_action") or judgment.get("suggested_action") or "",
+        "suggested_action_label": item.get("suggested_action_label") or judgment.get("action_label") or "",
+        "desired_action": judgment.get("desired_action") or "",
+        "confidence": item.get("confidence") if item.get("confidence") is not None else judgment.get("confidence"),
+        "thesis": item.get("thesis") or judgment.get("thesis") or "",
+        "why_now": item.get("why_now") or judgment.get("why_now") or "",
+        "invalidation": item.get("invalidation") or judgment.get("invalidation") or "",
+        "upgrade_reason": judgment.get("upgrade_reason") or "",
+        "missing_confirmation": missing if isinstance(missing, list) else [missing],
+        "hard_gate_max_action": item.get("hard_gate_max_action") or hard_gate.get("maximum_allowed_action") or "",
+        "hard_gate_block_reason": item.get("hard_gate_block_reason") or "; ".join(str(reason) for reason in block_reasons if reason),
+        "market_phase": _v2_value(judgment, "market_phase", "value"),
+        "market_phase_label": _v2_value(judgment, "market_phase", "label"),
+        "theme_phase": _v2_value(judgment, "theme_phase", "value"),
+        "theme_phase_label": _v2_value(judgment, "theme_phase", "label"),
+        "stock_role": _v2_value(judgment, "stock_role", "value"),
+        "stock_role_label": _v2_value(judgment, "stock_role", "label"),
+        "opportunity_type": judgment.get("opportunity_type") or _v2_value(judgment, "playbook", "opportunity_type"),
+        "playbook_label": _v2_value(judgment, "playbook", "label"),
+        "crowding_risk_level": _v2_value(judgment, "crowding_risk", "level"),
+        "fake_breakout_risk_level": _v2_value(judgment, "fake_breakout_risk", "level"),
+        "opportunity_v2": judgment,
+    }
+
+
+def _opportunity_snapshot_for_event(item: dict) -> dict:
+    fields = _opportunity_v2_fields_from_item(item)
+    return {
+        key: fields.get(key)
+        for key in (
+            "suggested_action",
+            "suggested_action_label",
+            "desired_action",
+            "confidence",
+            "thesis",
+            "why_now",
+            "invalidation",
+            "upgrade_reason",
+            "missing_confirmation",
+            "hard_gate_max_action",
+            "hard_gate_block_reason",
+            "market_phase",
+            "market_phase_label",
+            "theme_phase",
+            "theme_phase_label",
+            "stock_role",
+            "stock_role_label",
+            "opportunity_type",
+            "playbook_label",
+            "crowding_risk_level",
+            "fake_breakout_risk_level",
+        )
+    }
+
+
+def _v2_rank(item: dict) -> int:
+    return V2_ACTION_ORDER.get(str(item.get("suggested_action") or ""), 0)
+
+
+def _v2_confidence(item: dict) -> float:
+    value = item.get("confidence")
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _v2_missing_count(item: dict) -> int:
+    missing = item.get("missing_confirmation") or []
+    return len(missing) if isinstance(missing, list) else (1 if missing else 0)
+
+
+def _v2_risk_score(item: dict) -> int:
+    return max(
+        V2_RISK_ORDER.get(str(item.get("crowding_risk_level") or ""), 0),
+        V2_RISK_ORDER.get(str(item.get("fake_breakout_risk_level") or ""), 0),
+    )
+
+
+def _v2_change_reason(curr: dict, prev: dict, score_delta: float) -> tuple[str, str, list[str]]:
+    """Return (direction, reason, notes) using V2 semantics.
+
+    direction is ``upgrade``, ``downgrade`` or ``continue``. Old score/tier
+    movements are only a fallback when neither side carries V2 fields.
+    """
+
+    has_v2 = bool(curr.get("suggested_action") or prev.get("suggested_action") or curr.get("thesis") or prev.get("thesis"))
+    if not has_v2:
+        curr_tier = TIER_ORDER.get(curr.get("tier", ""), 0)
+        prev_tier = TIER_ORDER.get(prev.get("tier", ""), 0)
+        curr_status = STATUS_ORDER.get(curr.get("screening_status", ""), 0)
+        prev_status = STATUS_ORDER.get(prev.get("screening_status", ""), 0)
+        if curr_tier > prev_tier or curr_status > prev_status:
+            return "upgrade", "旧层级/状态改善；当前无 V2 结构字段，按旧规则回退", []
+        if curr_tier < prev_tier or curr_status < prev_status:
+            return "downgrade", "旧层级/状态回落；当前无 V2 结构字段，按旧规则回退", []
+        if score_delta >= 15:
+            return "upgrade", f"旧评分显著改善（{score_delta:+.2f}）", []
+        if score_delta <= -15:
+            return "downgrade", f"旧评分显著回落（{score_delta:+.2f}）", []
+        return "continue", "连续两轮仍在候选池，先按延续观察处理", []
+
+    notes: list[str] = []
+    upgrade_points = 0
+    downgrade_points = 0
+    action_delta = _v2_rank(curr) - _v2_rank(prev)
+    if action_delta > 0:
+        upgrade_points += 2
+        notes.append(f"建议动作 {prev.get('suggested_action') or 'observe'} -> {curr.get('suggested_action') or 'observe'}")
+    elif action_delta < 0:
+        downgrade_points += 2
+        notes.append(f"建议动作降级 {prev.get('suggested_action') or 'observe'} -> {curr.get('suggested_action') or 'observe'}")
+
+    conf_delta = round(_v2_confidence(curr) - _v2_confidence(prev), 2)
+    if conf_delta >= 0.12:
+        upgrade_points += 1
+        notes.append(f"结构置信度提升 {conf_delta:+.2f}")
+    elif conf_delta <= -0.12:
+        downgrade_points += 1
+        notes.append(f"结构置信度回落 {conf_delta:+.2f}")
+
+    missing_delta = _v2_missing_count(curr) - _v2_missing_count(prev)
+    if missing_delta < 0:
+        upgrade_points += 1
+        notes.append("确认缺口收窄")
+    elif missing_delta > 0:
+        downgrade_points += 1
+        notes.append("确认缺口增加")
+
+    for key, label in (("stock_role", "个股角色"), ("theme_phase", "题材阶段"), ("opportunity_type", "机会类型")):
+        before, after = prev.get(key), curr.get(key)
+        if before and after and before != after:
+            notes.append(f"{label} {before} -> {after}")
+
+    risk_delta = _v2_risk_score(curr) - _v2_risk_score(prev)
+    if risk_delta < 0:
+        upgrade_points += 1
+        notes.append("拥挤/假突破风险下降")
+    elif risk_delta > 0:
+        downgrade_points += 1
+        notes.append("拥挤/假突破风险上升")
+
+    if curr.get("hard_gate_block_reason") and not prev.get("hard_gate_block_reason"):
+        downgrade_points += 1
+        notes.append("新增硬闸门封顶原因")
+    elif prev.get("hard_gate_block_reason") and not curr.get("hard_gate_block_reason"):
+        upgrade_points += 1
+        notes.append("硬闸门封顶解除")
+
+    if downgrade_points >= max(2, upgrade_points + 1):
+        reason = curr.get("invalidation") or curr.get("main_risk") or "原始机会假设被破坏或风险收益比变差"
+        return "downgrade", reason, notes[:5]
+    if upgrade_points >= max(2, downgrade_points + 1):
+        reason = curr.get("upgrade_reason") or curr.get("why_now") or "结构假设更清楚，行为验证改善"
+        return "upgrade", reason, notes[:5]
+    return "continue", curr.get("why_now") or "原始假设未被破坏，但仍需继续验证", notes[:5]
+
+
 def extract_shortlist(data: dict) -> dict[str, dict]:
     """Extract {code: stock_info} from ai_screening or history snapshot."""
     if not data:
@@ -61,6 +288,8 @@ def extract_shortlist(data: dict) -> dict[str, dict]:
     # ai_screening_result.json format: .shortlist
     if "shortlist" in data:
         for s in data["shortlist"]:
+            factor_fields = _factor_fields_from_item(s)
+            opportunity_fields = _opportunity_v2_fields_from_item(s)
             stocks[s["code"]] = {
                 "code": s["code"],
                 "name": s.get("name", ""),
@@ -75,6 +304,8 @@ def extract_shortlist(data: dict) -> dict[str, dict]:
                 "entry_reason": s.get("entry_reason", ""),
                 "main_risk": s.get("main_risk", ""),
                 "watch_condition": s.get("watch_condition", ""),
+                **opportunity_fields,
+                **factor_fields,
                 "timestamp": data.get("timestamp", ""),
             }
         return stocks
@@ -90,6 +321,8 @@ def extract_shortlist(data: dict) -> dict[str, dict]:
             code = s.get("code")
             if not code or code in stocks:
                 continue  # keep first occurrence (combined is typically first)
+            factor_fields = _factor_fields_from_item(s)
+            opportunity_fields = _opportunity_v2_fields_from_item(s)
             stocks[code] = {
                 "code": code,
                 "name": s.get("name", ""),
@@ -104,6 +337,8 @@ def extract_shortlist(data: dict) -> dict[str, dict]:
                 "entry_reason": s.get("entry_reason", ""),
                 "main_risk": s.get("main_risk", ""),
                 "watch_condition": s.get("watch_condition", ""),
+                **opportunity_fields,
+                **factor_fields,
                 "timestamp": data.get("timestamp", ""),
             }
     return stocks
@@ -254,6 +489,7 @@ def compute_lifecycle(
     exited = []
     upgraded = []
     downgraded = []
+    continued = []
     handed_off = []
 
     # Entered: in current but not in previous
@@ -269,6 +505,10 @@ def compute_lifecycle(
             "change_pct": s["change_pct"],
             "entry_reason": s["entry_reason"],
             "main_risk": s["main_risk"],
+            "reason": s.get("why_now") or s.get("entry_reason") or "新进入观察池，等待结构和行为继续验证",
+            "evidence_notes": [s.get("upgrade_reason") or "", *(s.get("missing_confirmation") or [])],
+            **_opportunity_snapshot_for_event(s),
+            **_factor_snapshot_for_event(s),
         })
 
     # Exited: in previous but not in current
@@ -282,6 +522,10 @@ def compute_lifecycle(
             "score": s["score"],
             "theme": s["theme"],
             "last_seen": s.get("timestamp", ""),
+            "reason": s.get("invalidation") or s.get("main_risk") or "已从当前 shortlist 退出，原始假设没有继续获得验证",
+            "evidence_notes": [s.get("thesis") or "", s.get("hard_gate_block_reason") or ""],
+            **_opportunity_snapshot_for_event(s),
+            **_factor_snapshot_for_event(s),
         })
 
     # Upgraded / Downgraded: in both, compare tier and screening_status
@@ -291,43 +535,10 @@ def compute_lifecycle(
         curr = current[code]
         prev = previous[code]
 
-        curr_tier_val = curr.get("tier", "")
-        prev_tier_val = prev.get("tier", "")
-        curr_status_val = curr.get("screening_status", "")
-        prev_status_val = prev.get("screening_status", "")
-
-        curr_tier = TIER_ORDER.get(curr_tier_val, 0)
-        prev_tier = TIER_ORDER.get(prev_tier_val, 0)
-        curr_status = STATUS_ORDER.get(curr_status_val, 0)
-        prev_status = STATUS_ORDER.get(prev_status_val, 0)
-
-        curr_score = curr.get("score", 0)
-        prev_score = prev.get("score", 0)
+        curr_score = safe_float(curr.get("score", 0), default=0.0)
+        prev_score = safe_float(prev.get("score", 0), default=0.0)
         score_delta = round(curr_score - prev_score, 2)
-
-        # Only detect tier/status upgrade/downgrade when both sides have data
-        has_tier_data = prev_tier_val != "" and curr_tier_val != ""
-        has_status_data = prev_status_val != "" and curr_status_val != ""
-
-        is_upgrade = False
-        is_downgrade = False
-
-        if has_tier_data and curr_tier > prev_tier:
-            is_upgrade = True
-        elif has_tier_data and curr_tier < prev_tier:
-            is_downgrade = True
-
-        if has_status_data and curr_status > prev_status:
-            is_upgrade = True
-        elif has_status_data and curr_status < prev_status:
-            is_downgrade = True
-
-        # Score change as secondary signal (±15 points) when no tier/status change
-        if not is_upgrade and not is_downgrade and abs(score_delta) >= 15:
-            if score_delta > 0:
-                is_upgrade = True
-            else:
-                is_downgrade = True
+        direction, semantic_reason, evidence_notes = _v2_change_reason(curr, prev, score_delta)
 
         detail = {
             "code": code,
@@ -340,12 +551,33 @@ def compute_lifecycle(
             "curr_score": curr_score,
             "score_delta": round(score_delta, 2),
             "theme": curr["theme"],
+            "reason": semantic_reason,
+            "evidence_notes": evidence_notes,
+            "prev_suggested_action": prev.get("suggested_action", ""),
+            "curr_suggested_action": curr.get("suggested_action", ""),
+            "prev_confidence": prev.get("confidence"),
+            "curr_confidence": curr.get("confidence"),
+            "prev_missing_confirmation_count": _v2_missing_count(prev),
+            "curr_missing_confirmation_count": _v2_missing_count(curr),
+            **_opportunity_snapshot_for_event(curr),
+            **_factor_snapshot_for_event(curr),
         }
 
-        if is_upgrade:
+        if direction == "upgrade":
             upgraded.append(detail)
-        elif is_downgrade:
+        elif direction == "downgrade":
             downgraded.append(detail)
+        else:
+            continued.append(
+                {
+                    **detail,
+                    "tier": curr.get("tier", ""),
+                    "screening_status": curr.get("screening_status", ""),
+                    "score": curr_score,
+                    "persistence_label": "非一日脉冲",
+                    "reason": semantic_reason,
+                }
+            )
 
     # Midday downgraded: supplement downgrade funnel (and avoid malformed empty objects)
     downgraded_codes = {item["code"] for item in downgraded}
@@ -366,8 +598,11 @@ def compute_lifecycle(
             "curr_score": current_info.get("score", d.get("morning_score", 0)) if in_current else d.get("morning_score", 0),
             "score_delta": round((current_info.get("score", d.get("morning_score", 0)) if in_current else d.get("morning_score", 0)) - d.get("morning_score", 0), 2),
             "theme": current_info.get("theme", ""),
-            "reason": d.get("reason", ""),
+            "reason": d.get("reason", "") or current_info.get("invalidation", "") or "午盘承接失败，原始假设暂时失效",
+            "evidence_notes": d.get("details", []) or [current_info.get("invalidation", "")],
             "source": "midday_verification",
+            **_opportunity_snapshot_for_event(current_info),
+            **_factor_snapshot_for_event(current_info),
         })
 
     # Handed off: confirmed in midday verification
@@ -384,18 +619,21 @@ def compute_lifecycle(
             "in_current_shortlist": in_current,
             "current_tier": current[code]["tier"] if in_current else "N/A",
             "current_screening_status": current[code]["screening_status"] if in_current else "N/A",
+            **_opportunity_snapshot_for_event(current.get(code, {})),
         })
 
     return {
         "entered": entered,
         "upgraded": upgraded,
         "downgraded": downgraded,
+        "continued": continued,
         "exited": exited,
         "handed_off": handed_off,
         "summary": {
             "entered_count": len(entered),
             "upgraded_count": len(upgraded),
             "downgraded_count": len(downgraded),
+            "continued_count": len(continued),
             "exited_count": len(exited),
             "handed_off_count": len(handed_off),
             "current_pool_size": len(current_codes),
@@ -422,6 +660,7 @@ def generate_markdown(lifecycle: dict, now_str: str) -> str:
     lines.append(f"| 🆕 新入选 | {s['entered_count']} |")
     lines.append(f"| ⬆️ 升级 | {s['upgraded_count']} |")
     lines.append(f"| ⬇️ 降级 | {s['downgraded_count']} |")
+    lines.append(f"| ✅ 非一日脉冲 | {s.get('continued_count', 0)} |")
     lines.append(f"| 🚪 退出 | {s['exited_count']} |")
     lines.append(f"| 🔄 已移交 analyzer | {s['handed_off_count']} |")
     lines.append("")
@@ -431,11 +670,16 @@ def generate_markdown(lifecycle: dict, now_str: str) -> str:
         lines.append("## 🆕 新入选 (entered)")
         lines.append("")
         for e in lifecycle["entered"]:
-            lines.append(f"- **{e['name']}({e['code']})** | Tier {e['tier']} | {e['screening_status']} | 评分 {e['score']} | 涨幅 {e['change_pct']}% | {e['theme']}")
-            if e.get("entry_reason"):
-                lines.append(f"  - 入选理由：{e['entry_reason']}")
-            if e.get("main_risk"):
-                lines.append(f"  - 风险：{e['main_risk']}")
+            action = e.get("suggested_action_label") or e.get("suggested_action") or e.get("screening_status")
+            lines.append(f"- **{e['name']}({e['code']})** | {action} | 置信 {e.get('confidence', '-')} | {e['theme']}")
+            if e.get("thesis"):
+                lines.append(f"  - 假设：{e['thesis']}")
+            if e.get("reason"):
+                lines.append(f"  - 为什么现在：{e['reason']}")
+            if e.get("missing_confirmation"):
+                lines.append(f"  - 还差确认：{'；'.join(str(item) for item in e.get('missing_confirmation') or [])}")
+            if e.get("hard_gate_block_reason"):
+                lines.append(f"  - 硬闸门：{e['hard_gate_block_reason']}")
         lines.append("")
 
     # Upgraded
@@ -443,11 +687,13 @@ def generate_markdown(lifecycle: dict, now_str: str) -> str:
         lines.append("## ⬆️ 升级 (upgraded)")
         lines.append("")
         for u in lifecycle["upgraded"]:
-            prev_label = f"Tier {u['prev_tier']}/{u['prev_screening_status']}"
-            curr_label = f"Tier {u['curr_tier']}/{u['curr_screening_status']}"
-            delta = u["score_delta"]
-            delta_str = f"+{delta}" if delta > 0 else str(delta)
-            lines.append(f"- **{u['name']}({u['code']})** | {prev_label} → {curr_label} | 评分 {u['prev_score']}→{u['curr_score']} ({delta_str}) | {u['theme']}")
+            action = f"{u.get('prev_suggested_action') or '-'} → {u.get('curr_suggested_action') or u.get('suggested_action') or '-'}"
+            lines.append(f"- **{u['name']}({u['code']})** | V2 动作 {action} | 置信 {u.get('prev_confidence', '-')}→{u.get('curr_confidence', '-')}")
+            lines.append(f"  - 升级原因：{u.get('reason') or '结构假设更清楚'}")
+            if u.get("evidence_notes"):
+                lines.append(f"  - 证据：{'；'.join(str(item) for item in u.get('evidence_notes') or [] if item)}")
+            if u.get("missing_confirmation"):
+                lines.append(f"  - 还差确认：{'；'.join(str(item) for item in u.get('missing_confirmation') or [])}")
         lines.append("")
 
     # Downgraded
@@ -455,16 +701,31 @@ def generate_markdown(lifecycle: dict, now_str: str) -> str:
         lines.append("## ⬇️ 降级 (downgraded)")
         lines.append("")
         for d in lifecycle["downgraded"]:
-            prev_label = f"Tier {d['prev_tier']}/{d['prev_screening_status']}"
-            curr_label = f"Tier {d['curr_tier']}/{d['curr_screening_status']}"
-            delta = d["score_delta"]
-            delta_str = f"+{delta}" if delta > 0 else str(delta)
+            action = f"{d.get('prev_suggested_action') or '-'} → {d.get('curr_suggested_action') or d.get('suggested_action') or '-'}"
             suffix = f" | {d.get('theme', '')}" if d.get("theme") else ""
-            lines.append(f"- **{d['name']}({d['code']})** | {prev_label} → {curr_label} | 评分 {d['prev_score']}→{d['curr_score']} ({delta_str}){suffix}")
-            if d.get("reason"):
-                lines.append(f"  - 降级原因：{d['reason']}")
+            lines.append(f"- **{d['name']}({d['code']})** | V2 动作 {action} | 评分旁证 {d.get('prev_score')}→{d.get('curr_score')} ({d.get('score_delta')}){suffix}")
+            lines.append(f"  - 降级原因：{d.get('reason') or '原始假设被破坏'}")
+            if d.get("invalidation"):
+                lines.append(f"  - 失效条件：{d['invalidation']}")
+            if d.get("evidence_notes"):
+                lines.append(f"  - 证据：{'；'.join(str(item) for item in d.get('evidence_notes') or [] if item)}")
             if d.get("source") == "midday_verification":
                 lines.append("  - 来源：盘中验证")
+        lines.append("")
+
+    # Continued
+    if lifecycle.get("continued"):
+        lines.append("## ✅ 非一日脉冲 (continued)")
+        lines.append("")
+        for c in lifecycle["continued"]:
+            delta = c["score_delta"]
+            delta_str = f"+{delta}" if delta > 0 else str(delta)
+            lines.append(
+                f"- **{c['name']}({c['code']})** | Tier {c.get('tier', '')}/{c.get('screening_status', '')} | "
+                f"评分 {c['prev_score']}→{c['curr_score']} ({delta_str}) | {c.get('theme', '')}"
+            )
+            if c.get("reason"):
+                lines.append(f"  - 延续原因：{c['reason']}")
         lines.append("")
 
     # Exited
@@ -472,7 +733,9 @@ def generate_markdown(lifecycle: dict, now_str: str) -> str:
         lines.append("## 🚪 退出 (exited)")
         lines.append("")
         for e in lifecycle["exited"]:
-            lines.append(f"- **{e['name']}({e['code']})** | Tier {e['tier']} | {e['screening_status']} | 评分 {e['score']} | {e['theme']}")
+            lines.append(f"- **{e['name']}({e['code']})** | {e.get('suggested_action_label') or e.get('screening_status')} | {e['theme']}")
+            if e.get("reason"):
+                lines.append(f"  - 退出原因：{e['reason']}")
             if e.get("last_seen"):
                 lines.append(f"  - 最后出现：{e['last_seen']}")
         lines.append("")
@@ -488,7 +751,7 @@ def generate_markdown(lifecycle: dict, now_str: str) -> str:
                 lines.append(f"  - 确认理由：{h['reason']}")
         lines.append("")
 
-    if not any(lifecycle[k] for k in ["entered", "upgraded", "downgraded", "exited", "handed_off"]):
+    if not any(lifecycle.get(k) for k in ["entered", "upgraded", "downgraded", "continued", "exited", "handed_off"]):
         lines.append("## 无变动")
         lines.append("")
         lines.append("与上一期候选池相比，未检测到状态变化。")
@@ -576,6 +839,7 @@ def main():
     print(f"  🆕 entered:    {s['entered_count']}")
     print(f"  ⬆️ upgraded:   {s['upgraded_count']}")
     print(f"  ⬇️ downgraded: {s['downgraded_count']}")
+    print(f"  ✅ continued:  {s.get('continued_count', 0)}")
     print(f"  🚪 exited:     {s['exited_count']}")
     print(f"  🔄 handed_off: {s['handed_off_count']}")
     print(f"")

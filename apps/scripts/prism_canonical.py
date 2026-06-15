@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from datetime import datetime
@@ -99,6 +100,19 @@ def load_sidecar_manifest(path: Path | None, raw: dict[str, Any] | None = None) 
     return None
 
 
+def _payload_json_candidates(directory: Path, pattern: str) -> list[Path]:
+    return [
+        candidate
+        for candidate in directory.glob(pattern)
+        if candidate.is_file() and candidate.suffix == ".json" and not candidate.name.endswith(".manifest.json")
+    ]
+
+
+def _filename_trade_date(path: Path) -> str | None:
+    match = re.search(r"(\d{4}-\d{2}-\d{2})", path.name)
+    return match.group(1) if match else None
+
+
 def parse_ts(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -176,9 +190,133 @@ def build_confirmation_observation_contract(raw: dict[str, Any], status: str) ->
     return build_intraday_observation_contract(
         raw,
         status=status,
-        active_theme=bool(raw.get("active_theme")),
+        active_theme=bool(raw.get("active_theme") or raw.get("theme_in_play")),
         flow_today_yi=raw.get("flow_today_yi"),
     )
+
+
+def _price_text(value: Any) -> str:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return ""
+    if number <= 0:
+        return ""
+    return f"{number:.2f}"
+
+
+def _confirmation_snapshot_entry_plan(snapshot: dict[str, Any], status: str) -> dict[str, Any]:
+    setup_type = str(snapshot.get("setup_type") or "")
+    pullback = _price_text(snapshot.get("pullback_level") or snapshot.get("ma5"))
+    trigger = _price_text(snapshot.get("trigger_level") or snapshot.get("price"))
+    invalidate = _price_text(snapshot.get("invalidate_level") or snapshot.get("ma10") or snapshot.get("ma20"))
+
+    if setup_type == "breakout_follow":
+        trigger_text = (
+            f"放量站稳 {trigger} 上方再试，若回踩 {pullback} 不破可候补。"
+            if trigger and pullback
+            else f"放量站稳 {trigger} 上方再试。"
+            if trigger
+            else "放量站稳后再试，盘中直线拉高不追。"
+        )
+        avoid_text = "高开高走但量能跟不上时不追。"
+        invalidate_text = f"跌回 {invalidate} 下方或主力转负就取消。" if invalidate else "主力转负或结构走弱就取消。"
+    elif setup_type == "pullback_continuation":
+        trigger_text = (
+            f"回踩 {pullback} 一带不破，且资金继续为正，再考虑进场。"
+            if pullback
+            else "回踩承接不破，且资金继续为正，再考虑进场。"
+        )
+        avoid_text = "脱离支撑过远时不追。"
+        invalidate_text = f"跌破 {invalidate} 或主题明显转弱就取消。" if invalidate else "主题明显转弱就取消。"
+    elif setup_type == "low_reversal":
+        reference = pullback or trigger
+        trigger_text = (
+            f"站回 {reference} 上方且资金不转负，再考虑试错。"
+            if reference
+            else "站回短线均线且资金不转负，再考虑试错。"
+        )
+        avoid_text = "第一波直线拉升不追。"
+        invalidate_text = f"跌破 {invalidate} 或再次放量走弱就取消。" if invalidate else "再次放量走弱就取消。"
+    elif pullback and trigger:
+        trigger_text = f"优先看 {pullback} 一带承接，或放量站稳 {trigger} 后再评估。"
+        avoid_text = "没有站稳触发位或资金转弱时不追。"
+        invalidate_text = f"跌破 {invalidate} 或结构走弱就取消。" if invalidate else "资金转负或结构走弱就取消。"
+    else:
+        trigger_text = "先等换手、承接和资金同时确认。"
+        avoid_text = "没有站稳触发位或资金转弱时不追。"
+        invalidate_text = "资金转负或结构走弱就取消。"
+
+    return {
+        "action": "午盘转弱，暂停执行，只保留观察。" if status == "downgraded" else "午盘确认仍在，按触发条件继续跟踪。",
+        "trigger": trigger_text,
+        "avoid": avoid_text,
+        "invalidate": invalidate_text,
+        "sizing": "先不开新仓" if status == "downgraded" else "触发后小仓位试错",
+        "levels": {
+            "trigger": snapshot.get("trigger_level"),
+            "pullback": snapshot.get("pullback_level"),
+            "invalidate": snapshot.get("invalidate_level"),
+        },
+    }
+
+
+def confirmation_contract_source(raw: dict[str, Any], status: str) -> dict[str, Any]:
+    payload = dict(raw)
+    snapshot = raw.get("snapshot") if isinstance(raw.get("snapshot"), dict) else {}
+    if not snapshot:
+        return payload
+
+    def fill(key: str, *values: Any) -> None:
+        if payload.get(key) not in (None, "", [], {}):
+            return
+        for value in values:
+            if value not in (None, "", [], {}):
+                payload[key] = value
+                return
+
+    active_themes = snapshot.get("active_themes") if isinstance(snapshot.get("active_themes"), list) else []
+    fill("theme", snapshot.get("current_theme"), snapshot.get("morning_theme"), active_themes[0] if active_themes else None)
+    fill("setup_type", snapshot.get("setup_type"))
+    fill("setup_label", snapshot.get("setup_label"))
+    fill("score", snapshot.get("score"), raw.get("morning_score"))
+    fill("change_pct", snapshot.get("change_pct"))
+    fill("amount_yi", snapshot.get("amount_yi"))
+    fill("flow_today_yi", snapshot.get("flow_today_yi"))
+    fill("capital_trend", snapshot.get("capital_trend"))
+    fill("price", snapshot.get("price"))
+    fill("high20", snapshot.get("trigger_level"))
+    fill("ma5", snapshot.get("ma5"), snapshot.get("pullback_level"))
+    fill("ma10", snapshot.get("ma10"), snapshot.get("invalidate_level"))
+    fill("ma20", snapshot.get("ma20"))
+    fill("entry_reason", raw.get("reason"), snapshot.get("confirmation_label"))
+
+    details = raw.get("details") if isinstance(raw.get("details"), list) else []
+    if status == "downgraded":
+        fill("main_risk", raw.get("main_risk"), details[0] if details else raw.get("reason"))
+    fill("watch_condition", raw.get("watch_condition"), "；".join(str(item) for item in details if item))
+
+    technical_state = dict(payload.get("technical_state") or {})
+    for source_key, target_key in (
+        ("trigger_level", "high20"),
+        ("pullback_level", "ma5"),
+        ("invalidate_level", "ma10"),
+        ("ma20", "ma20"),
+    ):
+        if technical_state.get(target_key) in (None, "", [], {}) and snapshot.get(source_key) not in (None, "", [], {}):
+            technical_state[target_key] = snapshot.get(source_key)
+    if technical_state:
+        payload["technical_state"] = technical_state
+
+    if payload.get("entry_plan") in (None, "", [], {}):
+        payload["entry_plan"] = _confirmation_snapshot_entry_plan(snapshot, status)
+    if snapshot.get("theme_in_play") is not None:
+        payload["theme_in_play"] = snapshot.get("theme_in_play")
+        payload["active_theme"] = snapshot.get("theme_in_play")
+    if snapshot.get("confirmation_label") not in (None, "", [], {}):
+        payload["confirmation_label"] = snapshot.get("confirmation_label")
+    payload["snapshot"] = snapshot
+    return payload
 
 
 def stable_artifact_path(path_value: str | None) -> str | None:
@@ -218,6 +356,74 @@ def latest_matching(pattern: Path, exclude_tokens: tuple[str, ...] = ()) -> Path
 
     files.sort(key=_path_sort_key, reverse=True)
     return files[0] if files else None
+
+
+def _date_prefix(value: Any) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    compact = re.match(r"^(\d{4})(\d{2})(\d{2})$", text)
+    if compact:
+        year, month, day = compact.groups()
+        return f"{year}-{month}-{day}"
+    dashed = re.match(r"^(\d{4}-\d{2}-\d{2})", text)
+    return dashed.group(1) if dashed else None
+
+
+def _quality_payload_trade_date(data: dict[str, Any]) -> str | None:
+    for key in ("checked_trade_date", "trade_date", "expected_trade_date"):
+        normalized = _date_prefix(data.get(key))
+        if normalized:
+            return normalized
+    return None
+
+
+def _expected_quality_trade_date() -> str | None:
+    for env_key in ("PRISM_EXPECTED_TRADE_DATE", "TRADE_DATE", "RUN_DATE"):
+        normalized = _date_prefix(os.environ.get(env_key))
+        if normalized:
+            return normalized
+
+    control_panel_root = BASE_DIR / "control-panel"
+    if control_panel_root.exists() and str(control_panel_root) not in sys.path:
+        sys.path.insert(0, str(control_panel_root))
+    try:
+        from readiness import expected_trade_date as readiness_expected_trade_date  # type: ignore
+
+        return _date_prefix(readiness_expected_trade_date())
+    except Exception:
+        return None
+
+
+def latest_quality_matching(
+    pattern: Path,
+    exclude_tokens: tuple[str, ...] = (),
+    expected_trade_date: str | None = None,
+) -> Path | None:
+    files = list(pattern.parent.glob(pattern.name))
+    if exclude_tokens:
+        files = [path for path in files if not any(token in path.name for token in exclude_tokens)]
+    if not files:
+        return None
+
+    payloads = [(path, load_json(path)) for path in files]
+    if expected_trade_date:
+        matching = [
+            path
+            for path, data in payloads
+            if _quality_payload_trade_date(data) == expected_trade_date
+        ]
+        if matching:
+            matching.sort(key=lambda path: (path.stat().st_mtime, _path_sort_key(path)), reverse=True)
+            return matching[0]
+
+    explicit = [path for path, data in payloads if _quality_payload_trade_date(data)]
+    if explicit:
+        explicit.sort(key=lambda path: (path.stat().st_mtime, _path_sort_key(path)), reverse=True)
+        return explicit[0]
+
+    files.sort(key=_path_sort_key, reverse=True)
+    return files[0]
 
 
 def resolve_watchlist_snapshot_path(path: str | None = None, trade_date: str | None = None) -> Path | None:
@@ -263,6 +469,9 @@ def _payload_trade_date(path: Path) -> str | None:
 def _matches_trade_date(path: Path, trade_date: str | None) -> bool:
     if not trade_date:
         return True
+    name_trade_date = _filename_trade_date(path)
+    if name_trade_date and name_trade_date != trade_date:
+        return False
     return _payload_trade_date(path) == trade_date
 
 
@@ -277,7 +486,7 @@ def resolve_screening_batch_path(path: str | None = None, trade_date: str | None
     for data_dir in SCREENER_DATA_DIRS:
         history = [
             candidate
-            for candidate in (data_dir / "ai_history").glob("ai_screening_*.json")
+            for candidate in _payload_json_candidates(data_dir / "ai_history", "ai_screening_*.json")
             if _matches_trade_date(candidate, trade_date)
         ]
         history.sort(key=_path_sort_key, reverse=True)
@@ -297,7 +506,7 @@ def resolve_confirmation_path(path: str | None = None, trade_date: str | None = 
     for data_dir in SCREENER_DATA_DIRS:
         history = [
             candidate
-            for candidate in data_dir.glob("midday_verification_*.json")
+            for candidate in _payload_json_candidates(data_dir, "midday_verification_*.json")
             if _matches_trade_date(candidate, trade_date)
         ]
         history.sort(key=_path_sort_key, reverse=True)
@@ -315,7 +524,19 @@ def _decision_brief_trade_dates(path: Path) -> tuple[str | None, str | None]:
     return str(summary_trade_date) if summary_trade_date else None, str(manifest_trade_date) if manifest_trade_date else None
 
 
+def _decision_brief_manifest_trade_date(path: Path) -> str | None:
+    manifest = load_sidecar_manifest(path)
+    trade_date = (manifest or {}).get("trade_date")
+    return str(trade_date) if trade_date else None
+
+
 def _decision_brief_rank(path: Path, trade_date: str | None = None) -> tuple[int, datetime, float, str]:
+    if trade_date:
+        manifest_trade_date = _decision_brief_manifest_trade_date(path)
+        if manifest_trade_date:
+            priority = 3 if manifest_trade_date == trade_date else 0
+            return (priority, *_path_sort_key(path))
+
     summary_trade_date, manifest_trade_date = _decision_brief_trade_dates(path)
     if trade_date:
         if manifest_trade_date == trade_date:
@@ -337,9 +558,19 @@ def resolve_decision_brief_path(path: str | None = None, trade_date: str | None 
     if path:
         candidate = Path(path).expanduser()
         return candidate if candidate.exists() else None
-    files = list(COMMAND_BRIEF_DIR.glob("prism_command_brief_*.json"))
+    if trade_date and re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(trade_date).strip()):
+        scoped_files = _payload_json_candidates(COMMAND_BRIEF_DIR, f"prism_command_brief_{str(trade_date).strip()}_*.json")
+        if scoped_files:
+            ranked = [(_decision_brief_rank(candidate, trade_date), candidate) for candidate in scoped_files]
+            ranked.sort(key=lambda item: item[0], reverse=True)
+            if ranked[0][0][0] > 0:
+                return ranked[0][1]
+    files = _payload_json_candidates(COMMAND_BRIEF_DIR, "prism_command_brief_*.json")
     if not files:
         return None
+    if trade_date and re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(trade_date).strip()):
+        files.sort(key=_path_sort_key, reverse=True)
+        return files[0]
     files.sort(key=lambda candidate: _decision_brief_rank(candidate, trade_date), reverse=True)
     return files[0]
 
@@ -650,11 +881,19 @@ def diff_watchlist_snapshots(
 
 def candidate_risk_flags(raw: dict[str, Any]) -> list[str]:
     warnings = ((raw.get("execution_quality") or {}).get("warnings") or [])
-    return unique_strings([raw.get("main_risk") or "", *warnings])
+    factors = raw.get("tushare_factors") if isinstance(raw.get("tushare_factors"), dict) else {}
+    return unique_strings([
+        raw.get("main_risk") or "",
+        *(raw.get("risk_flags") or []),
+        *(factors.get("risk_flags") or []),
+        *warnings,
+    ])
 
 
 def normalize_candidate(raw: dict[str, Any], batch_id: str) -> dict[str, Any]:
     capital_flow = normalize_capital_flow_payload(raw.get("capital_flow") or {}, legacy_source_unit=UNIT_YUAN)
+    factors = raw.get("tushare_factors") if isinstance(raw.get("tushare_factors"), dict) else {}
+    opportunity_v2 = raw.get("opportunity_v2") if isinstance(raw.get("opportunity_v2"), dict) else {}
     return {
         "entity": "candidate",
         "schema_version": SCHEMA_VERSION,
@@ -678,9 +917,31 @@ def normalize_candidate(raw: dict[str, Any], batch_id: str) -> dict[str, Any]:
         "watch_condition": raw.get("watch_condition"),
         "main_risk": raw.get("main_risk"),
         "screening_note": raw.get("screening_note"),
+        "suggested_action": raw.get("suggested_action") or opportunity_v2.get("suggested_action"),
+        "suggested_action_label": raw.get("suggested_action_label") or opportunity_v2.get("action_label"),
+        "confidence": raw.get("confidence") if raw.get("confidence") is not None else opportunity_v2.get("confidence"),
+        "thesis": raw.get("thesis") or opportunity_v2.get("thesis"),
+        "why_now": raw.get("why_now") or opportunity_v2.get("why_now"),
+        "invalidation": raw.get("invalidation") or opportunity_v2.get("invalidation"),
+        "missing_confirmation": raw.get("missing_confirmation") or opportunity_v2.get("missing_confirmation") or [],
+        "hard_gate_max_action": raw.get("hard_gate_max_action") or ((opportunity_v2.get("hard_gate") or {}).get("maximum_allowed_action") if isinstance(opportunity_v2.get("hard_gate"), dict) else None),
+        "hard_gate_block_reason": raw.get("hard_gate_block_reason") or "",
+        "opportunity_v2": opportunity_v2,
         "consistency": raw.get("consistency") or {},
         "execution_quality": raw.get("execution_quality") or {},
         "capital_flow": capital_flow,
+        "risk_level": raw.get("risk_level") or factors.get("risk_level") or "info",
+        "risk_items": raw.get("risk_items") or factors.get("risk_items") or [],
+        "degrade_reason": raw.get("degrade_reason") or factors.get("degrade_reason") or "",
+        "block_reason": raw.get("block_reason") or factors.get("block_reason") or "",
+        "risk_evidence_refs": raw.get("risk_evidence_refs") or factors.get("risk_evidence_refs") or [],
+        "risk_source_cards": raw.get("risk_source_cards") or factors.get("risk_source_cards") or [],
+        "tushare_score": factors.get("tushare_score"),
+        "tushare_score_breakdown": factors.get("tushare_score_breakdown") or {},
+        "factor_tags": factors.get("factor_tags") or [],
+        "factor_risk_flags": factors.get("risk_flags") or [],
+        "factor_explanation": factors.get("explanation") or {},
+        "tushare_factors": factors,
     }
 
 
@@ -717,6 +978,8 @@ def load_screening_batch(path: str | None = None, trade_date: str | None = None)
         "market_regime": raw.get("market_regime") or {},
         "market_themes": raw.get("market_themes") or [],
         "screening_summary": raw.get("screening_summary") or {},
+        "opportunity_v2": raw.get("opportunity_v2") or ((raw.get("screening_summary") or {}).get("opportunity_v2") or {}),
+        "opportunity_v2_tracking": raw.get("opportunity_v2_tracking") or {},
         "candidates": shortlist,
     }
 
@@ -728,28 +991,31 @@ def normalize_confirmation_item(
     morning_batch_id: str | None,
     midday_batch_id: str | None,
 ) -> dict[str, Any]:
-    observation_contract = build_confirmation_observation_contract(raw, status)
+    source = confirmation_contract_source(raw, status)
+    observation_contract = build_confirmation_observation_contract(source, status)
     return {
-        "code": raw.get("code") or "",
-        "name": raw.get("name") or raw.get("code") or "",
+        "code": source.get("code") or "",
+        "name": source.get("name") or source.get("code") or "",
         "status": status,
-        "theme": raw.get("theme") or raw.get("active_theme"),
+        "theme": source.get("theme") or source.get("active_theme"),
         "setup_type": observation_contract["setup_type"],
         "setup_label": observation_contract["setup_label"],
         "setup_summary": observation_contract["setup_summary"],
-        "score": safe_float(raw.get("score")),
-        "change_pct": safe_float(raw.get("change_pct")),
-        "amount_yi": safe_float(raw.get("amount_yi")),
-        "flow_today_yi": safe_float(raw.get("flow_today_yi")),
-        "capital_trend": raw.get("capital_trend"),
-        "entry_reason": raw.get("entry_reason"),
+        "score": safe_float(source.get("score")),
+        "change_pct": safe_float(source.get("change_pct")),
+        "amount_yi": safe_float(source.get("amount_yi")),
+        "flow_today_yi": safe_float(source.get("flow_today_yi")),
+        "capital_trend": source.get("capital_trend"),
+        "entry_reason": source.get("entry_reason"),
         "entry_plan": observation_contract["entry_plan"],
         "execution_quality": observation_contract["execution_quality"],
-        "main_risk": raw.get("main_risk"),
-        "watch_condition": raw.get("watch_condition"),
-        "high20": safe_float(raw.get("high20")),
-        "ma5": safe_float(raw.get("ma5")),
-        "ma10": safe_float(raw.get("ma10")),
+        "main_risk": source.get("main_risk"),
+        "watch_condition": source.get("watch_condition"),
+        "high20": safe_float(source.get("high20")),
+        "ma5": safe_float(source.get("ma5")),
+        "ma10": safe_float(source.get("ma10")),
+        "confirmation_label": source.get("confirmation_label"),
+        "snapshot": source.get("snapshot") or {},
         "morning_batch_id": morning_batch_id,
         "midday_batch_id": midday_batch_id,
     }
@@ -939,15 +1205,20 @@ def find_candidate_detail(code: str, path: str | None = None, trade_date: str | 
 
 
 def load_quality_status(lane: str | None = None) -> dict[str, Any]:
+    expected = _expected_quality_trade_date()
+
     def load_lane(target_lane: str) -> dict[str, Any]:
         pattern = QUALITY_PATTERNS[target_lane]
         exclude = ("midday_",) if target_lane == "aggressive" else ()
-        path = latest_matching(pattern, exclude_tokens=exclude)
+        path = latest_quality_matching(pattern, exclude_tokens=exclude, expected_trade_date=expected)
         data = load_json(path)
         return {
             "lane": target_lane,
             "checked_at": data.get("checked_at") if data else None,
             "validation_status": data.get("validation_status") if data else None,
+            "trade_date": data.get("trade_date") if data else None,
+            "checked_trade_date": data.get("checked_trade_date") if data else None,
+            "expected_trade_date": data.get("expected_trade_date") if data else None,
             "expected_timestamp": data.get("expected_timestamp") if data else None,
             "errors": data.get("errors") or [],
             "warnings": data.get("warnings") or [],
@@ -972,7 +1243,14 @@ def lifecycle_activity_count(summary: dict[str, Any] | None) -> int:
     counts = summary or {}
     return sum(
         int(counts.get(key) or 0)
-        for key in ("entered_count", "upgraded_count", "downgraded_count", "exited_count", "handed_off_count")
+        for key in (
+            "entered_count",
+            "upgraded_count",
+            "downgraded_count",
+            "continued_count",
+            "exited_count",
+            "handed_off_count",
+        )
     )
 
 
@@ -1027,11 +1305,40 @@ def normalize_lifecycle_item(raw: dict[str, Any]) -> dict[str, Any]:
         "current_tier",
         "current_screening_status",
         "in_current_shortlist",
+        "persistence_label",
+        "suggested_action",
+        "suggested_action_label",
+        "desired_action",
+        "confidence",
+        "thesis",
+        "why_now",
+        "invalidation",
+        "upgrade_reason",
+        "missing_confirmation",
+        "hard_gate_max_action",
+        "hard_gate_block_reason",
+        "market_phase",
+        "market_phase_label",
+        "theme_phase",
+        "theme_phase_label",
+        "stock_role",
+        "stock_role_label",
+        "opportunity_type",
+        "playbook_label",
+        "crowding_risk_level",
+        "fake_breakout_risk_level",
+        "evidence_notes",
+        "prev_suggested_action",
+        "curr_suggested_action",
+        "prev_confidence",
+        "curr_confidence",
+        "prev_missing_confirmation_count",
+        "curr_missing_confirmation_count",
     ):
         if key not in raw:
             continue
         value = raw.get(key)
-        if key in {"score", "change_pct", "prev_score", "curr_score", "score_delta", "morning_score"}:
+        if key in {"score", "change_pct", "prev_score", "curr_score", "score_delta", "morning_score", "confidence", "prev_confidence", "curr_confidence"}:
             normalized[key] = safe_float(value)
         else:
             normalized[key] = value
@@ -1062,6 +1369,7 @@ def load_lifecycle(path: str | None = None, require_activity: bool = False) -> d
             "entered_count": int(summary.get("entered_count") or 0),
             "upgraded_count": int(summary.get("upgraded_count") or 0),
             "downgraded_count": int(summary.get("downgraded_count") or 0),
+            "continued_count": int(summary.get("continued_count") or 0),
             "exited_count": int(summary.get("exited_count") or 0),
             "handed_off_count": int(summary.get("handed_off_count") or 0),
             "current_pool_size": int(summary.get("current_pool_size") or 0),
@@ -1072,6 +1380,7 @@ def load_lifecycle(path: str | None = None, require_activity: bool = False) -> d
             "entered": [normalize_lifecycle_item(item or {}) for item in (raw.get("entered") or [])],
             "upgraded": [normalize_lifecycle_item(item or {}) for item in (raw.get("upgraded") or [])],
             "downgraded": [normalize_lifecycle_item(item or {}) for item in (raw.get("downgraded") or [])],
+            "continued": [normalize_lifecycle_item(item or {}) for item in (raw.get("continued") or [])],
             "exited": [normalize_lifecycle_item(item or {}) for item in (raw.get("exited") or [])],
             "handed_off": [normalize_lifecycle_item(item or {}) for item in (raw.get("handed_off") or [])],
         },

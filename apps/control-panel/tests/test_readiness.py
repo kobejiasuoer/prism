@@ -290,6 +290,58 @@ class ReadinessModelTest(unittest.TestCase):
         formal_codes = {item["code"] for item in readiness["formal_blockers"]}
         self.assertIn("watchlist_formal_not_allowed", formal_codes)
 
+    def test_research_mode_keeps_formal_ready_trust_as_trusted(self) -> None:
+        quality = {
+            "lanes": {
+                "watchlist": {"validation_status": "ok", "checked_at": "2026-05-06 09:25:00", "expected_timestamp": "2026-05-06"},
+                "aggressive": {"validation_status": "ok", "checked_at": "2026-05-06 09:35:00", "expected_timestamp": "2026-05-06"},
+                "midday_confirmation": {"validation_status": "ok", "checked_at": "2026-05-06 13:30:00", "expected_timestamp": "2026-05-06"},
+            }
+        }
+        formal_rows = [
+            {
+                "dataset": "bars.daily",
+                "label": "正式日线",
+                "available": True,
+                "stale": False,
+                "trade_date": "2026-05-06",
+                "manifest_path": "/tmp/bars.daily.manifest.json",
+                "formal_decision_allowed": True,
+                "source_authority_ready": True,
+                "quality_flags": [],
+                "stale_reasons": [],
+            },
+            {
+                "dataset": "execution.flags",
+                "label": "执行约束",
+                "available": True,
+                "stale": False,
+                "trade_date": "2026-05-06",
+                "manifest_path": "/tmp/execution.flags.manifest.json",
+                "formal_decision_allowed": True,
+                "source_authority_ready": True,
+                "quality_flags": [],
+                "stale_reasons": [],
+            },
+        ]
+
+        readiness = compute_readiness(
+            watchlist=_source("watchlist.snapshot", "2026-05-06", "2026-05-06 09:25:00"),
+            screening_batch=_source("screening.batch", "2026-05-06", "2026-05-06 09:35:00"),
+            confirmation=_source("screening.confirmation", "2026-05-06", "2026-05-06 13:30:00"),
+            decision_brief=_source("decision_brief.snapshot", "2026-05-06", "2026-05-06 13:40:00"),
+            quality_status=quality,
+            account_book={"mode": "research", "fills": [], "cash_balance": 0, "reconciliations": []},
+            today_action_decisions={},
+            formal_freshness=formal_rows,
+            now=datetime(2026, 5, 6, 14, 30, 0),
+            expected_date="2026-05-06",
+        )
+
+        self.assertTrue(readiness["formal_ready"])
+        self.assertEqual(readiness["trust_level"]["level"], "trusted")
+        self.assertFalse(readiness["trust_level"]["can_trade_live"])
+
     def test_same_day_pipeline_manifest_expiry_is_degraded_not_stale(self) -> None:
         manifest = _manifest(
             "watchlist.snapshot",
@@ -391,6 +443,38 @@ class ReadinessModelTest(unittest.TestCase):
         self.assertNotIn("watchlist_stale", {item["code"] for item in readiness["blockers"]})
         self.assertEqual(readiness["readiness_mode"], "live_ready")
 
+    def test_premarket_uses_previous_complete_trade_date(self) -> None:
+        self.assertEqual(expected_trade_date(datetime(2026, 6, 4, 0, 9, 0)), "2026-06-03")
+        self.assertEqual(expected_trade_date(datetime(2026, 6, 4, 9, 1, 0)), "2026-06-04")
+
+    def test_premarket_previous_day_pipeline_bundle_is_not_marked_unready(self) -> None:
+        quality = {
+            "lanes": {
+                "watchlist": {"validation_status": "ok", "checked_at": "2026-06-03 09:50:00"},
+                "aggressive": {"validation_status": "ok", "checked_at": "2026-06-03 10:30:00"},
+                "midday_confirmation": {"validation_status": "ok", "checked_at": "2026-06-03 13:45:00"},
+            }
+        }
+        readiness = compute_readiness(
+            watchlist=_source("watchlist.snapshot", "2026-06-03", "2026-06-03 09:50:00"),
+            screening_batch=_source("screening.batch", "2026-06-03", "2026-06-03 10:30:00"),
+            confirmation=_source("screening.confirmation", "2026-06-03", "2026-06-03 13:45:00"),
+            decision_brief=_source("decision_brief.snapshot", "2026-06-03", "2026-06-03 15:05:00"),
+            quality_status=quality,
+            now=datetime(2026, 6, 4, 0, 9, 0),
+        )
+
+        source_by_key = {item["key"]: item for item in readiness["source_freshness"]}
+        quality_by_key = {item["key"]: item for item in readiness["quality_freshness"]}
+        self.assertEqual(readiness["expected_trade_date"], "2026-06-03")
+        self.assertEqual(readiness["data_trade_date"], "2026-06-03")
+        self.assertNotIn("trade_date_mismatch", {item["code"] for item in readiness["blockers"]})
+        self.assertFalse(source_by_key["watchlist"]["stale"])
+        self.assertTrue(source_by_key["watchlist"]["age_softened"])
+        self.assertTrue(quality_by_key["watchlist"]["timely"])
+        self.assertNotIn("age_exceeded", quality_by_key["watchlist"]["stale_reasons"])
+        self.assertEqual(readiness["readiness_mode"], "live_ready")
+
     def test_session_aware_confirmation_warning_in_morning(self) -> None:
         """Morning sessions: midday confirmation is not due yet."""
 
@@ -439,6 +523,153 @@ class ReadinessModelTest(unittest.TestCase):
         blocker_codes = {item["code"] for item in readiness["blockers"]}
         self.assertIn("confirmation_missing", blocker_codes)
 
+    def test_early_afternoon_confirmation_window_is_deferred_until_due_time(self) -> None:
+        """Regression: 13:06 is before the scheduled 13:45 confirmation run."""
+
+        readiness = compute_readiness(
+            watchlist=_source("watchlist.snapshot", "2026-06-04", "2026-06-04 11:49:07"),
+            screening_batch=_source("screening.batch", "2026-06-04", "2026-06-04 11:55:59"),
+            confirmation=None,
+            decision_brief=_source("decision_brief.snapshot", "2026-06-04", "2026-06-04 11:49:07"),
+            quality_status={
+                "lanes": {
+                    "watchlist": {"validation_status": "ok", "checked_at": "2026-06-04 11:49:07"},
+                    "aggressive": {"validation_status": "ok", "checked_at": "2026-06-04 11:55:59"},
+                    "midday_confirmation": {"validation_status": "ok", "checked_at": "2026-06-03 13:45:00"},
+                }
+            },
+            now=datetime(2026, 6, 4, 13, 6, 0),
+            expected_date="2026-06-04",
+        )
+
+        blocker_codes = {item["code"] for item in readiness["blockers"]}
+        self.assertNotIn("confirmation_missing", blocker_codes)
+        self.assertNotIn("quality_midday_stale", blocker_codes)
+        self.assertNotIn("midday_confirmation", readiness["recommended_tasks"])
+        self.assertEqual(readiness["readiness_mode"], "live_ready")
+
+        confirmation = next(item for item in readiness["source_freshness"] if item["key"] == "confirmation")
+        quality = next(item for item in readiness["quality_freshness"] if item["key"] == "midday_confirmation")
+        self.assertTrue(confirmation["deferred"])
+        self.assertFalse(confirmation["stale"])
+        self.assertEqual(confirmation.get("deferred_reason"), "awaiting_midday_confirmation_window")
+        self.assertTrue(quality["deferred"])
+        self.assertTrue(quality["timely"])
+        self.assertEqual(quality.get("deferred_reason"), "awaiting_midday_confirmation_window")
+
+    def test_early_afternoon_existing_confirmation_is_not_labeled_waiting(self) -> None:
+        readiness = compute_readiness(
+            watchlist=_source("watchlist.snapshot", "2026-06-04", "2026-06-04 11:49:07"),
+            screening_batch=_source("screening.batch", "2026-06-04", "2026-06-04 11:55:59"),
+            confirmation=_source("screening.confirmation", "2026-06-04", "2026-06-04 13:12:33", validation_status="ok"),
+            decision_brief=_source("decision_brief.snapshot", "2026-06-04", "2026-06-04 11:49:07"),
+            quality_status={
+                "lanes": {
+                    "watchlist": {"validation_status": "ok", "checked_at": "2026-06-04 11:49:07"},
+                    "aggressive": {"validation_status": "ok", "checked_at": "2026-06-04 11:55:59"},
+                    "midday_confirmation": {"validation_status": "ok", "checked_at": "2026-06-03 13:45:00"},
+                }
+            },
+            now=datetime(2026, 6, 4, 13, 39, 0),
+            expected_date="2026-06-04",
+        )
+
+        blocker_codes = {item["code"] for item in readiness["blockers"]}
+        self.assertNotIn("confirmation_missing", blocker_codes)
+        self.assertNotIn("quality_midday_stale", blocker_codes)
+        self.assertEqual(readiness["readiness_mode"], "live_ready")
+
+        confirmation = next(item for item in readiness["source_freshness"] if item["key"] == "confirmation")
+        quality = next(item for item in readiness["quality_freshness"] if item["key"] == "midday_confirmation")
+        self.assertTrue(confirmation["available"])
+        self.assertFalse(confirmation["stale"])
+        self.assertFalse(confirmation.get("deferred", False))
+        self.assertTrue(quality["deferred"])
+        self.assertTrue(quality["timely"])
+
+    def test_after_confirmation_due_time_missing_confirmation_blocks(self) -> None:
+        readiness = compute_readiness(
+            watchlist=_source("watchlist.snapshot", "2026-06-04", "2026-06-04 11:49:07"),
+            screening_batch=_source("screening.batch", "2026-06-04", "2026-06-04 11:55:59"),
+            confirmation=None,
+            decision_brief=_source("decision_brief.snapshot", "2026-06-04", "2026-06-04 11:49:07"),
+            quality_status={
+                "lanes": {
+                    "watchlist": {"validation_status": "ok", "checked_at": "2026-06-04 11:49:07"},
+                    "aggressive": {"validation_status": "ok", "checked_at": "2026-06-04 11:55:59"},
+                    "midday_confirmation": {"validation_status": "ok", "checked_at": "2026-06-03 13:45:00"},
+                }
+            },
+            now=datetime(2026, 6, 4, 13, 50, 0),
+            expected_date="2026-06-04",
+        )
+
+        blocker_codes = {item["code"] for item in readiness["blockers"]}
+        self.assertIn("confirmation_missing", blocker_codes)
+        self.assertIn("quality_midday_stale", blocker_codes)
+        self.assertIn("midday_confirmation", readiness["recommended_tasks"])
+        self.assertEqual(readiness["readiness_mode"], "blocked")
+
+    def test_after_due_time_current_confirmation_softens_stale_midday_quality(self) -> None:
+        readiness = compute_readiness(
+            watchlist=_source("watchlist.snapshot", "2026-06-04", "2026-06-04 11:49:07"),
+            screening_batch=_source("screening.batch", "2026-06-04", "2026-06-04 11:55:59"),
+            confirmation=_source("screening.confirmation", "2026-06-04", "2026-06-04 13:12:33", validation_status="ok"),
+            decision_brief=_source("decision_brief.snapshot", "2026-06-04", "2026-06-04 11:49:07"),
+            quality_status={
+                "lanes": {
+                    "watchlist": {"validation_status": "ok", "checked_at": "2026-06-04 11:49:07"},
+                    "aggressive": {"validation_status": "ok", "checked_at": "2026-06-04 11:55:59"},
+                    "midday_confirmation": {"validation_status": "ok", "checked_at": "2026-06-03 13:45:00"},
+                }
+            },
+            now=datetime(2026, 6, 4, 13, 50, 0),
+            expected_date="2026-06-04",
+        )
+
+        blocker_codes = {item["code"] for item in readiness["blockers"]}
+        self.assertNotIn("confirmation_missing", blocker_codes)
+        self.assertNotIn("quality_midday_stale", blocker_codes)
+        self.assertEqual(readiness["readiness_mode"], "live_ready")
+
+        quality = next(item for item in readiness["quality_freshness"] if item["key"] == "midday_confirmation")
+        self.assertTrue(quality["timely"])
+        self.assertTrue(quality["source_softened"])
+        self.assertEqual(quality["source_softened_reason"], "current_confirmation_available")
+
+    def test_failed_confirmation_blocks_after_due_time(self) -> None:
+        readiness = compute_readiness(
+            watchlist=_source("watchlist.snapshot", "2026-06-04", "2026-06-04 11:49:07"),
+            screening_batch=_source("screening.batch", "2026-06-04", "2026-06-04 11:55:59"),
+            confirmation=_source(
+                "screening.confirmation",
+                "2026-06-04",
+                "2026-06-04 13:12:33",
+                validation_status="verify_failed",
+                validation_errors=["midday_verify.py 执行失败，请查看 stderr"],
+                runner_status="failed",
+            ),
+            decision_brief=_source("decision_brief.snapshot", "2026-06-04", "2026-06-04 11:49:07"),
+            quality_status={
+                "lanes": {
+                    "watchlist": {"validation_status": "ok", "checked_at": "2026-06-04 11:49:07"},
+                    "aggressive": {"validation_status": "ok", "checked_at": "2026-06-04 11:55:59"},
+                    "midday_confirmation": {"validation_status": "ok", "checked_at": "2026-06-03 13:45:00"},
+                }
+            },
+            now=datetime(2026, 6, 4, 13, 50, 0),
+            expected_date="2026-06-04",
+        )
+
+        blocker_codes = {item["code"] for item in readiness["blockers"]}
+        self.assertIn("confirmation_failed", blocker_codes)
+        self.assertNotIn("quality_midday_stale", blocker_codes)
+        self.assertIn("midday_confirmation", readiness["recommended_tasks"])
+        self.assertEqual(readiness["readiness_mode"], "blocked")
+        failure = next(item for item in readiness["blockers"] if item["code"] == "confirmation_failed")
+        self.assertIn("午盘确认执行失败", failure["message"])
+        self.assertIn("midday_verify.py 执行失败", failure["message"])
+
     def test_weekend_is_at_most_shadow_only(self) -> None:
         """Weekends/holidays must never produce live_ready."""
 
@@ -461,6 +692,42 @@ class ReadinessModelTest(unittest.TestCase):
         )
         self.assertEqual(readiness["readiness_mode"], "shadow_only")
         self.assertFalse(readiness["ready"])
+
+    def test_weekend_prior_trade_day_age_only_is_partial_ready_not_blocked(self) -> None:
+        """Weekend startup should keep Friday's finalized bundle observable.
+
+        The market is closed, so this must stay ``shadow_only`` and never
+        become real-money-ready.  But a Friday bundle that is aligned to the
+        expected trade date should not show the operator a hard "data source
+        not ready" state just because intraday age budgets elapsed overnight.
+        """
+
+        readiness = compute_readiness(
+            watchlist=_source("watchlist.snapshot", "2026-05-08", "2026-05-08 09:25:00"),
+            screening_batch=_source("screening.batch", "2026-05-08", "2026-05-08 09:35:00"),
+            confirmation=_source("screening.confirmation", "2026-05-08", "2026-05-08 13:45:00", validation_status="ok"),
+            decision_brief=_source("decision_brief.snapshot", "2026-05-08", "2026-05-08 15:05:00"),
+            quality_status={
+                "lanes": {
+                    "watchlist": {"validation_status": "ok", "checked_at": "2026-05-08 09:25:00"},
+                    "aggressive": {"validation_status": "ok", "checked_at": "2026-05-08 09:35:00"},
+                    "midday_confirmation": {"validation_status": "ok", "checked_at": "2026-05-08 13:45:00"},
+                }
+            },
+            now=datetime(2026, 5, 9, 14, 30, 0),
+            expected_date="2026-05-08",
+        )
+
+        self.assertEqual(readiness["readiness_mode"], "shadow_only")
+        self.assertFalse(readiness["ready"])
+        self.assertEqual(readiness["blockers"], [])
+        self.assertTrue(any(item["code"] == "non_trading_day" for item in readiness["warnings"]))
+        self.assertTrue(any(source.get("age_softened") for source in readiness["source_freshness"]))
+        for source in readiness["source_freshness"]:
+            self.assertFalse(source["stale"], msg=source)
+        self.assertTrue(any(quality.get("age_softened") for quality in readiness["quality_freshness"]))
+        for quality in readiness["quality_freshness"]:
+            self.assertTrue(quality["timely"], msg=quality)
 
     def test_expected_trade_date_env_override(self) -> None:
         with mock.patch.dict("os.environ", {"PRISM_EXPECTED_TRADE_DATE": "2026-05-06"}):
@@ -501,22 +768,19 @@ class TodayViewReadinessTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.client = TestClient(app)
 
-    def test_api_today_embeds_readiness(self) -> None:
-        response = self.client.get("/api/today")
+    def test_api_readiness_live_exposes_full_readiness(self) -> None:
+        response = self.client.get("/api/readiness/live")
         self.assertEqual(response.status_code, 200)
         payload = response.json()
 
-        self.assertIn("readiness", payload)
-        readiness = payload["readiness"]
-        self.assertIn("expected_trade_date", readiness)
-        self.assertIn("readiness_mode", readiness)
-        self.assertIn("source_freshness", readiness)
-        self.assertIn("quality_freshness", readiness)
-        self.assertIn("recommended_tasks", readiness)
-        # source_cards must carry freshness metadata, not just label/value
-        for card in payload["source_cards"]:
-            self.assertIn("stale", card)
-            self.assertIn("age_label", card)
+        self.assertIn("expected_trade_date", payload)
+        self.assertIn("readiness_mode", payload)
+        self.assertIn("source_freshness", payload)
+        self.assertIn("quality_freshness", payload)
+        self.assertIn("recommended_tasks", payload)
+        for row in payload["source_freshness"]:
+            self.assertIn("stale", row)
+            self.assertIn("age_label", row)
 
     def test_api_readiness_live_endpoint(self) -> None:
         response = self.client.get("/api/readiness/live")
@@ -533,11 +797,11 @@ class TodayViewReadinessTest(unittest.TestCase):
         ):
             self.assertIn(key, payload)
 
-    def test_api_today_with_old_data_is_blocked(self) -> None:
+    def test_today_summary_with_old_data_is_blocked(self) -> None:
         """The current repository fixtures use 2026-04-27 data while today is
         2026-05-06.  The readiness payload MUST report blocked, never live."""
 
-        response = self.client.get("/api/today")
+        response = self.client.get("/api/today/summary")
         payload = response.json()
         readiness = payload["readiness"]
         if readiness["data_trade_date"] != readiness["expected_trade_date"]:
@@ -832,7 +1096,7 @@ class ConfirmationRecommendedTaskTest(unittest.TestCase):
 
 
 class TodayRefreshConsistencyTest(unittest.TestCase):
-    """Regression: /api/today, /api/readiness/live and /api/refresh/status?page=today
+    """Regression: /api/today/summary, /api/readiness/live and /api/refresh/status?page=today
     must agree on readiness_mode, stale_count, recommended task and per-source
     stale flags.  The previous implementation ran ``build_page_freshness`` in
     parallel with readiness for the today page, producing two truths.
@@ -843,7 +1107,7 @@ class TodayRefreshConsistencyTest(unittest.TestCase):
         cls.client = TestClient(app)
 
     def test_three_endpoints_agree_on_readiness_mode_and_stale_count(self) -> None:
-        today_payload = self.client.get("/api/today").json()
+        today_payload = self.client.get("/api/today/summary").json()
         live_payload = self.client.get("/api/readiness/live").json()
         refresh_payload = self.client.get("/api/refresh/status?page=today").json()
 
@@ -869,12 +1133,12 @@ class TodayRefreshConsistencyTest(unittest.TestCase):
     def test_refresh_freshness_rows_match_readiness_source_freshness(self) -> None:
         """Per-source stale flag must come from readiness, not be re-derived."""
 
-        today_payload = self.client.get("/api/today").json()
+        live_payload = self.client.get("/api/readiness/live").json()
         refresh_payload = self.client.get("/api/refresh/status?page=today").json()
 
         readiness_sources = {
             item["key"]: bool(item.get("stale"))
-            for item in today_payload["readiness"]["source_freshness"]
+            for item in live_payload["source_freshness"]
         }
         for row in refresh_payload["freshness"]:
             key = row.get("key")
@@ -887,7 +1151,7 @@ class TodayRefreshConsistencyTest(unittest.TestCase):
 
     def test_refresh_status_includes_operator_recovery_steps(self) -> None:
         refresh_payload = self.client.get("/api/refresh/status?page=today").json()
-        today_ready = self.client.get("/api/today").json()["readiness"]
+        today_ready = self.client.get("/api/today/summary").json()["readiness"]
         steps = refresh_payload.get("recovery_steps") or []
 
         self.assertIsInstance(steps, list)

@@ -65,6 +65,49 @@ class DataProvider(Protocol):
     ) -> ProviderResult:
         ...
 
+    def fetch_trade_calendar(
+        self,
+        exchange: str = "SSE",
+        start_date: str | None = None,
+        end_date: str | None = None,
+        **kwargs: Any,
+    ) -> ProviderResult:
+        ...
+
+    def fetch_index_daily(
+        self,
+        symbol: str,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        **kwargs: Any,
+    ) -> ProviderResult:
+        ...
+
+    def fetch_adjustment_factor(
+        self,
+        code: str,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        **kwargs: Any,
+    ) -> ProviderResult:
+        ...
+
+    def fetch_price_limit(
+        self,
+        trade_date: str,
+        code: str | None = None,
+        **kwargs: Any,
+    ) -> ProviderResult:
+        ...
+
+    def fetch_execution_flags(
+        self,
+        trade_date: str,
+        codes: list[str] | None = None,
+        **kwargs: Any,
+    ) -> ProviderResult:
+        ...
+
     def fetch_capital_flow(
         self,
         code: str,

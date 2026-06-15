@@ -67,6 +67,151 @@ class RefreshPolicyDecisionTests(unittest.TestCase):
         self.assertIn("cooldown", payload)
         self.assertIn("next_allowed_at", payload["cooldown"])
 
+    def test_today_source_cards_use_lightweight_view(self) -> None:
+        with mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_today_source_cards_view",
+            return_value={
+                "source_cards": [
+                    {
+                        "label": "自选股",
+                        "value": "2026-05-08 09:30:00",
+                        "detail": "2026-05-08",
+                    }
+                ]
+            },
+        ) as source_cards, mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_today_view",
+            side_effect=AssertionError("source-card reads must not build full today view"),
+        ) as full_view:
+            cards = LEGACY_APP_MODULE.read_page_source_cards("today")
+
+        self.assertEqual(cards[0]["label"], "自选股")
+        self.assertEqual(source_cards.call_count, 1)
+        self.assertEqual(full_view.call_count, 0)
+
+    def test_opportunities_refresh_status_uses_lightweight_source_cards(self) -> None:
+        with mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_opportunities_source_cards_view",
+            return_value={
+                "source_cards": [
+                    {
+                        "label": "早盘批次",
+                        "value": "2026-05-08 09:30:00",
+                        "detail": "fixture",
+                    }
+                ]
+            },
+        ) as source_cards, mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_opportunities_view",
+            side_effect=AssertionError("refresh/status must not build full opportunities view"),
+        ) as full_view, mock.patch.object(
+            LEGACY_APP_MODULE,
+            "_dataset_manifest_freshness_rows",
+            return_value=[],
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_running_refresh_tasks",
+            return_value=[],
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_scheduler_status_payload",
+            return_value={},
+        ):
+            payload = LEGACY_APP_MODULE.build_refresh_status_payload(
+                "opportunities",
+                auto=False,
+                compact=True,
+                now=datetime(2026, 5, 8, 10, 0, 0),
+            )
+
+        self.assertEqual(payload["page"], "opportunities")
+        self.assertEqual(payload["freshness"][0]["label"], "早盘批次")
+        self.assertEqual(source_cards.call_count, 1)
+        self.assertEqual(full_view.call_count, 0)
+
+    def test_watchlist_refresh_status_uses_lightweight_source_cards(self) -> None:
+        with mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_watchlist_source_cards_view",
+            return_value={
+                "source_cards": [
+                    {
+                        "label": "自选股快照",
+                        "value": "2026-05-08 09:30:00",
+                        "detail": "2026-05-08",
+                    }
+                ]
+            },
+        ) as source_cards, mock.patch.object(
+            LEGACY_APP_MODULE,
+            "_dataset_manifest_freshness_rows",
+            return_value=[],
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_running_refresh_tasks",
+            return_value=[],
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_scheduler_status_payload",
+            return_value={},
+        ):
+            payload = LEGACY_APP_MODULE.build_refresh_status_payload(
+                "watchlist",
+                auto=False,
+                compact=True,
+                now=datetime(2026, 5, 8, 10, 0, 0),
+            )
+
+        self.assertEqual(payload["page"], "watchlist")
+        self.assertEqual(payload["freshness"][0]["label"], "自选股快照")
+        self.assertEqual(source_cards.call_count, 1)
+
+    def test_review_refresh_status_uses_lightweight_source_cards(self) -> None:
+        with mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_review_source_cards_view",
+            return_value={
+                "source_cards": [
+                    {
+                        "label": "基准研究",
+                        "value": "2026-05-08 09:30:00",
+                        "detail": "7d",
+                    }
+                ]
+            },
+        ) as source_cards, mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_review_view",
+            side_effect=AssertionError("refresh/status must not build full review page"),
+        ) as full_view, mock.patch.object(
+            LEGACY_APP_MODULE,
+            "_dataset_manifest_freshness_rows",
+            return_value=[],
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_running_refresh_tasks",
+            return_value=[],
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_scheduler_status_payload",
+            return_value={},
+        ):
+            payload = LEGACY_APP_MODULE.build_refresh_status_payload(
+                "review",
+                auto=False,
+                compact=True,
+                now=datetime(2026, 5, 8, 10, 0, 0),
+            )
+
+        self.assertEqual(payload["page"], "review")
+        self.assertEqual(payload["freshness"][0]["label"], "基准研究")
+        self.assertEqual(source_cards.call_count, 1)
+        self.assertEqual(full_view.call_count, 0)
+
     def test_cooldown_prevents_auto_trigger(self) -> None:
         decision = evaluate_auto_refresh(
             page="today",
@@ -163,7 +308,33 @@ class RefreshPolicyApiTests(unittest.TestCase):
         self.assertIn("policy", payload)
         self.assertIn("policy_catalog", payload)
         self.assertIn("scheduler_status", payload)
+        self.assertIn("freshness_guardian", payload["scheduler_status"]["scheduler"])
         self.assertIn("jobs", payload["scheduler_status"])
+
+    def test_refresh_status_compact_omits_diagnostics_but_keeps_poll_fields(self) -> None:
+        response = self.client.get("/api/refresh/status?page=today&auto=1&compact=1")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["page"], "today")
+        self.assertIn("recommended_task", payload)
+        self.assertNotIn("freshness", payload)
+        self.assertTrue(payload["freshness_deferred"])
+        self.assertEqual(
+            payload["links_lazy"]["freshness"],
+            "/api/refresh/status?page=today&compact=0",
+        )
+        self.assertIn("auto_refresh", payload)
+        self.assertIn("cooldown", payload)
+        self.assertIn("last_auto_refresh", payload)
+        self.assertIn("snapshot_signature", payload)
+        self.assertIn("readiness_mode", payload)
+        self.assertNotIn("readiness", payload)
+        self.assertNotIn("policy", payload)
+        self.assertNotIn("policy_catalog", payload)
+        self.assertNotIn("scheduler_status", payload)
+        self.assertNotIn("recovery_steps", payload)
+        self.assertNotIn("last_refresh_event", payload)
+        self.assertNotIn("last_decision", payload["cooldown"])
 
     def test_scheduler_status_endpoint_exposes_guardrail_fields(self) -> None:
         response = self.client.get("/api/scheduler/status")
@@ -172,13 +343,432 @@ class RefreshPolicyApiTests(unittest.TestCase):
         self.assertIn("scheduler", payload)
         self.assertIn("summary", payload)
         self.assertIn("jobs", payload)
+        self.assertIn("freshness_guardian", payload["scheduler"])
         self.assertTrue(any(job.get("task_name") == "morning_warmup" for job in payload["jobs"]))
         warmup = next(job for job in payload["jobs"] if job.get("task_name") == "morning_warmup")
         self.assertTrue(warmup.get("catchup_enabled"))
         self.assertEqual(warmup.get("retry_attempts"), 2)
 
+    def test_scheduler_safety_refresh_starts_morning_warmup_when_daemon_offline(self) -> None:
+        repository = FakeAppStateRepository()
+        scheduler_status = {
+            "calendar": {"status": "trading", "date": "2026-05-26"},
+            "scheduler": {"alive": False},
+            "jobs": [
+                {"task_name": "morning_warmup", "cron_expr": "25 9 * * 1-5", "run": {"today_success": False}},
+                {"task_name": "watchlist_refresh", "cron_expr": "32 9 * * 1-5", "run": {"today_success": False}},
+                {"task_name": "aggressive", "cron_expr": "40 9 * * 1-5", "run": {"today_success": False}},
+            ],
+        }
+        with mock.patch.object(LEGACY_APP_MODULE, "APP_STATE_REPOSITORY", repository), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_running_refresh_tasks",
+            return_value=[],
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "evaluate_auto_refresh",
+            return_value={
+                "enabled": True,
+                "allowed": False,
+                "should_trigger": False,
+                "triggered": False,
+                "trigger": None,
+                "summary": "test",
+                "blocked_reasons": ["outside_auto_window"],
+                "reason_codes": ["trade_date_mismatch"],
+                "cooldown_remaining_seconds": 0,
+                "next_allowed_at": "",
+            },
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_scheduler_status_payload",
+            return_value=scheduler_status,
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "list_runs",
+            return_value=[],
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "trigger_refresh_task",
+            return_value={"started": True, "run_id": "safety-run", "task_name": "morning_warmup"},
+        ) as trigger:
+            payload = LEGACY_APP_MODULE.build_refresh_status_payload(
+                "today",
+                auto=True,
+                now=datetime(2026, 5, 26, 10, 0, 0),
+            )
+
+        trigger.assert_called_once()
+        self.assertEqual(trigger.call_args.kwargs["task_name"], "morning_warmup")
+        self.assertEqual(payload["scheduler_safety_refresh"]["task_name"], "morning_warmup")
+
+    def test_scheduler_safety_refresh_starts_due_task_even_when_daemon_alive(self) -> None:
+        repository = FakeAppStateRepository()
+        scheduler_status = {
+            "calendar": {"status": "trading", "date": "2026-05-26"},
+            "scheduler": {"alive": True},
+            "jobs": [
+                {"task_name": "morning_warmup", "cron_expr": "25 9 * * 1-5", "run": {"today_success": True}},
+                {"task_name": "watchlist_refresh", "cron_expr": "32 9 * * 1-5", "run": {"today_success": False}},
+                {"task_name": "aggressive", "cron_expr": "40 9 * * 1-5", "run": {"today_success": False}},
+            ],
+        }
+        with mock.patch.object(LEGACY_APP_MODULE, "APP_STATE_REPOSITORY", repository), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_running_refresh_tasks",
+            return_value=[],
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "evaluate_auto_refresh",
+            return_value={
+                "enabled": True,
+                "allowed": False,
+                "should_trigger": False,
+                "triggered": False,
+                "trigger": None,
+                "summary": "test",
+                "blocked_reasons": ["manifest_not_stale"],
+                "reason_codes": ["no_stale_manifest"],
+                "cooldown_remaining_seconds": 0,
+                "next_allowed_at": "",
+            },
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_scheduler_status_payload",
+            return_value=scheduler_status,
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "list_runs",
+            return_value=[],
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "trigger_refresh_task",
+            return_value={"started": True, "run_id": "safety-run", "task_name": "watchlist_refresh"},
+        ) as trigger:
+            payload = LEGACY_APP_MODULE.build_refresh_status_payload(
+                "today",
+                auto=True,
+                now=datetime(2026, 5, 26, 9, 35, 0),
+            )
+
+        trigger.assert_called_once()
+        self.assertEqual(trigger.call_args.kwargs["task_name"], "watchlist_refresh")
+        self.assertEqual(trigger.call_args.kwargs["reason"], "scheduler_due_required_task_missing")
+        self.assertEqual(payload["scheduler_safety_refresh"]["task_name"], "watchlist_refresh")
+
+    def test_scheduler_safety_refresh_starts_formal_refresh_when_due_and_missing(self) -> None:
+        repository = FakeAppStateRepository()
+        scheduler_status = {
+            "calendar": {"status": "trading", "date": "2026-05-26"},
+            "scheduler": {"alive": True},
+            "jobs": [
+                {"task_name": "morning_warmup", "cron_expr": "25 9 * * 1-5", "run": {"today_success": True}},
+                {"task_name": "formal_data_refresh", "cron_expr": "27 9 * * 1-5", "run": {"today_success": False}},
+                {"task_name": "watchlist_refresh", "cron_expr": "32 9 * * 1-5", "run": {"today_success": False}},
+                {"task_name": "aggressive", "cron_expr": "40 9 * * 1-5", "run": {"today_success": False}},
+            ],
+        }
+        with mock.patch.object(LEGACY_APP_MODULE, "APP_STATE_REPOSITORY", repository), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_running_refresh_tasks",
+            return_value=[],
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "evaluate_auto_refresh",
+            return_value={
+                "enabled": True,
+                "allowed": False,
+                "should_trigger": False,
+                "triggered": False,
+                "trigger": None,
+                "summary": "test",
+                "blocked_reasons": ["manifest_not_stale"],
+                "reason_codes": ["no_stale_manifest"],
+                "cooldown_remaining_seconds": 0,
+                "next_allowed_at": "",
+            },
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "build_scheduler_status_payload",
+            return_value=scheduler_status,
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "list_runs",
+            return_value=[],
+        ), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "trigger_refresh_task",
+            return_value={"started": True, "run_id": "formal-run", "task_name": "formal_data_refresh"},
+        ) as trigger:
+            payload = LEGACY_APP_MODULE.build_refresh_status_payload(
+                "today",
+                auto=True,
+                now=datetime(2026, 5, 26, 9, 35, 0),
+            )
+
+        trigger.assert_called_once()
+        self.assertEqual(trigger.call_args.kwargs["task_name"], "formal_data_refresh")
+        self.assertEqual(payload["scheduler_safety_refresh"]["task_name"], "formal_data_refresh")
+
+    def test_first_open_prefers_scheduler_safety_before_readiness_auto_refresh(self) -> None:
+        repository = FakeAppStateRepository()
+        scheduler_status = {
+            "calendar": {"status": "trading", "date": "2026-05-26"},
+            "scheduler": {"alive": True},
+            "jobs": [
+                {"task_name": "morning_warmup", "cron_expr": "25 9 * * 1-5", "run": {"today_success": False, "running": False}},
+                {"task_name": "watchlist_refresh", "cron_expr": "32 9 * * 1-5", "run": {"today_success": False, "running": False}},
+                {"task_name": "aggressive", "cron_expr": "40 9 * * 1-5", "run": {"today_success": False, "running": False}},
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            previous_state_path = LEGACY_APP_MODULE.REFRESH_STATE_PATH
+            LEGACY_APP_MODULE.REFRESH_STATE_PATH = Path(tmpdir) / "refresh_state.json"
+            try:
+                with mock.patch.object(LEGACY_APP_MODULE, "APP_STATE_REPOSITORY", repository), mock.patch.object(
+                    LEGACY_APP_MODULE,
+                    "list_runs",
+                    return_value=[],
+                ), mock.patch.object(
+                    LEGACY_APP_MODULE,
+                    "build_running_refresh_tasks",
+                    return_value=[],
+                ), mock.patch.object(
+                    LEGACY_APP_MODULE,
+                    "_dataset_manifest_freshness_rows",
+                    return_value=[_freshness_row(key="watchlist")],
+                ), mock.patch.object(
+                    LEGACY_APP_MODULE,
+                    "build_today_readiness_view",
+                    return_value={
+                        "readiness": {
+                            "ready": False,
+                            "readiness_mode": "blocked",
+                            "stale_count": 1,
+                            "expected_trade_date": "2026-05-26",
+                            "recommended_tasks": ["watchlist_refresh"],
+                            "source_freshness": [_freshness_row(key="watchlist")],
+                            "blockers": [],
+                            "warnings": [],
+                        }
+                    },
+                ), mock.patch.object(
+                    LEGACY_APP_MODULE,
+                    "build_scheduler_status_payload",
+                    return_value=scheduler_status,
+                ), mock.patch.object(
+                    LEGACY_APP_MODULE,
+                    "trigger_refresh_task",
+                    return_value={"started": True, "run_id": "safety-run", "task_name": "morning_warmup"},
+                ) as trigger:
+                    payload = LEGACY_APP_MODULE.build_refresh_status_payload(
+                        "today",
+                        auto=True,
+                        now=datetime(2026, 5, 26, 9, 35, 0),
+                    )
+
+                trigger.assert_called_once()
+                self.assertEqual(trigger.call_args.kwargs["task_name"], "morning_warmup")
+                self.assertEqual(trigger.call_args.kwargs["trigger_type"], "scheduler_safety")
+                self.assertFalse(payload["auto_refresh"]["triggered"])
+                self.assertEqual(payload["scheduler_safety_refresh"]["task_name"], "morning_warmup")
+            finally:
+                LEGACY_APP_MODULE.REFRESH_STATE_PATH = previous_state_path
+
+    def test_first_open_can_recover_stale_lightweight_quotes(self) -> None:
+        repository = FakeAppStateRepository()
+        scheduler_status = {
+            "calendar": {"status": "trading", "date": "2026-05-26"},
+            "scheduler": {"alive": True},
+            "jobs": [
+                {"task_name": "morning_warmup", "cron_expr": "25 9 * * 1-5", "run": {"today_success": True, "running": False}},
+                {"task_name": "watchlist_refresh", "cron_expr": "32 9 * * 1-5", "run": {"today_success": True, "running": False}},
+                {"task_name": "aggressive", "cron_expr": "40 9 * * 1-5", "run": {"today_success": True, "running": False}},
+            ],
+        }
+        quotes_row = _freshness_row(key="quotes.batch", reasons=["freshness_stale"])
+        quotes_row["label"] = "quotes.batch"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            previous_state_path = LEGACY_APP_MODULE.REFRESH_STATE_PATH
+            LEGACY_APP_MODULE.REFRESH_STATE_PATH = Path(tmpdir) / "refresh_state.json"
+            try:
+                with mock.patch.object(LEGACY_APP_MODULE, "APP_STATE_REPOSITORY", repository), mock.patch.object(
+                    LEGACY_APP_MODULE,
+                    "list_runs",
+                    return_value=[],
+                ), mock.patch.object(
+                    LEGACY_APP_MODULE,
+                    "build_running_refresh_tasks",
+                    return_value=[],
+                ), mock.patch.object(
+                    LEGACY_APP_MODULE,
+                    "build_today_readiness_view",
+                    return_value={
+                        "readiness": {
+                            "ready": True,
+                            "readiness_mode": "live_ready",
+                            "stale_count": 0,
+                            "expected_trade_date": "2026-05-26",
+                            "recommended_tasks": ["command_brief"],
+                            "source_freshness": [],
+                            "blockers": [],
+                            "warnings": [],
+                        }
+                    },
+                ), mock.patch.object(
+                    LEGACY_APP_MODULE,
+                    "_dataset_manifest_freshness_rows",
+                    return_value=[quotes_row],
+                ), mock.patch.object(
+                    LEGACY_APP_MODULE,
+                    "build_scheduler_status_payload",
+                    return_value=scheduler_status,
+                ), mock.patch.object(
+                    LEGACY_APP_MODULE,
+                    "trigger_refresh_task",
+                    return_value={"started": True, "run_id": "quotes-run", "task_name": "quotes_light"},
+                ) as trigger:
+                    payload = LEGACY_APP_MODULE.build_refresh_status_payload(
+                        "today",
+                        auto=True,
+                        now=datetime(2026, 5, 26, 10, 5, 0),
+                    )
+
+                trigger.assert_called_once()
+                self.assertEqual(trigger.call_args.kwargs["task_name"], "quotes_light")
+                self.assertEqual(trigger.call_args.kwargs["trigger_type"], "auto")
+                self.assertTrue(payload["auto_refresh"]["triggered"])
+                self.assertEqual(payload["auto_refresh"]["task_name"], "quotes_light")
+            finally:
+                LEGACY_APP_MODULE.REFRESH_STATE_PATH = previous_state_path
+
+    def test_first_open_can_recover_stale_lightweight_capital_flow(self) -> None:
+        repository = FakeAppStateRepository()
+        scheduler_status = {
+            "calendar": {"status": "trading", "date": "2026-05-26"},
+            "scheduler": {"alive": True},
+            "jobs": [
+                {"task_name": "morning_warmup", "cron_expr": "25 9 * * 1-5", "run": {"today_success": True, "running": False}},
+                {"task_name": "watchlist_refresh", "cron_expr": "32 9 * * 1-5", "run": {"today_success": True, "running": False}},
+                {"task_name": "aggressive", "cron_expr": "40 9 * * 1-5", "run": {"today_success": True, "running": False}},
+            ],
+        }
+        capital_row = _freshness_row(key="capital_flow.batch", reasons=["freshness_stale"])
+        capital_row["label"] = "capital_flow.batch"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            previous_state_path = LEGACY_APP_MODULE.REFRESH_STATE_PATH
+            LEGACY_APP_MODULE.REFRESH_STATE_PATH = Path(tmpdir) / "refresh_state.json"
+            try:
+                with mock.patch.object(LEGACY_APP_MODULE, "APP_STATE_REPOSITORY", repository), mock.patch.object(
+                    LEGACY_APP_MODULE,
+                    "list_runs",
+                    return_value=[],
+                ), mock.patch.object(
+                    LEGACY_APP_MODULE,
+                    "build_running_refresh_tasks",
+                    return_value=[],
+                ), mock.patch.object(
+                    LEGACY_APP_MODULE,
+                    "build_today_readiness_view",
+                    return_value={
+                        "readiness": {
+                            "ready": True,
+                            "readiness_mode": "live_ready",
+                            "stale_count": 0,
+                            "expected_trade_date": "2026-05-26",
+                            "recommended_tasks": ["command_brief"],
+                            "source_freshness": [],
+                            "blockers": [],
+                            "warnings": [],
+                        }
+                    },
+                ), mock.patch.object(
+                    LEGACY_APP_MODULE,
+                    "_dataset_manifest_freshness_rows",
+                    return_value=[capital_row],
+                ), mock.patch.object(
+                    LEGACY_APP_MODULE,
+                    "build_scheduler_status_payload",
+                    return_value=scheduler_status,
+                ), mock.patch.object(
+                    LEGACY_APP_MODULE,
+                    "trigger_refresh_task",
+                    return_value={"started": True, "run_id": "capital-run", "task_name": "capital_flow_light"},
+                ) as trigger:
+                    payload = LEGACY_APP_MODULE.build_refresh_status_payload(
+                        "today",
+                        auto=True,
+                        now=datetime(2026, 5, 26, 10, 15, 0),
+                    )
+
+                trigger.assert_called_once()
+                self.assertEqual(trigger.call_args.kwargs["task_name"], "capital_flow_light")
+                self.assertEqual(trigger.call_args.kwargs["trigger_type"], "auto")
+                self.assertTrue(payload["auto_refresh"]["triggered"])
+                self.assertEqual(payload["auto_refresh"]["task_name"], "capital_flow_light")
+            finally:
+                LEGACY_APP_MODULE.REFRESH_STATE_PATH = previous_state_path
+
+    def test_running_refresh_tasks_include_scheduler_runs(self) -> None:
+        with mock.patch.object(LEGACY_APP_MODULE, "list_runs", return_value=[]), mock.patch.object(
+            LEGACY_APP_MODULE,
+            "run_state_for_task",
+            side_effect=lambda task_name: {
+                "task_name": task_name,
+                "title": "自选股早盘分析",
+                "running": task_name == "watchlist_refresh",
+                "started_at": "2026-05-26 09:32:00",
+                "run_id": "watchlist_refresh_2026-05-26_09-32-00",
+            },
+        ):
+            rows = LEGACY_APP_MODULE.build_running_refresh_tasks("today")
+
+        self.assertTrue(any(row.get("task_name") == "watchlist_refresh" and row.get("source") == "scheduler" for row in rows))
+
+    def test_scheduler_safety_respects_control_panel_success(self) -> None:
+        scheduler_status = {
+            "calendar": {"status": "trading", "date": "2026-05-26"},
+            "scheduler": {"alive": False},
+            "jobs": [
+                {"task_name": "morning_warmup", "cron_expr": "25 9 * * 1-5", "run": {"today_success": False}},
+                {"task_name": "watchlist_refresh", "cron_expr": "32 9 * * 1-5", "run": {"today_success": False}},
+                {"task_name": "aggressive", "cron_expr": "40 9 * * 1-5", "run": {"today_success": False}},
+            ],
+        }
+        with mock.patch.object(
+            LEGACY_APP_MODULE,
+            "list_runs",
+            return_value=[
+                {
+                    "task_name": "morning_warmup",
+                    "status": "success",
+                    "finished_at": "2026-05-26 09:31:00",
+                },
+                {
+                    "task_name": "watchlist_refresh",
+                    "status": "success",
+                    "finished_at": "2026-05-26 09:36:00",
+                },
+            ],
+        ):
+            task_name = LEGACY_APP_MODULE._scheduler_safety_task(
+                scheduler_status,
+                now=datetime(2026, 5, 26, 9, 42, 0),
+            )
+
+        self.assertEqual(task_name, "aggressive")
+
     def test_auto_status_starts_when_policy_allows(self) -> None:
         repository = FakeAppStateRepository()
+        scheduler_status = {
+            "calendar": {"status": "trading", "date": "2026-05-08"},
+            "scheduler": {"alive": True},
+            "jobs": [
+                {"task_name": "morning_warmup", "cron_expr": "25 9 * * 1-5", "run": {"today_success": True, "running": False}},
+                {"task_name": "watchlist_refresh", "cron_expr": "32 9 * * 1-5", "run": {"today_success": True, "running": False}},
+                {"task_name": "aggressive", "cron_expr": "40 9 * * 1-5", "run": {"today_success": True, "running": False}},
+            ],
+        }
         with tempfile.TemporaryDirectory() as tmpdir:
             previous_state_path = LEGACY_APP_MODULE.REFRESH_STATE_PATH
             LEGACY_APP_MODULE.REFRESH_STATE_PATH = Path(tmpdir) / "refresh_state.json"
@@ -197,7 +787,7 @@ class RefreshPolicyApiTests(unittest.TestCase):
                     return_value=[_freshness_row(key="watchlist")],
                 ), mock.patch.object(
                     LEGACY_APP_MODULE,
-                    "build_today_view",
+                    "build_today_readiness_view",
                     return_value={
                         "readiness": {
                             "ready": False,
@@ -210,6 +800,10 @@ class RefreshPolicyApiTests(unittest.TestCase):
                             "warnings": [],
                         }
                     },
+                ), mock.patch.object(
+                    LEGACY_APP_MODULE,
+                    "build_scheduler_status_payload",
+                    return_value=scheduler_status,
                 ), mock.patch.object(
                     LEGACY_APP_MODULE,
                     "launch_background_task",
@@ -258,13 +852,33 @@ class RefreshPolicyApiTests(unittest.TestCase):
                         },
                         "readiness": {"ready": False},
                     }
-                    fake_status.side_effect = [base_status, {**base_status, "cooldown": _cooldown()}]
+                    compact_status = {
+                        "page": "today",
+                        "running": [],
+                        "freshness": [_freshness_row(key="watchlist")],
+                        "recommended_task": {"task_name": "watchlist_refresh", "title": "自选股全流程刷新"},
+                        "cooldown": _cooldown(),
+                        "auto_refresh": {"triggered": False, "trigger": None},
+                        "last_auto_refresh": None,
+                        "snapshot_signature": "compact-signature",
+                    }
+                    fake_status.side_effect = [base_status, compact_status]
                     response = self.client.post(
                         "/api/refresh/trigger",
                         json={"page": "today", "task_name": "watchlist_refresh", "force": True, "reason": "test_force"},
                     )
                     state = LEGACY_APP_MODULE.load_refresh_state()
                 self.assertEqual(response.status_code, 200)
+                self.assertEqual(
+                    fake_status.call_args_list,
+                    [mock.call("today"), mock.call("today", skip_auto=True, compact=True)],
+                )
+                response_status = response.json()["status"]
+                self.assertEqual(response_status, compact_status)
+                self.assertNotIn("policy_catalog", response_status)
+                self.assertNotIn("scheduler_status", response_status)
+                self.assertNotIn("recovery_steps", response_status)
+                self.assertNotIn("last_refresh_event", response_status)
                 event = state["audit_events"][-1]
                 self.assertTrue(event["force"])
                 self.assertEqual(event["reason"], "test_force")
@@ -281,21 +895,77 @@ class RefreshPolicyApiTests(unittest.TestCase):
         self.assertEqual(policy.depends_on, ("postclose_command_brief",))
         self.assertTrue(policy.catchup_enabled)
 
+    def test_formal_data_refresh_runs_as_morning_maintenance_job(self) -> None:
+        policies = {policy.task_name: policy for policy in CRON_POLICIES}
+        self.assertIn("formal_data_refresh", policies)
+        policy = policies["formal_data_refresh"]
+        self.assertEqual(policy.cron_expr, "27 9 * * 1-5")
+        self.assertEqual(policy.command, ("python3", "apps/scripts/refresh_formal_data.py"))
+        self.assertFalse(policy.delivery_default)
+        self.assertTrue(policy.catchup_enabled)
+        self.assertEqual(policy.catchup_until, "15:05")
+        postclose_daily = ("python3", "apps/scripts/refresh_formal_data.py", "--datasets", "bars.daily,adjustment.factor")
+        self.assertEqual(policies["formal_data_refresh_postclose"].cron_expr, "35 16 * * 1-5")
+        self.assertEqual(policies["formal_data_refresh_postclose"].command, postclose_daily)
+        index_command = ("python3", "apps/scripts/refresh_formal_data.py", "--datasets", "benchmark.index_daily")
+        self.assertEqual(policies["formal_data_refresh_index_morning"].cron_expr, "37 10 * * 1-5")
+        self.assertEqual(policies["formal_data_refresh_index_morning"].command, index_command)
+        self.assertEqual(policies["formal_data_refresh_index_late_morning"].cron_expr, "47 11 * * 1-5")
+        self.assertEqual(policies["formal_data_refresh_index_late_morning"].command, index_command)
+        self.assertEqual(policies["formal_data_refresh_index_postclose"].cron_expr, "20 15 * * 1-5")
+        self.assertEqual(policies["formal_data_refresh_index_postclose"].command, index_command)
+        self.assertEqual(policies["formal_data_refresh_index_postclose_second"].cron_expr, "30 16 * * 1-5")
+        self.assertEqual(policies["formal_data_refresh_index_postclose_second"].command, index_command)
+        self.assertEqual(policies["formal_data_refresh_index_postclose_third"].cron_expr, "40 17 * * 1-5")
+        self.assertEqual(policies["formal_data_refresh_index_postclose_third"].command, index_command)
+        self.assertEqual(policies["formal_data_refresh_index_postclose_fourth"].cron_expr, "50 18 * * 1-5")
+        self.assertEqual(policies["formal_data_refresh_index_postclose_fourth"].command, index_command)
+
     def test_cron_config_contains_preclose_postclose_and_ledger_outcomes(self) -> None:
         payload = json.loads((Path(__file__).resolve().parents[3] / "config" / "openclaw" / "prism_cron_jobs.json").read_text(encoding="utf-8"))
         result = validate_cron_policies(payload.get("jobs") or [])
         self.assertTrue(result["ok"], result)
         expr_by_name = {job["name"]: job["schedule"]["expr"] for job in payload["jobs"]}
         self.assertEqual(expr_by_name["晨间数据预热"], "25 9 * * 1-5")
+        self.assertEqual(expr_by_name["正式口径数据刷新"], "27 9 * * 1-5")
+        self.assertEqual(expr_by_name["正式日线复权盘后补齐"], "35 16 * * 1-5")
+        self.assertEqual(expr_by_name["正式基准指数补刷-上午一"], "37 10 * * 1-5")
+        self.assertEqual(expr_by_name["正式基准指数补刷-上午二"], "47 11 * * 1-5")
+        self.assertEqual(expr_by_name["自选股早盘分析"], "32 9 * * 1-5")
+        self.assertEqual(expr_by_name["进攻型选股-早盘"], "40 9 * * 1-5")
         self.assertEqual(expr_by_name["收盘前风险刷新"], "50 14 * * 1-5")
+        self.assertEqual(expr_by_name["正式基准指数补刷-收盘一"], "20 15 * * 1-5")
         self.assertEqual(expr_by_name["收盘后总控简报"], "5 15 * * 1-5")
         self.assertEqual(expr_by_name["Decision Ledger 结果评估"], "35 15 * * 1-5")
+        self.assertEqual(expr_by_name["正式基准指数补刷-收盘二"], "30 16 * * 1-5")
+        self.assertEqual(expr_by_name["正式基准指数补刷-收盘三"], "40 17 * * 1-5")
+        self.assertEqual(expr_by_name["正式基准指数补刷-收盘四"], "50 18 * * 1-5")
+
+    def test_command_brief_crons_wait_for_midday_confirmation(self) -> None:
+        policies = {policy.task_name: policy for policy in CRON_POLICIES}
+        self.assertEqual(policies["preclose_risk_refresh"].depends_on, ("midday_confirmation",))
+        self.assertEqual(policies["postclose_command_brief"].depends_on, ("midday_confirmation",))
 
     def test_morning_warmup_resolves_as_safe_manual_task(self) -> None:
         task = LEGACY_APP_MODULE.resolve_refresh_task("morning_warmup")
         self.assertEqual(task["task_name"], "morning_warmup")
         self.assertEqual(task["title"], "晨间数据预热")
         self.assertEqual(task["command"][-1], "apps/scripts/run_morning_warmup.py")
+
+    def test_formal_index_refresh_resolves_as_benchmark_only_task(self) -> None:
+        task = LEGACY_APP_MODULE.resolve_refresh_task("formal_data_refresh_index_morning")
+        self.assertEqual(task["task_name"], "formal_data_refresh_index_morning")
+        self.assertEqual(task["title"], "正式基准指数补刷-上午一")
+        self.assertEqual(task["command"], [sys.executable, "apps/scripts/refresh_formal_data.py", "--datasets", "benchmark.index_daily"])
+
+    def test_formal_postclose_refresh_resolves_as_daily_factor_task(self) -> None:
+        task = LEGACY_APP_MODULE.resolve_refresh_task("formal_data_refresh_postclose")
+        self.assertEqual(task["task_name"], "formal_data_refresh_postclose")
+        self.assertEqual(task["title"], "正式日线复权盘后补齐")
+        self.assertEqual(
+            task["command"],
+            [sys.executable, "apps/scripts/refresh_formal_data.py", "--datasets", "bars.daily,adjustment.factor"],
+        )
 
 
 if __name__ == "__main__":

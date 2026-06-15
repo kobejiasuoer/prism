@@ -9,9 +9,10 @@ spectrum:
 * FRESH    — aligned trade date, on-time, scope ok
 * USABLE   — reserved for Phase 2 ("near threshold" early warning)
 * STALE    — past TTL but still readable (degrade to observe/review)
-* DEGRADED — fallback provider in use or authority not in target lane
+* DEGRADED — fallback provider in use, authority not in target lane, or
+              usable data not allowed for live-money execution
 * INVALID  — structurally unusable (missing manifest, trade-date mismatch)
-* BLOCKED  — explicit policy bar (live_small_not_allowed, fallback_not_allowed)
+* BLOCKED  — reserved for future hard policy bars that also block review
 
 ``state_allows`` encodes which investment capabilities each state permits.
 This is the authoritative matrix; capability_matrix consumes it directly.
@@ -39,26 +40,31 @@ class FreshnessState(str, Enum):
     BLOCKED = "blocked"
 
 
-# Precedence: INVALID > BLOCKED > STALE > DEGRADED > USABLE > FRESH.
+# Precedence: INVALID > STALE > DEGRADED > BLOCKED > USABLE > FRESH.
 # Higher precedence means the data is more unusable; the classifier returns
 # the worst applicable state.
 
 _INVALID_REASONS = frozenset({
     "manifest_missing",
+    "manifest_status_failed",
     "missing",
+    "provider_failure",
     "trade_date_mismatch",
     "trade_date_unknown",
     "freshness_unknown",
 })
 
 _BLOCKED_REASONS = frozenset({
-    "live_small_not_allowed",
-    "fallback_not_allowed",
 })
 
 _STALE_REASONS = frozenset({
     "freshness_stale",
     "freshness_expired",
+})
+
+_DEGRADED_REASONS = frozenset({
+    "live_small_not_allowed",
+    "fallback_not_allowed",
 })
 
 
@@ -69,6 +75,9 @@ def classify_source_row(row: Mapping[str, Any]) -> FreshnessState:
     items: ``available``, ``stale``, ``degraded``, ``stale_reasons``,
     ``degradation_reasons`` (any of which may be missing).
     """
+    if bool(row.get("deferred")):
+        return FreshnessState.USABLE
+
     available = bool(row.get("available"))
     stale = bool(row.get("stale"))
     degraded = bool(row.get("degraded"))
@@ -76,10 +85,12 @@ def classify_source_row(row: Mapping[str, Any]) -> FreshnessState:
 
     if not available or reasons & _INVALID_REASONS:
         return FreshnessState.INVALID
-    if reasons & _BLOCKED_REASONS:
-        return FreshnessState.BLOCKED
     if stale and reasons & _STALE_REASONS:
         return FreshnessState.STALE
+    if reasons & _DEGRADED_REASONS:
+        return FreshnessState.DEGRADED
+    if reasons & _BLOCKED_REASONS:
+        return FreshnessState.BLOCKED
     if stale:
         return FreshnessState.STALE
     if degraded:

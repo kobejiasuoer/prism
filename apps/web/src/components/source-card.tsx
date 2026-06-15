@@ -9,8 +9,18 @@ const STALE_REASON_COPY: Record<string, string> = {
   research_review_expired: "研究过期",
 };
 
+const FAILURE_DETAILS = new Set(["执行失败", "链路失败", "链路无效", "质检拦截", "扫描失败"]);
+
 function sourceTone(source: SourceCardData) {
-  if (source.stale || source.value === "-" || source.available === false) {
+  if (source.deferred) {
+    return "var(--info)";
+  }
+  if (
+    source.stale ||
+    source.value === "-" ||
+    source.available === false ||
+    FAILURE_DETAILS.has(String(source.detail || ""))
+  ) {
     return "var(--warning)";
   }
   return "var(--positive)";
@@ -19,7 +29,9 @@ function sourceTone(source: SourceCardData) {
 export function SourceCard({ source }: { source: SourceCardData }) {
   const color = sourceTone(source);
   const reasonText = source.stale_reasons?.map((reason) => STALE_REASON_COPY[reason] || reason).join(" / ");
-  const detail = source.stale_reasons?.length
+  const detail = source.deferred
+    ? source.detail || "等待计划任务生成"
+    : source.stale_reasons?.length
     ? `${source.detail || ""}${source.detail ? " · " : ""}${reasonText}`
     : source.detail;
 

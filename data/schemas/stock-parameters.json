@@ -1027,6 +1027,60 @@
         }
       ]
     },
+    "opportunity_v2": {
+      "mode": "assist",
+      "ai": {
+        "enabled": true,
+        "max_calls": 3,
+        "timeout_seconds": 12
+      },
+      "confidence_weights": {
+        "clarity": 0.3,
+        "behavior": 0.24,
+        "role": 0.22,
+        "theme": 0.14,
+        "risk_reward": 0.1
+      },
+      "confidence_thresholds": {
+        "review": 0.38,
+        "shadow": 0.52,
+        "trial": 0.66,
+        "actionable": 0.8
+      },
+      "hard_gate_caps": {
+        "gate_off": "shadow",
+        "gate_limited_allowed": "trial",
+        "gate_limited_disallowed": "shadow",
+        "risk_degrade": "trial",
+        "risk_block": "shadow",
+        "readiness_blocked": "observe",
+        "readiness_shadow": "shadow",
+        "no_trade_permission": "shadow",
+        "position_cap_zero": "shadow",
+        "midday_failed": "observe"
+      },
+      "calibration": {
+        "enabled": true,
+        "path": "data/runtime/opportunity_v2_calibration.json",
+        "min_mature_samples": 8,
+        "min_playbook_samples": 3,
+        "min_positive_rate_for_active": 0.52,
+        "max_review_rate_for_active": 0.35,
+        "active_requires_calibration": true,
+        "cold_start_threshold_bump": {
+          "trial": 0.06,
+          "actionable": 0.1
+        },
+        "conservative_threshold_bump": {
+          "trial": 0.04,
+          "actionable": 0.07
+        },
+        "weak_playbook_penalty": -0.06,
+        "weak_playbook_action_cap": "shadow"
+      },
+      "playbook_adjustments": {
+      }
+    },
     "fundamental_score": {
       "max": 12,
       "min": -8

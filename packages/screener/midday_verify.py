@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +15,8 @@ from prism_data import build_pipeline_manifest, load_manifest_file, write_sideca
 try:
     from screener.capital_flow_contract import UNIT_YUAN, capital_flow_today_yi
     from screener.parameters import (
+        OPPORTUNITY_V2_RULES,
+        build_execution_gate,
         build_intraday_observation_contract,
         infer_intraday_setup_label,
         infer_intraday_setup_type,
@@ -21,10 +24,17 @@ try:
 except ModuleNotFoundError:
     from capital_flow_contract import UNIT_YUAN, capital_flow_today_yi
     from parameters import (
+        OPPORTUNITY_V2_RULES,
+        build_execution_gate,
         build_intraday_observation_contract,
         infer_intraday_setup_label,
         infer_intraday_setup_type,
     )
+
+try:
+    from screener.opportunity_v2 import ACTION_LABELS as V2_ACTION_LABELS, build_baseline_judgment
+except ModuleNotFoundError:
+    from opportunity_v2 import ACTION_LABELS as V2_ACTION_LABELS, build_baseline_judgment
 
 BASE = Path(__file__).resolve().parents[1]
 DEFAULT_MORNING = BASE / "data" / "ai_screening_result.json"
@@ -36,6 +46,32 @@ def load_sidecar_manifest(path: Path | str | None) -> dict | None:
     if not path:
         return None
     return load_manifest_file(Path(path).expanduser().with_suffix(".manifest.json"))
+
+
+def date_prefix(value) -> str:
+    text = str(value or "").strip()
+    if len(text) >= 10 and text[4:5] == "-" and text[7:8] == "-":
+        return text[:10]
+    digits = "".join(ch for ch in text if ch.isdigit())
+    if len(digits) >= 8:
+        return f"{digits[:4]}-{digits[4:6]}-{digits[6:8]}"
+    return ""
+
+
+def resolve_trade_date(morning: dict, current: dict) -> str:
+    for value in (
+        morning.get("trade_date"),
+        current.get("trade_date"),
+        os.environ.get("PRISM_EXPECTED_TRADE_DATE"),
+        os.environ.get("TRADE_DATE"),
+        os.environ.get("RUN_DATE"),
+        morning.get("source_scan_timestamp"),
+        current.get("timestamp"),
+    ):
+        resolved = date_prefix(value)
+        if resolved:
+            return resolved
+    return datetime.now().strftime("%Y-%m-%d")
 
 
 def ingress_summary(manifest: dict | None, manifest_path: Path | None) -> dict[str, object]:
@@ -197,6 +233,85 @@ def infer_scan_setup_type(item):
     return infer_intraday_setup_type(item or {})
 
 
+def execution_gate_of_scan(scan_data):
+    regime = dict((scan_data or {}).get("market_regime") or {})
+    gate = regime.get("execution_gate") if isinstance(regime.get("execution_gate"), dict) else {}
+    if not gate:
+        candidate_view = regime.get("candidate_view") if isinstance(regime.get("candidate_view"), dict) else {}
+        try:
+            gate = build_execution_gate(regime, candidate_view)
+        except Exception:
+            gate = {}
+    gate.setdefault("status", "on" if regime.get("attack_ok", True) else "off")
+    gate.setdefault("allow_new_positions", gate.get("status") != "off")
+    gate.setdefault("allow_handoff", gate.get("status") == "on")
+    gate.setdefault("allowed_setups", ["leader_continuation", "breakout_follow", "pullback_continuation", "low_reversal"])
+    gate.setdefault("position_cap", "0.5-0.8成试错" if gate.get("status") == "on" else "0成")
+    regime["execution_gate"] = gate
+    return regime
+
+
+def attach_opportunity_v2(item, scan_data, *, status="fresh_candidate"):
+    """Attach deterministic V2 judgment to a midday row.
+
+    Midday verification must stay deterministic and fast. The AI judge is
+    reserved for the morning screening layer; here we only re-evaluate
+    whether the structure survived the market-behavior check.
+    """
+
+    source = dict(item or {})
+    if status:
+        source["status"] = status
+        source["confirmation_status"] = status
+    if status == "downgraded":
+        source["main_risk"] = source.get("main_risk") or source.get("reason") or "午盘承接失败"
+    judgment = build_baseline_judgment(
+        source,
+        market_regime=execution_gate_of_scan(scan_data),
+        market_themes=(scan_data or {}).get("market_themes"),
+        rules=OPPORTUNITY_V2_RULES,
+        context={"midday_status": status},
+    )
+    source["opportunity_v2"] = judgment
+    source["suggested_action"] = judgment.get("suggested_action")
+    source["suggested_action_label"] = V2_ACTION_LABELS.get(str(judgment.get("suggested_action") or ""), str(judgment.get("suggested_action") or ""))
+    source["confidence"] = judgment.get("confidence")
+    source["thesis"] = judgment.get("thesis")
+    source["why_now"] = judgment.get("why_now")
+    source["invalidation"] = judgment.get("invalidation")
+    source["missing_confirmation"] = judgment.get("missing_confirmation") or []
+    hard_gate = judgment.get("hard_gate") if isinstance(judgment.get("hard_gate"), dict) else {}
+    source["hard_gate_max_action"] = hard_gate.get("maximum_allowed_action")
+    source["hard_gate_block_reason"] = "; ".join(hard_gate.get("block_reasons") or [])
+    return source
+
+
+def build_midday_v2_source(morning_item, current_item, result, active_themes=None):
+    source = dict(morning_item or {})
+    current_item = current_item or {}
+    snapshot = result.get("snapshot") if isinstance(result.get("snapshot"), dict) else {}
+    if current_item:
+        for key in ("code", "name", "score", "change_pct", "amount_yi", "price", "capital_flow", "technical_state"):
+            if current_item.get(key) not in (None, "", [], {}):
+                source[key] = current_item.get(key)
+        theme = theme_of(current_item)
+        if theme:
+            source["theme"] = theme
+    if snapshot:
+        source["flow_today_yi"] = snapshot.get("flow_today_yi")
+        source["capital_trend"] = snapshot.get("capital_trend")
+        source["theme"] = snapshot.get("current_theme") or snapshot.get("morning_theme") or source.get("theme")
+        source["active_theme"] = bool(snapshot.get("theme_in_play"))
+    details = result.get("details") if isinstance(result.get("details"), list) else []
+    source["reason"] = result.get("reason")
+    source["watch_condition"] = "；".join(str(item) for item in details if item) or source.get("watch_condition")
+    if result.get("status") == "downgraded":
+        source["main_risk"] = result.get("reason") or source.get("main_risk")
+    if active_themes:
+        source["active_themes"] = active_themes
+    return source
+
+
 def build_fresh_candidates(scan_data, exclude_codes, active_themes=None, limit=3):
     active_themes = active_themes or []
     candidates = []
@@ -224,8 +339,7 @@ def build_fresh_candidates(scan_data, exclude_codes, active_themes=None, limit=3
             active_theme=active_theme,
             flow_today_yi=flow_today_yi,
         )
-        candidates.append(
-            {
+        row = {
                 "code": code,
                 "name": item.get("name"),
                 "theme": theme or "其他",
@@ -247,7 +361,7 @@ def build_fresh_candidates(scan_data, exclude_codes, active_themes=None, limit=3
                 "ma10": technical_state.get("ma10"),
                 "active_theme": active_theme,
             }
-        )
+        candidates.append(attach_opportunity_v2(row, scan_data, status="fresh_candidate"))
 
     candidates.sort(
         key=lambda item: (
@@ -483,6 +597,7 @@ def build_tracking_items(
     active_themes=None,
     *,
     excluded_tiers=("A", "B"),
+    exclude_codes=None,
     limit=6,
 ):
     """Build observation-only items for shortlist tiers below A/B.
@@ -493,6 +608,7 @@ def build_tracking_items(
     """
 
     items = []
+    exclude_codes = set(exclude_codes or [])
     for raw in shortlist or []:
         tier = raw.get("tier")
         # Skip A/B (already covered by confirmed/downgraded) and untiered
@@ -500,7 +616,7 @@ def build_tracking_items(
         if not tier or tier in excluded_tiers:
             continue
         code = raw.get("code")
-        if not code:
+        if not code or code in exclude_codes:
             continue
         snapshot = build_tracking_snapshot(raw, scan_index.get(code))
         items.append(
@@ -518,12 +634,33 @@ def build_tracking_items(
     return items
 
 
+def select_verification_targets(shortlist, limit=8):
+    primary = [item for item in shortlist or [] if item.get("tier") in ("A", "B")]
+    if primary:
+        return primary[:limit], ("A", "B")
+
+    fallback = [
+        item
+        for item in shortlist or []
+        if item.get("code") and item.get("screening_status") == "caution"
+    ]
+    fallback.sort(
+        key=lambda item: (
+            safe_float(item.get("best_score", item.get("score")), default=-999),
+            safe_float(item.get("change_pct"), default=-999),
+        ),
+        reverse=True,
+    )
+    return fallback[:limit], ()
+
+
 def run_verification(morning, current):
     """Pure-function midday verification. Returns the same shape as the JSON output."""
 
     validation_errors = validate_inputs(morning, current)
     base_envelope = {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "trade_date": resolve_trade_date(morning, current),
         "source_morning_timestamp": morning.get("timestamp", ""),
         "source_scan_timestamp": morning.get("source_scan_timestamp", ""),
         "verified_against_scan_timestamp": current.get("timestamp", ""),
@@ -544,19 +681,32 @@ def run_verification(morning, current):
 
     scan_index = build_scan_index(current)
     shortlist = morning.get("shortlist") or []
-    targets = [item for item in shortlist if item.get("tier") in ("A", "B")][:8]
+    targets, tracking_excluded_tiers = select_verification_targets(shortlist, limit=8)
 
     active_themes = top_theme_names(current, limit=2)
     result_items = []
     for item in targets:
         code = item.get("code")
-        result = verify_item(item, scan_index.get(code), active_themes=active_themes)
+        current_item = scan_index.get(code)
+        result = verify_item(item, current_item, active_themes=active_themes)
+        v2_source = build_midday_v2_source(item, current_item, result, active_themes=active_themes)
+        v2_fields = attach_opportunity_v2(v2_source, current, status=result.get("status"))
         result_items.append({
             "code": code,
             "name": item.get("name"),
             "tier": item.get("tier"),
             "morning_score": item.get("best_score"),
             **result,
+            "opportunity_v2": v2_fields.get("opportunity_v2") or {},
+            "suggested_action": v2_fields.get("suggested_action"),
+            "suggested_action_label": v2_fields.get("suggested_action_label"),
+            "confidence": v2_fields.get("confidence"),
+            "thesis": v2_fields.get("thesis"),
+            "why_now": v2_fields.get("why_now"),
+            "invalidation": v2_fields.get("invalidation"),
+            "missing_confirmation": v2_fields.get("missing_confirmation") or [],
+            "hard_gate_max_action": v2_fields.get("hard_gate_max_action"),
+            "hard_gate_block_reason": v2_fields.get("hard_gate_block_reason") or "",
         })
 
     target_code_set = {item.get("code") for item in targets if item.get("code")}
@@ -578,6 +728,8 @@ def run_verification(morning, current):
             shortlist,
             scan_index,
             active_themes=active_themes,
+            excluded_tiers=tracking_excluded_tiers,
+            exclude_codes=target_code_set,
         ),
         "items": result_items,
     }
@@ -603,7 +755,7 @@ def main():
     ]
     ingress_manifest = build_pipeline_manifest(
         dataset="screening.confirmation",
-        trade_date=output["timestamp"][:10],
+        trade_date=output.get("trade_date") or output["timestamp"][:10],
         payload=output,
         upstream_manifests=upstream_manifests,
         ttl_seconds=900,

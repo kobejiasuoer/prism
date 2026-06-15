@@ -5,7 +5,8 @@ import json
 import os
 import re
 import sys
-from collections.abc import Mapping
+import time
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
@@ -41,7 +42,6 @@ if _control_panel_root_str in sys.path:
 sys.path.insert(0, _control_panel_root_str)
 
 from prism_canonical import (  # type: ignore
-    diff_watchlist_snapshots,
     find_candidate_detail,
     load_confirmation,
     load_decision_brief,
@@ -50,14 +50,22 @@ from prism_canonical import (  # type: ignore
     load_research_review,
     load_screening_batch,
     load_watchlist_snapshot,
-    resolve_previous_watchlist_snapshot_path,
 )
 from readiness import (  # type: ignore  # local module under apps/control-panel
+    MIDDAY_CONFIRMATION_DUE_MINUTES,
+    MIDDAY_CONFIRMATION_DEFER_REASON,
     compute_readiness,
     current_session,
     expected_trade_date,
 )
-from dataset_manifests import build_dataset_freshness_rows  # type: ignore  # local module under apps/control-panel
+from dataset_manifests import build_dataset_freshness_rows, build_formal_freshness_rows  # type: ignore  # local module under apps/control-panel
+from data_assets import (  # type: ignore  # local module under apps/control-panel
+    build_stock_formal_data,
+    build_stock_formal_data_profile,
+    build_stock_formal_data_risk,
+    build_stock_formal_data_sources,
+    build_stock_formal_data_summary,
+)
 from account_book import (  # type: ignore  # local module under apps/control-panel
     ACCOUNT_MODES,
     AccountBookError,
@@ -91,8 +99,11 @@ from decision_ledger import (  # type: ignore
     _chat_completions_url,
     _extract_json_object,
     _provider_config,
+    list_decisions_for_stock as ledger_list_decisions_for_stock,
+    normalize_stock_code as ledger_normalize_stock_code,
 )
 from command_brief import build_today_command_brief  # type: ignore  # local module under apps/control-panel
+from decision_contract import attach_decision_contracts  # type: ignore  # local module under apps/control-panel
 
 RESEARCH_REPORTS_DIR = STOCK_SCREENER_ROOT / "data" / "research_backfill" / "reports"
 SHADOW_REPLAY_ROOT = WORKSPACE_ROOT / "data" / "quant" / "shadow_replay"
@@ -119,6 +130,26 @@ TASK_NAME_ALIASES = {
 APP_STATE_REPOSITORY = AppStateRepository()
 ARTIFACT_REPOSITORY = ArtifactRepository()
 TASK_RUN_REPOSITORY = TaskRunRepository()
+STOCK_PROFILE_CACHE_TTL_SECONDS = max(
+    0,
+    int(os.environ.get("PRISM_STOCK_PROFILE_CACHE_TTL_SECONDS", "120") or "120"),
+)
+STOCK_PROFILE_BASE_CONTEXT_CACHE_TTL_SECONDS = max(
+    0,
+    int(os.environ.get("PRISM_STOCK_PROFILE_BASE_CONTEXT_CACHE_TTL_SECONDS", "5") or "5"),
+)
+_STOCK_PROFILE_CACHE: dict[tuple[str, str, str], tuple[float, dict[str, Any]]] = {}
+_STOCK_PROFILE_BASE_CONTEXT_CACHE: dict[tuple[str, str], tuple[float, dict[str, Any]]] = {}
+SHELL_STATUS_CACHE_TTL_SECONDS = max(
+    0,
+    int(os.environ.get("PRISM_SHELL_STATUS_CACHE_TTL_SECONDS", "30") or "30"),
+)
+_SHELL_STATUS_CACHE: tuple[float, dict[str, Any]] | None = None
+RUN_LIST_CACHE_TTL_SECONDS = max(
+    0,
+    int(os.environ.get("PRISM_RUN_LIST_CACHE_TTL_SECONDS", "5") or "5"),
+)
+_RUN_LIST_CACHE: dict[int, tuple[float, list[dict[str, Any]]]] = {}
 
 ACTION_DECISION_LABELS = {
     "pending": "待确认",
@@ -157,16 +188,20 @@ ACTION_TIER_LABELS = {
     "avoid": "明确回避",
 }
 
-QUALITY_PATTERNS = {
-    "watchlist": [STOCK_ANALYZER_ROOT / "data" / "quality_gate_watchlist_*.json"],
-    "aggressive": [
-        CURRENT_SCREENER_DATA_DIR / "quality_gate_*.json",
-        STOCK_SCREENER_ROOT / "data" / "quality_gate_*.json",
-    ],
-    "midday_confirmation": [
-        CURRENT_SCREENER_DATA_DIR / "quality_gate_midday_*.json",
-        STOCK_SCREENER_ROOT / "data" / "quality_gate_midday_*.json",
-    ],
+V2_ACTION_ORDER = {
+    "observe": 0,
+    "review": 1,
+    "shadow": 2,
+    "trial": 3,
+    "actionable": 4,
+}
+
+V2_ACTION_LABELS = {
+    "observe": "只观察",
+    "review": "人工复核",
+    "shadow": "影子跟踪",
+    "trial": "试错待触发",
+    "actionable": "可执行待复核",
 }
 
 ARTIFACT_GROUPS = {
@@ -292,7 +327,26 @@ TASK_DEFINITIONS = {
         "lane": "decision_ledger",
         "command": [sys.executable, "apps/scripts/evaluate_decision_ledger.py"],
         "cwd": str(WORKSPACE_ROOT),
-        "description": "补跑已成熟决策样本的 T+1/T+3/T+5 outcome，并把结果写回 Decision Ledger。",
+        "description": "补跑已成熟决策样本的 T+1/T+3/T+5/T+10 outcome，并把结果写回 Decision Ledger。",
+    },
+    "formal_data_refresh": {
+        "title": "正式口径数据刷新",
+        "lane": "formal_data",
+        "command": [sys.executable, "apps/scripts/refresh_formal_data.py"],
+        "cwd": str(WORKSPACE_ROOT),
+        "description": "通过已配置授权源刷新交易日历、日线、复权因子、基准指数、涨跌停和执行约束口径。",
+    },
+    "formal_data_refresh_postclose": {
+        "title": "正式日线复权盘后补齐",
+        "lane": "formal_data",
+        "command": [
+            sys.executable,
+            "apps/scripts/refresh_formal_data.py",
+            "--datasets",
+            "bars.daily,adjustment.factor",
+        ],
+        "cwd": str(WORKSPACE_ROOT),
+        "description": "盘后补齐当天正式日线和复权因子，避免早盘上一交易日口径在收盘后继续占位。",
     },
 }
 
@@ -398,35 +452,6 @@ def workspace_relative(path_like: str | Path | None) -> str | None:
         return str(path_like)
 
 
-def _match_quality_files(lane: str) -> list[Path]:
-    files: list[Path] = []
-    for pattern in QUALITY_PATTERNS[lane]:
-        files.extend(pattern.parent.glob(pattern.name))
-    if lane == "aggressive":
-        files = [path for path in files if "midday_" not in path.name]
-    return sorted(files, key=lambda path: path.stat().st_mtime, reverse=True)
-
-
-def latest_quality_item(lane: str) -> dict[str, Any] | None:
-    files = _match_quality_files(lane)
-    for path in files:
-        data = load_json(path)
-        if not data:
-            continue
-        return {
-            "lane": lane,
-            "path": str(path),
-            "checked_at": data.get("checked_at") or "",
-            "expected_timestamp": data.get("expected_timestamp") or "",
-            "status": data.get("validation_status") or "unknown",
-            "errors": data.get("errors") or [],
-            "warnings": data.get("warnings") or [],
-            "paths": data.get("paths") or {},
-            "stats": data.get("stats") or {},
-        }
-    return None
-
-
 def scan_artifact_candidates(group_key: str) -> list[dict[str, Any]]:
     config = ARTIFACT_GROUPS[group_key]
     candidates: list[Path] = []
@@ -451,9 +476,9 @@ def scan_artifact_candidates(group_key: str) -> list[dict[str, Any]]:
     ]
 
 
-def sync_artifact_group(group_key: str) -> None:
+def sync_artifact_group(group_key: str, candidates: list[dict[str, Any]] | None = None) -> None:
     config = ARTIFACT_GROUPS[group_key]
-    for item in scan_artifact_candidates(group_key):
+    for item in candidates if candidates is not None else scan_artifact_candidates(group_key):
         try:
             ARTIFACT_REPOSITORY.register_file(
                 item["path"],
@@ -493,125 +518,56 @@ def artifact_item_from_index(group_key: str, item: dict[str, Any]) -> dict[str, 
     }
 
 
-def artifact_candidates(group_key: str) -> list[dict[str, Any]]:
+def _artifact_path_matches(left: str | Path | None, right: str | Path | None) -> bool:
+    if not left or not right:
+        return False
     try:
-        sync_artifact_group(group_key)
+        return Path(left).expanduser().resolve() == Path(right).expanduser().resolve()
+    except Exception:
+        return str(left) == str(right)
+
+
+def _artifact_index_matches_latest_file(indexed: dict[str, Any], scanned: dict[str, Any]) -> bool:
+    indexed_mtime = str(indexed.get("mtime_full") or "").strip()
+    scanned_mtime = str(scanned.get("mtime_full") or "").strip()
+    if not indexed_mtime or not scanned_mtime or indexed_mtime != scanned_mtime:
+        return False
+    indexed_name = str(indexed.get("name") or Path(str(indexed.get("path") or "")).name).strip()
+    scanned_name = str(scanned.get("name") or Path(str(scanned.get("path") or "")).name).strip()
+    return _artifact_path_matches(indexed.get("path"), scanned.get("path")) or bool(indexed_name and indexed_name == scanned_name)
+
+
+def _artifact_index_contains_latest_file(indexed: list[dict[str, Any]], scanned: dict[str, Any]) -> bool:
+    return any(_artifact_index_matches_latest_file(item, scanned) for item in indexed)
+
+
+def artifact_candidates(group_key: str) -> list[dict[str, Any]]:
+    scanned = scan_artifact_candidates(group_key)
+    try:
         indexed = [
             candidate
             for item in ARTIFACT_REPOSITORY.list(artifact_type=group_key, limit=80)
             if (candidate := artifact_item_from_index(group_key, item))
         ]
-        if indexed:
+        if indexed and (not scanned or _artifact_index_contains_latest_file(indexed, scanned[0])):
             return indexed
+        if scanned:
+            sync_artifact_group(group_key, candidates=scanned)
+            indexed = [
+                candidate
+                for item in ARTIFACT_REPOSITORY.list(artifact_type=group_key, limit=80)
+                if (candidate := artifact_item_from_index(group_key, item))
+            ]
+            if indexed:
+                return indexed
     except Exception:
         pass
-    return scan_artifact_candidates(group_key)
+    return scanned
 
 
 def latest_artifact(group_key: str) -> dict[str, Any] | None:
     items = artifact_candidates(group_key)
     return items[0] if items else None
-
-
-def pick_artifact_for_reference(
-    group_key: str,
-    reference_dt: datetime | None,
-    max_delta_seconds: int,
-) -> dict[str, Any] | None:
-    candidates = artifact_candidates(group_key)
-    if not candidates:
-        return None
-    if not reference_dt:
-        return candidates[0]
-
-    def sort_key(item: dict[str, Any]) -> tuple[float, float]:
-        artifact_dt = parse_timestamp(item.get("mtime_full"))
-        if not artifact_dt:
-            return (float("inf"), 0.0)
-        delta = abs((artifact_dt - reference_dt).total_seconds())
-        return (delta, -artifact_dt.timestamp())
-
-    best = min(candidates, key=sort_key)
-    best_dt = parse_timestamp(best.get("mtime_full"))
-    if not best_dt:
-        return candidates[0]
-
-    delta = abs((best_dt - reference_dt).total_seconds())
-    if delta <= max_delta_seconds or best_dt.date() == reference_dt.date():
-        return best
-    return None
-
-
-def infer_watchlist_report(summary_path: str | Path | None, quality: dict[str, Any] | None) -> dict[str, Any] | None:
-    summary = Path(summary_path).expanduser() if summary_path else None
-    report_date = None
-    if summary and summary.exists():
-        match = re.search(r"analysis-summary-(\d{4}-\d{2}-\d{2})\.txt$", summary.name)
-        if match:
-            report_date = match.group(1)
-    if not report_date and quality:
-        checked = (quality.get("checked_at") or "").strip()
-        if checked:
-            report_date = checked.split(" ")[0]
-    if not report_date:
-        return None
-    report_path = STOCK_ANALYZER_ROOT / "reports" / f"analysis-report-{report_date}.md"
-    return artifact_from_path("自选股完整报告", report_path, key="watchlist_report")
-
-
-def quality_report_artifact(quality: dict[str, Any] | None) -> dict[str, Any] | None:
-    if not quality:
-        return None
-    source_value = str(quality.get("path") or "").strip()
-    if not source_value:
-        return None
-    source = Path(source_value)
-    if not source.exists():
-        return None
-    reports_root = STOCK_ANALYZER_ROOT / "reports" if quality.get("lane") == "watchlist" else STOCK_SCREENER_ROOT / "reports"
-    report_path = reports_root / f"{source.stem}.md"
-    return artifact_from_path("质检报告", report_path, key=f"{quality.get('lane')}_quality_report")
-
-
-def reference_dt_for_lane(quality: dict[str, Any] | None, task_name: str | None = None) -> datetime | None:
-    if quality:
-        expected = parse_timestamp(quality.get("expected_timestamp"))
-        checked = parse_timestamp(quality.get("checked_at"))
-        if expected and checked:
-            if abs((checked - expected).total_seconds()) > 1800:
-                return checked
-            return expected
-        if expected:
-            return expected
-        if checked:
-            return checked
-    if task_name:
-        latest_run = latest_run_for_task(task_name)
-        if latest_run:
-            return parse_timestamp(latest_run.get("started_at")) or parse_timestamp(latest_run.get("finished_at"))
-    return None
-
-
-def matched_run_for_task(task_name: str, reference_dt: datetime | None, max_delta_seconds: int) -> dict[str, Any] | None:
-    expected = canonical_task_name(task_name)
-    candidates = [item for item in list_runs(limit=80) if canonical_task_name(item.get("task_name")) == expected]
-    if not candidates:
-        return None
-    if not reference_dt:
-        return candidates[0]
-
-    matched: list[tuple[float, dict[str, Any]]] = []
-    for item in candidates:
-        started = parse_timestamp(item.get("started_at")) or parse_timestamp(item.get("finished_at"))
-        if not started:
-            continue
-        delta = abs((started - reference_dt).total_seconds())
-        if delta <= max_delta_seconds:
-            matched.append((delta, item))
-    if matched:
-        matched.sort(key=lambda pair: pair[0])
-        return matched[0][1]
-    return None
 
 
 def clean_log_line(line: str) -> str:
@@ -794,27 +750,6 @@ def extract_run_summary(run: dict[str, Any]) -> str:
     return f"退出码 {exit_code if exit_code is not None else '-'}，建议查看日志"
 
 
-def build_lane_alignment_warning(quality: dict[str, Any] | None, artifacts: list[dict[str, Any]]) -> str | None:
-    if not quality or not artifacts:
-        return None
-    expected_dt = parse_timestamp(quality.get("expected_timestamp"))
-    if not expected_dt:
-        return None
-
-    deltas: list[float] = []
-    for artifact in artifacts:
-        artifact_dt = parse_timestamp(artifact.get("mtime_full"))
-        if not artifact_dt:
-            continue
-        deltas.append(abs((artifact_dt - expected_dt).total_seconds()))
-
-    if not deltas:
-        return None
-    if min(deltas) <= 1800:
-        return None
-    return "当前最新质检对应的批次时间，与下方展示的最新附件不是同一轮，查看时请优先以时间戳为准。"
-
-
 def latest_snapshot_info() -> dict[str, Any]:
     snapshot_dir = STOCK_ANALYZER_ROOT / "data" / "daily_snapshots"
     files = sorted(snapshot_dir.glob("*.json"), key=lambda path: path.stat().st_mtime, reverse=True)
@@ -871,7 +806,7 @@ def latest_midday_info() -> dict[str, Any]:
     return {
         "label": "午盘确认",
         "value": data.get("verified_against_scan_timestamp") or data.get("timestamp") or fmt_mtime(path),
-        "detail": data.get("validation_status") or "-",
+        "detail": midday_validation_status_label(data.get("validation_status")),
     }
 
 
@@ -911,53 +846,6 @@ def latest_dashboard_info() -> dict[str, Any]:
     }
 
 
-def latest_midday_refresh_status() -> dict[str, Any] | None:
-    expected = expected_trade_date()
-    path = next(
-        (
-            candidate
-            for data_dir in SCREENER_DATA_DIRS
-            if (candidate := data_dir / "midday_refresh_result.json").exists()
-            and (
-                (load_json(candidate) or {}).get("scan_timestamp", "")[:10] == expected
-                or (load_json(candidate) or {}).get("source_scan_timestamp", "")[:10] == expected
-                or (load_json(candidate) or {}).get("timestamp", "")[:10] == expected
-            )
-        ),
-        None,
-    )
-    if path is None:
-        return None
-    data = load_json(path) or {}
-    validation_status = (data.get("validation_status") or "").strip()
-    status = {
-        "ok": "ok",
-        "workflow_failed": "blocked",
-        "invalid": "blocked",
-        "terminated": "blocked",
-        "missing_output": "blocked",
-    }.get(validation_status, "unknown")
-    return {
-        "lane": "midday_refresh",
-        "path": str(path),
-        "checked_at": data.get("timestamp") or "",
-        "expected_timestamp": data.get("scan_timestamp") or data.get("source_scan_timestamp") or data.get("ai_timestamp") or "",
-        "status": status,
-        "status_label": "就绪" if status == "ok" else ("待查" if status == "unknown" else "拦截"),
-        "errors": data.get("validation_errors") or [],
-        "warnings": [],
-        "paths": {
-            "brief": data.get("selected_brief_path") or "",
-            "report": data.get("selected_report_path") or "",
-            "json": str(path),
-        },
-        "stats": {
-            "scan_timestamp": data.get("scan_timestamp") or "",
-            "ai_timestamp": data.get("ai_timestamp") or "",
-        },
-    }
-
-
 def is_pid_alive(pid: int | None) -> bool:
     if not pid:
         return False
@@ -968,7 +856,14 @@ def is_pid_alive(pid: int | None) -> bool:
     return True
 
 
-def list_runs(limit: int = 12) -> list[dict[str, Any]]:
+def list_runs(limit: int = 12, *, fresh: bool = False) -> list[dict[str, Any]]:
+    if RUN_LIST_CACHE_TTL_SECONDS > 0 and not fresh:
+        cached = _RUN_LIST_CACHE.get(limit)
+        if cached:
+            cached_at, cached_items = cached
+            if time.monotonic() - cached_at <= RUN_LIST_CACHE_TTL_SECONDS:
+                return deepcopy(cached_items)
+
     ensure_runtime_dirs()
     items: list[dict[str, Any]] = []
     for data in TASK_RUN_REPOSITORY.list(legacy_dirs=CONTROL_PANEL_RUN_DIRS, limit=limit):
@@ -979,7 +874,14 @@ def list_runs(limit: int = 12) -> list[dict[str, Any]]:
         data["batch_label"] = data["checked_started_at"]
         data["summary"] = extract_run_summary(data)
         items.append(data)
-    return items[:limit]
+    payload = items[:limit]
+    if RUN_LIST_CACHE_TTL_SECONDS > 0:
+        _RUN_LIST_CACHE[limit] = (time.monotonic(), deepcopy(payload))
+    return payload
+
+
+def clear_run_list_cache() -> None:
+    _RUN_LIST_CACHE.clear()
 
 
 def latest_run_for_task(task_name: str) -> dict[str, Any] | None:
@@ -990,244 +892,55 @@ def latest_run_for_task(task_name: str) -> dict[str, Any] | None:
     return None
 
 
-def task_cards() -> list[dict[str, Any]]:
-    cards = []
-    for task_name, config in TASK_DEFINITIONS.items():
-        latest_run = latest_run_for_task(task_name)
-        cards.append(
-            {
-                "task_name": canonical_task_name(task_name),
-                "title": config["title"],
-                "description": config["description"],
-                "lane": config["lane"],
-                "last_run": latest_run,
-            }
-        )
-    return cards
-
-
-def build_lane_batch(
-    lane_key: str,
-    task_name: str,
-    quality: dict[str, Any] | None,
-    artifact_group_keys: list[str],
-    tolerance_seconds: int,
-) -> dict[str, Any]:
-    reference_dt = reference_dt_for_lane(quality, task_name)
-    reference_label = reference_dt.strftime("%m-%d %H:%M:%S") if reference_dt else "-"
-    artifacts: list[dict[str, Any]] = []
-    seen_paths: set[str] = set()
-
-    def push(item: dict[str, Any] | None) -> None:
-        if not item:
-            return
-        path = item.get("path")
-        if not path or path in seen_paths:
-            return
-        seen_paths.add(path)
-        artifacts.append(item)
-
-    if lane_key == "watchlist" and quality:
-        summary = pick_artifact_for_reference("watchlist_summary", reference_dt, tolerance_seconds)
-        push(summary)
-        push(infer_watchlist_report(summary.get("path") if summary else "", quality))
-    elif lane_key == "midday_refresh" and quality:
-        push(artifact_from_path("午盘刷新摘要", (quality.get("paths") or {}).get("brief"), key="midday_refresh_brief"))
-        push(artifact_from_path("午盘刷新报告", (quality.get("paths") or {}).get("report"), key="midday_refresh_report"))
-        push(artifact_from_path("刷新结果 JSON", (quality.get("paths") or {}).get("json"), key="midday_refresh_result"))
-    else:
-        for group_key in artifact_group_keys:
-            push(pick_artifact_for_reference(group_key, reference_dt, tolerance_seconds))
-
-    push(quality_report_artifact(quality))
-
-    matched_run = matched_run_for_task(task_name, reference_dt, tolerance_seconds)
-    push(artifact_from_path("关联日志", matched_run.get("log_path") if matched_run else "", key=f"{lane_key}_run_log"))
-
-    detail_parts = []
-    if quality and quality.get("expected_timestamp"):
-        detail_parts.append(f"锚点 {quality['expected_timestamp']}")
-    elif reference_dt:
-        detail_parts.append(f"锚点 {reference_dt.strftime('%Y-%m-%d %H:%M:%S')}")
-    if matched_run:
-        detail_parts.append(f"手动运行 {matched_run.get('checked_started_at') or '-'}")
-
+def _public_run_summary(run: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(run, dict):
+        return None
     return {
-        "label": reference_label,
-        "detail": " | ".join(detail_parts) if detail_parts else "按当前最新产物自动归组",
-        "artifacts": artifacts,
-        "matched_run": matched_run,
+        key: value
+        for key, value in {
+            "run_id": run.get("run_id") or run.get("task_id"),
+            "task_id": run.get("task_id") or run.get("run_id"),
+            "task_name": run.get("task_name"),
+            "title": run.get("title"),
+            "status": run.get("status"),
+            "started_at": run.get("started_at"),
+            "finished_at": run.get("finished_at"),
+            "checked_started_at": run.get("checked_started_at"),
+            "checked_finished_at": run.get("checked_finished_at"),
+            "log_path": run.get("log_path"),
+            "meta_path": run.get("meta_path"),
+            "summary": run.get("summary"),
+            "send_to_feishu": run.get("send_to_feishu"),
+        }.items()
+        if value not in (None, "", [], {})
     }
 
 
-def build_lane_detail_cards(batch: dict[str, Any] | None) -> list[dict[str, Any]]:
-    cards: list[dict[str, Any]] = []
-    if not batch:
-        return cards
-
-    cards.append(
-        {
-            "kind": "batch",
-            "title": "当前批次",
-            "label": batch.get("label") or "-",
-            "detail": batch.get("detail") or "按当前最新产物自动归组",
+def task_cards(*, compact_runs: bool = False, compact_tasks: bool = False) -> list[dict[str, Any]]:
+    cards = []
+    for task_name, config in TASK_DEFINITIONS.items():
+        latest_run = latest_run_for_task(task_name)
+        if compact_runs:
+            latest_run = _public_run_summary(latest_run)
+        card = {
+            "task_name": canonical_task_name(task_name),
+            "title": config["title"],
+            "lane": config["lane"],
+            "last_run": latest_run,
         }
-    )
-
-    matched_run = batch.get("matched_run")
-    if matched_run:
-        status = str(matched_run.get("status") or "unknown")
-        cards.append(
-            {
-                "kind": "run_note",
-                "title": "关联手动运行",
-                "label": f"{matched_run.get('checked_started_at') or '-'} | {status}",
-                "detail": matched_run.get("summary") or "暂无运行摘要",
-                "status": status,
-            }
-        )
-
-    for artifact in batch.get("artifacts") or []:
-        cards.append(
-            {
-                "kind": "artifact",
-                "title": artifact.get("title") or "产物",
-                "label": artifact.get("name") or "-",
-                "detail": artifact.get("mtime") or "-",
-                "path": artifact.get("path") or "",
-            }
-        )
-
-    if len(cards) == 1:
-        cards.append(
-            {
-                "kind": "empty",
-                "detail": "当前批次还没有可直接预览的摘要、报告或日志。",
-            }
-        )
+        if not compact_tasks:
+            card["description"] = config["description"]
+        cards.append(card)
     return cards
 
 
-def lane_cards() -> list[dict[str, Any]]:
-    mappings = [
-        {
-            "key": "command_center",
-            "task_name": "command_brief",
-            "title": "投资总控",
-            "subtitle": "把自选股与进攻池收束成一份日决策",
-            "quality": None,
-            "artifact_groups": ["command_brief", "command_report"],
-            "tolerance_seconds": 86_400,
-        },
-        {
-            "key": "watchlist",
-            "task_name": WATCHLIST_REFRESH_TASK_NAME,
-            "title": "自选股",
-            "subtitle": "日常持仓/观察池摘要",
-            "quality": latest_quality_item("watchlist"),
-            "artifact_groups": ["watchlist_summary", "watchlist_report"],
-            "tolerance_seconds": 86_400,
-        },
-        {
-            "key": "aggressive",
-            "task_name": "aggressive",
-            "title": "进攻型早盘",
-            "subtitle": "早盘主流程与 Analyzer 接力",
-            "quality": latest_quality_item("aggressive"),
-            "artifact_groups": ["aggressive_brief", "aggressive_report"],
-            "tolerance_seconds": 14_400,
-        },
-        {
-            "key": "midday_refresh",
-            "task_name": "midday_refresh",
-            "title": "午盘刷新",
-            "subtitle": "午盘重扫，不替代晨间基线",
-            "quality": latest_midday_refresh_status(),
-            "artifact_groups": ["midday_refresh_brief", "midday_refresh_report"],
-            "tolerance_seconds": 14_400,
-        },
-        {
-            "key": "midday_confirmation",
-            "task_name": "midday_confirmation",
-            "title": "午盘确认",
-            "subtitle": "晨间基线后的承接验证",
-            "quality": latest_quality_item("midday_confirmation"),
-            "artifact_groups": ["midday_confirmation_brief", "midday_confirmation_report"],
-            "tolerance_seconds": 14_400,
-        },
-    ]
-
-    for item in mappings:
-        item["batch"] = build_lane_batch(
-            lane_key=item["key"],
-            task_name=item["task_name"],
-            quality=item.get("quality"),
-            artifact_group_keys=item["artifact_groups"],
-            tolerance_seconds=item["tolerance_seconds"],
-        )
-        item["artifacts"] = item["batch"]["artifacts"]
-        item["detail_cards"] = build_lane_detail_cards(item["batch"])
-        item["alignment_warning"] = build_lane_alignment_warning(item.get("quality"), item["artifacts"])
-    return mappings
-
-
-def kpi_cards() -> list[dict[str, str]]:
-    qualities = [
-        latest_quality_item("watchlist"),
-        latest_quality_item("aggressive"),
-        latest_midday_refresh_status(),
-        latest_quality_item("midday_confirmation"),
-    ]
-    blocked = sum(1 for item in qualities if item and item.get("status") == "blocked")
-    ok_count = sum(1 for item in qualities if item and item.get("status") == "ok")
-    running = sum(1 for item in list_runs(limit=20) if item.get("status") == "running")
-
-    freshness = [
-        latest_command_brief_info(),
-        latest_snapshot_info(),
-        latest_ai_history_info(),
-        latest_midday_refresh_info(),
-        latest_midday_info(),
-        latest_dashboard_info(),
-    ]
-    newest = max((parse_timestamp(item["value"]) for item in freshness if parse_timestamp(item["value"])), default=None)
-
-    return [
-        {"label": "链路正常", "value": str(ok_count), "detail": "最近四条主链路"},
-        {"label": "质检拦截", "value": str(blocked), "detail": "需要人工复核"},
-        {"label": "运行中任务", "value": str(running), "detail": "后台异步任务"},
-        {"label": "最近刷新", "value": newest.strftime("%m-%d %H:%M") if newest else "-", "detail": "来自状态/质检产物"},
-    ]
-
-
-def latest_quality_reports() -> list[dict[str, Any]]:
-    reports = []
-    for lane in ("watchlist", "aggressive", "midday_confirmation"):
-        item = latest_quality_item(lane)
-        if not item:
-            continue
-        path = Path(item["path"])
-        reports.append(
-            {
-                "title": lane,
-                "name": path.name.replace(".json", ".md"),
-                "json_path": item["path"],
-                "md_path": str(path.with_suffix(".md").resolve().parent / path.with_suffix(".md").name),
-            }
-        )
-    return reports
-
-
-def build_overview() -> dict[str, Any]:
+def build_overview_summary(*, compact: bool = True) -> dict[str, Any]:
     ensure_runtime_dirs()
     return {
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "workspace_root": str(WORKSPACE_ROOT),
-        "quality_dashboard_path": str(QUALITY_DASHBOARD_PATH),
-        "kpis": kpi_cards(),
-        "lanes": lane_cards(),
-        "tasks": task_cards(),
-        "runs": list_runs(),
+        "tasks": task_cards(compact_runs=True, compact_tasks=compact),
+        "compact": compact,
         "freshness": [
             latest_command_brief_info(),
             latest_snapshot_info(),
@@ -1236,6 +949,67 @@ def build_overview() -> dict[str, Any]:
             latest_midday_info(),
             latest_dashboard_info(),
         ],
+    }
+
+
+def build_shell_status_view() -> dict[str, Any]:
+    global _SHELL_STATUS_CACHE
+
+    if SHELL_STATUS_CACHE_TTL_SECONDS > 0 and _SHELL_STATUS_CACHE:
+        cached_at, cached_payload = _SHELL_STATUS_CACHE
+        if time.monotonic() - cached_at <= SHELL_STATUS_CACHE_TTL_SECONDS:
+            return deepcopy(cached_payload)
+
+    base = _today_base_inputs()
+    readiness = base["readiness"]
+    decision_brief = base["decision_brief"] or {}
+    watchlist_source = next(
+        (
+            item
+            for item in readiness.get("source_freshness", [])
+            if str(item.get("key") or "") == "watchlist"
+        ),
+        None,
+    )
+    payload = {
+        "ok": True,
+        "generated_at": base["generated_at"],
+        "workspace_root": str(WORKSPACE_ROOT),
+        "trade_date": base["trade_date"],
+        "expected_trade_date": base["expected_date"],
+        "data_trade_date": base["data_trade_date"],
+        "brief": {
+            "generated_at": decision_brief.get("generated_at"),
+            "trade_date": decision_brief.get("trade_date"),
+            "is_live": base["brief_is_live"],
+        },
+        "readiness": {
+            "checked_at": readiness.get("checked_at"),
+            "readiness_mode": readiness.get("readiness_mode"),
+            "ready": readiness.get("ready", False),
+            "brief_is_live": readiness.get("brief_is_live", False),
+            "session": readiness.get("session"),
+            "stale_count": readiness.get("stale_count", 0),
+            "trust_level": readiness.get("trust_level"),
+        },
+        "watchlist_source": watchlist_source,
+    }
+    if SHELL_STATUS_CACHE_TTL_SECONDS > 0:
+        _SHELL_STATUS_CACHE = (time.monotonic(), deepcopy(payload))
+    return payload
+
+
+def build_today_readiness_view() -> dict[str, Any]:
+    """Lightweight readiness view for refresh/status and shell surfaces."""
+
+    base = _today_base_inputs()
+    return {
+        "generated_at": base.get("generated_at"),
+        "display_date": current_display_date(),
+        "trade_date": base.get("trade_date"),
+        "expected_trade_date": base.get("expected_date"),
+        "data_trade_date": base.get("data_trade_date"),
+        "readiness": base.get("readiness") or {},
     }
 
 
@@ -1344,22 +1118,6 @@ def batch_detail_url(kind: str) -> str:
     return "/discovery"
 
 
-def api_watchlist_detail_url(code: str | None) -> str | None:
-    if not code:
-        return None
-    return f"/api/watchlist/{quote(str(code), safe='')}"
-
-
-def api_candidate_detail_url(code: str | None) -> str | None:
-    if not code:
-        return None
-    return f"/api/opportunities/{quote(str(code), safe='')}"
-
-
-def api_batch_detail_url(kind: str) -> str:
-    return f"/api/opportunities/batch/{quote(kind, safe='')}"
-
-
 def today_watchlist_detail_url(code: str | None) -> str | None:
     return watchlist_detail_url(code)
 
@@ -1372,16 +1130,13 @@ def today_batch_detail_url(kind: str) -> str:
     return batch_detail_url(kind)
 
 
-def api_today_watchlist_detail_url(code: str | None) -> str | None:
-    return api_watchlist_detail_url(code)
+TODAY_BASE_INPUTS_CACHE_TTL_SECONDS = 5
+_TODAY_BASE_INPUTS_CACHE: tuple[float, tuple[Any, ...], dict[str, Any]] | None = None
 
 
-def api_today_candidate_detail_url(code: str | None) -> str | None:
-    return api_candidate_detail_url(code)
-
-
-def api_today_batch_detail_url(kind: str) -> str:
-    return api_batch_detail_url(kind)
+def clear_today_base_inputs_cache() -> None:
+    global _TODAY_BASE_INPUTS_CACHE
+    _TODAY_BASE_INPUTS_CACHE = None
 
 
 def today_nav_links() -> dict[str, str]:
@@ -1392,7 +1147,6 @@ def today_nav_links() -> dict[str, str]:
         "watchlist": watchlist_page_url(),
         "opportunities": opportunities_page_url(),
         "review": review_page_url(),
-        "api_today": "/api/today",
         "api_ask": api_ask_page_url(),
         "api_watchlist": api_watchlist_page_url(),
         "api_opportunities": api_opportunities_page_url(),
@@ -1400,8 +1154,6 @@ def today_nav_links() -> dict[str, str]:
         "api_parameters": "/api/parameters",
         "screener_batch": today_batch_detail_url("screener"),
         "confirmation_batch": today_batch_detail_url("confirmation"),
-        "api_screener_batch": api_today_batch_detail_url("screener"),
-        "api_confirmation_batch": api_today_batch_detail_url("confirmation"),
     }
 
 
@@ -1428,8 +1180,13 @@ def candidate_status_label(status: str | None) -> str:
 
 
 def candidate_tone(item: dict[str, Any]) -> str:
+    v2_action = v2_suggested_action(item)
+    if v2_action:
+        return v2_task_tone(item)
     quality_score = safe_float((item.get("execution_quality") or {}).get("score"), default=0)
     status = item.get("screening_status") or item.get("status")
+    if item.get("risk_level") == "block" or item.get("block_reason"):
+        return "risk"
     if status == "approved" and quality_score >= 6:
         return "positive"
     if status in {"confirmed", "fresh_candidate"}:
@@ -1752,10 +1509,15 @@ def remember_ask_query(
     return write_ask_recent_store(store)
 
 
-def get_today_action_decision_map(trade_date: str | None) -> dict[str, dict[str, Any]]:
+def get_today_action_decision_map(
+    trade_date: str | None,
+    *,
+    store: dict[str, Any] | None = None,
+) -> dict[str, dict[str, Any]]:
     if not trade_date:
         return {}
-    store = load_today_action_decision_store()
+    if store is None:
+        store = load_today_action_decision_store()
     decisions = (store.get("trade_dates") or {}).get(str(trade_date))
     if not isinstance(decisions, dict):
         return {}
@@ -1818,18 +1580,6 @@ def text_items(values: list[Any] | None) -> list[str]:
         if text:
             output.append(text)
     return output
-
-
-def normalize_review_note_text(text: str) -> str:
-    normalized = str(text or "").strip()
-    if not normalized:
-        return ""
-    replacements = {
-        "避免在线接口回看历史时漂移或超时": "避免远端历史接口回看时漂移或超时",
-    }
-    for source, target in replacements.items():
-        normalized = normalized.replace(source, target)
-    return normalized
 
 
 def normalize_stock_ui_copy(text: Any) -> str:
@@ -1950,6 +1700,18 @@ _STOCK_FETCH_MODULE: Any | None = None
 _ASK_CASE_CACHE: dict[str, dict[str, Any]] = {}
 ASK_CASE_CACHE_TTL_SECONDS = 300
 ASK_FOLLOWUP_HISTORY_LIMIT = 6
+ASK_FOLLOWUP_INTENT_LABELS = {
+    "decision": "结论追问",
+    "plan": "操作追问",
+    "levels": "关键位追问",
+    "risk": "风险追问",
+    "events": "事件追问",
+    "flow": "资金追问",
+    "tech": "技术追问",
+    "fundamentals": "基本面追问",
+    "confidence": "可信度追问",
+    "cross": "系统位置追问",
+}
 
 
 def load_stock_fetch_module() -> Any:
@@ -2650,6 +2412,7 @@ def build_today_action_context(
     code: str,
     today: dict[str, Any] | None = None,
     account_book: dict[str, Any] | None = None,
+    today_action_decisions: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     normalized_code = str(code or "").strip()
     if not normalized_code:
@@ -2662,7 +2425,10 @@ def build_today_action_context(
             return None
 
     trade_date = str(today.get("trade_date") or today.get("expected_trade_date") or "").strip()
-    decision_map = get_today_action_decision_map(trade_date) if trade_date else {}
+    decision_map = get_today_action_decision_map(
+        trade_date,
+        store=today_action_decisions,
+    ) if trade_date else {}
     no_fill_index = build_no_fill_intent_index(account_book if account_book is not None else load_account_book())
 
     matched_item = None
@@ -3161,19 +2927,44 @@ def ask_followup_model_config() -> dict[str, Any] | None:
     if disabled in {"1", "true", "yes", "on"}:
         return None
 
-    api_key = first_text(os.environ.get("PRISM_ASK_FOLLOWUP_API_KEY"), os.environ.get("OPENAI_API_KEY"))
-    model = first_text(os.environ.get("PRISM_ASK_FOLLOWUP_MODEL"), os.environ.get("OPENAI_MODEL"))
-    if not api_key or not model:
-        return None
-
+    provider = str(
+        first_text(
+            os.environ.get("PRISM_ASK_FOLLOWUP_PROVIDER"),
+            os.environ.get("PRISM_AI_PROVIDER"),
+            "openai" if os.environ.get("OPENAI_API_KEY") else "compatible",
+        )
+        or "compatible"
+    ).strip().lower()
+    api_key = first_text(
+        os.environ.get("PRISM_ASK_FOLLOWUP_API_KEY"),
+        os.environ.get("PRISM_AI_API_KEY"),
+        os.environ.get("OPENAI_API_KEY"),
+    )
+    model = first_text(
+        os.environ.get("PRISM_ASK_FOLLOWUP_MODEL"),
+        os.environ.get("PRISM_AI_MODEL"),
+        os.environ.get("OPENAI_MODEL"),
+    )
     base_url = first_text(
         os.environ.get("PRISM_ASK_FOLLOWUP_BASE_URL"),
+        os.environ.get("PRISM_AI_BASE_URL"),
         os.environ.get("OPENAI_BASE_URL"),
         os.environ.get("OPENAI_API_BASE"),
-        "https://api.openai.com/v1",
-    ) or "https://api.openai.com/v1"
+    )
+    if not base_url and provider == "deepseek":
+        base_url = "https://api.deepseek.com"
+        model = model or "deepseek-v4-flash"
+    elif not base_url and (provider == "openai" or os.environ.get("OPENAI_API_KEY")):
+        base_url = "https://api.openai.com"
+
+    if not api_key or not model or not base_url:
+        return None
+
     endpoint = base_url.rstrip("/")
-    if endpoint.endswith("/chat/completions"):
+    if provider == "deepseek":
+        if not endpoint.endswith("/chat/completions"):
+            endpoint = f"{endpoint}/chat/completions"
+    elif endpoint.endswith("/chat/completions"):
         pass
     elif endpoint.endswith("/v1"):
         endpoint = f"{endpoint}/chat/completions"
@@ -3182,7 +2973,11 @@ def ask_followup_model_config() -> dict[str, Any] | None:
     else:
         endpoint = f"{endpoint}/v1/chat/completions"
 
-    timeout_raw = str(os.environ.get("PRISM_ASK_FOLLOWUP_TIMEOUT_SECONDS") or "8").strip()
+    timeout_raw = str(
+        os.environ.get("PRISM_ASK_FOLLOWUP_TIMEOUT_SECONDS")
+        or os.environ.get("PRISM_AI_TIMEOUT_SECONDS")
+        or "8"
+    ).strip()
     try:
         timeout = max(2.0, min(float(timeout_raw), 30.0))
     except ValueError:
@@ -3193,19 +2988,20 @@ def ask_followup_model_config() -> dict[str, Any] | None:
         "model": model,
         "endpoint": endpoint,
         "timeout": timeout,
+        "provider": provider,
     }
 
 
 def ask_followup_engine_badge() -> dict[str, str]:
     if ask_followup_model_config():
         return {
-            "label": "模型增强可用",
-            "detail": "规则先托底，回答可结合最近几轮追问上下文继续补强。",
+            "label": "AI 增强可用",
+            "detail": "先用纪律规则控风险，再让模型结合最近几轮追问补强表达。",
             "tone": "positive",
         }
     return {
-        "label": "规则托底",
-        "detail": "当前先基于页面分析和最近追问上下文回答，后续接入模型时会自动增强。",
+        "label": "规则风控",
+        "detail": "当前基于页面结论、关键位和最近追问直接回答；配置 Prism AI 后会自动增强。",
         "tone": "watch",
     }
 
@@ -3267,11 +3063,17 @@ def build_ask_followup_prompt_payload(
         "question": question,
         "rule_answer": {
             "intent": base_answer.get("intent"),
+            "intent_label": base_answer.get("intent_label"),
             "title": normalize_ask_followup_copy(base_answer.get("title")),
             "summary": normalize_ask_followup_copy(base_answer.get("summary")),
             "bullets": [normalize_ask_followup_copy(item) for item in list(base_answer.get("bullets") or [])[:6]],
             "references": [normalize_ask_followup_copy(item) for item in list(base_answer.get("references") or [])[:6]],
             "followups": list(base_answer.get("followups") or [])[:3],
+        },
+        "answer_contract": {
+            "must_answer_user_intent_first": True,
+            "style": "先给结论，再给触发条件、失效条件和证据，不要复读模板句。",
+            "forbidden": ["强投资建议", "收益承诺", "外部事实", "没有证据的目标价"],
         },
     }
 
@@ -3419,19 +3221,19 @@ def merge_ask_followup_answer(
         if enhancement.get("followups"):
             answer["followups"] = list(enhancement.get("followups") or [])[:3]
         answer["engine"] = "hybrid"
-        answer["engine_label"] = "规则托底 + 模型增强"
-        answer["engine_note"] = "先按当前页分析托底，再结合最近几轮追问做补强表述。"
+        answer["engine_label"] = "AI 增强 + 规则风控"
+        answer["engine_note"] = "先按当前页纪律规则控风险，再结合最近几轮追问补强表达。"
     else:
         answer["engine"] = "rule"
-        answer["engine_label"] = "规则托底"
-        answer["engine_note"] = "当前基于页面分析和最近几轮追问直接回答。"
+        answer["engine_label"] = "规则风控"
+        answer["engine_note"] = "当前基于页面结论、关键位和最近几轮追问直接回答。"
     answer["history_used"] = len(history)
     return normalize_ask_followup_answer(answer)
 
 
 def normalize_ask_followup_answer(answer: dict[str, Any]) -> dict[str, Any]:
     normalized = deepcopy(answer)
-    for key in ("title", "summary", "engine_note"):
+    for key in ("title", "summary", "engine_note", "intent_label"):
         if key in normalized:
             normalized[key] = normalize_ask_followup_copy(normalized.get(key))
     if isinstance(normalized.get("bullets"), list):
@@ -3461,33 +3263,58 @@ def ask_find_analysis_group(case: dict[str, Any], title: str) -> dict[str, Any] 
     return None
 
 
-def ask_find_cross_card(case: dict[str, Any], label: str) -> dict[str, Any] | None:
-    for item in case.get("cross_cards") or []:
-        if str(item.get("label") or "").strip() == label:
-            return item
-    return None
-
-
 def ask_followup_presets(case: dict[str, Any]) -> list[dict[str, str]]:
+    hero = case.get("hero") or {}
+    decision_label = normalize_ask_followup_copy(hero.get("decision_label")) or "当前结论"
     presets = [
-        {"label": "为什么这样判断", "question": "为什么当前是这个结论？"},
-        {"label": "今天怎么做", "question": "今天怎么按纪律处理更合适？"},
-        {"label": "关键位", "question": "支撑位、压力位和止损位怎么看？"},
-        {"label": "主要风险", "question": "这只股票现在最主要的风险是什么？"},
-        {"label": "公告新闻", "question": "最近公告和新闻里有什么值得注意？"},
+        {"label": "今天动不动", "question": "这只今天到底要不要动？如果动，什么条件才动？"},
+        {"label": "关键位怎么用", "question": "支撑位、压力位和止损位分别怎么处理？"},
+        {"label": "为什么这样定", "question": f"为什么当前是{decision_label}，不是升级动作？"},
+        {"label": "反向风险", "question": "什么情况说明这次观察错了？"},
+        {"label": "公告影响", "question": "最近公告和新闻会改变今天动作吗？"},
     ]
     if str(((case.get("watchlist_action") or {}).get("kind") or "")).strip() in {"add", "restore"}:
-        presets.append({"label": "要不要进自选", "question": "现在适合加入自选股吗？"})
+        presets.append({"label": "是否进自选", "question": "它现在值得加入自选股继续跟踪吗？"})
     return presets
 
 
 def detect_ask_followup_intent(question: str, history: list[dict[str, Any]] | None = None) -> str:
     text = str(question or "").strip().lower()
+    if any(token in text for token in ("自选股", "观察池", "机会池", "午盘", "执行队列", "链路", "系统里")):
+        return "cross"
     if any(token in text for token in ("支撑", "压力", "止损", "关键位", "价位", "位置")):
         return "levels"
-    if any(token in text for token in ("怎么操作", "怎么做", "怎么办", "执行", "仓位", "买还是卖", "该怎么", "高开", "低开", "冲高", "回落", "跌破", "破位")):
+    if any(
+        token in text
+        for token in (
+            "要不要动",
+            "动不动",
+            "怎么动",
+            "什么条件才动",
+            "怎么操作",
+            "怎么做",
+            "怎么办",
+            "按纪律",
+            "处理",
+            "执行",
+            "仓位",
+            "买还是卖",
+            "要不要买",
+            "能不能买",
+            "该不该",
+            "该怎么",
+            "高开",
+            "低开",
+            "冲高",
+            "回落",
+            "跌破",
+            "破位",
+            "站上",
+            "放量",
+        )
+    ):
         return "plan"
-    if any(token in text for token in ("风险", "回避", "失效", "注意", "担心", "雷")):
+    if any(token in text for token in ("风险", "回避", "失效", "注意", "担心", "雷", "错了", "反向")):
         return "risk"
     if any(token in text for token in ("公告", "新闻", "事件", "催化", "消息")):
         return "events"
@@ -3499,8 +3326,6 @@ def detect_ask_followup_intent(question: str, history: list[dict[str, Any]] | No
         return "fundamentals"
     if any(token in text for token in ("可信", "置信", "靠谱吗", "数据完整", "完整")):
         return "confidence"
-    if any(token in text for token in ("自选股", "观察池", "机会池", "午盘", "执行队列", "链路", "系统里")):
-        return "cross"
     for item in reversed(history or []):
         if str(item.get("role") or "").strip() != "assistant":
             continue
@@ -3522,12 +3347,128 @@ def ask_followup_references(case: dict[str, Any], items: list[str]) -> list[str]
     return refs[:6]
 
 
+def ask_followup_intent_label(intent: str) -> str:
+    return ASK_FOLLOWUP_INTENT_LABELS.get(intent, "追问")
+
+
+def ask_followup_row_value(rows: list[dict[str, Any]], label: str) -> str:
+    for item in rows:
+        if str(item.get("label") or "").strip() == label:
+            return normalize_ask_followup_copy(item.get("value"))
+    return ""
+
+
+def ask_followup_group(case: dict[str, Any], title: str) -> dict[str, Any]:
+    return ask_find_analysis_group(case, title) or {}
+
+
+def ask_followup_group_items(case: dict[str, Any], title: str, limit: int = 4) -> list[str]:
+    group = ask_followup_group(case, title)
+    return [normalize_ask_followup_copy(item) for item in list(group.get("items") or [])[:limit] if normalize_ask_followup_copy(item)]
+
+
+def ask_followup_group_metric(case: dict[str, Any], title: str) -> str:
+    return normalize_ask_followup_copy((ask_followup_group(case, title) or {}).get("metric"))
+
+
+def ask_followup_metric_value(case: dict[str, Any], label: str) -> str:
+    for item in case.get("metric_cards") or []:
+        if str(item.get("label") or "").strip() == label:
+            value = normalize_ask_followup_copy(item.get("value"))
+            detail = normalize_ask_followup_copy(item.get("detail"))
+            return "；".join(part for part in (value, detail) if part)
+    return ""
+
+
+def ask_followup_level_value(level_cards: list[dict[str, Any]], label: str) -> str:
+    for item in level_cards:
+        if str(item.get("label") or "").strip() == label:
+            return normalize_ask_followup_copy(item.get("value")) or "-"
+    return "-"
+
+
+def ask_followup_level_detail(level_cards: list[dict[str, Any]], label: str) -> str:
+    for item in level_cards:
+        if str(item.get("label") or "").strip() == label:
+            return normalize_ask_followup_copy(item.get("detail"))
+    return ""
+
+
+def ask_followup_float(value: Any) -> float | None:
+    if value in (None, "", "-"):
+        return None
+    match = re.search(r"-?\d+(?:\.\d+)?", str(value))
+    if not match:
+        return None
+    try:
+        return float(match.group(0))
+    except ValueError:
+        return None
+
+
+def ask_followup_price_context(case: dict[str, Any], level_cards: list[dict[str, Any]]) -> str:
+    latest = ask_followup_metric_value(case, "最新价")
+    support_label = ask_followup_level_value(level_cards, "支撑位")
+    resistance_label = ask_followup_level_value(level_cards, "压力位")
+    stop_label = ask_followup_level_value(level_cards, "止损位")
+    current = ask_followup_float(latest)
+    support = ask_followup_float(support_label)
+    resistance = ask_followup_float(resistance_label)
+    stop_loss = ask_followup_float(stop_label)
+    latest_label = normalize_ask_followup_copy((latest.split("；", 1)[0] if latest else ""))
+    if current is None or not latest_label:
+        return ""
+
+    parts: list[str] = []
+    if support:
+        parts.append(f"较支撑 {support_label} 高约 {(current / support - 1) * 100:.1f}%")
+    if resistance:
+        parts.append(f"较压力 {resistance_label} 低约 {(1 - current / resistance) * 100:.1f}%")
+    if stop_loss and stop_loss != support:
+        parts.append(f"较止损 {stop_label} 高约 {(current / stop_loss - 1) * 100:.1f}%")
+    return f"当前价 {latest_label}" + (f"：{'，'.join(parts)}。" if parts else "。")
+
+
+def ask_followup_trigger_line(case: dict[str, Any], keywords: tuple[str, ...]) -> str:
+    for item in case.get("triggers") or []:
+        text = " ".join(str(item.get(key) or "") for key in ("name", "condition", "action"))
+        if any(keyword in text for keyword in keywords):
+            condition = normalize_ask_followup_copy(item.get("condition"))
+            action = normalize_ask_followup_copy(item.get("action"))
+            return " / ".join(part for part in (condition, action) if part)
+    return ""
+
+
+def ask_followup_cross_summary(cross_cards: list[dict[str, Any]]) -> str:
+    items = [
+        f"{normalize_ask_followup_copy(item.get('label'))}{normalize_ask_followup_copy(item.get('value'))}"
+        for item in cross_cards
+        if normalize_ask_followup_copy(item.get("label")) and normalize_ask_followup_copy(item.get("value"))
+    ]
+    if not items:
+        return ""
+    return "、".join(items[:4])
+
+
+def ask_followup_unique(items: list[str]) -> list[str]:
+    output: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        text = normalize_ask_followup_copy(item)
+        if not text or text == "-" or text in seen:
+            continue
+        seen.add(text)
+        output.append(text)
+    return output
+
+
 def build_ask_followup_answer(
     case: dict[str, Any],
     question: str,
     history: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     hero = case.get("hero") or {}
+    canonical = case.get("canonical_decision") or {}
     watchlist_action = case.get("watchlist_action") or {}
     plan_rows = case.get("plan_rows") or []
     plan_levels = case.get("plan_levels") or []
@@ -3536,119 +3477,165 @@ def build_ask_followup_answer(
     cross_cards = case.get("cross_cards") or []
     context_tags = case.get("context_tags") or []
 
-    def level_value(label: str) -> str:
-        for item in level_cards:
-            if str(item.get("label") or "").strip() == label:
-                return str(item.get("value") or "-").strip() or "-"
-        return "-"
-
-    def row_value(label: str) -> str:
-        for item in plan_rows:
-            if str(item.get("label") or "").strip() == label:
-                return str(item.get("value") or "-").strip() or "-"
-        return "-"
-
     sanitized_history = sanitize_ask_followup_history(history)
     intent = detect_ask_followup_intent(question, sanitized_history)
     tone = str(case.get("tone") or "watch")
+    intent_label = ask_followup_intent_label(intent)
+
+    decision_label = normalize_ask_followup_copy(hero.get("decision_label")) or normalize_ask_followup_copy(canonical.get("main_conclusion")) or "当前结论"
+    position = normalize_position_guidance(hero.get("position") or canonical.get("position_guidance"), "待定")
+    why_now = normalize_ask_followup_copy(canonical.get("why_now") or hero.get("summary") or "当前证据还不支持升级动作")
+    action = ask_followup_row_value(plan_rows, "动作") or normalize_ask_followup_copy(canonical.get("next_step")) or decision_label
+    trigger = ask_followup_row_value(plan_rows, "触发") or normalize_ask_followup_copy(canonical.get("trigger_condition")) or "等待触发条件明确"
+    avoid = ask_followup_row_value(plan_rows, "回避") or normalize_ask_followup_copy(canonical.get("avoid_action")) or why_now
+    invalid = ask_followup_row_value(plan_rows, "失效") or normalize_ask_followup_copy(canonical.get("stop_condition") or canonical.get("risk_boundary")) or "等待风险边界明确"
+    support = ask_followup_level_value(level_cards, "支撑位")
+    resistance = ask_followup_level_value(level_cards, "压力位")
+    stop_loss = ask_followup_level_value(level_cards, "止损位")
+    support_detail = ask_followup_level_detail(level_cards, "支撑位")
+    resistance_detail = ask_followup_level_detail(level_cards, "压力位")
+    stop_detail = ask_followup_level_detail(level_cards, "止损位")
+    price_context = ask_followup_price_context(case, level_cards)
+    flow_metric = ask_followup_group_metric(case, "资金面") or ask_followup_metric_value(case, "资金信号")
+    tech_metric = ask_followup_group_metric(case, "技术面")
+    risk_items = ask_followup_group_items(case, "风险", 4)
+    fundamentals_items = ask_followup_group_items(case, "基本面", 4)
+    event_items = ask_followup_group_items(case, "事件面", 3)
+    cross_summary = ask_followup_cross_summary(cross_cards)
+    breakout_line = ask_followup_trigger_line(case, ("突破", "站上", "压力"))
+    defense_line = ask_followup_trigger_line(case, ("防守", "跌破", "止损"))
+    confirm_line = ask_followup_trigger_line(case, ("确认", "回踩", "资金"))
+
+    default_hold = any(token in f"{decision_label} {action}" for token in ("观察", "观望", "不新增", "等待"))
     title = "继续拆这只股票"
-    summary = str(hero.get("summary") or "继续围绕当前结论拆问题。").strip()
+    summary = normalize_ask_followup_copy(hero.get("summary") or "继续围绕当前结论拆问题。")
     bullets: list[str] = []
     references: list[str] = []
 
     if intent == "levels":
-        support = level_value("支撑位")
-        resistance = level_value("压力位")
-        stop_loss = level_value("止损位")
-        title = "关键位怎么看"
-        summary = f"当前先盯支撑 {support}、压力 {resistance}、止损 {stop_loss}，这三档基本决定今天还能不能继续拿。"
-        bullets = [
-            f"{item.get('label')}：{item.get('value')}；{item.get('detail')}"
-            for item in level_cards
-            if item.get("value")
-        ]
-        bullets.extend(
+        title = f"{support} 是防守线，{resistance} 才是升级线"
+        same_support_stop = ask_followup_float(support) is not None and ask_followup_float(support) == ask_followup_float(stop_loss)
+        defense_copy = (
+            f"{support} 同时承担支撑/止损参考，跌破就不能再按原观察剧本"
+            if same_support_stop
+            else f"{support} 是支撑参考，{stop_loss} 是止损/失效参考"
+        )
+        summary = f"这轮问的是关键位怎么用：{defense_copy}；{resistance} 是压力和动作升级位，只有放量站上才谈下一步。"
+        bullets = ask_followup_unique(
             [
-                f"{item.get('label')}：{item.get('value')}"
-                for item in plan_levels
-                if str(item.get("value") or "").strip() not in {"", "-"}
+                price_context,
+                f"支撑位 {support}（{support_detail or '防守参考'}）：回踩不破，观察剧本才还成立。",
+                f"压力位 {resistance}（{resistance_detail or '上方观察'}）：必须放量站上，不能把摸到压力当成触发。",
+                f"止损位 {stop_loss}（{stop_detail or '失效参考'}）：{invalid}。",
+                f"{support}-{resistance} 区间：更像观察带，资金没有确认时，不把反弹当反转。",
+                confirm_line,
             ]
         )
-        references = ask_followup_references(case, [f"仓位参考 {hero.get('position')}", f"当前结论 {hero.get('decision_label')}"])
+        references = ask_followup_references(case, [f"当前结论 {decision_label}", f"仓位参考 {position}", f"触发 {trigger}", f"失效 {invalid}"])
     elif intent == "plan":
-        title = "今天怎么按纪律处理"
-        summary = f"当前更像是按“{normalize_ask_followup_copy(row_value('动作'))}”去处理，先看触发，再看回避和失效，不要把盘中噪音当成新结论。"
-        bullets = [
-            f"{item.get('label')}：{normalize_ask_followup_copy(item.get('value'))}"
-            for item in plan_rows
-            if str(item.get("value") or "").strip()
-        ]
-        references = ask_followup_references(case, [f"仓位参考 {hero.get('position')}"] + [f"{item.get('label')} {normalize_ask_followup_copy(item.get('value'))}" for item in plan_levels])
+        title = f"今天先按“{action}”处理"
+        if default_hold:
+            summary = (
+                f"你问的是今天到底要不要动：按纪律当前答案是先不主动动，除非出现“{trigger}”。"
+                f"反过来，只要触发“{invalid}”，这轮观察就先失效。"
+            )
+        else:
+            summary = f"你问的是操作，不是原因复述：当前按“{action}”执行，先看触发和失效两条线，不因为盘中噪音改口径。"
+        bullets = ask_followup_unique(
+            [
+                f"默认动作：{action}；当前结论 {decision_label}，仓位参考 {position}。",
+                f"动的条件：{trigger}。触发后也先按{position}验证，不放大仓位。",
+                f"不动的理由：{avoid}；{flow_metric or '资金确认不足'}；{cross_summary or '系统优先级未抬升'}。",
+                f"失效处理：{invalid}；触发后先停止原计划，别继续用原结论解释。",
+                price_context,
+                confirm_line,
+            ]
+        )
+        references = ask_followup_references(
+            case,
+            [f"动作 {action}", f"触发 {trigger}", f"失效 {invalid}", f"仓位参考 {position}"]
+            + [f"{item.get('label')} {normalize_ask_followup_copy(item.get('value'))}" for item in plan_levels],
+        )
     elif intent == "risk":
-        risk_group = ask_find_analysis_group(case, "风险") or {}
-        title = "主要风险在哪"
-        summary = first_text(*(risk_group.get("items") or []), hero.get("summary")) or "当前没有额外风险提示。"
-        bullets = list(risk_group.get("items") or [])[:5] or ["当前没有额外风险提示。"]
-        references = ask_followup_references(case, [f"止损位 {level_value('止损位')}", f"当前结论 {hero.get('decision_label')}"])
+        title = "最大的风险是误把观察当动作"
+        summary = f"主要风险不是一句“{why_now}”而已，而是价格靠近防守线、资金确认不足时，仍然把它当成今天可切到动作的标的。"
+        bullets = ask_followup_unique(
+            [
+                f"价格风险：{invalid}。",
+                f"资金风险：{flow_metric or '资金面没有给出明确正反馈'}。",
+                f"质量风险：{'；'.join(risk_items or [why_now])}。",
+                f"优先级风险：{cross_summary or '当前没有进入更高优先级队列'}。",
+                f"纠错条件：只有 {trigger}，才重新评估是否进入下一步动作。",
+            ]
+        )
+        references = ask_followup_references(case, [f"止损位 {stop_loss}", f"回避 {avoid}", f"当前结论 {decision_label}"])
     elif intent == "events":
         title = "公告和新闻怎么看"
         ann_group = event_groups[0] if len(event_groups) > 0 else {"items": []}
         news_group = event_groups[1] if len(event_groups) > 1 else {"items": []}
-        summary = f"当前抓到公告 {len(ann_group.get('items') or [])} 条、新闻 {len(news_group.get('items') or [])} 条，先看会不会直接改动作。"
+        summary = f"当前抓到公告 {len(ann_group.get('items') or [])} 条、新闻 {len(news_group.get('items') or [])} 条；它们可以解释关注度，但要改变今天动作，仍要回到 {trigger} 和 {invalid}。"
         bullets = [
-            f"{item.get('title')} | {item.get('meta')}"
+            normalize_ask_followup_copy(f"{item.get('title')} | {item.get('meta')}")
             for group in (ann_group, news_group)
             for item in (group.get("items") or [])[:3]
-        ] or ["当前没有抓到新的公告或新闻。"]
+        ] or event_items or ["当前没有抓到新的公告或新闻。"]
+        bullets = ask_followup_unique([*bullets, f"动作判断仍看：{trigger} / {invalid}。"])[:6]
         references = ask_followup_references(case, [f"事件标签 {' / '.join(context_tags)}"])
     elif intent == "flow":
-        group = ask_find_analysis_group(case, "资金面") or {}
         title = "资金面怎么看"
-        summary = first_text(*(group.get("items") or []), hero.get("summary")) or "当前没有足够的资金线索。"
-        bullets = list(group.get("items") or [])[:5] or ["当前没有足够的资金线索。"]
-        references = ask_followup_references(case, [f"资金信号 {(case.get('metric_cards') or [{}, {}, {}, {}])[3].get('value') if len(case.get('metric_cards') or []) >= 4 else '-'}"])
+        flow_items = ask_followup_group_items(case, "资金面", 5)
+        summary = f"资金面现在没有给“主动升级”的理由：{flow_metric or first_text(flow_items) or '资金线索不足'}。所以它只能作为观察，不适合脱离关键位单独行动。"
+        bullets = ask_followup_unique([*flow_items, f"资金要改变结论，至少要配合 {trigger}。", confirm_line]) or ["当前没有足够的资金线索。"]
+        references = ask_followup_references(case, [f"资金信号 {flow_metric}", f"当前结论 {decision_label}"])
     elif intent == "tech":
-        group = ask_find_analysis_group(case, "技术面") or {}
         title = "技术面怎么看"
-        summary = first_text(*(group.get("items") or []), hero.get("summary")) or "当前技术证据还不够完整。"
-        bullets = list(group.get("items") or [])[:5] or ["当前技术证据还不够完整。"]
-        references = ask_followup_references(case, [f"规则分 {(case.get('metric_cards') or [{}, {}, {}, {}])[2].get('value') if len(case.get('metric_cards') or []) >= 3 else '-'}"])
+        tech_items = ask_followup_group_items(case, "技术面", 5)
+        summary = f"技术面现在更像中性观察，不是动作信号；真正改变口径的是 {resistance} 上方的放量确认，失效线在 {stop_loss}。"
+        bullets = ask_followup_unique([price_context, *tech_items, breakout_line, defense_line]) or ["当前技术证据还不够完整。"]
+        references = ask_followup_references(case, [f"技术面 {tech_metric}", f"触发 {trigger}", f"失效 {invalid}"])
     elif intent == "fundamentals":
-        group = ask_find_analysis_group(case, "基本面") or {}
         title = "基本面怎么看"
-        summary = first_text(*(group.get("items") or []), "先看估值和盈利质量，再决定这票值不值得更长拿。")
-        bullets = list(group.get("items") or [])[:5] or ["当前基本面数据还不完整。"]
-        references = ask_followup_references(case, [f"当前结论 {hero.get('decision_label')}"])
+        summary = f"基本面这轮的作用是限制动作升级：{why_now}。它能解释为什么仓位只给到 {position}，但不能替代盘面触发。"
+        bullets = ask_followup_unique([*fundamentals_items, f"基本面不足时，只有 {trigger} 才重新评估动作。"]) or ["当前基本面数据还不完整。"]
+        references = ask_followup_references(case, [f"当前结论 {decision_label}", f"仓位参考 {position}"])
     elif intent == "confidence":
         title = "这个结论有多可靠"
-        summary = f"当前是 {hero.get('confidence_label')} 可信度，原因是 {hero.get('confidence_note')}。"
-        bullets = [
-            f"可信度：{hero.get('confidence_label')}",
-            f"说明：{hero.get('confidence_note')}",
+        summary = f"这里的可信度说的是数据链路和上下文完整度，不等于方向很强；当前仍然要按 {trigger} / {invalid} 校验。"
+        bullets = ask_followup_unique(
+            [
+            f"可信度：{normalize_ask_followup_copy(hero.get('confidence_label'))}",
+            f"说明：{normalize_ask_followup_copy(hero.get('confidence_note'))}",
             f"上下文标签：{' / '.join(context_tags) if context_tags else '仅临时分析'}",
-        ]
-        references = ask_followup_references(case, [f"当前结论 {hero.get('decision_label')}", f"仓位参考 {hero.get('position')}"])
+            f"纪律边界：{trigger} / {invalid}",
+            ]
+        )
+        references = ask_followup_references(case, [f"当前结论 {decision_label}", f"仓位参考 {position}"])
     elif intent == "cross":
         title = "这只票在系统里的位置"
-        summary = "先看它是不是已进入自选股、观察池、午盘确认或今日动作队列，再决定优先级。"
+        summary = f"系统位置决定优先级：{cross_summary or '当前没有进入核心队列'}。这解释了为什么回答先落在观察和纪律边界上。"
         bullets = [
-            f"{item.get('label')}：{item.get('value')}；{item.get('detail')}"
+            normalize_ask_followup_copy(f"{item.get('label')}：{item.get('value')}；{item.get('detail')}")
             for item in cross_cards
         ]
-        references = ask_followup_references(case, [f"自选股动作 {watchlist_action.get('label')}"])
+        bullets = ask_followup_unique([*bullets, f"若要提高优先级，先看 {trigger}。"])
+        references = ask_followup_references(case, [f"自选股动作 {watchlist_action.get('label')}", f"当前结论 {decision_label}"])
     else:
-        tech_group = ask_find_analysis_group(case, "技术面") or {}
-        flow_group = ask_find_analysis_group(case, "资金面") or {}
-        risk_group = ask_find_analysis_group(case, "风险") or {}
-        title = f"为什么当前是 {hero.get('decision_label')}"
-        summary = f"当前统一结论是 {hero.get('decision_label')}，核心原因还是 {str(hero.get('summary') or '当前结论来自多维度合并判断。').strip()}。"
-        bullets = [
-            f"纪律与仓位：{hero.get('decision_label')}；仓位参考 {hero.get('position')}",
-            f"技术面：{first_text(*(tech_group.get('items') or []), tech_group.get('metric')) or '暂无明确技术线索'}",
-            f"资金面：{first_text(*(flow_group.get('items') or []), flow_group.get('metric')) or '暂无明确资金线索'}",
-            f"风险面：{first_text(*(risk_group.get('items') or []), '当前没有额外风险提示。')}",
-        ]
-        references = ask_followup_references(case, [f"可信度 {hero.get('confidence_label')}", f"上下文 {' / '.join(context_tags)}"])
+        title = f"为什么只是{decision_label}"
+        summary = (
+            f"不是只因为“{why_now}”四个字：当前价格仍在 {support}-{resistance} 的观察带里，"
+            f"资金面是{flow_metric or '未确认'}，系统位置是{cross_summary or '未进入高优先级队列'}，所以先给出{decision_label}。"
+        )
+        bullets = ask_followup_unique(
+            [
+                f"纪律结论：{decision_label}；仓位参考 {position}。",
+                f"确认条件：{trigger}。没有这条，不把它从观察切到动作。",
+                f"防守条件：{invalid}。触发后先停止原计划。",
+                f"技术面：{tech_metric or '暂无明确技术线索'}；{price_context}",
+                f"资金/风险：{flow_metric or '资金未确认'}；{'；'.join(risk_items or [why_now])}。",
+                f"系统优先级：{cross_summary or '当前未进入自选/观察/今日动作队列'}。",
+            ]
+        )
+        references = ask_followup_references(case, [f"可信度 {hero.get('confidence_label')}", f"上下文 {' / '.join(context_tags)}", f"触发 {trigger}", f"失效 {invalid}"])
 
     asked_questions = {
         ask_followup_topic_key(question),
@@ -3658,17 +3645,28 @@ def build_ask_followup_answer(
             if str(item.get("role") or "").strip() == "user"
         ),
     }
+    asked_intents = {intent}
+    for item in sanitized_history:
+        if str(item.get("role") or "").strip() == "user":
+            asked_intents.add(detect_ask_followup_intent(str(item.get("summary") or ""), []))
+        elif str(item.get("role") or "").strip() == "assistant":
+            mapped = ask_followup_intent_from_title(str(item.get("title") or ""))
+            if mapped:
+                asked_intents.add(mapped)
     followups = [
         item["question"]
         for item in ask_followup_presets(case)
-        if item.get("question") and ask_followup_topic_key(item.get("question")) not in asked_questions
+        if item.get("question")
+        and ask_followup_topic_key(item.get("question")) not in asked_questions
+        and detect_ask_followup_intent(item.get("question") or "", []) not in asked_intents
     ][:3]
 
     return {
         "intent": intent,
+        "intent_label": intent_label,
         "title": title,
         "summary": summary,
-        "bullets": bullets[:6],
+        "bullets": ask_followup_unique(bullets)[:6],
         "references": references,
         "tone": tone,
         "followups": followups,
@@ -4261,6 +4259,21 @@ def quality_status_tone(status: Any) -> str:
     return "watch"
 
 
+def midday_validation_status_label(status: Any) -> str:
+    normalized = str(status or "unknown").strip().lower()
+    return {
+        "ok": "已确认",
+        "verify_failed": "执行失败",
+        "invalid": "链路无效",
+        "failed": "链路失败",
+        "workflow_failed": "链路失败",
+        "quality_blocked": "质检拦截",
+        "scan_failed": "扫描失败",
+        "missing": "暂无确认",
+        "unknown": "待核",
+    }.get(normalized, normalized or "待核")
+
+
 def quality_status_label(status: Any) -> str:
     normalized = str(status or "unknown").strip().lower()
     return {
@@ -4409,133 +4422,6 @@ def build_today_confidence_switch(
     )
 
 
-def build_watchlist_confidence_switch(
-    decision_brief: dict[str, Any] | None,
-    watchlist: dict[str, Any] | None,
-    quality: dict[str, Any] | None,
-    *,
-    brief_is_live: bool,
-    links: dict[str, Any],
-) -> dict[str, Any]:
-    brief_trade_date = detail_value((decision_brief or {}).get("trade_date"), "未生成")
-    quality_status = (quality or {}).get("validation_status") or "unknown"
-    tone = quality_status_tone(quality_status)
-
-    if tone == "risk":
-        status = "人工复核"
-        label = "先人工核对"
-        summary = "自选股质检没有通过，先别直接照着这页的持仓动作执行。"
-    elif tone == "watch":
-        status = "局部待核"
-        label = "先局部核对"
-        summary = "自选股快照已经到位，但质检还没完全通过，关键动作前先回源确认。"
-    elif brief_is_live:
-        tone = "positive"
-        status = "持仓层同步"
-        label = "按持仓动作使用"
-        summary = "总控持仓层和自选股质检都已同步，这页可作为今天的持仓判断主参考页。"
-    else:
-        tone = "watch"
-        status = "实时快照"
-        label = "按快照使用"
-        summary = "总控没更新到当日，但自选股快照和质检可用，当前页可先作为实时持仓整理入口。"
-
-    return build_confidence_switch(
-        status=status,
-        label=label,
-        tone=tone,
-        summary=summary,
-        note=(
-            f"快照时间 {detail_value((watchlist or {}).get('generated_at'))}，总控交易日 {brief_trade_date}。"
-        ),
-        metrics=[
-            build_confidence_metric("总控", "已同步" if brief_is_live else f"停留 {brief_trade_date}"),
-            build_confidence_metric("快照", detail_value((watchlist or {}).get("generated_at"))),
-            build_confidence_metric("质检", quality_status_label(quality_status)),
-            build_confidence_metric("优先处理", len((watchlist or {}).get("priority_codes") or [])),
-        ],
-        actions=[
-            build_confidence_action("打开质检 JSON", artifact_url((quality or {}).get("path")), external=True),
-            build_confidence_action("看观察池", links.get("opportunities")),
-        ],
-    )
-
-
-def build_opportunities_confidence_switch(
-    decision_brief: dict[str, Any] | None,
-    screening_batch: dict[str, Any] | None,
-    aggressive_quality: dict[str, Any] | None,
-    midday_quality: dict[str, Any] | None,
-    *,
-    brief_is_live: bool,
-    links: dict[str, Any],
-) -> dict[str, Any]:
-    brief_trade_date = detail_value((decision_brief or {}).get("trade_date"), "未生成")
-    gate = (((screening_batch or {}).get("market_regime") or {}).get("execution_gate") or {})
-    allow_new_positions = bool(gate.get("allow_new_positions"))
-    early_status = (aggressive_quality or {}).get("validation_status") or "unknown"
-    midday_status = (midday_quality or {}).get("validation_status") or "unknown"
-    risk_titles = [
-        title
-        for title, status in (("早盘", early_status), ("午盘", midday_status))
-        if quality_status_tone(status) == "risk"
-    ]
-    watch_titles = [
-        title
-        for title, status in (("早盘", early_status), ("午盘", midday_status))
-        if quality_status_tone(status) == "watch"
-    ]
-
-    if risk_titles:
-        tone = "risk"
-        status = "人工复核"
-        label = "先人工核对"
-        summary = f"{'、'.join(risk_titles)} 链路没有通过，这页先只能当问题排查入口，不能直接挑新仓。"
-    elif watch_titles:
-        tone = "watch"
-        status = "局部待核"
-        label = "先局部核对"
-        summary = f"{'、'.join(watch_titles)} 链路还没完全确认，候选名单先看，不急着直接执行。"
-    elif not allow_new_positions:
-        tone = "watch"
-        status = "只保留观察"
-        label = "先别开新仓"
-        summary = "早盘和午盘链路都可用，但进攻阀门关闭，今天这里主要承担观察池角色。"
-    elif brief_is_live:
-        tone = "positive"
-        status = "观察层同步"
-        label = "仅轻仓试错"
-        summary = "总控观察层已同步，早盘和午盘链路都已就绪，先看优先观察名单，盘中条件继续确认后再考虑轻仓试错。"
-    else:
-        tone = "watch"
-        status = "实时观察链路"
-        label = "按实时链路看"
-        summary = "总控没更新到当日，但实时早盘和午盘链路可用，可先按实时观察池判断。"
-
-    issue_url = first_issue_quality_url(aggressive_quality, midday_quality)
-    return build_confidence_switch(
-        status=status,
-        label=label,
-        tone=tone,
-        summary=summary,
-        note=f"进攻阀门 {detail_value(gate.get('label'), '实时判断')}，总控交易日 {brief_trade_date}。",
-        metrics=[
-            build_confidence_metric("阀门", detail_value(gate.get("label"), "实时判断")),
-            build_confidence_metric("总控", "已同步" if brief_is_live else f"停留 {brief_trade_date}"),
-            build_confidence_metric("早盘质检", quality_status_label(early_status)),
-            build_confidence_metric("午盘质检", quality_status_label(midday_status)),
-        ],
-        actions=[
-            build_confidence_action(
-                "打开问题 JSON" if issue_url else "看自选股",
-                issue_url or links.get("watchlist"),
-                external=bool(issue_url),
-            ),
-            build_confidence_action("回到今日总览", links.get("today")),
-        ],
-    )
-
-
 def build_review_confidence_switch(
     baseline_review: dict[str, Any] | None,
     latest_review: dict[str, Any] | None,
@@ -4610,11 +4496,18 @@ def normalize_learning_stock_code(value: Any) -> str:
 
 
 def infer_learning_action(item: dict[str, Any], *, default: str = "observe") -> str:
+    v2_action = v2_suggested_action(item)
+    if v2_action in {"actionable", "trial"}:
+        return "trial_buy"
+    if v2_action in {"shadow", "review", "observe"}:
+        return "observe"
     entry_plan = item.get("entry_plan") or {}
     text = " ".join(
         str(value or "")
         for value in (
             entry_plan.get("action"),
+            entry_plan.get("sizing"),
+            entry_plan.get("trigger"),
             item.get("action"),
             item.get("status"),
             item.get("screening_status"),
@@ -4923,7 +4816,7 @@ def build_observation_instruction(
     upgrade_text = compact_observation_sentence(upgrade)
     invalid_text = compact_observation_sentence(invalid)
     if upgrade_text:
-        parts.append(f"升级：{upgrade_text}")
+        parts.append(f"还差确认：{upgrade_text}")
     if invalid_text:
         parts.append(f"失效：{invalid_text}")
     return f"{'；'.join(parts)}。"
@@ -4942,50 +4835,750 @@ def opportunity_risk_tags(*values: Any, limit: int = 3) -> list[str]:
     return tags
 
 
+def v2_action_rank(value: Any) -> int:
+    return V2_ACTION_ORDER.get(str(value or "").strip(), -1)
+
+
+def opportunity_v2_judgment(item: Mapping[str, Any]) -> dict[str, Any]:
+    judgment = item.get("opportunity_v2") if isinstance(item.get("opportunity_v2"), Mapping) else {}
+    return dict(judgment) if isinstance(judgment, Mapping) else {}
+
+
+def _v2_nested(judgment: Mapping[str, Any], key: str) -> dict[str, Any]:
+    value = judgment.get(key)
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _v2_text_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return text_items(value)
+    text = str(value or "").strip()
+    return [text] if text else []
+
+
+def v2_suggested_action(item: Mapping[str, Any]) -> str:
+    judgment = opportunity_v2_judgment(item)
+    action = str(item.get("suggested_action") or judgment.get("suggested_action") or "").strip()
+    return action if action in V2_ACTION_ORDER else ""
+
+
+def v2_suggested_action_label(item: Mapping[str, Any]) -> str:
+    judgment = opportunity_v2_judgment(item)
+    action = v2_suggested_action(item)
+    return (
+        str(item.get("suggested_action_label") or judgment.get("action_label") or "").strip()
+        or V2_ACTION_LABELS.get(action, "")
+    )
+
+
+def v2_hard_gate_max_action(item: Mapping[str, Any]) -> str:
+    judgment = opportunity_v2_judgment(item)
+    hard_gate = _v2_nested(judgment, "hard_gate")
+    value = str(item.get("hard_gate_max_action") or hard_gate.get("maximum_allowed_action") or "").strip()
+    return value if value in V2_ACTION_ORDER else ""
+
+
+def v2_hard_gate_block_reason(item: Mapping[str, Any]) -> str:
+    judgment = opportunity_v2_judgment(item)
+    hard_gate = _v2_nested(judgment, "hard_gate")
+    block_reasons = hard_gate.get("block_reasons") if isinstance(hard_gate.get("block_reasons"), list) else []
+    return str(item.get("hard_gate_block_reason") or "；".join(text_items(block_reasons)) or "").strip()
+
+
+def v2_hard_gate_blocks_action(item: Mapping[str, Any]) -> bool:
+    action = v2_suggested_action(item)
+    max_action = v2_hard_gate_max_action(item)
+    desired = str(opportunity_v2_judgment(item).get("desired_action") or "").strip()
+    return bool(
+        max_action
+        and action
+        and (
+            v2_action_rank(max_action) < v2_action_rank(desired or action)
+            or v2_hard_gate_block_reason(item)
+        )
+    )
+
+
+def opportunity_v2_payload(item: Mapping[str, Any]) -> dict[str, Any]:
+    judgment = opportunity_v2_judgment(item)
+    if not judgment and not v2_suggested_action(item):
+        return {}
+
+    market_phase = _v2_nested(judgment, "market_phase")
+    theme_phase = _v2_nested(judgment, "theme_phase")
+    stock_role = _v2_nested(judgment, "stock_role")
+    playbook = _v2_nested(judgment, "playbook")
+    crowding = _v2_nested(judgment, "crowding_risk")
+    fake_breakout = _v2_nested(judgment, "fake_breakout_risk")
+    hard_gate = _v2_nested(judgment, "hard_gate")
+    calibration = _v2_nested(judgment, "calibration")
+    mode_guard = _v2_nested(judgment, "mode_guard")
+    ai_summary = _v2_nested(judgment, "ai_summary")
+    ai_delta = _v2_nested(judgment, "ai_delta")
+    action = v2_suggested_action(item)
+    action_label = v2_suggested_action_label(item)
+    hard_gate_max = v2_hard_gate_max_action(item)
+    hard_gate_block = v2_hard_gate_block_reason(item)
+    missing = _v2_text_list(item.get("missing_confirmation") or judgment.get("missing_confirmation"))
+    positives = _v2_text_list(judgment.get("positive_confirmation"))
+
+    confidence = item.get("confidence") if item.get("confidence") is not None else judgment.get("confidence")
+    return {
+        "suggested_action": action,
+        "suggested_action_label": action_label,
+        "confidence": confidence,
+        "thesis": item.get("thesis") or judgment.get("thesis") or "",
+        "why_now": item.get("why_now") or judgment.get("why_now") or "",
+        "invalidation": item.get("invalidation") or judgment.get("invalidation") or "",
+        "upgrade_reason": judgment.get("upgrade_reason") or "",
+        "missing_confirmation": missing,
+        "positive_confirmation": positives,
+        "hard_gate_max_action": hard_gate_max,
+        "hard_gate_block_reason": hard_gate_block,
+        "hard_gate_blocks_action": v2_hard_gate_blocks_action(item),
+        "hard_gate_reasons": hard_gate.get("reasons") if isinstance(hard_gate.get("reasons"), list) else [],
+        "market_phase": market_phase.get("label") or market_phase.get("value") or "",
+        "market_phase_value": market_phase.get("value") or "",
+        "theme_phase": theme_phase.get("label") or theme_phase.get("value") or "",
+        "theme_phase_value": theme_phase.get("value") or "",
+        "theme_phase_theme": theme_phase.get("theme") or "",
+        "stock_role": stock_role.get("label") or stock_role.get("value") or "",
+        "stock_role_value": stock_role.get("value") or "",
+        "playbook": playbook.get("label") or playbook.get("value") or judgment.get("opportunity_type") or "",
+        "playbook_value": playbook.get("value") or judgment.get("opportunity_type") or "",
+        "opportunity_type": judgment.get("opportunity_type") or playbook.get("opportunity_type") or playbook.get("value") or "",
+        "crowding_risk": crowding.get("summary") or crowding.get("level") or "",
+        "crowding_risk_level": crowding.get("level") or "",
+        "fake_breakout_risk": fake_breakout.get("summary") or fake_breakout.get("level") or "",
+        "fake_breakout_risk_level": fake_breakout.get("level") or "",
+        "judge_source": judgment.get("judge_source") or "",
+        "ai_status": judgment.get("ai_status") or "",
+        "ai_status_label": ai_summary.get("label") or item.get("ai_status_label") or "",
+        "ai_summary": ai_summary,
+        "ai_delta": ai_delta,
+        "ai_provider": judgment.get("ai_provider") or ai_summary.get("provider") or "",
+        "ai_model": judgment.get("ai_model") or ai_summary.get("model") or "",
+        "v2_mode_requested": judgment.get("mode_requested") or mode_guard.get("requested_mode") or "",
+        "v2_mode_effective": judgment.get("mode_effective") or mode_guard.get("effective_mode") or judgment.get("mode") or "",
+        "v2_active_allowed": mode_guard.get("active_allowed") if "active_allowed" in mode_guard else calibration.get("active_allowed"),
+        "v2_calibration_stage": calibration.get("sample_stage") or mode_guard.get("sample_stage") or "",
+        "v2_calibration_guard_reason": calibration.get("guard_reason") or mode_guard.get("guard_reason") or "",
+        "v2_calibration_mature_samples": calibration.get("mature_samples") or mode_guard.get("mature_samples"),
+        "v2_calibration_threshold_adjustments": calibration.get("threshold_adjustments") if isinstance(calibration.get("threshold_adjustments"), Mapping) else {},
+        "v2_playbook_adjustment": calibration.get("playbook_adjustment") if isinstance(calibration.get("playbook_adjustment"), Mapping) else {},
+        "opportunity_v2": judgment,
+    }
+
+
+def v2_task_status(item: Mapping[str, Any], fallback: Any = "待看") -> str:
+    return v2_suggested_action_label(item) or str(detail_value(fallback, "待看"))
+
+
+def v2_task_tone(item: Mapping[str, Any], fallback: str = "watch") -> str:
+    action = v2_suggested_action(item)
+    if action == "actionable":
+        return "positive"
+    if action == "trial":
+        return "positive" if not v2_hard_gate_blocks_action(item) else "watch"
+    if action in {"review", "shadow"}:
+        return "watch"
+    if action == "observe":
+        return "risk" if v2_hard_gate_block_reason(item) else "watch"
+    return fallback
+
+
+def v2_candidate_sort_key(item: Mapping[str, Any]) -> tuple[int, float, float]:
+    return (
+        v2_action_rank(v2_suggested_action(item)),
+        safe_float(item.get("confidence"), default=safe_float(opportunity_v2_judgment(item).get("confidence"), default=0)),
+        opportunity_candidate_rank_value(item),
+    )
+
+
+def v2_candidate_action_lane(item: Mapping[str, Any], *, allow_new_positions: bool) -> str:
+    action = v2_suggested_action(item)
+    max_action = v2_hard_gate_max_action(item) or "actionable"
+    if action == "actionable" and allow_new_positions and v2_action_rank(max_action) >= v2_action_rank("actionable"):
+        return "do_now"
+    if action == "trial" and allow_new_positions and v2_action_rank(max_action) >= v2_action_rank("trial"):
+        return "conditional"
+    if action in {"review", "shadow", "observe", "trial", "actionable"}:
+        return "observe"
+    return ""
+
+
+def candidate_factor_payload(item: Mapping[str, Any], *, include_empty: bool = True) -> dict[str, Any]:
+    factors = item.get("tushare_factors") if isinstance(item.get("tushare_factors"), Mapping) else {}
+    raw_snapshot = item.get("factor_snapshot")
+    if not isinstance(raw_snapshot, Mapping) or not raw_snapshot:
+        raw_snapshot = factors.get("factor_snapshot") if isinstance(factors.get("factor_snapshot"), Mapping) else {}
+    has_raw_snapshot = isinstance(raw_snapshot, Mapping) and bool(raw_snapshot)
+
+    risk_flags = item.get("factor_risk_flags") or factors.get("risk_flags") or []
+    if not risk_flags and (item.get("tushare_score") is not None or item.get("factor_snapshot") is not None):
+        risk_flags = item.get("risk_flags") or []
+
+    payload = {
+        "tushare_score": item.get("tushare_score") if item.get("tushare_score") is not None else factors.get("tushare_score"),
+        "data_completeness": (
+            item.get("data_completeness")
+            if item.get("data_completeness") is not None
+            else factors.get("data_completeness")
+        ),
+        "factor_tags": item.get("factor_tags") or factors.get("factor_tags") or [],
+        "factor_risk_flags": risk_flags,
+        "risk_level": item.get("risk_level") or factors.get("risk_level") or ("warn" if risk_flags else "info"),
+        "risk_items": item.get("risk_items") or factors.get("risk_items") or [],
+        "degrade_reason": item.get("degrade_reason") or factors.get("degrade_reason") or "",
+        "block_reason": item.get("block_reason") or factors.get("block_reason") or "",
+        "risk_evidence_refs": item.get("risk_evidence_refs") or factors.get("risk_evidence_refs") or [],
+        "risk_source_cards": item.get("risk_source_cards") or factors.get("risk_source_cards") or [],
+        "tushare_score_breakdown": item.get("tushare_score_breakdown") or factors.get("tushare_score_breakdown") or {},
+        "factor_snapshot": dict(raw_snapshot) if isinstance(raw_snapshot, Mapping) else {},
+        "trade_date_used": item.get("trade_date_used") or factors.get("trade_date_used"),
+        "factor_explanation": item.get("factor_explanation") or factors.get("explanation") or {},
+        "tushare_positive_adjustment": item.get("tushare_positive_adjustment"),
+        "tushare_risk_penalty": item.get("tushare_risk_penalty"),
+        "tushare_priority_adjustment": item.get("tushare_priority_adjustment"),
+    }
+    if not include_empty and not any(
+        payload.get(key)
+        for key in (
+            "tushare_score",
+            "data_completeness",
+            "factor_tags",
+            "factor_risk_flags",
+            "risk_items",
+            "degrade_reason",
+            "block_reason",
+            "risk_evidence_refs",
+            "risk_source_cards",
+            "tushare_score_breakdown",
+            "factor_snapshot",
+            "trade_date_used",
+        )
+    ):
+        return {}
+    return payload
+
+
+def public_tushare_factor_summary(item: Mapping[str, Any]) -> dict[str, Any]:
+    factors = item.get("tushare_factors") if isinstance(item.get("tushare_factors"), Mapping) else {}
+    summary = {
+        "tushare_score": item.get("tushare_score") if item.get("tushare_score") is not None else factors.get("tushare_score"),
+        "data_completeness": (
+            item.get("data_completeness")
+            if item.get("data_completeness") is not None
+            else factors.get("data_completeness")
+        ),
+        "factor_tags": item.get("factor_tags") or factors.get("factor_tags") or [],
+        "risk_flags": item.get("factor_risk_flags") or factors.get("risk_flags") or [],
+        "explanation": item.get("factor_explanation") or factors.get("explanation") or {},
+        "trade_date_used": item.get("trade_date_used") or factors.get("trade_date_used"),
+    }
+    return {key: value for key, value in summary.items() if value not in (None, "", [], {})}
+
+
 def build_screening_candidate_card(
     item: dict[str, Any],
     *,
     learning_index: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     execution_quality = item.get("execution_quality") or {}
+    consistency = item.get("consistency") or {}
+    capital_flow = item.get("capital_flow") or {}
     entry_plan = item.get("entry_plan") or {}
+    action_intent = infer_learning_action(item)
     upgrade_condition = entry_plan.get("trigger") or item.get("watch_condition")
     invalid_condition = entry_plan.get("invalidate") or ((entry_plan.get("levels") or {}).get("invalidate")) or item.get("main_risk")
     action_text = entry_plan.get("action") or item.get("screening_note") or "只观察，不追"
+    factor_payload = candidate_factor_payload(item)
+    v2_payload = opportunity_v2_payload(item)
+    v2_missing = text_items(v2_payload.get("missing_confirmation"))
+    v2_status = v2_payload.get("suggested_action_label")
+    v2_risk = first_text(
+        v2_payload.get("hard_gate_block_reason"),
+        v2_payload.get("crowding_risk"),
+        v2_payload.get("fake_breakout_risk"),
+    )
+    primary_risk = factor_payload.get("block_reason") or factor_payload.get("degrade_reason") or item.get("main_risk")
     card = {
         "code": item.get("code"),
         "name": item.get("name"),
-        "status": candidate_status_label(item.get("screening_status") or "unknown"),
+        "status": v2_status or candidate_status_label(item.get("screening_status") or "unknown"),
         "tone": candidate_tone(item),
         "setup_label": item.get("setup_label") or item.get("setup_type") or "待确认",
         "score": item.get("priority_score"),
+        "priority_score": item.get("priority_score"),
+        "best_score": item.get("best_score"),
         "change_pct": item.get("change_pct"),
         "amount_yi": item.get("amount_yi"),
+        "flow_today_yi": item.get("flow_today_yi") or capital_flow.get("flow_today_yi") or capital_flow.get("today_yi"),
+        "capital_trend": item.get("capital_trend") or capital_flow.get("trend"),
         "theme": ", ".join(item.get("themes") or []) or "其他",
-        "detail": item.get("entry_reason") or item.get("screening_note") or item.get("main_risk") or "等待更多确认",
+        "detail": v2_payload.get("thesis") or item.get("entry_reason") or item.get("screening_note") or item.get("main_risk") or "等待更多确认",
         "foot": (
-            f"{execution_quality.get('label') or '未评级'}"
-            f" · {(item.get('main_risk') or ((item.get('risk_flags') or [None])[0]) or '等待更多确认')}"
+            first_text(
+                v2_risk,
+                f"还差：{'；'.join(v2_missing[:2])}" if v2_missing else "",
+                f"{execution_quality.get('label') or '未评级'} · {(primary_risk or ((item.get('risk_flags') or [None])[0]) or '等待更多确认')}",
+            )
+            or "等待更多确认"
         ),
         "observation_instruction": build_observation_instruction(
             name=item.get("name"),
-            action=action_text,
-            upgrade=upgrade_condition,
-            invalid=invalid_condition,
+            action=v2_status or action_text,
+            upgrade=upgrade_condition or ("；".join(v2_missing[:2]) if v2_missing else ""),
+            invalid=v2_payload.get("invalidation") or invalid_condition,
         ),
         "upgrade_condition": normalize_trigger_sentence(upgrade_condition, "等待触发条件明确。"),
-        "invalid_condition": normalize_stock_result_copy(invalid_condition, "触发失效条件就剔除。"),
-        "avoid_condition": normalize_avoid_sentence(entry_plan.get("avoid") or item.get("main_risk")),
-        "risk_tags": opportunity_risk_tags(item.get("risk_flags"), execution_quality.get("warnings"), item.get("main_risk")),
+        "invalid_condition": normalize_stock_result_copy(v2_payload.get("invalidation") or invalid_condition, "触发失效条件就剔除。"),
+        "avoid_condition": normalize_avoid_sentence(entry_plan.get("avoid") or v2_risk or primary_risk),
+        "risk_tags": opportunity_risk_tags(
+            v2_payload.get("hard_gate_block_reason"),
+            v2_payload.get("crowding_risk"),
+            v2_payload.get("fake_breakout_risk"),
+            factor_payload.get("block_reason"),
+            factor_payload.get("degrade_reason"),
+            factor_payload.get("factor_risk_flags"),
+            item.get("risk_flags"),
+            execution_quality.get("warnings"),
+            item.get("main_risk"),
+        ),
         "priority_label": detail_value(item.get("tier"), "观察"),
+        "execution_quality_score": execution_quality.get("score"),
+        "execution_quality_label": execution_quality.get("label"),
+        "consistency_score": consistency.get("score"),
+        "consistency_label": consistency.get("label"),
+        "action_intent": action_intent,
+        "position_guidance": entry_plan.get("sizing") or "",
+        "entry_plan": dict(entry_plan) if isinstance(entry_plan, dict) and entry_plan else None,
         "action_key": f"screening:{item.get('code')}",
         "updated_at": item.get("updated_at") or item.get("snapshot_time"),
         "detail_url": today_candidate_detail_url(item.get("code")),
+        **factor_payload,
+        **v2_payload,
     }
     memories = candidate_learning_memories(item, lane="aggressive", learning_index=learning_index)
     if memories:
         card["learning_memories"] = memories
     return card
+
+
+def merge_confirmation_with_screening_candidate(
+    confirmation_item: dict[str, Any],
+    screening_item: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if not screening_item:
+        return confirmation_item
+
+    merged = deepcopy(screening_item)
+    confirmation_plan = confirmation_item.get("entry_plan") if isinstance(confirmation_item.get("entry_plan"), dict) else {}
+    screening_plan = deepcopy(merged.get("entry_plan") or {})
+    if confirmation_plan.get("sizing"):
+        screening_plan["sizing"] = confirmation_plan.get("sizing")
+    for key in ("action", "trigger", "avoid", "invalidate", "levels"):
+        if not screening_plan.get(key) and confirmation_plan.get(key):
+            screening_plan[key] = confirmation_plan.get(key)
+
+    merged["status"] = confirmation_item.get("status")
+    merged["confirmation_status"] = confirmation_item.get("status")
+    merged["confirmation_entry_plan"] = dict(confirmation_plan) if confirmation_plan else {}
+    merged["confirmation_execution_quality"] = confirmation_item.get("execution_quality") or {}
+    merged["midday_batch_id"] = confirmation_item.get("midday_batch_id")
+    merged["morning_batch_id"] = confirmation_item.get("morning_batch_id")
+    merged["entry_plan"] = screening_plan
+
+    for key in (
+        "opportunity_v2",
+        "suggested_action",
+        "suggested_action_label",
+        "confidence",
+        "thesis",
+        "why_now",
+        "invalidation",
+        "missing_confirmation",
+        "hard_gate_max_action",
+        "hard_gate_block_reason",
+        "judge_source",
+        "ai_status",
+        "ai_status_label",
+        "ai_summary",
+        "ai_delta",
+        "ai_provider",
+        "ai_model",
+    ):
+        value = confirmation_item.get(key)
+        if value not in (None, "", [], {}):
+            merged[key] = value
+
+    for key in (
+        "code",
+        "name",
+        "theme",
+        "setup_type",
+        "setup_label",
+        "setup_summary",
+        "score",
+        "change_pct",
+        "amount_yi",
+        "flow_today_yi",
+        "capital_trend",
+        "entry_reason",
+        "main_risk",
+        "watch_condition",
+    ):
+        value = confirmation_item.get(key)
+        if value not in (None, "", [], {}) and merged.get(key) in (None, "", [], {}):
+            merged[key] = value
+
+    return merged
+
+
+def opportunity_candidate_rank_value(item: Mapping[str, Any]) -> float:
+    execution_quality = item.get("execution_quality") if isinstance(item.get("execution_quality"), Mapping) else {}
+    consistency = item.get("consistency") if isinstance(item.get("consistency"), Mapping) else {}
+    capital_flow = item.get("capital_flow") if isinstance(item.get("capital_flow"), Mapping) else {}
+    priority = safe_float(item.get("priority_score"), default=0) or 0
+    execution = safe_float(execution_quality.get("score"), default=0) or 0
+    consistency_score = safe_float(consistency.get("score"), default=0) or 0
+    amount = safe_float(item.get("amount_yi"), default=0) or 0
+    flow_today = safe_float(
+        item.get("flow_today_yi") or capital_flow.get("flow_today_yi") or capital_flow.get("today_yi"),
+        default=0,
+    ) or 0
+    change_pct = safe_float(item.get("change_pct"), default=0) or 0
+    return (
+        priority
+        + execution * 6
+        + consistency_score * 4
+        + min(amount, 150) * 0.08
+        + max(min(flow_today, 30), -30) * 2
+        + change_pct
+    )
+
+
+def annotate_opportunity_card_ranks(cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    labels = ("先看", "二号候补", "三号候补", "靠后")
+    annotated: list[dict[str, Any]] = []
+    for index, card in enumerate(cards, start=1):
+        copy_card = dict(card)
+        label = labels[index - 1] if index <= len(labels) else f"候补 {index}"
+        trigger = str(copy_card.get("upgrade_condition") or "").strip()
+        setup = str(copy_card.get("setup_label") or "").strip()
+        risk = str(copy_card.get("avoid_condition") or "").strip()
+        if not risk:
+            risk = str((copy_card.get("risk_tags") or [copy_card.get("foot") or ""])[0] or "").strip()
+        copy_card["decision_rank"] = index
+        copy_card["decision_rank_label"] = f"#{index} {label}"
+        copy_card["decision_summary"] = "；".join(
+            part
+            for part in (
+                f"{setup}优先" if setup and setup != "待确认" else "",
+                trigger,
+                f"卡点：{risk}" if risk else "",
+            )
+            if part
+        )
+        annotated.append(copy_card)
+    return annotated
+
+
+def annotate_opportunity_item_ranks(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    labels = ("先看", "二号候补", "三号候补", "靠后")
+    annotated: list[dict[str, Any]] = []
+    for index, item in enumerate(items, start=1):
+        copy_item = dict(item)
+        entry_plan = copy_item.get("entry_plan") if isinstance(copy_item.get("entry_plan"), dict) else {}
+        label = labels[index - 1] if index <= len(labels) else f"候补 {index}"
+        trigger = str(entry_plan.get("trigger") or copy_item.get("watch_condition") or "").strip()
+        setup = str(copy_item.get("setup_label") or copy_item.get("setup_type") or "").strip()
+        risk = str(entry_plan.get("avoid") or copy_item.get("main_risk") or "").strip()
+        if not risk:
+            risk = str(((copy_item.get("risk_flags") or []) + [""])[0] or "").strip()
+        copy_item["decision_rank"] = index
+        copy_item["decision_rank_label"] = f"#{index} {label}"
+        copy_item["decision_summary"] = "；".join(
+            part
+            for part in (
+                f"{setup}优先" if setup and setup != "待确认" else "",
+                trigger,
+                f"卡点：{risk}" if risk else "",
+            )
+            if part
+        )
+        annotated.append(copy_item)
+    return annotated
+
+
+def _public_value_present(value: Any) -> bool:
+    return value not in (None, "", [], {})
+
+
+def public_learning_memory_payload(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    payload = {
+        key: value.get(key)
+        for key in (
+            "key",
+            "title",
+            "summary",
+            "learning_hint",
+            "scope_label",
+            "primary_cause_label",
+            "tone",
+            "sample_count",
+            "evidence_strength_label",
+        )
+        if _public_value_present(value.get(key))
+    }
+    if payload.get("summary") == payload.get("learning_hint"):
+        payload.pop("learning_hint", None)
+    secondary = text_items(
+        value.get("secondary_cause_labels")
+        if isinstance(value.get("secondary_cause_labels"), list)
+        else [value.get("secondary_cause_labels")]
+    )
+    if secondary:
+        payload["secondary_cause_labels"] = secondary[:3]
+    return payload
+
+
+def public_opportunity_card_payload(card: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep Discovery list cards focused on display-ready decision summaries."""
+
+    text_limits = {
+        "detail": 88,
+        "foot": 64,
+        "reason": 88,
+        "risk": 64,
+        "observation_instruction": 90,
+        "upgrade_condition": 72,
+        "invalid_condition": 64,
+        "avoid_condition": 56,
+        "thesis": 72,
+        "why_now": 72,
+        "invalidation": 64,
+        "upgrade_reason": 64,
+        "hard_gate_block_reason": 72,
+        "decision_summary": 104,
+        "degrade_reason": 72,
+        "block_reason": 72,
+        "crowding_risk": 40,
+        "fake_breakout_risk": 40,
+    }
+    array_limits = {
+        "risk_tags": 2,
+        "factor_tags": 2,
+        "factor_risk_flags": 2,
+        "missing_confirmation": 2,
+    }
+    allowlist = (
+        "code",
+        "name",
+        "status",
+        "action",
+        "tone",
+        "setup_label",
+        "score",
+        "priority_score",
+        "change_pct",
+        "amount_yi",
+        "flow_today_yi",
+        "capital_trend",
+        "theme",
+        "detail",
+        "foot",
+        "reason",
+        "risk",
+        "observation_instruction",
+        "upgrade_condition",
+        "invalid_condition",
+        "avoid_condition",
+        "risk_tags",
+        "priority_label",
+        "persistence_label",
+        "execution_quality_label",
+        "consistency_score",
+        "consistency_label",
+        "action_intent",
+        "position_guidance",
+        "action_key",
+        "detail_url",
+        "suggested_action",
+        "suggested_action_label",
+        "confidence",
+        "thesis",
+        "why_now",
+        "invalidation",
+        "upgrade_reason",
+        "missing_confirmation",
+        "hard_gate_max_action",
+        "hard_gate_block_reason",
+        "hard_gate_blocks_action",
+        "market_phase",
+        "theme_phase",
+        "theme_phase_theme",
+        "stock_role",
+        "playbook",
+        "opportunity_type",
+        "crowding_risk",
+        "crowding_risk_level",
+        "fake_breakout_risk",
+        "fake_breakout_risk_level",
+        "judge_source",
+        "ai_status",
+        "ai_status_label",
+        "v2_active_allowed",
+        "v2_calibration_stage",
+        "v2_calibration_mature_samples",
+        "decision_rank",
+        "decision_rank_label",
+        "decision_summary",
+        "tushare_score",
+        "factor_tags",
+        "factor_risk_flags",
+        "risk_level",
+        "degrade_reason",
+        "block_reason",
+    )
+    payload = {key: card.get(key) for key in allowlist if _public_value_present(card.get(key))}
+    is_v2_like = bool(
+        payload.get("suggested_action")
+        or payload.get("thesis")
+        or payload.get("why_now")
+        or card.get("opportunity_v2")
+    )
+    if is_v2_like:
+        payload.pop("observation_instruction", None)
+        if payload.get("ai_status") in {"", "not_requested", "disabled"}:
+            payload.pop("ai_status", None)
+            payload.pop("ai_status_label", None)
+    for key, limit in text_limits.items():
+        if key in payload:
+            payload[key] = _brief_text(payload[key], limit)
+    for key, limit in array_limits.items():
+        value = payload.get(key)
+        if isinstance(value, list):
+            compact_items = [_brief_text(item, 48) for item in text_items(value)]
+            if compact_items:
+                payload[key] = compact_items[:limit]
+            else:
+                payload.pop(key, None)
+    if payload.get("detail") == payload.get("thesis"):
+        payload.pop("detail", None)
+    if payload.get("reason") in {payload.get("detail"), payload.get("thesis")}:
+        payload.pop("reason", None)
+    if payload.get("foot") == payload.get("hard_gate_block_reason"):
+        payload.pop("foot", None)
+    if payload.get("foot") in {payload.get("invalidation"), payload.get("risk")}:
+        payload.pop("foot", None)
+    if payload.get("invalid_condition") == payload.get("invalidation"):
+        payload.pop("invalid_condition", None)
+    if payload.get("avoid_condition") == payload.get("risk"):
+        payload.pop("avoid_condition", None)
+    if payload.get("score") == payload.get("priority_score"):
+        payload.pop("score", None)
+    if payload.get("theme") == payload.get("theme_phase_theme"):
+        payload.pop("theme", None)
+    upgrade_reason = str(payload.get("upgrade_reason") or "")
+    if upgrade_reason.startswith("结构假设成立但还不够买"):
+        payload.pop("upgrade_reason", None)
+    risk_tags = payload.get("risk_tags")
+    hard_gate_reason = payload.get("hard_gate_block_reason")
+    if isinstance(risk_tags, list):
+        repeated_risk_text = {
+            item
+            for item in (
+                hard_gate_reason,
+                payload.get("block_reason"),
+                payload.get("degrade_reason"),
+                payload.get("crowding_risk"),
+                payload.get("fake_breakout_risk"),
+            )
+            if isinstance(item, str) and item
+        }
+        compact_risks = [item for item in risk_tags if item not in repeated_risk_text]
+        if compact_risks:
+            payload["risk_tags"] = compact_risks
+        else:
+            payload.pop("risk_tags", None)
+
+    return payload
+
+
+def public_lifecycle_card_payload(card: Mapping[str, Any]) -> dict[str, Any]:
+    """Thin card for the lazy Discovery lifecycle sidebar."""
+
+    payload = {
+        key: card.get(key)
+        for key in (
+            "code",
+            "name",
+            "status",
+            "tone",
+            "persistence_label",
+            "priority_label",
+            "detail_url",
+        )
+        if _public_value_present(card.get(key))
+    }
+    detail = first_text(card.get("detail"), card.get("observation_instruction"))
+    if detail:
+        payload["detail"] = _brief_text(detail, 72)
+    return payload
+
+
+def public_opportunity_group_payload(
+    group: Mapping[str, Any],
+    *,
+    card_limit: int | None = None,
+    card_payload: str = "workbench",
+) -> dict[str, Any]:
+    payload = dict(group)
+    cards = [
+        card
+        for card in (group.get("cards") or [])
+        if isinstance(card, Mapping)
+    ]
+    if card_limit is not None:
+        cards = cards[:card_limit]
+    card_builder = (
+        public_lifecycle_card_payload
+        if card_payload == "lifecycle"
+        else public_opportunity_card_payload
+    )
+    payload["cards"] = [
+        card_builder(card)
+        for card in cards
+    ]
+    return payload
+
+
+def public_opportunity_groups_payload(
+    groups: list[dict[str, Any]],
+    *,
+    card_limit: int | None = None,
+    card_payload: str = "workbench",
+) -> list[dict[str, Any]]:
+    return [
+        public_opportunity_group_payload(
+            group,
+            card_limit=card_limit,
+            card_payload=card_payload,
+        )
+        for group in groups
+    ]
+
+
+def public_lifecycle_groups_payload(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    visible_groups = [group for group in groups if int(group.get("count") or 0) > 0]
+    return public_opportunity_groups_payload(
+        visible_groups[:4],
+        card_limit=3,
+        card_payload="lifecycle",
+    )
 
 
 def build_confirmation_candidate_card(
@@ -4994,36 +5587,82 @@ def build_confirmation_candidate_card(
     learning_index: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     execution_quality = item.get("execution_quality") or {}
+    consistency = item.get("consistency") or {}
+    capital_flow = item.get("capital_flow") or {}
     entry_plan = item.get("entry_plan") or {}
+    action_intent = infer_learning_action(item)
     upgrade_condition = entry_plan.get("trigger") or item.get("watch_condition")
     invalid_condition = entry_plan.get("invalidate") or ((entry_plan.get("levels") or {}).get("invalidate")) or item.get("main_risk")
     action_text = entry_plan.get("action") or item.get("watch_condition") or "只观察，不追"
+    factor_payload = candidate_factor_payload(item)
+    v2_payload = opportunity_v2_payload(item)
+    v2_missing = text_items(v2_payload.get("missing_confirmation"))
+    v2_status = v2_payload.get("suggested_action_label")
+    v2_risk = first_text(
+        v2_payload.get("hard_gate_block_reason"),
+        v2_payload.get("crowding_risk"),
+        v2_payload.get("fake_breakout_risk"),
+    )
+    primary_risk = factor_payload.get("block_reason") or factor_payload.get("degrade_reason") or item.get("main_risk")
+    status_label = candidate_status_label(item.get("status") or "unknown")
+    if item.get("status") == "confirmed" and action_intent == "trial_buy":
+        status_label = "试错待触发"
+    if v2_status:
+        status_label = str(v2_status)
     card = {
         "code": item.get("code"),
         "name": item.get("name"),
-        "status": candidate_status_label(item.get("status") or "unknown"),
+        "status": status_label,
         "tone": candidate_tone(item),
         "setup_label": item.get("setup_label") or "待确认",
-        "score": item.get("score"),
+        "score": item.get("priority_score") or item.get("score") or item.get("best_score"),
+        "priority_score": item.get("priority_score"),
+        "best_score": item.get("best_score"),
         "change_pct": item.get("change_pct"),
         "amount_yi": item.get("amount_yi"),
-        "theme": item.get("theme") or "其他",
-        "detail": item.get("entry_reason") or item.get("watch_condition") or item.get("main_risk") or "等待更多确认",
-        "foot": item.get("main_risk") or "等待更多确认",
+        "flow_today_yi": item.get("flow_today_yi") or capital_flow.get("flow_today_yi") or capital_flow.get("today_yi"),
+        "capital_trend": item.get("capital_trend") or capital_flow.get("trend"),
+        "theme": item.get("theme") or ", ".join(item.get("themes") or []) or "其他",
+        "detail": v2_payload.get("why_now") or item.get("entry_reason") or item.get("watch_condition") or item.get("main_risk") or "等待更多确认",
+        "foot": first_text(
+            v2_risk,
+            f"还差：{'；'.join(v2_missing[:2])}" if v2_missing else "",
+            primary_risk,
+        )
+        or "等待更多确认",
         "observation_instruction": build_observation_instruction(
             name=item.get("name"),
-            action=action_text,
-            upgrade=upgrade_condition,
-            invalid=invalid_condition,
+            action=status_label or action_text,
+            upgrade=upgrade_condition or ("；".join(v2_missing[:2]) if v2_missing else ""),
+            invalid=v2_payload.get("invalidation") or invalid_condition,
         ),
         "upgrade_condition": normalize_trigger_sentence(upgrade_condition, "等待触发条件明确。"),
-        "invalid_condition": normalize_stock_result_copy(invalid_condition, "触发失效条件就剔除。"),
-        "avoid_condition": normalize_avoid_sentence(entry_plan.get("avoid") or item.get("main_risk")),
-        "risk_tags": opportunity_risk_tags(item.get("risk_flags"), execution_quality.get("warnings"), item.get("main_risk")),
+        "invalid_condition": normalize_stock_result_copy(v2_payload.get("invalidation") or invalid_condition, "触发失效条件就剔除。"),
+        "avoid_condition": normalize_avoid_sentence(entry_plan.get("avoid") or v2_risk or primary_risk),
+        "risk_tags": opportunity_risk_tags(
+            v2_payload.get("hard_gate_block_reason"),
+            v2_payload.get("crowding_risk"),
+            v2_payload.get("fake_breakout_risk"),
+            factor_payload.get("block_reason"),
+            factor_payload.get("degrade_reason"),
+            factor_payload.get("factor_risk_flags"),
+            item.get("risk_flags"),
+            execution_quality.get("warnings"),
+            item.get("main_risk"),
+        ),
         "priority_label": detail_value(item.get("tier"), "观察"),
+        "execution_quality_score": execution_quality.get("score"),
+        "execution_quality_label": execution_quality.get("label"),
+        "consistency_score": consistency.get("score"),
+        "consistency_label": consistency.get("label"),
+        "action_intent": action_intent,
+        "position_guidance": entry_plan.get("sizing") or "",
+        "entry_plan": dict(entry_plan) if isinstance(entry_plan, dict) and entry_plan else None,
         "action_key": f"confirmation:{item.get('code')}",
         "updated_at": item.get("updated_at") or item.get("snapshot_time"),
         "detail_url": today_candidate_detail_url(item.get("code")),
+        **factor_payload,
+        **v2_payload,
     }
     memories = candidate_learning_memories(item, lane="midday_confirmation", learning_index=learning_index)
     if memories:
@@ -5205,7 +5844,14 @@ def build_today_watchlist_task_item(
 
 def build_today_screening_task_item(item: dict[str, Any], *, source: str) -> dict[str, Any]:
     execution_quality = item.get("execution_quality") or {}
+    factor_payload = candidate_factor_payload(item, include_empty=False)
+    v2_payload = opportunity_v2_payload(item)
+    entry_plan = item.get("entry_plan") if isinstance(item.get("entry_plan"), dict) else {}
+    missing = text_items(v2_payload.get("missing_confirmation"))
+    primary_risk = factor_payload.get("block_reason") or factor_payload.get("degrade_reason") or item.get("main_risk")
     metrics = [
+        f"动作 {v2_payload.get('suggested_action_label')}" if v2_payload.get("suggested_action_label") else "",
+        f"信心 {v2_payload.get('confidence')}" if v2_payload.get("confidence") not in (None, "", [], {}) else "",
         f"形态 {detail_value(item.get('setup_label') or item.get('setup_type'), '待确认')}",
         (
             f"优先分 {item.get('priority_score')}"
@@ -5213,22 +5859,27 @@ def build_today_screening_task_item(item: dict[str, Any], *, source: str) -> dic
             else ""
         ),
         f"执行 {detail_value(execution_quality.get('label'), '未评级')}",
+        f"还差 {missing[0]}" if missing else "",
     ]
-    return build_today_task_item(
+    task = build_today_task_item(
         key=f"screening:{detail_value(item.get('code'), '-')}",
         title=f"{detail_value(item.get('name'), '候选标的')} {detail_value(item.get('code'), '')}".strip(),
         source=source,
-        status=candidate_status_label(item.get("screening_status") or "unknown"),
-        tone=candidate_tone(item),
+        status=v2_task_status(item, candidate_status_label(item.get("screening_status") or "unknown")),
+        tone=v2_task_tone(item, candidate_tone(item)),
         detail=detail_value(
-            item.get("watch_condition")
+            v2_payload.get("why_now")
+            or v2_payload.get("thesis")
+            or item.get("watch_condition")
             or item.get("entry_reason")
             or item.get("screening_note")
             or item.get("main_risk"),
             "等待更多确认",
         ),
         foot=detail_value(
-            item.get("main_risk")
+            v2_payload.get("hard_gate_block_reason")
+            or ("还差：" + "；".join(missing[:2]) if missing else "")
+            or primary_risk
             or ((item.get("risk_flags") or [None])[0])
             or execution_quality.get("label"),
             "",
@@ -5236,34 +5887,107 @@ def build_today_screening_task_item(item: dict[str, Any], *, source: str) -> dic
         metrics=metrics,
         url=today_candidate_detail_url(item.get("code")),
     )
+    task.update(factor_payload)
+    task.update(v2_payload)
+    if entry_plan:
+        task["entry_plan"] = dict(entry_plan)
+    return task
 
 
 def build_today_confirmation_task_item(item: dict[str, Any], *, source: str) -> dict[str, Any]:
+    factor_payload = candidate_factor_payload(item, include_empty=False)
+    v2_payload = opportunity_v2_payload(item)
+    missing = text_items(v2_payload.get("missing_confirmation"))
+    primary_risk = factor_payload.get("block_reason") or factor_payload.get("degrade_reason") or item.get("main_risk")
+    entry_plan = item.get("entry_plan") if isinstance(item.get("entry_plan"), dict) else {}
+    execution_quality = item.get("execution_quality") if isinstance(item.get("execution_quality"), dict) else {}
+    capital_flow = item.get("capital_flow") if isinstance(item.get("capital_flow"), dict) else {}
+    flow_today_yi = item.get("flow_today_yi") or capital_flow.get("flow_today_yi") or capital_flow.get("today_yi")
+    capital_trend = item.get("capital_trend") or capital_flow.get("trend")
+    plan_text = " ".join(
+        str(value or "")
+        for value in (
+            entry_plan.get("action"),
+            entry_plan.get("sizing"),
+            entry_plan.get("trigger"),
+        )
+    )
+    raw_status = str(item.get("status") or "unknown").strip()
+    status_label = candidate_status_label(raw_status)
+    if raw_status == "confirmed" and any(token in plan_text for token in ("试错", "买入", "轻仓", "开仓")):
+        status_label = "试错待触发"
+    if v2_payload.get("suggested_action_label"):
+        status_label = str(v2_payload.get("suggested_action_label"))
     metrics = [
+        f"动作 {v2_payload.get('suggested_action_label')}" if v2_payload.get("suggested_action_label") else "",
+        f"信心 {v2_payload.get('confidence')}" if v2_payload.get("confidence") not in (None, "", [], {}) else "",
         f"状态 {candidate_status_label(item.get('status') or 'unknown')}",
+        f"仓位 {entry_plan.get('sizing')}" if entry_plan.get("sizing") else "",
         (
             f"涨幅 {item.get('change_pct')}%"
             if item.get("change_pct") not in (None, "", [], {})
             else ""
         ),
+        f"执行 {execution_quality.get('label')}" if execution_quality.get("label") else "",
+        (
+            f"资金 {capital_trend}/{round_money(flow_today_yi)}亿"
+            if capital_trend and flow_today_yi not in (None, "", [], {})
+            else f"资金 {capital_trend}"
+            if capital_trend
+            else ""
+        ),
         f"主题 {detail_value(item.get('theme'), '其他')}",
+        f"还差 {missing[0]}" if missing else "",
     ]
-    return build_today_task_item(
+    detail_text = (
+        v2_payload.get("why_now")
+        or v2_payload.get("thesis")
+        or (
+            entry_plan.get("trigger")
+            if status_label == "试错待触发"
+            else entry_plan.get("action")
+            or entry_plan.get("trigger")
+            or entry_plan.get("sizing")
+        )
+        or item.get("watch_condition")
+        or item.get("entry_reason")
+        or item.get("main_risk")
+    )
+    task = build_today_task_item(
         key=f"confirmation:{detail_value(item.get('code'), '-')}",
         title=f"{detail_value(item.get('name'), '午盘标的')} {detail_value(item.get('code'), '')}".strip(),
         source=source,
-        status=candidate_status_label(item.get("status") or "unknown"),
-        tone=candidate_tone(item),
-        detail=detail_value(
-            item.get("watch_condition")
-            or item.get("entry_reason")
-            or item.get("main_risk"),
-            "等待更多确认",
+        status=status_label,
+        tone=v2_task_tone(item, candidate_tone(item)),
+        detail=detail_value(detail_text, "等待更多确认"),
+        foot=detail_value(
+            v2_payload.get("hard_gate_block_reason")
+            or ("还差：" + "；".join(missing[:2]) if missing else "")
+            or primary_risk
+            or entry_plan.get("avoid")
+            or item.get("watch_condition")
+            or item.get("entry_reason"),
+            "",
         ),
-        foot=detail_value(item.get("main_risk"), ""),
         metrics=metrics,
         url=today_candidate_detail_url(item.get("code")),
     )
+    task.update(factor_payload)
+    task.update(v2_payload)
+    for key in (
+        "decision_rank",
+        "decision_rank_label",
+        "decision_summary",
+        "priority_score",
+        "best_score",
+        "flow_today_yi",
+        "capital_trend",
+    ):
+        if item.get(key) not in (None, "", [], {}):
+            task[key] = item.get(key)
+    if entry_plan:
+        task["entry_plan"] = dict(entry_plan)
+    return task
 
 
 def build_today_system_task_item(
@@ -5311,6 +6035,19 @@ def build_today_action_groups(
     approved = [item for item in candidates if item.get("screening_status") == "approved"]
     caution = [item for item in candidates if item.get("screening_status") == "caution"]
     confirmed = (confirmation or {}).get("confirmed") or []
+    ranked_confirmed = annotate_opportunity_item_ranks(
+        sorted(
+            (
+                merge_confirmation_with_screening_candidate(
+                    item,
+                    find_screening_candidate(screening_batch, str(item.get("code") or "")),
+                )
+                for item in confirmed
+            ),
+            key=opportunity_candidate_rank_value,
+            reverse=True,
+        )
+    )
     fresh_candidates = (confirmation or {}).get("fresh_candidates") or []
     downgraded = (confirmation or {}).get("downgraded") or []
     lanes = (quality_status or {}).get("lanes") or {}
@@ -5319,6 +6056,14 @@ def build_today_action_groups(
     watchlist_lane = lanes.get("watchlist") or {}
     aggressive_lane = lanes.get("aggressive") or {}
     confirmation_lane = lanes.get("midday_confirmation") or {}
+    has_v2_flow = any(
+        v2_suggested_action(item)
+        for item in [
+            *candidates,
+            *ranked_confirmed,
+            *fresh_candidates,
+        ]
+    )
 
     watchlist_context = build_today_task_context(
         lane_key="watchlist",
@@ -5365,8 +6110,35 @@ def build_today_action_groups(
             limit=3,
         )
 
-    if allow_new_positions:
-        for item in confirmed:
+    if has_v2_flow:
+        v2_rows: list[tuple[str, dict[str, Any], str, dict[str, Any]]] = [
+            ("confirmation", item, "午盘结构验证", confirmation_context)
+            for item in ranked_confirmed
+        ]
+        v2_rows.extend(
+            ("screening", item, "早盘结构候选", screening_context)
+            for item in approved
+        )
+        v2_rows.extend(
+            ("confirmation", item, "午盘新增结构", confirmation_context)
+            for item in fresh_candidates
+        )
+        v2_rows.extend(
+            ("screening", item, "观察池结构复核", screening_context)
+            for item in caution
+        )
+        for kind, item, source, context in sorted(v2_rows, key=lambda row: v2_candidate_sort_key(row[1]), reverse=True):
+            lane = v2_candidate_action_lane(item, allow_new_positions=allow_new_positions)
+            if not lane:
+                continue
+            builder = build_today_confirmation_task_item if kind == "confirmation" else build_today_screening_task_item
+            task = attach_today_task_context(builder(item, source=source), context)
+            if lane in {"do_now", "conditional"}:
+                append_today_task(do_now, do_now_seen, task, limit=3)
+            else:
+                append_today_task(observe, observe_seen, task, limit=3)
+    elif allow_new_positions:
+        for item in ranked_confirmed:
             append_today_task(
                 do_now,
                 do_now_seen,
@@ -5417,40 +6189,41 @@ def build_today_action_groups(
             ),
             limit=3,
         )
-    for item in fresh_candidates:
-        append_today_task(
-            observe,
-            observe_seen,
-            attach_today_task_context(
-                build_today_confirmation_task_item(item, source="午盘新增"),
-                confirmation_context,
-            ),
-            limit=3,
-        )
-    for item in caution:
-        append_today_task(
-            observe,
-            observe_seen,
-            attach_today_task_context(
-                build_today_screening_task_item(item, source="观察池观察"),
-                screening_context,
-            ),
-            limit=3,
-        )
-    if allow_new_positions:
-        for item in approved:
-            observe_item = attach_today_task_context(
-                build_today_screening_task_item(item, source="早盘进入候选"),
-                screening_context,
-            )
-            if observe_item.get("key") in do_now_seen:
-                continue
+    if not has_v2_flow:
+        for item in fresh_candidates:
             append_today_task(
                 observe,
                 observe_seen,
-                observe_item,
+                attach_today_task_context(
+                    build_today_confirmation_task_item(item, source="午盘新增"),
+                    confirmation_context,
+                ),
                 limit=3,
             )
+        for item in caution:
+            append_today_task(
+                observe,
+                observe_seen,
+                attach_today_task_context(
+                    build_today_screening_task_item(item, source="观察池观察"),
+                    screening_context,
+                ),
+                limit=3,
+            )
+        if allow_new_positions:
+            for item in approved:
+                observe_item = attach_today_task_context(
+                    build_today_screening_task_item(item, source="早盘进入候选"),
+                    screening_context,
+                )
+                if observe_item.get("key") in do_now_seen:
+                    continue
+                append_today_task(
+                    observe,
+                    observe_seen,
+                    observe_item,
+                    limit=3,
+                )
 
     if not allow_new_positions:
         append_today_task(
@@ -5723,11 +6496,15 @@ def build_today_action_queue(
     trade_date: str,
     *,
     account_book: dict[str, Any] | None = None,
+    today_action_decisions: dict[str, Any] | None = None,
     expected_trade_date: str | None = None,
     readiness_mode: str = "live_ready",
     readiness_ready: bool = True,
 ) -> dict[str, Any]:
-    decision_map = get_today_action_decision_map(trade_date)
+    decision_map = get_today_action_decision_map(
+        trade_date,
+        store=today_action_decisions,
+    )
     no_fill_index = build_no_fill_intent_index(account_book)
     ranked_items: list[dict[str, Any]] = []
     stale_items: list[dict[str, Any]] = []
@@ -5833,23 +6610,6 @@ def compress_today_actions(action_queue: dict[str, Any]) -> list[dict[str, Any]]
 
 def build_today_primary_actions(top_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return top_rows[:3]
-
-
-def build_today_holdings_rows(action_groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    do_now_group = next((group for group in action_groups if group.get("key") == "do-now"), None)
-    items = [item for item in (do_now_group or {}).get("items") or [] if str(item.get("key") or "").startswith("watchlist:")]
-    return compress_today_actions({"items": items})
-
-
-def build_today_opportunity_rows(action_groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    watch_group = next((group for group in action_groups if group.get("key") == "watch"), None)
-    items = [
-        item
-        for item in (watch_group or {}).get("items") or []
-        if str(item.get("key") or "").startswith("screening:")
-        or str(item.get("key") or "").startswith("confirmation:")
-    ]
-    return compress_today_actions({"items": items})
 
 
 def build_today_trusted_group_rows(action_queue: dict[str, Any], group_key: str, key_prefixes: tuple[str, ...]) -> list[dict[str, Any]]:
@@ -6049,70 +6809,6 @@ def build_today_evidence_hint(*, brief_is_live: bool, source_cards: list[dict[st
     }
 
 
-def watchlist_trigger_price(card: dict[str, Any]) -> str:
-    for label, value in (
-        ("止损", card.get("stop_loss")),
-        ("支撑", card.get("support")),
-        ("压力", card.get("resistance")),
-    ):
-        if value is not None and str(value).strip():
-            return f"{label} {value}"
-    return "查看详情"
-
-
-def compress_watchlist_group(
-    group: dict[str, Any],
-    limit: int = 3,
-    *,
-    fallback_freshness: str = "-",
-) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for item in (group.get("cards") or [])[:limit]:
-        rows.append(
-            {
-                "title": f"{detail_value(item.get('name'))} {detail_value(item.get('code'))}",
-                "action": detail_value(item.get("action"), "查看详情"),
-                "tier": action_tier_label(
-                    infer_action_tier(action=item.get("action"), tone=item.get("tone"), title=item.get("name"))
-                ),
-                "trigger": watchlist_trigger_price(item),
-                "reason": detail_value(item.get("reason"), "先看详情确认触发条件"),
-                "risk": detail_value(item.get("risk"), item.get("status_line") or "继续复核"),
-                "freshness": detail_value(item.get("snapshot_time"), fallback_freshness),
-                "url": item.get("detail_url"),
-                "tone": item.get("tone") or "watch",
-            }
-        )
-    return rows
-
-
-def compress_opportunity_group(
-    group: dict[str, Any],
-    limit: int = 3,
-    *,
-    fallback_freshness: str = "-",
-) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for item in (group.get("cards") or [])[:limit]:
-        freshness_raw = item.get("updated_at") or item.get("snapshot_time") or fallback_freshness
-        rows.append(
-            {
-                "title": f"{detail_value(item.get('name'))} {detail_value(item.get('code'))}",
-                "action": detail_value(item.get("status"), "查看详情"),
-                "tier": action_tier_label(
-                    infer_action_tier(action=item.get("status"), tone=item.get("tone"), title=item.get("name"))
-                ),
-                "trigger": detail_value(item.get("setup_label"), "查看详情"),
-                "reason": detail_value(item.get("detail"), "先看详情确认触发条件"),
-                "risk": detail_value(item.get("foot"), "继续复核"),
-                "freshness": detail_value(fmt_dt(freshness_raw), "-"),
-                "url": item.get("detail_url"),
-                "tone": item.get("tone") or "watch",
-            }
-        )
-    return rows
-
-
 def classify_today_urgent_lane(item: dict[str, Any]) -> str:
     url = str(item.get("url") or "").strip()
     source = str(item.get("source") or "").strip()
@@ -6239,39 +6935,6 @@ def build_detail_topline(
             }
             for item in (cta_links or [])
             if item and item.get("href")
-        ],
-    }
-
-
-def build_today_dispatch_topline(
-    *,
-    trade_date: str,
-    hero: dict[str, Any],
-    next_steps: dict[str, Any],
-    links: dict[str, str],
-) -> dict[str, Any]:
-    dispatch_titles = {
-        "old_positions": "今天先处理旧仓，再决定是否看新仓",
-        "new_positions": "今天先看观察名单，需要动作也只轻仓",
-        "stand_down": "今天先收手，优先等承接",
-    }
-    verdict_title = dispatch_titles.get(
-        str(next_steps.get("current_key") or ""),
-        detail_value(hero.get("title"), "今天先处理旧仓，再决定是否看新仓"),
-    )
-    return {
-        "verdict_badge": "一句总判断",
-        "verdict_title": verdict_title,
-        "verdict_summary": f"先按「{next_steps.get('current_label') or '先站住'}」往下看，再看其余信息。",
-        "meta_pills": build_topline_meta_pills(
-            freshness=trade_date,
-            position=hero.get("position_cap"),
-            risk_boundary=hero.get("gate_label"),
-        ),
-        "cta_links": [
-            {"label": "去持仓看动作", "href": links.get("watchlist")},
-            {"label": "去看观察池", "href": links.get("opportunities")},
-            {"label": "去问一只股票", "href": links.get("ask")},
         ],
     }
 
@@ -6427,6 +7090,87 @@ def build_review_source_cards(
             now=now,
         ),
     ]
+
+
+def build_review_artifacts(
+    *,
+    latest_lifecycle: dict[str, Any] | None,
+    active_lifecycle: dict[str, Any] | None,
+    baseline_review: dict[str, Any] | None,
+    latest_review: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    artifacts = []
+    seen_paths: set[str] = set()
+    for title, path, key in (
+        ("最新变化回放 JSON", (latest_lifecycle or {}).get("path"), "lifecycle_latest"),
+        ("最近有动作的变化回放 JSON", (active_lifecycle or {}).get("path"), "lifecycle_active"),
+        ("基准窗口研究", (baseline_review or {}).get("path"), "review_baseline"),
+        ("对比窗口研究", (latest_review or {}).get("path"), "review_latest"),
+    ):
+        item = artifact_from_path(title, path, key=key)
+        if not item:
+            continue
+        if item["path"] in seen_paths:
+            continue
+        seen_paths.add(item["path"])
+        artifacts.append(item)
+    return artifacts
+
+
+def build_review_source_cards_view(
+    baseline_id: str | None = None,
+    window_id: str | None = None,
+) -> dict[str, Any]:
+    lifecycle_context = resolve_lifecycle_context()
+    selected_baseline_path = resolve_review_option_path(baseline_id)
+    selected_window_path = resolve_review_option_path(window_id)
+    baseline_review = safe_canonical_load(
+        load_research_review,
+        path=str(selected_baseline_path) if selected_baseline_path else None,
+        prefer_baseline=selected_baseline_path is None,
+    )
+    latest_review = safe_canonical_load(
+        load_research_review,
+        path=str(selected_window_path) if selected_window_path else None,
+        prefer_baseline=False,
+    )
+    return {
+        "source_cards": build_review_source_cards(
+            latest_lifecycle=lifecycle_context["latest_lifecycle"],
+            active_lifecycle=lifecycle_context["active_lifecycle"],
+            baseline_review=baseline_review,
+            latest_review=latest_review,
+        )
+    }
+
+
+def build_review_evidence_view(
+    baseline_id: str | None = None,
+    window_id: str | None = None,
+) -> dict[str, Any]:
+    lifecycle_context = resolve_lifecycle_context()
+    review_pair = resolve_review_pair(baseline_id=baseline_id, window_id=window_id)
+    latest_lifecycle = lifecycle_context["latest_lifecycle"]
+    active_lifecycle = lifecycle_context["active_lifecycle"]
+    baseline_review = review_pair["baseline_review"]
+    latest_review = review_pair["latest_review"]
+    return {
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "active_baseline_id": review_pair["active_baseline_id"],
+        "active_window_id": review_pair["active_window_id"],
+        "source_cards": build_review_source_cards(
+            latest_lifecycle=latest_lifecycle,
+            active_lifecycle=active_lifecycle,
+            baseline_review=baseline_review,
+            latest_review=latest_review,
+        ),
+        "artifacts": build_review_artifacts(
+            latest_lifecycle=latest_lifecycle,
+            active_lifecycle=active_lifecycle,
+            baseline_review=baseline_review,
+            latest_review=latest_review,
+        ),
+    }
 
 
 def build_review_freshness_alerts(source_cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -6602,10 +7346,8 @@ def review_detail_url(
     label: str,
     baseline_id: str | None = None,
     window_id: str | None = None,
-    *,
-    api: bool = False,
 ) -> str:
-    base = "/api/review/detail" if api else review_page_url()
+    base = review_page_url()
     params = [
         f"section={quote(str(section_key), safe='')}",
         f"label={quote(str(label), safe='')}",
@@ -6719,6 +7461,7 @@ def lifecycle_group_tone(group_key: str) -> str:
     return {
         "entered": "positive",
         "upgraded": "positive",
+        "continued": "info",
         "downgraded": "risk",
         "exited": "risk",
         "handed_off": "watch",
@@ -6729,6 +7472,7 @@ def lifecycle_group_title(group_key: str) -> str:
     return {
         "entered": "新进入",
         "upgraded": "升级",
+        "continued": "非一日脉冲",
         "downgraded": "降级",
         "exited": "退出",
         "handed_off": "午盘交接",
@@ -6758,6 +7502,12 @@ def lifecycle_item_metrics(item: dict[str, Any], group_key: str) -> list[str]:
             f"当前状态 {candidate_status_label(item.get('curr_screening_status'))}",
             f"分数变化 {detail_value(item.get('score_delta'))}",
         ]
+    if group_key == "continued":
+        return [
+            f"层级 {detail_value(item.get('tier') or item.get('curr_tier'))}",
+            f"状态 {candidate_status_label(item.get('screening_status') or item.get('curr_screening_status'))}",
+            f"分数变化 {detail_value(item.get('score_delta'))}",
+        ]
     if group_key == "exited":
         return [
             f"最后分数 {detail_value(item.get('score'))}",
@@ -6778,6 +7528,8 @@ def lifecycle_item_copy(item: dict[str, Any], group_key: str) -> str:
         return detail_value(item.get("theme"), "升级原因待补")
     if group_key == "downgraded":
         return detail_value(item.get("reason") or item.get("theme"), "降级原因待补")
+    if group_key == "continued":
+        return detail_value(item.get("reason") or item.get("theme"), "连续两轮仍在候选池，先按延续观察处理。")
     if group_key == "exited":
         return "已从当前 shortlist 退出，后续只保留历史留痕。"
     return detail_value(item.get("reason"), "已进入午盘承接观察。")
@@ -6790,6 +7542,8 @@ def lifecycle_item_foot(item: dict[str, Any], group_key: str) -> str:
         return detail_value(item.get("theme"), "强度正在抬升")
     if group_key == "downgraded":
         return detail_value(item.get("reason"), "需要重新评估承接")
+    if group_key == "continued":
+        return detail_value(item.get("persistence_label"), "非一日脉冲")
     if group_key == "exited":
         return detail_value(item.get("theme"), "不再进入当前执行名单")
     return detail_value(item.get("current_screening_status"), "已完成午盘交接")
@@ -6816,12 +7570,117 @@ def build_lifecycle_group(group_key: str, lifecycle: dict[str, Any] | None) -> d
             "entered": "新增进入当前观察池的名字",
             "upgraded": "同一批次里强度或状态更好的名字",
             "downgraded": "盘中承接变弱，需要降级对待",
+            "continued": "连续两轮仍在候选池，不按一日脉冲处理",
             "exited": "已经从当前 shortlist 离开的名字",
             "handed_off": "从早盘进入午盘承接观察的名字",
         }.get(group_key, "最近变化"),
         "count": len(cards),
         "cards": cards,
         "empty": f"当前没有{lifecycle_group_title(group_key)}记录。",
+    }
+
+
+def build_discovery_lifecycle_card(item: dict[str, Any], group_key: str) -> dict[str, Any]:
+    score = item.get("curr_score") if item.get("curr_score") is not None else item.get("score")
+    status = lifecycle_group_title(group_key)
+    if group_key == "entered":
+        upgrade_condition = "后续若继续留在 shortlist 且分数/题材延续，再进入午盘确认。"
+        invalid_condition = "次日掉出 shortlist 或主线退潮，就只保留历史留痕。"
+    elif group_key == "upgraded":
+        upgrade_condition = "强度已抬升，下一步只等午盘承接和总控阀门。"
+        invalid_condition = "若分数回落或状态降级，重新放回观察。"
+    elif group_key == "downgraded":
+        upgrade_condition = "重新进入当前池且承接恢复后再评估。"
+        invalid_condition = detail_value(item.get("reason"), "当前按降级处理。")
+    elif group_key == "continued":
+        upgrade_condition = "明天继续留在 shortlist，且午盘承接不破，再看升级。"
+        invalid_condition = "后续掉出 shortlist 或分数明显回落，就改成一日脉冲风险。"
+    elif group_key == "exited":
+        upgrade_condition = "重新进入当日 shortlist 后再观察。"
+        invalid_condition = "已退出当前观察池，不再占用今日复核任务。"
+    else:
+        upgrade_condition = "午盘承接继续成立后再看升级。"
+        invalid_condition = detail_value(item.get("reason"), "承接失败则降级。")
+
+    return {
+        "code": item.get("code"),
+        "name": item.get("name") or item.get("code"),
+        "status": status,
+        "tone": lifecycle_group_tone(group_key),
+        "setup_label": detail_value(item.get("theme"), "跨天追踪"),
+        "score": score,
+        "theme": detail_value(item.get("theme"), ""),
+        "detail": lifecycle_item_copy(item, group_key),
+        "foot": lifecycle_item_foot(item, group_key),
+        "observation_instruction": build_observation_instruction(
+            name=item.get("name") or item.get("code"),
+            action=f"{status}：只作为跨天追踪，不直接执行",
+            upgrade=upgrade_condition,
+            invalid=invalid_condition,
+        ),
+        "upgrade_condition": upgrade_condition,
+        "invalid_condition": invalid_condition,
+        "risk_tags": opportunity_risk_tags(item.get("reason"), item.get("main_risk"), item.get("theme")),
+        "priority_label": detail_value(item.get("persistence_label"), "Lifecycle"),
+        "persistence_label": detail_value(item.get("persistence_label"), ""),
+        "action_key": f"lifecycle:{group_key}:{item.get('code')}",
+        "updated_at": item.get("last_seen") or item.get("current_timestamp"),
+        "detail_url": today_candidate_detail_url(item.get("code")),
+    }
+
+
+def build_discovery_lifecycle_group(group_key: str, lifecycle: dict[str, Any] | None) -> dict[str, Any]:
+    items = (((lifecycle or {}).get("groups") or {}).get(group_key) or [])
+    cards = [build_discovery_lifecycle_card(item, group_key) for item in items if item.get("code")]
+    titles = {
+        "entered": "延续新增",
+        "upgraded": "延续升级",
+        "continued": "非一日脉冲",
+        "downgraded": "延续降级",
+        "exited": "延续退出",
+        "handed_off": "午盘交接",
+    }
+    empties = {
+        "entered": "跨天追踪里暂无新增进入。",
+        "upgraded": "跨天追踪里暂无升级。",
+        "continued": "跨天追踪里暂无非一日脉冲。",
+        "downgraded": "跨天追踪里暂无降级。",
+        "exited": "跨天追踪里暂无退出。",
+        "handed_off": "跨天追踪里暂无午盘交接。",
+    }
+    return {
+        "key": f"lifecycle_{group_key}",
+        "title": titles.get(group_key, lifecycle_group_title(group_key)),
+        "subtitle": "连续两轮仍在池里的票会打上非一日脉冲标记。",
+        "count": len(cards),
+        "cards": cards,
+        "empty": empties.get(group_key, f"跨天追踪里暂无{lifecycle_group_title(group_key)}。"),
+    }
+
+
+def merge_opportunity_group_with_lifecycle(
+    primary_group: dict[str, Any],
+    *lifecycle_groups: dict[str, Any],
+) -> dict[str, Any]:
+    merged_cards = list(primary_group.get("cards") or [])
+    seen_codes = {item.get("code") for item in merged_cards if item.get("code")}
+
+    for lifecycle_group in lifecycle_groups:
+        for item in lifecycle_group.get("cards") or []:
+            code = item.get("code")
+            if code and code in seen_codes:
+                continue
+            merged_cards.append(item)
+            if code:
+                seen_codes.add(code)
+
+    if len(merged_cards) == len(primary_group.get("cards") or []):
+        return primary_group
+
+    return {
+        **primary_group,
+        "count": len(merged_cards),
+        "cards": merged_cards,
     }
 
 
@@ -6880,7 +7739,7 @@ def build_today_change_view(lifecycle: dict[str, Any] | None, *, links: dict[str
     handoff_total = len((((lifecycle or {}).get("groups") or {}).get("handed_off") or []))
 
     groups = []
-    for key in ("downgraded", "entered", "upgraded", "handed_off", "exited"):
+    for key in ("downgraded", "continued", "entered", "upgraded", "handed_off", "exited"):
         group = build_today_change_group(key, lifecycle)
         if group["count"]:
             groups.append(group)
@@ -6942,23 +7801,6 @@ def build_today_change_view(lifecycle: dict[str, Any] | None, *, links: dict[str
     }
 
 
-def build_review_group_entries(
-    review: dict[str, Any] | None,
-    section_key: str,
-    *,
-    baseline_id: str | None,
-    window_id: str | None,
-) -> list[dict[str, Any]]:
-    return [
-        {
-            "label": row.get("label") or "-",
-            "summary": review_row_line(row),
-            "detail_url": review_detail_url(section_key, row.get("label") or "-", baseline_id, window_id),
-        }
-        for row in review_section_rows(review, section_key)
-    ]
-
-
 def review_row_detail_link(
     row: dict[str, Any] | None,
     section_key: str,
@@ -7006,21 +7848,15 @@ def build_review_selector_groups(
     ]
 
 
-def build_review_panel(
+def build_review_research_panel_preview(
     review: dict[str, Any] | None,
     *,
     eyebrow: str,
     title: str,
-    baseline_id: str | None,
-    window_id: str | None,
 ) -> dict[str, Any]:
     summary = (review or {}).get("summary") or {}
     ai_overall = summary.get("ai_overall")
     scan_overall = summary.get("scan_overall")
-    best_regime = summary.get("ai_best_regime_day5")
-    best_gate = summary.get("ai_best_gate_day5")
-    worst_gate = summary.get("ai_worst_gate_day5")
-    best_strategy = summary.get("scan_best_strategy_day5")
 
     return {
         "eyebrow": eyebrow,
@@ -7029,128 +7865,37 @@ def build_review_panel(
             f"{review_window_text(review)}，AI 5日净 {signed_pct(review_row_net_pct(ai_overall, 'day5'))}，"
             f"扫描 5日净 {signed_pct(review_row_net_pct(scan_overall, 'day5'))}。"
         ),
-        "metric_cards": [
-            {
-                "label": "AI 5日净",
-                "value": signed_pct(review_row_net_pct(ai_overall, "day5")),
-                "detail": review_row_line(ai_overall),
-            },
-            {
-                "label": "扫描 5日净",
-                "value": signed_pct(review_row_net_pct(scan_overall, "day5")),
-                "detail": review_row_line(scan_overall),
-            },
-            {
-                "label": "最佳环境",
-                "value": signed_pct(review_row_net_pct(best_regime, "day5")),
-                "detail": detail_value((best_regime or {}).get("label"), "暂无"),
-                "detail_url": review_row_detail_link(best_regime, "ai_regime_rows", baseline_id, window_id),
-                "detail_link_text": f"查看 {detail_value((best_regime or {}).get('label'), '对应分组')}",
-            },
-            {
-                "label": "最优阀门",
-                "value": signed_pct(review_row_net_pct(best_gate, "day5")),
-                "detail": detail_value((best_gate or {}).get("label"), "暂无"),
-                "detail_url": review_row_detail_link(best_gate, "ai_gate_rows", baseline_id, window_id),
-                "detail_link_text": f"查看 {detail_value((best_gate or {}).get('label'), '对应分组')}",
-            },
-            {
-                "label": "最差阀门",
-                "value": signed_pct(review_row_net_pct(worst_gate, "day5")),
-                "detail": detail_value((worst_gate or {}).get("label"), "暂无"),
-                "detail_url": review_row_detail_link(worst_gate, "ai_gate_rows", baseline_id, window_id),
-                "detail_link_text": f"查看 {detail_value((worst_gate or {}).get('label'), '对应分组')}",
-            },
-            {
-                "label": "最优策略",
-                "value": signed_pct(review_row_net_pct(best_strategy, "day5")),
-                "detail": detail_value((best_strategy or {}).get("label"), "暂无"),
-                "detail_url": review_row_detail_link(best_strategy, "scan_bucket_rows", baseline_id, window_id),
-                "detail_link_text": f"查看 {detail_value((best_strategy or {}).get('label'), '对应分组')}",
-            },
-        ],
-        "groups": [
-            {
-                "title": "AI 分桶",
-                "entries": build_review_group_entries(
-                    review,
-                    "ai_bucket_rows",
-                    baseline_id=baseline_id,
-                    window_id=window_id,
-                ),
-                "empty": "暂无 AI 分桶统计。",
-            },
-            {
-                "title": "AI 环境",
-                "entries": build_review_group_entries(
-                    review,
-                    "ai_regime_rows",
-                    baseline_id=baseline_id,
-                    window_id=window_id,
-                ),
-                "empty": "暂无 AI 环境统计。",
-            },
-            {
-                "title": "AI 阀门",
-                "entries": build_review_group_entries(
-                    review,
-                    "ai_gate_rows",
-                    baseline_id=baseline_id,
-                    window_id=window_id,
-                ),
-                "empty": "暂无 AI 阀门统计。",
-            },
-            {
-                "title": "AI 分层",
-                "entries": build_review_group_entries(
-                    review,
-                    "ai_tier_rows",
-                    baseline_id=baseline_id,
-                    window_id=window_id,
-                ),
-                "empty": "暂无 AI 分层统计。",
-            },
-            {
-                "title": "扫描环境",
-                "entries": build_review_group_entries(
-                    review,
-                    "scan_regime_rows",
-                    baseline_id=baseline_id,
-                    window_id=window_id,
-                ),
-                "empty": "暂无扫描环境统计。",
-            },
-            {
-                "title": "扫描阀门",
-                "entries": build_review_group_entries(
-                    review,
-                    "scan_gate_rows",
-                    baseline_id=baseline_id,
-                    window_id=window_id,
-                ),
-                "empty": "暂无扫描阀门统计。",
-            },
-            {
-                "title": "扫描策略",
-                "entries": build_review_group_entries(
-                    review,
-                    "scan_bucket_rows",
-                    baseline_id=baseline_id,
-                    window_id=window_id,
-                ),
-                "empty": "暂无扫描策略统计。",
-            },
-            {
-                "title": "压测备注",
-                "entries": [
-                    {"label": normalize_review_note_text(item), "summary": "", "detail_url": None}
-                    for item in text_items((review or {}).get("notes"))[:4]
-                ],
-                "empty": "暂无额外备注。",
-            },
-        ],
         "artifact_url": artifact_url((review or {}).get("path")),
-        "artifact_path": (review or {}).get("path"),
+    }
+
+
+def build_review_research_view(
+    baseline_id: str | None = None,
+    window_id: str | None = None,
+) -> dict[str, Any]:
+    review_pair = resolve_review_pair(baseline_id=baseline_id, window_id=window_id)
+    baseline_review = review_pair["baseline_review"]
+    latest_review = review_pair["latest_review"]
+    active_baseline_id = review_pair["active_baseline_id"]
+    active_window_id = review_pair["active_window_id"]
+
+    return {
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "active_baseline_id": active_baseline_id,
+        "active_window_id": active_window_id,
+        "research_panels": [
+            build_review_research_panel_preview(
+                baseline_review,
+                eyebrow="基准研究",
+                title="基准窗口",
+            ),
+            build_review_research_panel_preview(
+                latest_review,
+                eyebrow="对比窗口",
+                title="对比窗口",
+            ),
+        ],
+        "research_panels_deferred": False,
     }
 
 
@@ -7453,137 +8198,6 @@ def build_review_change_log(comparison_cards: list[dict[str, Any]]) -> dict[str,
     }
 
 
-def build_review_detail_view(
-    section_key: str,
-    label: str,
-    baseline_id: str | None = None,
-    window_id: str | None = None,
-) -> dict[str, Any]:
-    if section_key not in REVIEW_DETAIL_SECTIONS:
-        raise KeyError(f"unknown review section: {section_key}")
-
-    review_pair = resolve_review_pair(baseline_id=baseline_id, window_id=window_id)
-    baseline_review = review_pair["baseline_review"]
-    latest_review = review_pair["latest_review"]
-    active_baseline_id = review_pair["active_baseline_id"]
-    active_window_id = review_pair["active_window_id"]
-    available_reviews = review_pair["available_reviews"]
-
-    baseline_row = review_row_lookup(baseline_review, section_key, label)
-    latest_row = review_row_lookup(latest_review, section_key, label)
-    if not baseline_row and not latest_row:
-        raise KeyError(f"review row not found: {section_key} / {label}")
-
-    if active_baseline_id and active_window_id and active_baseline_id == active_window_id:
-        comparison_note = "当前基准窗口和对比窗口选的是同一份报告，变化值只剩定位作用，更适合先看原始行。"
-    else:
-        comparison_note = "这页只对比同一个分组；如果某一侧缺行，会明确展示为空，不把缺失误写成 0。"
-
-    if baseline_row and latest_row:
-        missing_note = None
-    elif baseline_row:
-        missing_note = "对比窗口里没有这条分组，说明它在当前切片中已经消失，或样本不足以进入统计。"
-    else:
-        missing_note = "基准窗口里没有这条分组，说明它是在后续窗口里才出现的新结构。"
-
-    return {
-        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "section_key": section_key,
-        "label": label,
-        "hero": {
-            "eyebrow": review_section_title(section_key),
-            "title": f"{review_section_title(section_key)} · {label}",
-            "summary": (
-                f"同一口径下，对比 {review_window_text(baseline_review)} 与 {review_window_text(latest_review)} 的净收益与胜率变化。"
-            ),
-        },
-        "selector_groups": build_review_selector_groups(
-            active_baseline_id,
-            active_window_id,
-            available_reviews,
-            url_builder=lambda baseline, window: review_detail_url(section_key, label, baseline, window),
-        ),
-        "comparison_note": comparison_note,
-        "missing_note": missing_note,
-        "source_cards": [
-            {
-                "label": "基准窗口",
-                "value": review_window_text(baseline_review),
-                "detail": detail_value((baseline_review or {}).get("generated_at")),
-            },
-            {
-                "label": "对比窗口",
-                "value": review_window_text(latest_review),
-                "detail": detail_value((latest_review or {}).get("generated_at")),
-            },
-            {
-                "label": "基准样本",
-                "value": detail_value((baseline_row or {}).get("sample_count")),
-                "detail": review_row_line(baseline_row),
-            },
-            {
-                "label": "对比样本",
-                "value": detail_value((latest_row or {}).get("sample_count")),
-                "detail": review_row_line(latest_row),
-            },
-        ],
-        "summary_cards": [
-            {
-                "label": "次日净变化",
-                "value": review_delta_label(review_delta(review_row_net_pct(latest_row, "next_day"), review_row_net_pct(baseline_row, "next_day"))),
-                "detail": f"{signed_pct(review_row_net_pct(baseline_row, 'next_day'))} -> {signed_pct(review_row_net_pct(latest_row, 'next_day'))}",
-            },
-            {
-                "label": "3日净变化",
-                "value": review_delta_label(review_delta(review_row_net_pct(latest_row, "day3"), review_row_net_pct(baseline_row, "day3"))),
-                "detail": f"{signed_pct(review_row_net_pct(baseline_row, 'day3'))} -> {signed_pct(review_row_net_pct(latest_row, 'day3'))}",
-            },
-            {
-                "label": "5日净变化",
-                "value": review_delta_label(review_delta(review_row_net_pct(latest_row, "day5"), review_row_net_pct(baseline_row, "day5"))),
-                "detail": f"{signed_pct(review_row_net_pct(baseline_row, 'day5'))} -> {signed_pct(review_row_net_pct(latest_row, 'day5'))}",
-            },
-            {
-                "label": "5日净胜率变化",
-                "value": review_delta_label(review_delta(review_win_net_pct(latest_row, "day5"), review_win_net_pct(baseline_row, "day5"))),
-                "detail": f"{signed_pct(review_win_net_pct(baseline_row, 'day5'))} -> {signed_pct(review_win_net_pct(latest_row, 'day5'))}",
-            },
-        ],
-        "comparison_panels": [
-            {
-                "title": "基准窗口",
-                "subtitle": review_window_text(baseline_review),
-                "cards": build_review_row_cards(baseline_row),
-                "empty": "基准窗口当前没有这条分组。",
-                "artifact_url": artifact_url((baseline_review or {}).get("path")),
-                "artifact_path": (baseline_review or {}).get("path"),
-            },
-            {
-                "title": "对比窗口",
-                "subtitle": review_window_text(latest_review),
-                "cards": build_review_row_cards(latest_row),
-                "empty": "对比窗口当前没有这条分组。",
-                "artifact_url": artifact_url((latest_review or {}).get("path")),
-                "artifact_path": (latest_review or {}).get("path"),
-            },
-        ],
-        "links": {
-            **today_nav_links(),
-            "review": review_page_with_params(active_baseline_id, active_window_id),
-            "self": review_detail_url(section_key, label, active_baseline_id, active_window_id),
-            "api_self": review_detail_url(section_key, label, active_baseline_id, active_window_id, api=True),
-        },
-        "artifacts": [
-            item
-            for item in (
-                artifact_from_path("基准研究", (baseline_review or {}).get("path"), key="review_baseline"),
-                artifact_from_path("对比研究", (latest_review or {}).get("path"), key="review_latest"),
-            )
-            if item
-        ],
-    }
-
-
 def build_watchlist_manager_view(watchlist: dict[str, Any] | None = None) -> dict[str, Any]:
     active_stocks = list_active_watchlist_stocks()
     archived_stocks = list_archived_watchlist_stocks()
@@ -7707,78 +8321,80 @@ def build_watchlist_manager_view(watchlist: dict[str, Any] | None = None) -> dic
     }
 
 
-def build_watchlist_day_over_day_diff(today: dict[str, Any] | None) -> dict[str, Any]:
-    """Resolve the previous dated snapshot and diff it against ``today``.
+def build_watchlist_manager_api_view() -> dict[str, Any]:
+    """Lightweight manager payload with snapshot context, without building the page."""
 
-    The page view always carries a ``diff`` field — when no previous
-    snapshot exists, the diff has empty change buckets but still records
-    today's trade date so the frontend can render a clean "first day, no
-    diff" empty state instead of being missing the field entirely.
-
-    Errors during previous-snapshot load are swallowed deliberately:
-    a stale or partially-written prior file should not block today's
-    page render.
-    """
-
-    if not today:
-        return diff_watchlist_snapshots({}, previous=None)
-
-    snapshot_path = today.get("snapshot_path")
-    previous_payload: dict[str, Any] | None = None
-    if snapshot_path:
-        try:
-            previous_path = resolve_previous_watchlist_snapshot_path(Path(snapshot_path))
-        except Exception:
-            previous_path = None
-        if previous_path is not None:
-            try:
-                previous_payload = load_watchlist_snapshot(path=str(previous_path))
-            except Exception:
-                previous_payload = None
-    return diff_watchlist_snapshots(today, previous=previous_payload)
+    trade_date_hint = expected_trade_date()
+    watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
+    return build_watchlist_manager_view(watchlist)
 
 
-def build_watchlist_page_view() -> dict[str, Any]:
+def _watchlist_source_cards(
+    *,
+    decision_brief: dict[str, Any] | None,
+    watchlist: dict[str, Any],
+    screening_batch: dict[str, Any] | None,
+    confirmation: dict[str, Any] | None,
+    brief_is_live: bool,
+) -> list[dict[str, Any]]:
+    stocks = watchlist.get("stocks") or []
+    in_discovery = sum(1 for item in stocks if find_screening_candidate(screening_batch, item.get("code") or ""))
+    in_midday = sum(1 for item in stocks if find_confirmation_match(confirmation, item.get("code") or ""))
+    return [
+        {
+            "label": "自选股快照",
+            "value": watchlist.get("generated_at") or "-",
+            "detail": watchlist.get("trade_date") or "暂无快照",
+        },
+        {
+            "label": "总控简报",
+            "value": (decision_brief or {}).get("generated_at") or "-",
+            "detail": "已同步" if brief_is_live else "数据偏旧",
+        },
+        {
+            "label": "观察池链路",
+            "value": str(in_discovery),
+            "detail": "进入早盘观察池链路的自选股数量",
+        },
+        {
+            "label": "午盘链路",
+            "value": str(in_midday),
+            "detail": "进入午盘承接链路的自选股数量",
+        },
+    ]
+
+
+def build_watchlist_source_cards_view() -> dict[str, Any]:
     trade_date_hint = expected_trade_date()
     decision_brief = safe_canonical_load(load_decision_brief, trade_date=trade_date_hint)
     watchlist = load_watchlist_snapshot(trade_date=trade_date_hint)
-    screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint)
-    confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
-    quality = safe_canonical_load(load_quality_status, lane="watchlist")
+    brief_is_live = bool((decision_brief or {}).get("trade_date") == trade_date_hint)
+    return {
+        "source_cards": [
+            {
+                "label": "自选股快照",
+                "value": watchlist.get("generated_at") or "-",
+                "detail": watchlist.get("trade_date") or "暂无快照",
+            },
+            {
+                "label": "总控简报",
+                "value": (decision_brief or {}).get("generated_at") or "-",
+                "detail": "已同步" if brief_is_live else "数据偏旧",
+            },
+        ]
+    }
 
-    readiness_for_page = compute_readiness(
-        watchlist=watchlist,
-        screening_batch=screening_batch,
-        confirmation=confirmation,
-        decision_brief=decision_brief,
-        quality_status=safe_canonical_load(load_quality_status, lane="all"),
-        account_book=load_account_book(),
-        today_action_decisions=load_today_action_decision_store(),
-        dataset_freshness=build_dataset_freshness_rows(
-            expected_date=trade_date_hint,
-            now=datetime.now(),
-        ),
-    )
-    expected_date_w = readiness_for_page["expected_trade_date"]
-    trade_date = readiness_for_page["data_trade_date"] or current_trade_date(watchlist, screening_batch, decision_brief)
-    brief_trade_date = (decision_brief or {}).get("trade_date")
-    brief_is_live = bool(readiness_for_page["brief_is_live"])
-    brief_focus = (((decision_brief or {}).get("focus") or {}).get("holding_focus") or []) if brief_is_live else []
-    avoid_points = (((decision_brief or {}).get("focus") or {}).get("avoid_points") or []) if brief_is_live else []
 
+def _watchlist_summary_groups(
+    *,
+    watchlist: dict[str, Any],
+    screening_batch: dict[str, Any] | None,
+    confirmation: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
     priority_codes = set(watchlist.get("priority_codes") or [])
     follow_codes = set(watchlist.get("follow_codes") or [])
     observe_codes = set(watchlist.get("observe_codes") or [])
     stocks = watchlist.get("stocks") or []
-
-    if brief_is_live:
-        hero_title = normalize_stock_ui_copy(((decision_brief or {}).get("summary") or {}).get("watchlist_summary")) or "先处理风险和仓位，再决定是否继续拿"
-        hero_summary = "当前页面优先展示完整持仓动作，只回答已有股票今天怎么管。"
-        context_note = f"总控持仓焦点：{'、'.join(brief_focus) if brief_focus else '暂无额外焦点'}。"
-    else:
-        hero_title = "先处理风险和仓位，再决定是否继续拿"
-        hero_summary = f"当前页面直接读取最新自选股快照，优先处理 {len(priority_codes)} 只，其余按轻仓跟踪和继续观察展开。"
-        context_note = "总控层若未更新到当日，持仓页仍以实时自选股快照为准。"
 
     groups = []
     for key, title, subtitle, empty_copy in (
@@ -7804,140 +8420,41 @@ def build_watchlist_page_view() -> dict[str, Any]:
                 "empty": empty_copy,
             }
         )
+    return groups
 
-    in_discovery = sum(1 for item in stocks if find_screening_candidate(screening_batch, item.get("code") or ""))
-    in_midday = sum(1 for item in stocks if find_confirmation_match(confirmation, item.get("code") or ""))
 
-    artifacts = [
-        artifact_from_path("自选股快照 JSON", watchlist.get("snapshot_path"), key="watchlist_snapshot"),
-        artifact_from_path("总控简报 JSON", ((decision_brief or {}).get("paths") or {}).get("source_json"), key="decision_brief"),
-        artifact_from_path("自选股质检 JSON", (quality or {}).get("path"), key="watchlist_quality"),
-    ]
-    links = {
-        **today_nav_links(),
-        "self": watchlist_page_url(),
-        "api_self": api_watchlist_page_url(),
-    }
-    source_cards = [
-        {
-            "label": "自选股快照",
-            "value": watchlist.get("generated_at") or "-",
-            "detail": watchlist.get("trade_date") or "暂无快照",
-        },
-        {
-            "label": "总控简报",
-            "value": (decision_brief or {}).get("generated_at") or "-",
-            "detail": "已同步" if brief_is_live else "数据偏旧",
-        },
-        {
-            "label": "观察池链路",
-            "value": str(in_discovery),
-            "detail": "进入早盘观察池链路的自选股数量",
-        },
-        {
-            "label": "午盘链路",
-            "value": str(in_midday),
-            "detail": "进入午盘承接链路的自选股数量",
-        },
-    ]
-    summary_cards = [
-        {
-            "label": "总股票数",
-            "value": str(watchlist.get("stock_count") or 0),
-            "detail": "当前自选股快照",
-        },
-        {
-            "label": "优先处理",
-            "value": str(len(priority_codes)),
-            "detail": "先处理风险与仓位",
-        },
-        {
-            "label": "跟踪增强",
-            "value": str(len(follow_codes)),
-            "detail": "允许轻仓跟踪",
-        },
-        {
-            "label": "继续观察",
-            "value": str(len(observe_codes)),
-            "detail": "等待更明确信号",
-        },
-    ]
-    priority_rows = compress_watchlist_group(
-        groups[0],
-        limit=3,
-        fallback_freshness=watchlist.get("generated_at") or "-",
-    )
-    follow_rows = compress_watchlist_group(
-        groups[1],
-        limit=3,
-        fallback_freshness=watchlist.get("generated_at") or "-",
-    )
-    observe_rows = compress_watchlist_group(
-        groups[2],
-        limit=3,
-        fallback_freshness=watchlist.get("generated_at") or "-",
-    )
-    quality_status = (quality or {}).get("validation_status")
-    quality_label = quality_status_label(quality_status)
-    quality_tone = quality_status_tone(quality_status)
-    status_strip = build_status_strip(
-        {
-            "label": "来源",
-            "value": "总控 + 快照" if brief_is_live else "实时快照",
-            "note": watchlist.get("generated_at") or "-",
-            "tone": "good" if brief_is_live else "warn",
-        },
-        {
-            "label": "质量",
-            "value": quality_label,
-            "note": ((quality or {}).get("checked_at")) or "待检查",
-            "tone": "risk" if quality_tone == "risk" else ("warn" if quality_tone == "watch" else "good"),
-        },
-        {
-            "label": "新鲜度",
-            "value": latest_source_freshness(source_cards),
-            "note": f"交易日 {trade_date}",
-            "tone": "good" if watchlist.get("generated_at") else "warn",
-        },
-    )
-    topline = {
-        "verdict_badge": "持仓判断",
-        "verdict_title": (
-            f"先处理 {len(priority_codes)} 只优先持仓，再看其余观察。"
-            if priority_codes
-            else "当前无强制优先持仓，先保持观察节奏。"
-        ),
-        "verdict_summary": (
-            "首屏只保留最靠前的持仓动作，其他管理与回源入口全部折叠到后续层。"
-        ),
-        "meta_pills": [
-            {"label": "交易日", "value": trade_date},
-            {"label": "持仓总数", "value": str(watchlist.get("stock_count") or 0)},
-            {"label": "优先处理", "value": str(len(priority_codes))},
-        ],
-        "cta_links": [
-            {"label": "去看其余持仓", "href": "#watchlist-follow"},
-            {"label": "去管理持仓名单", "href": "#watchlist-manager"},
-        ],
-    }
+def build_watchlist_summary_view() -> dict[str, Any]:
+    """Default research-watchlist payload without manager/diff diagnostics."""
 
-    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    trade_date_hint = expected_trade_date()
+    decision_brief = safe_canonical_load(load_decision_brief, trade_date=trade_date_hint)
+    watchlist = load_watchlist_snapshot(trade_date=trade_date_hint)
+    screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint)
+    confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
+
+    trade_date = current_trade_date(watchlist, screening_batch, decision_brief)
+    brief_is_live = bool((decision_brief or {}).get("trade_date") == trade_date_hint)
+    brief_focus = (((decision_brief or {}).get("focus") or {}).get("holding_focus") or []) if brief_is_live else []
+    avoid_points = (((decision_brief or {}).get("focus") or {}).get("avoid_points") or []) if brief_is_live else []
+    priority_codes = set(watchlist.get("priority_codes") or [])
+    follow_codes = set(watchlist.get("follow_codes") or [])
+    observe_codes = set(watchlist.get("observe_codes") or [])
+
+    if brief_is_live:
+        hero_title = normalize_stock_ui_copy(((decision_brief or {}).get("summary") or {}).get("watchlist_summary")) or "先处理风险和仓位，再决定是否继续拿"
+        hero_summary = "当前页面优先展示完整持仓动作，只回答已有股票今天怎么管。"
+        context_note = f"总控持仓焦点：{'、'.join(brief_focus) if brief_focus else '暂无额外焦点'}。"
+    else:
+        hero_title = "先处理风险和仓位，再决定是否继续拿"
+        hero_summary = f"当前页面直接读取最新自选股快照，优先处理 {len(priority_codes)} 只，其余按轻仓跟踪和继续观察展开。"
+        context_note = "总控层若未更新到当日，持仓页仍以实时自选股快照为准。"
 
     return {
-        "generated_at": generated_at,
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "display_date": current_display_date(),
         "trade_date": trade_date,
         "brief_is_live": brief_is_live,
-        "reading_compass": build_reading_compass_cards(
-            conclusion=topline.get("verdict_title"),
-            conclusion_detail=topline.get("verdict_summary"),
-            action_focus="优先处理 Top 3",
-            action_detail="先处理优先持仓，再看跟踪与观察，不在首屏把管理层混进来。",
-            risk_boundary=(status_strip[1].get("value") if len(status_strip) > 1 else "先核对质量"),
-            risk_detail=(status_strip[1].get("note") if len(status_strip) > 1 else "链路未确认前先不要扩动作。"),
-            evidence_entry="质检与原始数据",
-            evidence_detail="需要回看快照、质检和原始文件时，直接展开证据层。",
-        ),
+        "compact": True,
         "hero": {
             "title": hero_title,
             "summary": hero_summary,
@@ -7946,43 +8463,106 @@ def build_watchlist_page_view() -> dict[str, Any]:
             "stock_count": watchlist.get("stock_count") or 0,
             "priority_count": len(priority_codes),
         },
-        "source_cards": source_cards,
-        "summary_cards": summary_cards,
-        "groups": groups,
-        "topline": topline,
-        "priority_rows": priority_rows,
-        "follow_rows": follow_rows,
-        "observe_rows": observe_rows,
-        "status_strip": status_strip,
-        "follow_observe_count": groups[1]["count"] + groups[2]["count"],
+        "source_cards": _watchlist_source_cards(
+            decision_brief=decision_brief,
+            watchlist=watchlist,
+            screening_batch=screening_batch,
+            confirmation=confirmation,
+            brief_is_live=brief_is_live,
+        ),
+        "summary_cards": [
+            {
+                "label": "总股票数",
+                "value": str(watchlist.get("stock_count") or 0),
+                "detail": "当前自选股快照",
+            },
+            {
+                "label": "优先处理",
+                "value": str(len(priority_codes)),
+                "detail": "先处理风险与仓位",
+            },
+            {
+                "label": "跟踪增强",
+                "value": str(len(follow_codes)),
+                "detail": "允许轻仓跟踪",
+            },
+            {
+                "label": "继续观察",
+                "value": str(len(observe_codes)),
+                "detail": "等待更明确信号",
+            },
+        ],
+        "groups": _watchlist_summary_groups(
+            watchlist=watchlist,
+            screening_batch=screening_batch,
+            confirmation=confirmation,
+        ),
         "focus_tags": text_items(brief_focus),
         "avoid_points": text_items(avoid_points),
-        "day_over_day_diff": build_watchlist_day_over_day_diff(watchlist),
-        "manager": build_watchlist_manager_view(watchlist),
-        "confidence_switch": build_watchlist_confidence_switch(
-            decision_brief,
-            watchlist,
-            quality,
-            brief_is_live=brief_is_live,
-            links=links,
-        ),
-        "quality_card": lane_quality_card("自选股质检", quality),
-        "artifacts": [item for item in artifacts if item],
-        "links": links,
+        "manager_deferred": True,
+        "links_lazy": {
+            "manager": "/api/watchlist/manage",
+        },
+        "links": {
+            **today_nav_links(),
+            "self": watchlist_page_url(),
+            "api_self": api_watchlist_page_url(),
+            "api_manager": "/api/watchlist/manage",
+        },
     }
 
 
-def build_opportunities_view() -> dict[str, Any]:
+def _raw_opportunity_code(item: Mapping[str, Any]) -> str:
+    return str(item.get("code") or "").strip()
+
+
+def _merged_opportunity_count(raw_items: Sequence[Mapping[str, Any]], *lifecycle_groups: Mapping[str, Any]) -> int:
+    count = 0
+    seen_codes: set[str] = set()
+    for item in raw_items:
+        code = _raw_opportunity_code(item)
+        if code:
+            if code in seen_codes:
+                continue
+            seen_codes.add(code)
+        count += 1
+
+    for group in lifecycle_groups:
+        for item in group.get("cards") or []:
+            if not isinstance(item, Mapping):
+                continue
+            code = _raw_opportunity_code(item)
+            if code and code in seen_codes:
+                continue
+            if code:
+                seen_codes.add(code)
+            count += 1
+    return count
+
+
+def _opportunity_selected_group_key(
+    group_counts: Mapping[str, int],
+    requested_group: str | None,
+    fallback: str = "morning",
+) -> str:
+    requested = str(requested_group or "").strip()
+    if requested and requested in group_counts:
+        return requested
+    for key, count in group_counts.items():
+        if int(count or 0) > 0:
+            return key
+    return fallback
+
+
+def build_opportunities_source_cards_view() -> dict[str, Any]:
+    """Lightweight source-card payload for Discovery refresh status."""
+
     trade_date_hint = expected_trade_date()
     decision_brief = safe_canonical_load(load_decision_brief, trade_date=trade_date_hint)
     watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
-    screening_batch = load_screening_batch(trade_date=trade_date_hint)
+    screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint) or {}
     confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
-    aggressive_quality = safe_canonical_load(load_quality_status, lane="aggressive")
-    midday_quality = safe_canonical_load(load_quality_status, lane="midday_confirmation")
-    learning_index = build_review_learning_memory_index()
-
-    readiness_for_opps = compute_readiness(
+    readiness = compute_readiness(
         watchlist=watchlist,
         screening_batch=screening_batch,
         confirmation=confirmation,
@@ -7990,52 +8570,38 @@ def build_opportunities_view() -> dict[str, Any]:
         quality_status=safe_canonical_load(load_quality_status, lane="all"),
         account_book=load_account_book(),
         today_action_decisions=load_today_action_decision_store(),
-        dataset_freshness=build_dataset_freshness_rows(
-            expected_date=trade_date_hint,
-            now=datetime.now(),
-        ),
+        dataset_freshness=[],
+        formal_freshness=[],
     )
-    expected_date_o = readiness_for_opps["expected_trade_date"]
-    trade_date = readiness_for_opps["data_trade_date"] or current_trade_date(watchlist, screening_batch, decision_brief)
-    brief_trade_date = (decision_brief or {}).get("trade_date")
-    brief_is_live = bool(readiness_for_opps["brief_is_live"])
+    trade_date = readiness["data_trade_date"] or current_trade_date(watchlist, screening_batch, decision_brief)
+    brief_is_live = bool(readiness["brief_is_live"])
     gate = ((screening_batch.get("market_regime") or {}).get("execution_gate") or {})
-    summary = screening_batch.get("screening_summary") or {}
-    focus = (((decision_brief or {}).get("focus") or {}).get("opportunity_focus") or []) if brief_is_live else []
-    avoid_points = (((decision_brief or {}).get("focus") or {}).get("avoid_points") or []) if brief_is_live else []
 
-    approved = [item for item in (screening_batch.get("candidates") or []) if item.get("screening_status") == "approved"]
-    caution = [item for item in (screening_batch.get("candidates") or []) if item.get("screening_status") == "caution"]
-    confirmed = (confirmation or {}).get("confirmed") or []
-    fresh_candidates = (confirmation or {}).get("fresh_candidates") or []
-    downgraded = (confirmation or {}).get("downgraded") or []
+    return {
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "trade_date": trade_date,
+        "expected_trade_date": readiness["expected_trade_date"],
+        "data_trade_date": readiness["data_trade_date"],
+        "readiness_mode": readiness.get("readiness_mode"),
+        "source_cards": build_opportunities_source_cards(
+            screening_batch=screening_batch,
+            confirmation=confirmation,
+            decision_brief=decision_brief,
+            brief_is_live=brief_is_live,
+            gate=gate,
+        ),
+    }
 
-    if gate.get("allow_new_positions"):
-        hero_title = "今天值得继续盯的名字"
-    else:
-        hero_title = "阀门关闭，今天只保留观察名单"
 
-    hero_summary = (
-        normalize_stock_ui_copy(
-            gate.get("summary")
-            or (((decision_brief or {}).get("summary") or {}).get("gate_summary"))
-        )
-        or "这里只展示候选观察，不代表直接推荐开新仓。"
-    )
-    context_note = (
-        f"总控观察焦点：{'、'.join(focus) if focus else '暂无额外焦点'}。"
-        if brief_is_live
-        else "若总控层未更新到当日，这里仍以实时早盘扫描和午盘确认链路为准。"
-    )
-
-    artifacts = [
-        artifact_from_path("早盘批次 JSON", screening_batch.get("path"), key="screening_batch"),
-        artifact_from_path("午盘确认 JSON", (confirmation or {}).get("path"), key="confirmation"),
-        artifact_from_path("总控简报 JSON", ((decision_brief or {}).get("paths") or {}).get("source_json"), key="decision_brief"),
-        artifact_from_path("早盘质检 JSON", (aggressive_quality or {}).get("path"), key="aggressive_quality"),
-        artifact_from_path("午盘质检 JSON", (midday_quality or {}).get("path"), key="midday_quality"),
-    ]
-    source_cards = [
+def build_opportunities_source_cards(
+    *,
+    screening_batch: Mapping[str, Any],
+    confirmation: Mapping[str, Any] | None,
+    decision_brief: Mapping[str, Any] | None,
+    brief_is_live: bool,
+    gate: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    return [
         {
             "label": "早盘批次",
             "value": screening_batch.get("generated_at") or "-",
@@ -8057,67 +8623,410 @@ def build_opportunities_view() -> dict[str, Any]:
             "detail": gate.get("position_cap") or "仓位上限待定",
         },
     ]
+
+
+def build_opportunities_context_view() -> dict[str, Any]:
+    """Sidebar-only Discovery context without hydrating opportunity cards."""
+
+    trade_date_hint = expected_trade_date()
+    decision_brief = safe_canonical_load(load_decision_brief, trade_date=trade_date_hint)
+    watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
+    screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint) or {}
+    confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
+    readiness = compute_readiness(
+        watchlist=watchlist,
+        screening_batch=screening_batch,
+        confirmation=confirmation,
+        decision_brief=decision_brief,
+        quality_status=safe_canonical_load(load_quality_status, lane="all"),
+        account_book=load_account_book(),
+        today_action_decisions=load_today_action_decision_store(),
+        dataset_freshness=[],
+        formal_freshness=[],
+    )
+    trade_date = readiness["data_trade_date"] or current_trade_date(watchlist, screening_batch, decision_brief)
+    brief_is_live = bool(readiness["brief_is_live"])
+    gate = ((screening_batch.get("market_regime") or {}).get("execution_gate") or {})
+    lifecycle_context = resolve_lifecycle_context()
+    display_lifecycle = lifecycle_context["display_lifecycle"]
+    lifecycle_note = lifecycle_context["lifecycle_note"]
+    lifecycle_groups = [
+        build_discovery_lifecycle_group("continued", display_lifecycle),
+        build_discovery_lifecycle_group("upgraded", display_lifecycle),
+        build_discovery_lifecycle_group("downgraded", display_lifecycle),
+        build_discovery_lifecycle_group("entered", display_lifecycle),
+        build_discovery_lifecycle_group("exited", display_lifecycle),
+        build_discovery_lifecycle_group("handed_off", display_lifecycle),
+    ]
+    lifecycle_activity_count = sum(int(group.get("count") or 0) for group in lifecycle_groups)
+    learning_index = build_review_learning_memory_index()
+
+    return {
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "display_date": current_display_date(),
+        "trade_date": trade_date,
+        "source_cards": build_opportunities_source_cards(
+            screening_batch=screening_batch,
+            confirmation=confirmation,
+            decision_brief=decision_brief,
+            brief_is_live=brief_is_live,
+            gate=gate,
+        ),
+        "learning_memories": [
+            public_learning_memory_payload(memory)
+            for memory in global_learning_memories(learning_index, limit=3)
+        ],
+        "lifecycle_note": lifecycle_note,
+        "lifecycle_groups": public_lifecycle_groups_payload(lifecycle_groups),
+        "lifecycle_cards": [
+            {
+                "label": "追踪变动",
+                "value": str(lifecycle_activity_count),
+                "detail": detail_value((display_lifecycle or {}).get("current_timestamp"), "暂无生命周期快照"),
+            },
+            {
+                "label": "当前池",
+                "value": str((((display_lifecycle or {}).get("summary") or {}).get("current_pool_size")) or 0),
+                "detail": "当前 shortlist 大小",
+            },
+            {
+                "label": "上一池",
+                "value": str((((display_lifecycle or {}).get("summary") or {}).get("previous_pool_size")) or 0),
+                "detail": "上一轮对照快照",
+            },
+        ],
+        "theme_cards": build_theme_cards(screening_batch, limit=4),
+    }
+
+
+def build_yesterday_trial_review(
+    today_cards_by_code: dict[str, dict[str, Any]],
+    display_lifecycle: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Candidates that were trial-grade yesterday: are they still alive today?
+
+    Reconstructs yesterday's trial pool from the lifecycle delta groups:
+    - ``continued`` items carry ``prev_suggested_action`` (yesterday's action).
+    - ``upgraded`` items carry ``prev_suggested_action`` (trial → actionable).
+    - ``downgraded`` items carry ``prev_suggested_action`` (trial → observe/review/shadow).
+    - ``exited`` items carry ``suggested_action`` from the previous snapshot.
+
+    Returns a list of {code, name, yesterday_action, today_action_state, still_listed}.
+    """
+    if not display_lifecycle:
+        return []
+
+    groups = (display_lifecycle.get("groups") or {})
+    continued = groups.get("continued") or []
+    upgraded = groups.get("upgraded") or []
+    downgraded = groups.get("downgraded") or []
+    exited = groups.get("exited") or []
+
+    review: list[dict[str, Any]] = []
+    seen_codes: set[str] = set()
+
+    for item in continued:
+        code = item.get("code")
+        if not code or code in seen_codes:
+            continue
+        prev_action = str(item.get("prev_suggested_action") or "")
+        if prev_action != "trial":
+            continue
+        today = today_cards_by_code.get(code)
+        review.append({
+            "code": code,
+            "name": (today or item).get("name", code),
+            "yesterday_action": "trial",
+            "today_action_state": today["triage_action_state"] if today else "drop",
+            "still_listed": today is not None,
+        })
+        seen_codes.add(code)
+
+    # Upgraded and downgraded items also carry prev_suggested_action.
+    # A trial candidate that was upgraded (trial → actionable) or
+    # downgraded (trial → observe/review/shadow) must be surfaced too.
+    for item in upgraded:
+        code = item.get("code")
+        if not code or code in seen_codes:
+            continue
+        prev_action = str(item.get("prev_suggested_action") or "")
+        if prev_action != "trial":
+            continue
+        today = today_cards_by_code.get(code)
+        review.append({
+            "code": code,
+            "name": (today or item).get("name", code),
+            "yesterday_action": "trial",
+            "today_action_state": today["triage_action_state"] if today else "drop",
+            "still_listed": today is not None,
+        })
+        seen_codes.add(code)
+
+    for item in downgraded:
+        code = item.get("code")
+        if not code or code in seen_codes:
+            continue
+        prev_action = str(item.get("prev_suggested_action") or "")
+        if prev_action != "trial":
+            continue
+        today = today_cards_by_code.get(code)
+        review.append({
+            "code": code,
+            "name": (today or item).get("name", code),
+            "yesterday_action": "trial",
+            "today_action_state": today["triage_action_state"] if today else "drop",
+            "still_listed": today is not None,
+        })
+        seen_codes.add(code)
+
+    for item in exited:
+        code = item.get("code")
+        if not code or code in seen_codes:
+            continue
+        prev_action = str(item.get("suggested_action") or "")
+        if prev_action != "trial":
+            continue
+        # Exited candidates are, by definition, no longer in today's active
+        # shortlist — even if lifecycle merge injects them into the sidebar.
+        review.append({
+            "code": code,
+            "name": item.get("name", code),
+            "yesterday_action": "trial",
+            "today_action_state": "drop",
+            "still_listed": False,
+        })
+        seen_codes.add(code)
+
+    return review
+
+
+def build_opportunities_view(
+    *,
+    hydrate_all_groups: bool = True,
+    active_group_key: str | None = None,
+    include_context: bool = True,
+    include_lifecycle: bool = True,
+) -> dict[str, Any]:
+    trade_date_hint = expected_trade_date()
+    decision_brief = safe_canonical_load(load_decision_brief, trade_date=trade_date_hint)
+    watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
+    screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint) or {}
+    confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
+    learning_index = build_review_learning_memory_index() if include_context else None
+    # Discovery list cards are public payloads and intentionally do not expose
+    # card-level learning memories; keep the review-memory index for the
+    # sidebar only.
+    card_learning_index: dict[str, Any] | None = None
+    needs_lifecycle = bool(include_lifecycle or include_context)
+    lifecycle_context = resolve_lifecycle_context() if needs_lifecycle else {}
+    display_lifecycle = lifecycle_context.get("display_lifecycle")
+    lifecycle_note = lifecycle_context.get("lifecycle_note") or ""
+
+    readiness_for_opps = compute_readiness(
+        watchlist=watchlist,
+        screening_batch=screening_batch,
+        confirmation=confirmation,
+        decision_brief=decision_brief,
+        quality_status=safe_canonical_load(load_quality_status, lane="all"),
+        account_book=load_account_book(),
+        today_action_decisions=load_today_action_decision_store(),
+        dataset_freshness=[],
+        formal_freshness=[],
+    )
+    trade_date = readiness_for_opps["data_trade_date"] or current_trade_date(watchlist, screening_batch, decision_brief)
+    brief_is_live = bool(readiness_for_opps["brief_is_live"])
+    gate = ((screening_batch.get("market_regime") or {}).get("execution_gate") or {})
+    focus = (((decision_brief or {}).get("focus") or {}).get("opportunity_focus") or []) if brief_is_live else []
+
+    approved = [item for item in (screening_batch.get("candidates") or []) if item.get("screening_status") == "approved"]
+    caution = [item for item in (screening_batch.get("candidates") or []) if item.get("screening_status") == "caution"]
+    confirmed = (confirmation or {}).get("confirmed") or []
+    fresh_candidates = (confirmation or {}).get("fresh_candidates") or []
+    downgraded = (confirmation or {}).get("downgraded") or []
+    confirmed_with_context = sorted(
+        (
+            merge_confirmation_with_screening_candidate(
+                item,
+                find_screening_candidate(screening_batch, str(item.get("code") or "")),
+            )
+            for item in confirmed
+        ),
+        key=opportunity_candidate_rank_value,
+        reverse=True,
+    )
+
+    if gate.get("allow_new_positions"):
+        hero_title = "今天值得继续盯的名字"
+    else:
+        hero_title = "阀门关闭，今天只保留观察名单"
+
+    hero_summary = (
+        normalize_stock_ui_copy(
+            gate.get("summary")
+            or (((decision_brief or {}).get("summary") or {}).get("gate_summary"))
+        )
+        or "这里只展示候选观察，不代表直接推荐开新仓。"
+    )
+    context_note = (
+        f"总控观察焦点：{'、'.join(focus) if focus else '暂无额外焦点'}。"
+        if brief_is_live
+        else "若总控层未更新到当日，这里仍以实时早盘扫描和午盘确认链路为准。"
+    )
+
+    source_cards = build_opportunities_source_cards(
+        screening_batch=screening_batch,
+        confirmation=confirmation,
+        decision_brief=decision_brief,
+        brief_is_live=brief_is_live,
+        gate=gate,
+    )
+    lifecycle_groups = (
+        [
+            build_discovery_lifecycle_group("continued", display_lifecycle),
+            build_discovery_lifecycle_group("upgraded", display_lifecycle),
+            build_discovery_lifecycle_group("downgraded", display_lifecycle),
+            build_discovery_lifecycle_group("entered", display_lifecycle),
+            build_discovery_lifecycle_group("exited", display_lifecycle),
+            build_discovery_lifecycle_group("handed_off", display_lifecycle),
+        ]
+        if needs_lifecycle
+        else []
+    )
+    lifecycle_group_map = {group.get("key"): group for group in lifecycle_groups}
+    group_counts = {
+        "morning": len(approved),
+        "watching": len(caution),
+        "midday_new": len(fresh_candidates),
+        "upgrade": (
+            _merged_opportunity_count(
+                confirmed_with_context,
+                lifecycle_group_map.get("lifecycle_upgraded") or {},
+            )
+            if include_lifecycle
+            else len(confirmed_with_context)
+        ),
+        "eliminated": (
+            _merged_opportunity_count(
+                downgraded,
+                lifecycle_group_map.get("lifecycle_downgraded") or {},
+                lifecycle_group_map.get("lifecycle_exited") or {},
+            )
+            if include_lifecycle
+            else len(downgraded)
+        ),
+    }
+    selected_group_key = _opportunity_selected_group_key(group_counts, active_group_key)
+    hydrate_group_keys = set(group_counts) if hydrate_all_groups else {selected_group_key}
+
+    def should_hydrate_group(key: str) -> bool:
+        return hydrate_all_groups or key in hydrate_group_keys
+
     groups = [
         {
             "key": "morning",
             "title": "早盘进入",
-            "count": len(approved),
-            "cards": [build_screening_candidate_card(item, learning_index=learning_index) for item in approved],
+            "count": group_counts["morning"],
+            "cards": [
+                build_screening_candidate_card(item, learning_index=card_learning_index)
+                for item in approved
+            ]
+            if should_hydrate_group("morning")
+            else [],
             "empty": "当前没有早盘进入候选的名字。",
         },
         {
             "key": "watching",
             "title": "继续观察",
-            "count": len(caution),
-            "cards": [build_screening_candidate_card(item, learning_index=learning_index) for item in caution],
+            "count": group_counts["watching"],
+            "cards": [
+                build_screening_candidate_card(item, learning_index=card_learning_index)
+                for item in caution
+            ]
+            if should_hydrate_group("watching")
+            else [],
             "empty": "当前没有继续观察候选。",
         },
         {
             "key": "midday_new",
             "title": "午盘新增",
-            "count": len(fresh_candidates),
-            "cards": [build_confirmation_candidate_card(item, learning_index=learning_index) for item in fresh_candidates],
+            "count": group_counts["midday_new"],
+            "cards": [
+                build_confirmation_candidate_card(item, learning_index=card_learning_index)
+                for item in fresh_candidates
+            ]
+            if should_hydrate_group("midday_new")
+            else [],
             "empty": "当前没有午盘新增观察。",
         },
         {
             "key": "upgrade",
-            "title": "可升级",
-            "count": len(confirmed),
-            "cards": [build_confirmation_candidate_card(item, learning_index=learning_index) for item in confirmed],
-            "empty": "当前没有午盘仍可跟踪候选。",
+            "title": "结构验证/条件试错",
+            "count": group_counts["upgrade"],
+            "cards": annotate_opportunity_card_ranks(
+                [
+                    build_confirmation_candidate_card(item, learning_index=card_learning_index)
+                    for item in confirmed_with_context
+                ]
+            )
+            if should_hydrate_group("upgrade")
+            else [],
+            "empty": "当前没有需要结构验证或条件试错的候选。",
         },
         {
             "key": "eliminated",
             "title": "已淘汰",
-            "count": len(downgraded),
-            "cards": [build_confirmation_candidate_card(item, learning_index=learning_index) for item in downgraded],
+            "count": group_counts["eliminated"],
+            "cards": [
+                build_confirmation_candidate_card(item, learning_index=card_learning_index)
+                for item in downgraded
+            ]
+            if should_hydrate_group("eliminated")
+            else [],
             "empty": "当前没有需要剔除的候选。",
         },
     ]
-    quality_cards = [
-        lane_quality_card("早盘质检", aggressive_quality),
-        lane_quality_card("午盘质检", midday_quality),
-    ]
-
-    screening_freshness = screening_batch.get("generated_at") or "-"
-    confirmation_freshness = (confirmation or {}).get("generated_at") or screening_freshness
-    allow_new_positions = bool(gate.get("allow_new_positions"))
-    top_rows = []
-    promote_watch = not allow_new_positions
-    if allow_new_positions:
-        top_rows = compress_opportunity_group(groups[0], limit=3, fallback_freshness=screening_freshness)
-        promote_watch = len(top_rows) == 0
-    if promote_watch:
-        watch_mix = {
-            "cards": [
-                *(groups[1].get("cards") or []),
-                *(groups[2].get("cards") or []),
-                *(groups[3].get("cards") or []),
-            ]
+    if include_lifecycle and should_hydrate_group("upgrade"):
+        groups[3] = merge_opportunity_group_with_lifecycle(
+            groups[3],
+            lifecycle_group_map.get("lifecycle_upgraded") or {},
+        )
+        groups[3] = {
+            **groups[3],
+            "cards": annotate_opportunity_card_ranks(groups[3].get("cards") or []),
         }
-        top_rows = compress_opportunity_group(watch_mix, limit=3, fallback_freshness=confirmation_freshness)
+    if include_lifecycle and should_hydrate_group("eliminated"):
+        groups[4] = merge_opportunity_group_with_lifecycle(
+            groups[4],
+            lifecycle_group_map.get("lifecycle_downgraded") or {},
+            lifecycle_group_map.get("lifecycle_exited") or {},
+        )
+    lifecycle_activity_count = sum(int(group.get("count") or 0) for group in lifecycle_groups)
 
-    if allow_new_positions and not promote_watch:
+    allow_new_positions = bool(gate.get("allow_new_positions"))
+    opportunity_items = [*approved, *caution, *fresh_candidates, *confirmed_with_context]
+    v2_cards = [item for item in opportunity_items if v2_suggested_action(item)]
+    v2_action_counts = {
+        action: sum(1 for card in v2_cards if v2_suggested_action(card) == action)
+        for action in V2_ACTION_ORDER
+    }
+    v2_hard_blocked = sum(1 for card in v2_cards if v2_hard_gate_blocks_action(card))
+    promote_watch = not allow_new_positions
+    if v2_cards:
+        top_items = sorted(v2_cards, key=v2_candidate_sort_key, reverse=True)[:3]
+        promote_watch = not any(v2_task_tone(item) == "positive" for item in top_items)
+    elif allow_new_positions:
+        promote_watch = len(approved) == 0
+
+    if v2_action_counts.get("actionable") and allow_new_positions:
+        verdict_title = f"V2 找到 {v2_action_counts['actionable']} 只可执行待复核，但仍按硬闸门裁决。"
+        verdict_summary = "先看结构假设、触发位、失效位和硬闸门封顶；公共分数只作为证据，不再单独决定买入。"
+    elif v2_action_counts.get("trial") and allow_new_positions:
+        verdict_title = f"V2 找到 {v2_action_counts['trial']} 只条件试错，未触发前不买。"
+        verdict_summary = "这些票有结构假设，但必须等承接/资金/价格触发，同时失效条件要写清楚。"
+    elif v2_cards:
+        verdict_title = "V2 只给出观察/影子/复核线索，今天没有直接买入候选。"
+        verdict_summary = "当前结构还缺确认，或被硬闸门封顶；先跟踪假设是否继续成立。"
+    elif allow_new_positions and not promote_watch:
         verdict_title = "今天继续看观察名单，如要动作也仅限轻仓试错。"
         verdict_summary = "先看最值得继续观察的三只名字，再决定是否扩展到其余观察与午盘承接。"
     elif allow_new_positions:
@@ -8127,81 +9036,18 @@ def build_opportunities_view() -> dict[str, Any]:
         verdict_title = "今天先看观察名单，不急着开新仓。"
         verdict_summary = "进攻阀门关闭，先看观察与午盘承接，不主动开新仓。"
 
-    quality_ok = sum(1 for item in quality_cards if str(item.get("status") or "").strip().lower() == "ok")
-    quality_tone = "good" if quality_ok >= 2 else ("warn" if quality_ok == 1 else "risk")
-    status_strip = build_status_strip(
-        {
-            "label": "来源",
-            "value": "总控 + 实时链路" if brief_is_live else "实时链路",
-            "note": (decision_brief or {}).get("generated_at") or screening_batch.get("generated_at") or "-",
-            "tone": "good" if brief_is_live else "warn",
-        },
-        {
-            "label": "质量",
-            "value": f"{quality_ok}/2 就绪",
-            "note": "早盘+午盘质检",
-            "tone": quality_tone,
-        },
-        {
-            "label": "新鲜度",
-            "value": latest_source_freshness(source_cards),
-            "note": f"交易日 {trade_date}",
-            "tone": "good" if screening_batch.get("generated_at") else "warn",
-        },
-    )
-    secondary_groups = [
-        {
-            "title": groups[1]["title"],
-            "count": groups[1]["count"],
-            "rows": compress_opportunity_group(groups[1], limit=3, fallback_freshness=screening_freshness),
-            "empty": groups[1]["empty"],
-        },
-        {
-            "title": groups[2]["title"],
-            "count": groups[2]["count"],
-            "rows": compress_opportunity_group(groups[2], limit=3, fallback_freshness=confirmation_freshness),
-            "empty": groups[2]["empty"],
-        },
-        {
-            "title": groups[3]["title"],
-            "count": groups[3]["count"],
-            "rows": compress_opportunity_group(groups[3], limit=3, fallback_freshness=confirmation_freshness),
-            "empty": groups[3]["empty"],
-        },
-        {
-            "title": groups[4]["title"],
-            "count": groups[4]["count"],
-            "rows": compress_opportunity_group(groups[4], limit=3, fallback_freshness=confirmation_freshness),
-            "empty": groups[4]["empty"],
-        },
-    ]
-    links = {
-        **today_nav_links(),
-        "self": opportunities_page_url(),
-        "api_self": api_opportunities_page_url(),
-    }
-
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    return {
+    response = {
         "generated_at": generated_at,
         "display_date": current_display_date(),
         "trade_date": trade_date,
+        "valve_status": gate.get("status") or "off",
+        "expected_trade_date": readiness_for_opps.get("expected_trade_date"),
+        "data_trade_date": readiness_for_opps.get("data_trade_date"),
+        "readiness_mode": readiness_for_opps.get("readiness_mode"),
+        "readiness": public_opportunities_readiness(readiness_for_opps),
         "brief_is_live": brief_is_live,
-        "reading_compass": build_reading_compass_cards(
-            conclusion=verdict_title,
-            conclusion_detail=verdict_summary,
-            action_focus="Top 3 继续观察",
-            action_detail=(
-                "先看优先观察的名字，再决定是否展开观察与午盘承接。"
-                if not promote_watch
-                else "今天先保留观察与午盘承接，不主动切到新仓执行。"
-            ),
-            risk_boundary=(gate.get("label") or "实时阀门"),
-            risk_detail=(gate.get("position_cap") or "先按阀门控制动作节奏。"),
-            evidence_entry="质检与原始数据",
-            evidence_detail="主线、质检和原始批次都放在证据层，需要时再展开核对。",
-        ),
         "hero": {
             "title": hero_title,
             "summary": hero_summary,
@@ -8211,28 +9057,6 @@ def build_opportunities_view() -> dict[str, Any]:
             "main_theme": (((screening_batch.get("market_themes") or {}).get("top_theme")) or "暂无主线"),
         },
         "source_cards": source_cards,
-        "summary_cards": [
-            {
-                "label": "必须复核",
-                "value": str(len(caution) + len(fresh_candidates) + len(confirmed)),
-                "detail": "今天需要看完的观察任务",
-            },
-            {
-                "label": "午盘新增",
-                "value": str((confirmation or {}).get("counts", {}).get("fresh_candidates") or len(fresh_candidates)),
-                "detail": "午盘新进入观察视野",
-            },
-            {
-                "label": "可升级",
-                "value": str((confirmation or {}).get("counts", {}).get("confirmed") or len(confirmed)),
-                "detail": "承接仍成立，等待阀门",
-            },
-            {
-                "label": "应剔除",
-                "value": str((confirmation or {}).get("counts", {}).get("downgraded") or len(downgraded)),
-                "detail": "失效或降级的观察项",
-            },
-        ],
         "topline": {
             "verdict_badge": "观察池结论",
             "verdict_title": verdict_title,
@@ -8240,7 +9064,9 @@ def build_opportunities_view() -> dict[str, Any]:
             "meta_pills": [
                 {"label": "交易日", "value": trade_date},
                 {"label": "进攻阀门", "value": gate.get("label") or "实时判断"},
-                {"label": "早盘候选", "value": str(len(groups[0].get("cards") or []))},
+                {"label": "早盘候选", "value": str(group_counts["morning"])},
+                {"label": "V2 可执行/试错", "value": f"{v2_action_counts.get('actionable') or 0}/{v2_action_counts.get('trial') or 0}"},
+                {"label": "延续追踪", "value": str(lifecycle_activity_count)},
             ],
             "cta_links": [
                 {"label": "去看其余观察", "href": "#opportunities-secondary"},
@@ -8248,36 +9074,80 @@ def build_opportunities_view() -> dict[str, Any]:
                 {"label": "去看证据来源", "href": "#opportunities-support"},
             ],
         },
-        "top_rows": top_rows,
-        "promote_watch": promote_watch,
-        "status_strip": status_strip,
-        "learning_memories": global_learning_memories(learning_index, limit=3),
-        "learning_memory_summary": {
-            "case_count": len(learning_index.get("cases") or []),
-            "pattern_count": len(learning_index.get("patterns") or []),
-            "error": learning_index.get("error"),
-        },
-        "secondary_groups": secondary_groups,
-        "secondary_total": sum(int(item.get("count") or 0) for item in secondary_groups),
-        "theme_cards": build_theme_cards(screening_batch, limit=4),
-        "groups": groups,
-        "focus_tags": text_items(focus),
-        "avoid_points": text_items(avoid_points),
-        "confidence_switch": build_opportunities_confidence_switch(
-            decision_brief,
-            screening_batch,
-            aggressive_quality,
-            midday_quality,
-            brief_is_live=brief_is_live,
-            links=links,
-        ),
-        "quality_cards": quality_cards,
-        "artifacts": [item for item in artifacts if item],
-        "links": links,
+        "groups": public_opportunity_groups_payload(groups),
     }
+    if include_context:
+        response.update(
+            {
+                "learning_memories": [
+                    public_learning_memory_payload(memory)
+                    for memory in global_learning_memories(learning_index, limit=3)
+                ],
+                "lifecycle_note": lifecycle_note,
+                "lifecycle_groups": public_lifecycle_groups_payload(lifecycle_groups),
+                "lifecycle_cards": [
+                    {
+                        "label": "追踪变动",
+                        "value": str(lifecycle_activity_count),
+                        "detail": detail_value((display_lifecycle or {}).get("current_timestamp"), "暂无生命周期快照"),
+                    },
+                    {
+                        "label": "当前池",
+                        "value": str((((display_lifecycle or {}).get("summary") or {}).get("current_pool_size")) or 0),
+                        "detail": "当前 shortlist 大小",
+                    },
+                    {
+                        "label": "上一池",
+                        "value": str((((display_lifecycle or {}).get("summary") or {}).get("previous_pool_size")) or 0),
+                        "detail": "上一轮对照快照",
+                    },
+                ],
+                "theme_cards": build_theme_cards(screening_batch, limit=4),
+            }
+        )
+    # --- Stamp triage fields on every candidate card (Discovery Triage Funnel A5) ---
+    from screener.triage import triage_fields_for_card  # type: ignore  # noqa: E402
+    _valve_status = gate.get("status") or "off"
+    _trust_payload = readiness_for_opps.get("trust_level") or {}
+    _can_trade_live = bool(_trust_payload.get("can_trade_live"))
+    _trust_level = str(_trust_payload.get("level") or "unreliable")
+    for _group in response.get("groups") or []:
+        _eliminated = _group.get("key") == "eliminated"
+        for _card in _group.get("cards", []):
+            _card.update(
+                triage_fields_for_card(
+                    _card,
+                    valve_status=_valve_status,
+                    can_trade_live=_can_trade_live,
+                    trust_level=_trust_level,
+                    eliminated=_eliminated,
+                    legacy=not _card.get("suggested_action"),
+                )
+            )
+    # --- Stamp theme-internal RS + theme_in_play (Discovery Triage Funnel C1a) ---
+    from screener.triage import assign_theme_ranks as _assign_theme_ranks  # type: ignore  # noqa: E402
+    _all_cards = [
+        _card for _group in (response.get("groups") or []) for _card in _group.get("cards", [])
+    ]
+    _assign_theme_ranks(_all_cards)
+    for _card in _all_cards:
+        _theme_phase = str(_card.get("theme_phase_value") or "").strip()
+        _card["triage_theme_in_play"] = _theme_phase not in ("", "exited")
+    # --- Yesterday trial-grade review (Discovery Triage Funnel P1 C2a) ---
+    _today_by_code = {_card.get("code"): _card for _card in _all_cards if _card.get("code")}
+    response["yesterday_trial_review"] = build_yesterday_trial_review(
+        _today_by_code, display_lifecycle
+    )
+    return response
 
 
-def build_review_view(baseline_id: str | None = None, window_id: str | None = None) -> dict[str, Any]:
+def build_review_view(
+    baseline_id: str | None = None,
+    window_id: str | None = None,
+    *,
+    include_evidence: bool = True,
+    include_shadow_replay: bool = True,
+) -> dict[str, Any]:
     lifecycle_context = resolve_lifecycle_context()
     latest_lifecycle = lifecycle_context["latest_lifecycle"]
     active_lifecycle = lifecycle_context["active_lifecycle"]
@@ -8324,21 +9194,16 @@ def build_review_view(baseline_id: str | None = None, window_id: str | None = No
     else:
         comparison_note = "变化卡只用于看同一口径下优势是否改善，不代表实盘可直接放宽执行。"
 
-    artifacts = []
-    seen_paths: set[str] = set()
-    for title, path, key in (
-        ("最新变化回放 JSON", (latest_lifecycle or {}).get("path"), "lifecycle_latest"),
-        ("最近有动作的变化回放 JSON", (active_lifecycle or {}).get("path"), "lifecycle_active"),
-        ("基准窗口研究", (baseline_review or {}).get("path"), "review_baseline"),
-        ("对比窗口研究", (latest_review or {}).get("path"), "review_latest"),
-    ):
-        item = artifact_from_path(title, path, key=key)
-        if not item:
-            continue
-        if item["path"] in seen_paths:
-            continue
-        seen_paths.add(item["path"])
-        artifacts.append(item)
+    artifacts = (
+        build_review_artifacts(
+            latest_lifecycle=latest_lifecycle,
+            active_lifecycle=active_lifecycle,
+            baseline_review=baseline_review,
+            latest_review=latest_review,
+        )
+        if include_evidence
+        else []
+    )
 
     selector_groups = build_review_selector_groups(
         active_baseline_id,
@@ -8439,24 +9304,9 @@ def build_review_view(baseline_id: str | None = None, window_id: str | None = No
         build_lifecycle_group("entered", display_lifecycle),
         build_lifecycle_group("upgraded", display_lifecycle),
         build_lifecycle_group("downgraded", display_lifecycle),
+        build_lifecycle_group("continued", display_lifecycle),
         build_lifecycle_group("exited", display_lifecycle),
         build_lifecycle_group("handed_off", display_lifecycle),
-    ]
-    research_panels = [
-        build_review_panel(
-            baseline_review,
-            eyebrow="基准研究",
-            title="基准窗口",
-            baseline_id=active_baseline_id,
-            window_id=active_window_id,
-        ),
-        build_review_panel(
-            latest_review,
-            eyebrow="对比窗口",
-            title="对比窗口",
-            baseline_id=active_baseline_id,
-            window_id=active_window_id,
-        ),
     ]
     source_cards = build_review_source_cards(
         latest_lifecycle=latest_lifecycle,
@@ -8465,11 +9315,8 @@ def build_review_view(baseline_id: str | None = None, window_id: str | None = No
         latest_review=latest_review,
     )
     freshness_alerts = build_review_freshness_alerts(source_cards)
-    shadow_replay = build_shadow_replay_review_summary()
-
-    return {
+    response = {
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "shadow_replay": shadow_replay,
         "freshness_alerts": freshness_alerts,
         "freshness_summary": {
             "stale_count": sum(1 for card in source_cards if card.get("stale")),
@@ -8530,7 +9377,6 @@ def build_review_view(baseline_id: str | None = None, window_id: str | None = No
         "verdict_note": "把基准窗口与对比窗口先翻成当前判断，先看这里，再决定要不要往下拆细节。",
         "verdict_cards": verdict_cards,
         "selector_groups": selector_groups,
-        "source_cards": source_cards,
         "summary_cards": [
             {
                 "label": "基准 AI 5日净",
@@ -8616,14 +9462,24 @@ def build_review_view(baseline_id: str | None = None, window_id: str | None = No
             },
         ],
         "lifecycle_groups": lifecycle_groups,
-        "research_panels": research_panels,
-        "artifacts": artifacts,
+        "research_panels_deferred": True,
         "links": links,
     }
+    if include_evidence:
+        response["source_cards"] = source_cards
+        response["artifacts"] = artifacts
+    if include_shadow_replay:
+        response["shadow_replay"] = build_shadow_replay_review_summary()
+    return response
 
 
-def build_watchlist_detail_view(code: str) -> dict[str, Any]:
-    trade_date_hint = expected_trade_date()
+def build_watchlist_detail_view(
+    code: str,
+    trade_date: str | None = None,
+    *,
+    include_learning_memories: bool = True,
+) -> dict[str, Any]:
+    trade_date_hint = str(trade_date or "").strip() or expected_trade_date()
     snapshot = load_watchlist_snapshot(code=code, trade_date=trade_date_hint)
     stocks = snapshot.get("stocks") or []
     if not stocks:
@@ -8644,13 +9500,15 @@ def build_watchlist_detail_view(code: str) -> dict[str, Any]:
     confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
     candidate = safe_canonical_load(find_candidate_detail, code=stock.get("code"), trade_date=trade_date_hint)
     confirmation_match = find_confirmation_match(confirmation, stock.get("code") or "")
-    learning_index = build_review_learning_memory_index()
-    learning_memories = candidate_learning_memories(
-        stock,
-        lane="watchlist",
-        learning_index=learning_index,
-        limit=3,
-    )
+    learning_memories: list[dict[str, Any]] = []
+    if include_learning_memories:
+        learning_index = build_review_learning_memory_index()
+        learning_memories = candidate_learning_memories(
+            stock,
+            lane="watchlist",
+            learning_index=learning_index,
+            limit=3,
+        )
 
     related_status = [
         {
@@ -8696,13 +9554,12 @@ def build_watchlist_detail_view(code: str) -> dict[str, Any]:
         updated_at=snapshot.get("generated_at") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     )
 
-    return {
+    response = {
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "trade_date": snapshot.get("trade_date"),
         "code": stock.get("code"),
         "name": stock.get("name"),
         "tone": action_tone(stock.get("action")),
-        "learning_memories": learning_memories,
         "hero": {
             "title": f"{stock.get('name')} {stock.get('code')}",
             "summary": normalize_stock_result_copy(reason, "先按持仓链路理解这只股票。"),
@@ -8808,20 +9665,27 @@ def build_watchlist_detail_view(code: str) -> dict[str, Any]:
         "links": {
             **today_nav_links(),
             "self": today_watchlist_detail_url(stock.get("code")),
-            "api_self": api_today_watchlist_detail_url(stock.get("code")),
             "ask": ask_page_url(stock.get("code")),
             "candidate_detail": today_candidate_detail_url(stock.get("code")) if candidate else None,
         },
     }
+    if include_learning_memories:
+        response["learning_memories"] = learning_memories
+    return response
 
 
-def build_candidate_detail_view(code: str) -> dict[str, Any]:
-    trade_date_hint = expected_trade_date()
+def build_candidate_detail_view(
+    code: str,
+    trade_date: str | None = None,
+    *,
+    include_learning_memories: bool = True,
+) -> dict[str, Any]:
+    trade_date_hint = str(trade_date or "").strip() or expected_trade_date()
     candidate = find_candidate_detail(code=code, trade_date=trade_date_hint)
     screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint)
     confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
     watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
-    learning_index = build_review_learning_memory_index()
+    learning_index = build_review_learning_memory_index() if include_learning_memories else None
 
     watchlist_stock = find_watchlist_stock(watchlist, candidate.get("code") or "")
     confirmation_match = find_confirmation_match(confirmation, candidate.get("code") or "")
@@ -8829,11 +9693,13 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
     consistency = candidate.get("consistency") or {}
     capital_flow = candidate.get("capital_flow") or {}
     entry_plan = candidate.get("entry_plan") or {}
+    factor_payload = candidate_factor_payload(candidate)
+    primary_risk = factor_payload.get("block_reason") or factor_payload.get("degrade_reason") or candidate.get("main_risk")
     in_screening = any(item.get("code") == candidate.get("code") for item in ((screening_batch or {}).get("candidates") or []))
     summary = (
         candidate.get("entry_reason")
         or candidate.get("screening_note")
-        or candidate.get("main_risk")
+        or primary_risk
         or candidate.get("watch_condition")
         or "等待更多确认"
     )
@@ -8860,29 +9726,23 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
             title=candidate.get("name"),
         ),
         position_guidance=entry_plan.get("sizing") or (watchlist_stock or {}).get("position") or "轻仓试错",
-        risk_boundary=(entry_plan.get("invalidate") or ((entry_plan.get("levels") or {}).get("invalidate")) or candidate.get("main_risk")),
+        risk_boundary=(entry_plan.get("invalidate") or ((entry_plan.get("levels") or {}).get("invalidate")) or primary_risk),
         why_now=summary,
         continue_condition=entry_plan.get("trigger") or candidate.get("watch_condition"),
-        stop_condition=entry_plan.get("invalidate") or ((entry_plan.get("levels") or {}).get("invalidate")) or candidate.get("main_risk"),
+        stop_condition=entry_plan.get("invalidate") or ((entry_plan.get("levels") or {}).get("invalidate")) or primary_risk,
         next_step=entry_plan.get("action") or entry_plan.get("trigger") or "先观察，不急着执行",
         trigger_condition=entry_plan.get("trigger") or candidate.get("watch_condition"),
-        avoid_action=entry_plan.get("avoid") or candidate.get("main_risk"),
+        avoid_action=entry_plan.get("avoid") or primary_risk,
         evidence_entry="看动作计划与原始文件",
         confidence_note="先用入选主因判断今天值不值得继续跟。",
         updated_at=(screening_batch or {}).get("generated_at") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     )
-    return {
+    response = {
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "trade_date": current_trade_date(watchlist, screening_batch, None),
         "code": candidate.get("code"),
         "name": candidate.get("name"),
         "tone": candidate_tone((confirmation_match or {}).get("item") or candidate),
-        "learning_memories": candidate_learning_memories(
-            (confirmation_match or {}).get("item") or candidate,
-            lane="midday_confirmation" if confirmation_match else "aggressive",
-            learning_index=learning_index,
-            limit=3,
-        ),
         "hero": {
             "title": f"{candidate.get('name')} {candidate.get('code')}",
             "summary": normalize_stock_result_copy(summary, "先按观察池链路理解这只股票。"),
@@ -8919,15 +9779,15 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
             conclusion_detail=summary,
             position=(entry_plan.get("sizing") or (watchlist_stock or {}).get("position") or "轻仓试错"),
             position_detail="按动作计划控仓，没进持仓前默认以试错仓参考。",
-            risk_boundary=(entry_plan.get("invalidate") or ((entry_plan.get("levels") or {}).get("invalidate")) or candidate.get("main_risk")),
-            risk_detail=(entry_plan.get("avoid") or candidate.get("main_risk") or "触发回避条件后，取消这次执行计划。"),
+            risk_boundary=(entry_plan.get("invalidate") or ((entry_plan.get("levels") or {}).get("invalidate")) or primary_risk),
+            risk_detail=(entry_plan.get("avoid") or primary_risk or "触发回避条件后，取消这次执行计划。"),
             next_step=entry_plan.get("action") or entry_plan.get("trigger") or "先观察，不急着执行",
             next_step_detail=entry_plan.get("trigger") or candidate.get("watch_condition") or "先等触发条件更清晰，再决定是否执行。",
         ),
         "decision_explanation": build_detail_explanation_block(
             why=summary,
-            risk=entry_plan.get("avoid") or candidate.get("main_risk"),
-            invalid=entry_plan.get("invalidate") or ((entry_plan.get("levels") or {}).get("invalidate")) or candidate.get("main_risk"),
+            risk=entry_plan.get("avoid") or primary_risk,
+            invalid=entry_plan.get("invalidate") or ((entry_plan.get("levels") or {}).get("invalidate")) or primary_risk,
         ),
         "execution_loop": build_execution_loop(
             action_now=entry_plan.get("action") or "先观察，不急着执行",
@@ -8935,8 +9795,8 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
             why_now=summary,
             why_detail="先用入选主因判断今天值不值得继续跟。",
             trigger=entry_plan.get("trigger") or candidate.get("watch_condition"),
-            trigger_detail="满足触发条件后，再把观察升级成下一步动作。",
-            avoid=entry_plan.get("avoid") or candidate.get("main_risk"),
+            trigger_detail="满足触发条件后，再评估是否进入下一步动作。",
+            avoid=entry_plan.get("avoid") or primary_risk,
             avoid_detail="这些情况先不做，避免把候选误当成直接推荐。",
             evidence="看动作计划与原始文件",
             evidence_detail="先看动作计划和资金承接，需要时回到批次、自选股或午盘确认原件。",
@@ -8957,6 +9817,18 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
                 "value": detail_value((watchlist_stock or {}).get("action"), "未进入"),
                 "detail": detail_value((watchlist_stock or {}).get("position"), "当前不在自选股快照"),
             },
+        ] + [
+            {
+                "label": card.get("label") or card.get("dataset") or "风险证据",
+                "value": card.get("risk_level") or card.get("risk_label") or "-",
+                "detail": card.get("detail") or card.get("decision_use") or "",
+                "dataset": card.get("dataset"),
+                "decision_use": card.get("decision_use"),
+                "live_permission": card.get("live_permission"),
+                "available": True,
+            }
+            for card in (factor_payload.get("risk_source_cards") or [])[:4]
+            if isinstance(card, Mapping)
         ],
         "metric_cards": [
             {
@@ -8983,7 +9855,7 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
         "plan_rows": [
             {"label": "动作", "value": detail_value(entry_plan.get("action"), "当前没有单独动作计划")},
             {"label": "触发", "value": detail_value(entry_plan.get("trigger"), candidate.get("watch_condition"))},
-            {"label": "回避", "value": detail_value(entry_plan.get("avoid"), candidate.get("main_risk"))},
+            {"label": "回避", "value": detail_value(entry_plan.get("avoid"), primary_risk)},
             {"label": "失效", "value": detail_value(entry_plan.get("invalidate"))},
             {"label": "仓位", "value": detail_value(entry_plan.get("sizing"))},
         ],
@@ -9005,7 +9877,13 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
             },
             {
                 "title": "风险提示",
-                "items": text_items(candidate.get("risk_flags")),
+                "items": opportunity_risk_tags(
+                    factor_payload.get("block_reason"),
+                    factor_payload.get("degrade_reason"),
+                    factor_payload.get("factor_risk_flags"),
+                    candidate.get("risk_flags"),
+                    limit=6,
+                ),
                 "empty": "当前没有额外风险提示。",
             },
             {
@@ -9037,84 +9915,176 @@ def build_candidate_detail_view(code: str) -> dict[str, Any]:
             },
         ],
         "artifacts": [item for item in artifacts if item],
+        "tushare_factors": public_tushare_factor_summary(candidate),
+        "tushare_score": candidate.get("tushare_score"),
+        "factor_tags": candidate.get("factor_tags") or [],
+        "factor_risk_flags": candidate.get("factor_risk_flags") or [],
+        "factor_explanation": candidate.get("factor_explanation") or {},
+        "risk_level": factor_payload.get("risk_level"),
+        "risk_items": factor_payload.get("risk_items") or [],
+        "degrade_reason": factor_payload.get("degrade_reason") or "",
+        "block_reason": factor_payload.get("block_reason") or "",
+        "risk_evidence_refs": factor_payload.get("risk_evidence_refs") or [],
+        "risk_source_cards": factor_payload.get("risk_source_cards") or [],
         "links": {
             **today_nav_links(),
             "self": today_candidate_detail_url(candidate.get("code")),
-            "api_self": api_today_candidate_detail_url(candidate.get("code")),
             "ask": ask_page_url(candidate.get("code")),
             "watchlist_detail": today_watchlist_detail_url(candidate.get("code")) if watchlist_stock else None,
         },
     }
+    if include_learning_memories:
+        response["learning_memories"] = candidate_learning_memories(
+            (confirmation_match or {}).get("item") or candidate,
+            lane="midday_confirmation" if confirmation_match else "aggressive",
+            learning_index=learning_index,
+            limit=3,
+        )
+    return response
 
 
-def build_stock_profile_view(code: str) -> dict[str, Any]:
+def _stock_profile_code_variants(code: str | None) -> set[str]:
     normalized_code = str(code or "").strip()
     if not normalized_code:
-        raise KeyError("stock code missing")
+        return set()
 
-    trade_date_hint = expected_trade_date()
-    decision_brief = safe_canonical_load(load_decision_brief, trade_date=trade_date_hint)
-    watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
-    screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint)
-    confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
-    quality_status = safe_canonical_load(load_quality_status, lane="all")
-    account_book = load_account_book()
-    today_action_decisions = load_today_action_decision_store()
-    readiness = compute_readiness(
-        watchlist=watchlist,
-        screening_batch=screening_batch,
-        confirmation=confirmation,
-        decision_brief=decision_brief,
-        quality_status=quality_status,
-        account_book=account_book,
-        today_action_decisions=today_action_decisions,
-        dataset_freshness=build_dataset_freshness_rows(
-            expected_date=trade_date_hint,
-            now=datetime.now(),
-        ),
-    )
-    action_groups = build_today_action_groups(
-        watchlist,
-        screening_batch,
-        confirmation,
-        decision_brief,
-        quality_status,
-        brief_is_live=bool(readiness.get("brief_is_live")),
-        gate=(((screening_batch or {}).get("market_regime") or {}).get("execution_gate") or {}),
-    )
-    profile_trade_date = readiness.get("data_trade_date") or current_trade_date(watchlist, screening_batch, decision_brief)
-    today_context = {
-        "trade_date": profile_trade_date,
-        "expected_trade_date": readiness.get("expected_trade_date"),
-        "action_queue": build_today_action_queue(
-            action_groups,
-            profile_trade_date,
-            account_book=account_book,
-            expected_trade_date=str(readiness.get("expected_trade_date") or ""),
-            readiness_mode=str(readiness.get("readiness_mode") or "blocked"),
-            readiness_ready=bool(readiness.get("ready")),
-        ),
-        "action_groups": action_groups,
+    variants = {normalized_code}
+    lower_code = normalized_code.lower()
+    if lower_code != normalized_code:
+        variants.add(lower_code)
+
+    market_match = re.fullmatch(r"(sh|sz)(\d{6})", lower_code)
+    if market_match:
+        variants.add(market_match.group(2))
+        return variants
+
+    if re.fullmatch(r"\d{6}", normalized_code):
+        try:
+            variants.add(infer_sina_code(normalized_code))
+        except ValueError:
+            pass
+    return variants
+
+
+def clear_stock_profile_cache(
+    code: str | None = None,
+    *,
+    sections: Sequence[str] | None = None,
+    clear_base_context: bool = True,
+) -> None:
+    code_variants = _stock_profile_code_variants(code)
+    section_names = {str(section or "").strip() for section in (sections or []) if str(section or "").strip()}
+    if not code_variants and not section_names:
+        _STOCK_PROFILE_CACHE.clear()
+        _STOCK_PROFILE_BASE_CONTEXT_CACHE.clear()
+        return
+
+    for key in list(_STOCK_PROFILE_CACHE):
+        section, cached_code, _trade_date = key
+        if code_variants and cached_code not in code_variants:
+            continue
+        if section_names and section not in section_names:
+            continue
+        _STOCK_PROFILE_CACHE.pop(key, None)
+    if clear_base_context:
+        for key in list(_STOCK_PROFILE_BASE_CONTEXT_CACHE):
+            if code_variants and key[0] not in code_variants:
+                continue
+            _STOCK_PROFILE_BASE_CONTEXT_CACHE.pop(key, None)
+
+
+def stock_profile_cache_stats() -> dict[str, Any]:
+    return {
+        "enabled": STOCK_PROFILE_CACHE_TTL_SECONDS > 0,
+        "ttl_seconds": STOCK_PROFILE_CACHE_TTL_SECONDS,
+        "items": len(_STOCK_PROFILE_CACHE),
+        "base_context": {
+            "enabled": STOCK_PROFILE_BASE_CONTEXT_CACHE_TTL_SECONDS > 0,
+            "ttl_seconds": STOCK_PROFILE_BASE_CONTEXT_CACHE_TTL_SECONDS,
+            "items": len(_STOCK_PROFILE_BASE_CONTEXT_CACHE),
+        },
     }
 
-    errors: dict[str, str] = {}
-    watchlist_detail: dict[str, Any] | None = None
-    opportunity_detail: dict[str, Any] | None = None
 
-    try:
-        watchlist_detail = build_watchlist_detail_view(normalized_code)
-    except Exception as exc:
-        errors["watchlist"] = str(exc)
+def _stock_profile_trade_date_hint(trade_date: str | None = None) -> str:
+    normalized = str(trade_date or "").strip()
+    return normalized or expected_trade_date()
 
-    try:
-        opportunity_detail = build_candidate_detail_view(normalized_code)
-    except Exception as exc:
-        errors["opportunity"] = str(exc)
 
-    primary_source = "watchlist" if watchlist_detail else ("opportunity" if opportunity_detail else None)
-    primary_detail = watchlist_detail or opportunity_detail
-    catalog_entry = (build_stock_catalog(watchlist, screening_batch, confirmation).get(normalized_code) or {})
-    recent_entry = next(
+def _stock_profile_cache_key(section: str, code: str, trade_date: str) -> tuple[str, str, str]:
+    return (str(section or "").strip(), str(code or "").strip(), str(trade_date or "").strip())
+
+
+def _get_stock_profile_cache(section: str, code: str, trade_date: str) -> dict[str, Any] | None:
+    if STOCK_PROFILE_CACHE_TTL_SECONDS <= 0:
+        return None
+    key = _stock_profile_cache_key(section, code, trade_date)
+    cached = _STOCK_PROFILE_CACHE.get(key)
+    if not cached:
+        return None
+    stored_at, payload = cached
+    if time.monotonic() - stored_at > STOCK_PROFILE_CACHE_TTL_SECONDS:
+        _STOCK_PROFILE_CACHE.pop(key, None)
+        return None
+    return deepcopy(payload)
+
+
+def _set_stock_profile_cache(section: str, code: str, trade_date: str, payload: dict[str, Any]) -> dict[str, Any]:
+    if STOCK_PROFILE_CACHE_TTL_SECONDS > 0:
+        _STOCK_PROFILE_CACHE[_stock_profile_cache_key(section, code, trade_date)] = (
+            time.monotonic(),
+            deepcopy(payload),
+        )
+    return payload
+
+
+def _stock_profile_base_context_cache_key(code: str, trade_date: str) -> tuple[str, str]:
+    return (str(code or "").strip(), str(trade_date or "").strip())
+
+
+def _get_stock_profile_base_context_cache(code: str, trade_date: str) -> dict[str, Any] | None:
+    if STOCK_PROFILE_BASE_CONTEXT_CACHE_TTL_SECONDS <= 0:
+        return None
+    key = _stock_profile_base_context_cache_key(code, trade_date)
+    cached = _STOCK_PROFILE_BASE_CONTEXT_CACHE.get(key)
+    if not cached:
+        return None
+    stored_at, payload = cached
+    if time.monotonic() - stored_at > STOCK_PROFILE_BASE_CONTEXT_CACHE_TTL_SECONDS:
+        _STOCK_PROFILE_BASE_CONTEXT_CACHE.pop(key, None)
+        return None
+    return dict(payload)
+
+
+def _set_stock_profile_base_context_cache(code: str, trade_date: str, payload: dict[str, Any]) -> dict[str, Any]:
+    if STOCK_PROFILE_BASE_CONTEXT_CACHE_TTL_SECONDS > 0:
+        # Base context contains read-only canonical snapshots. Return a shallow
+        # copy so per-slice memoized fields do not mutate the cached container.
+        _STOCK_PROFILE_BASE_CONTEXT_CACHE[_stock_profile_base_context_cache_key(code, trade_date)] = (
+            time.monotonic(),
+            dict(payload),
+        )
+    return dict(payload)
+
+
+def _stock_profile_context_has_identity(context: dict[str, Any]) -> bool:
+    return bool(context.get("_identity_loaded"))
+
+
+def _stock_profile_enrich_identity(
+    context: dict[str, Any],
+    normalized_code: str,
+    trade_date_hint: str,
+) -> dict[str, Any]:
+    if _stock_profile_context_has_identity(context):
+        return dict(context)
+
+    watchlist = context.get("watchlist") if isinstance(context.get("watchlist"), dict) else None
+    screening_batch = context.get("screening_batch") if isinstance(context.get("screening_batch"), dict) else None
+    confirmation = context.get("confirmation") if isinstance(context.get("confirmation"), dict) else None
+    enriched = dict(context)
+    enriched["catalog_entry"] = (build_stock_catalog(watchlist, screening_batch, confirmation).get(normalized_code) or {})
+    enriched["recent_entry"] = next(
         (
             item
             for item in reversed(load_ask_recent_store().get("items") or [])
@@ -9122,13 +10092,380 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
         ),
         {},
     )
-    profile_name = first_text(
-        (primary_detail or {}).get("name"),
-        catalog_entry.get("name") if catalog_entry.get("name") != normalized_code else None,
-        recent_entry.get("name") if recent_entry.get("name") != normalized_code else None,
-        (load_ask_case_cache(normalized_code) or {}).get("name"),
+    ask_case = load_ask_case_cache(normalized_code) or {}
+    enriched["ask_case"] = ask_case if isinstance(ask_case, dict) else {}
+    enriched["_identity_loaded"] = True
+    return _set_stock_profile_base_context_cache(normalized_code, trade_date_hint, enriched)
+
+
+def _cached_stock_profile_payload(
+    section: str,
+    code: str,
+    trade_date: str | None,
+    builder,
+) -> dict[str, Any]:
+    normalized_code = str(code or "").strip()
+    if not normalized_code:
+        raise KeyError("stock code missing")
+    trade_date_hint = _stock_profile_trade_date_hint(trade_date)
+    cached = _get_stock_profile_cache(section, normalized_code, trade_date_hint)
+    if cached is not None:
+        return cached
+    return _set_stock_profile_cache(
+        section,
+        normalized_code,
+        trade_date_hint,
+        builder(normalized_code, trade_date_hint),
     )
-    today_action = build_today_action_context(normalized_code, today=today_context, account_book=account_book)
+
+
+def _stock_profile_base_context(
+    code: str,
+    trade_date: str | None = None,
+    *,
+    include_identity: bool = True,
+) -> dict[str, Any]:
+    normalized_code = str(code or "").strip()
+    if not normalized_code:
+        raise KeyError("stock code missing")
+
+    trade_date_hint = _stock_profile_trade_date_hint(trade_date)
+    cached = _get_stock_profile_base_context_cache(normalized_code, trade_date_hint)
+    if cached is not None:
+        if include_identity:
+            return _stock_profile_enrich_identity(cached, normalized_code, trade_date_hint)
+        return cached
+
+    now = datetime.now()
+    readiness_expected_date = expected_trade_date(now)
+    if trade_date_hint == readiness_expected_date:
+        base = _today_base_inputs()
+        decision_brief = base.get("decision_brief") if isinstance(base.get("decision_brief"), dict) else None
+        watchlist = base.get("watchlist") if isinstance(base.get("watchlist"), dict) else None
+        screening_batch = base.get("screening_batch") if isinstance(base.get("screening_batch"), dict) else None
+        confirmation = base.get("confirmation") if isinstance(base.get("confirmation"), dict) else None
+        quality_status = base.get("quality_status") if isinstance(base.get("quality_status"), dict) else None
+        account_book = base.get("account_book") if isinstance(base.get("account_book"), dict) else load_account_book()
+        today_action_decisions = (
+            base.get("today_action_decisions")
+            if isinstance(base.get("today_action_decisions"), dict)
+            else load_today_action_decision_store()
+        )
+        readiness = base.get("readiness") if isinstance(base.get("readiness"), dict) else {}
+        profile_trade_date = base.get("trade_date") or readiness.get("data_trade_date") or current_trade_date(watchlist, screening_batch, decision_brief)
+        generated_at = str(base.get("generated_at") or now.strftime("%Y-%m-%d %H:%M:%S"))
+    else:
+        decision_brief = safe_canonical_load(load_decision_brief, trade_date=trade_date_hint)
+        watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
+        screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint)
+        confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
+        quality_status = safe_canonical_load(load_quality_status, lane="all")
+        account_book = load_account_book()
+        today_action_decisions = load_today_action_decision_store()
+        readiness = compute_readiness(
+            watchlist=watchlist,
+            screening_batch=screening_batch,
+            confirmation=confirmation,
+            decision_brief=decision_brief,
+            quality_status=quality_status,
+            account_book=account_book,
+            today_action_decisions=today_action_decisions,
+            dataset_freshness=build_dataset_freshness_rows(
+                expected_date=readiness_expected_date,
+                now=now,
+            ),
+            formal_freshness=build_formal_freshness_rows(
+                expected_date=readiness_expected_date,
+                now=now,
+            ),
+            now=now,
+            expected_date=readiness_expected_date,
+        )
+        profile_trade_date = readiness.get("data_trade_date") or current_trade_date(watchlist, screening_batch, decision_brief)
+        generated_at = now.strftime("%Y-%m-%d %H:%M:%S")
+    payload = {
+        "code": normalized_code,
+        "trade_date_hint": trade_date_hint,
+        "generated_at": generated_at,
+        "decision_brief": decision_brief,
+        "watchlist": watchlist,
+        "screening_batch": screening_batch,
+        "confirmation": confirmation,
+        "quality_status": quality_status,
+        "account_book": account_book,
+        "today_action_decisions": today_action_decisions,
+        "readiness": readiness,
+        "profile_trade_date": profile_trade_date,
+    }
+    payload = _set_stock_profile_base_context_cache(normalized_code, trade_date_hint, payload)
+    if include_identity:
+        return _stock_profile_enrich_identity(payload, normalized_code, trade_date_hint)
+    return payload
+
+
+def _stock_profile_action_groups(context: dict[str, Any]) -> list[dict[str, Any]]:
+    action_groups = context.get("action_groups")
+    if isinstance(action_groups, list):
+        return action_groups
+
+    readiness = context["readiness"] if isinstance(context.get("readiness"), dict) else {}
+    screening_batch = context.get("screening_batch") if isinstance(context.get("screening_batch"), dict) else None
+    action_groups = build_today_action_groups(
+        context.get("watchlist") if isinstance(context.get("watchlist"), dict) else None,
+        screening_batch,
+        context.get("confirmation") if isinstance(context.get("confirmation"), dict) else None,
+        context.get("decision_brief") if isinstance(context.get("decision_brief"), dict) else None,
+        context.get("quality_status") if isinstance(context.get("quality_status"), dict) else None,
+        brief_is_live=bool(readiness.get("brief_is_live")),
+        gate=(((screening_batch or {}).get("market_regime") or {}).get("execution_gate") or {}),
+    )
+    context["action_groups"] = action_groups
+    return action_groups
+
+
+def _stock_profile_today_context(context: dict[str, Any]) -> dict[str, Any]:
+    today_context = context.get("today_context")
+    if isinstance(today_context, dict):
+        return today_context
+
+    readiness = context["readiness"] if isinstance(context.get("readiness"), dict) else {}
+    profile_trade_date = str(context.get("profile_trade_date") or "")
+    action_groups = _stock_profile_action_groups(context)
+    today_context = {
+        "trade_date": profile_trade_date,
+        "expected_trade_date": readiness.get("expected_trade_date"),
+        "action_queue": build_today_action_queue(
+            action_groups,
+            profile_trade_date,
+            account_book=context.get("account_book") if isinstance(context.get("account_book"), dict) else None,
+            today_action_decisions=(
+                context.get("today_action_decisions")
+                if isinstance(context.get("today_action_decisions"), dict)
+                else None
+            ),
+            expected_trade_date=str(readiness.get("expected_trade_date") or ""),
+            readiness_mode=str(readiness.get("readiness_mode") or "blocked"),
+            readiness_ready=bool(readiness.get("ready")),
+        ),
+        "action_groups": action_groups,
+    }
+    context["today_context"] = today_context
+    return today_context
+
+
+def _stock_profile_name(
+    normalized_code: str,
+    *,
+    primary_detail: dict[str, Any] | None,
+    watchlist_stock: dict[str, Any] | None = None,
+    opportunity_stock: dict[str, Any] | None = None,
+    catalog_entry: dict[str, Any] | None = None,
+    recent_entry: dict[str, Any] | None = None,
+    ask_case: dict[str, Any] | None = None,
+) -> str | None:
+    return first_text(
+        (primary_detail or {}).get("name"),
+        (watchlist_stock or {}).get("name"),
+        (opportunity_stock or {}).get("name"),
+        (catalog_entry or {}).get("name") if (catalog_entry or {}).get("name") != normalized_code else None,
+        (recent_entry or {}).get("name") if (recent_entry or {}).get("name") != normalized_code else None,
+        (ask_case or {}).get("name") if (ask_case or {}).get("name") != normalized_code else None,
+    )
+
+
+def _stock_profile_public_detail(detail: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(detail, dict):
+        return detail
+    payload = deepcopy(detail)
+    for key in (
+        "action_tier_legend",
+        "artifacts",
+        "block_reason",
+        "capital_cards",
+        "degrade_reason",
+        "decision_explanation",
+        "factor_explanation",
+        "factor_risk_flags",
+        "factor_tags",
+        "links",
+        "meta_cards",
+        "metric_cards",
+        "plan_rows",
+        "related_status",
+        "risk_evidence_refs",
+        "risk_items",
+        "risk_level",
+        "risk_source_cards",
+        "source_cards",
+        "triggers",
+        "tushare_factors",
+        "tushare_score",
+    ):
+        payload.pop(key, None)
+    return payload
+
+
+def _stock_profile_source_details(
+    normalized_code: str,
+    trade_date_hint: str,
+    *,
+    include_learning_memories: bool,
+) -> tuple[dict[str, str], dict[str, Any] | None, dict[str, Any] | None]:
+    cache_section = "source-details:learning" if include_learning_memories else "source-details"
+    cached = _get_stock_profile_cache(cache_section, normalized_code, trade_date_hint)
+    if cached is not None:
+        return (
+            dict(cached.get("errors") or {}),
+            cached.get("watchlist_detail") if isinstance(cached.get("watchlist_detail"), dict) else None,
+            cached.get("opportunity_detail") if isinstance(cached.get("opportunity_detail"), dict) else None,
+        )
+
+    errors: dict[str, str] = {}
+    watchlist_detail: dict[str, Any] | None = None
+    opportunity_detail: dict[str, Any] | None = None
+
+    try:
+        watchlist_detail = build_watchlist_detail_view(
+            normalized_code,
+            trade_date=trade_date_hint,
+            include_learning_memories=include_learning_memories,
+        )
+    except Exception as exc:
+        errors["watchlist"] = str(exc)
+
+    try:
+        opportunity_detail = build_candidate_detail_view(
+            normalized_code,
+            trade_date=trade_date_hint,
+            include_learning_memories=include_learning_memories,
+        )
+    except Exception as exc:
+        errors["opportunity"] = str(exc)
+
+    _set_stock_profile_cache(
+        cache_section,
+        normalized_code,
+        trade_date_hint,
+        {
+            "errors": errors,
+            "watchlist_detail": watchlist_detail,
+            "opportunity_detail": opportunity_detail,
+        },
+    )
+    return errors, watchlist_detail, opportunity_detail
+
+
+def _stock_profile_detail_payload(
+    normalized_code: str,
+    trade_date_hint: str,
+    *,
+    include_learning_memories: bool | None = None,
+) -> dict[str, Any]:
+    context = _stock_profile_base_context(normalized_code, trade_date_hint, include_identity=False)
+    generated_at = str(context["generated_at"])
+    readiness = context["readiness"]
+    hydrate_learning_memories = False if include_learning_memories is None else include_learning_memories
+
+    errors, watchlist_detail, opportunity_detail = _stock_profile_source_details(
+        normalized_code,
+        trade_date_hint,
+        include_learning_memories=hydrate_learning_memories,
+    )
+
+    primary_source = "watchlist" if watchlist_detail else ("opportunity" if opportunity_detail else None)
+    raw_primary_detail = watchlist_detail or opportunity_detail
+    primary_detail = _stock_profile_public_detail(raw_primary_detail)
+    profile_name = _stock_profile_name(
+        normalized_code,
+        primary_detail=raw_primary_detail,
+    )
+    if not profile_name:
+        context = _stock_profile_enrich_identity(context, normalized_code, trade_date_hint)
+        profile_name = _stock_profile_name(
+            normalized_code,
+            primary_detail=raw_primary_detail,
+            catalog_entry=context.get("catalog_entry") if isinstance(context.get("catalog_entry"), dict) else None,
+            recent_entry=context.get("recent_entry") if isinstance(context.get("recent_entry"), dict) else None,
+            ask_case=context.get("ask_case") if isinstance(context.get("ask_case"), dict) else None,
+        )
+    available_sources = [
+        key
+        for key, detail in (
+            ("watchlist", watchlist_detail),
+            ("opportunity", opportunity_detail),
+        )
+        if detail
+    ]
+
+    payload = {
+        "generated_at": generated_at,
+        "code": normalized_code,
+        "name": profile_name,
+        "trade_date": (primary_detail or {}).get("trade_date"),
+        "expected_trade_date": readiness.get("expected_trade_date"),
+        "data_trade_date": readiness.get("data_trade_date"),
+        "readiness": public_stock_profile_readiness(readiness),
+        "primary_source": primary_source,
+        "primary_source_label": {
+            "watchlist": "自选股链路",
+            "opportunity": "观察池链路",
+        }.get(str(primary_source or ""), "未命中详情"),
+        "primary_detail": primary_detail,
+        "available_sources": available_sources,
+        "errors": errors,
+        "links": {
+            "self": f"/stock/{normalized_code}",
+            "api_self": f"/api/stock/{normalized_code}/detail",
+            "api_detail": f"/api/stock/{normalized_code}/detail",
+            "api_evidence": f"/api/stock/{normalized_code}/evidence",
+            "api_secondary": f"/api/stock/{normalized_code}/secondary",
+            "api_formal_data_summary": f"/api/stock/{normalized_code}/formal-data/summary",
+            "api_formal_data_full": f"/api/stock/{normalized_code}/formal-data/full",
+            "api_today_action": f"/api/stock/{normalized_code}/today-action",
+            "api_learning_scorecard": f"/api/stock/{normalized_code}/learning-scorecard",
+            "watchlist_detail": today_watchlist_detail_url(normalized_code) if watchlist_detail else None,
+            "opportunity_detail": today_candidate_detail_url(normalized_code) if opportunity_detail else None,
+            "ask": ask_page_url(normalized_code),
+        },
+    }
+    return payload
+
+
+def build_stock_profile_detail_view(code: str, trade_date: str | None = None) -> dict[str, Any]:
+    return _cached_stock_profile_payload(
+        "detail-compact",
+        code,
+        trade_date,
+        lambda normalized_code, trade_date_hint: _stock_profile_detail_payload(
+            normalized_code,
+            trade_date_hint,
+        ),
+    )
+
+
+def _stock_profile_evidence_payload(normalized_code: str, trade_date_hint: str) -> dict[str, Any]:
+    context = _stock_profile_base_context(normalized_code, trade_date_hint, include_identity=False)
+    readiness = context["readiness"]
+    errors, watchlist_detail, opportunity_detail = _stock_profile_source_details(
+        normalized_code,
+        trade_date_hint,
+        include_learning_memories=False,
+    )
+    primary_source = "watchlist" if watchlist_detail else ("opportunity" if opportunity_detail else None)
+    primary_detail = watchlist_detail or opportunity_detail
+    profile_name = _stock_profile_name(
+        normalized_code,
+        primary_detail=primary_detail,
+    )
+    if not profile_name:
+        context = _stock_profile_enrich_identity(context, normalized_code, trade_date_hint)
+        profile_name = _stock_profile_name(
+            normalized_code,
+            primary_detail=primary_detail,
+            catalog_entry=context.get("catalog_entry") if isinstance(context.get("catalog_entry"), dict) else None,
+            recent_entry=context.get("recent_entry") if isinstance(context.get("recent_entry"), dict) else None,
+            ask_case=context.get("ask_case") if isinstance(context.get("ask_case"), dict) else None,
+        )
     available_sources = [
         key
         for key, detail in (
@@ -9139,40 +10476,553 @@ def build_stock_profile_view(code: str) -> dict[str, Any]:
     ]
 
     return {
-        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "generated_at": str(context["generated_at"]),
         "code": normalized_code,
         "name": profile_name,
         "trade_date": (primary_detail or {}).get("trade_date"),
         "expected_trade_date": readiness.get("expected_trade_date"),
         "data_trade_date": readiness.get("data_trade_date"),
-        "readiness": readiness,
         "primary_source": primary_source,
         "primary_source_label": {
             "watchlist": "自选股链路",
             "opportunity": "观察池链路",
         }.get(str(primary_source or ""), "未命中详情"),
-        "primary_detail": primary_detail,
         "available_sources": available_sources,
-        "watchlist": watchlist_detail,
-        "opportunity": opportunity_detail,
-        "today_action": today_action,
+        "source_cards": list((primary_detail or {}).get("source_cards") or []),
+        "artifacts": list((primary_detail or {}).get("artifacts") or []),
         "errors": errors,
         "links": {
             "self": f"/stock/{normalized_code}",
-            "api_self": f"/api/stock/{normalized_code}",
+            "api_self": f"/api/stock/{normalized_code}/evidence",
+            "api_detail": f"/api/stock/{normalized_code}/detail",
+            "api_formal_data_summary": f"/api/stock/{normalized_code}/formal-data/summary",
             "watchlist_detail": today_watchlist_detail_url(normalized_code) if watchlist_detail else None,
             "opportunity_detail": today_candidate_detail_url(normalized_code) if opportunity_detail else None,
+        },
+    }
+
+
+def build_stock_profile_evidence_view(code: str, trade_date: str | None = None) -> dict[str, Any]:
+    return _cached_stock_profile_payload("evidence", code, trade_date, _stock_profile_evidence_payload)
+
+
+def _stock_profile_secondary_payload(normalized_code: str, trade_date_hint: str) -> dict[str, Any]:
+    context = _stock_profile_base_context(normalized_code, trade_date_hint, include_identity=False)
+    readiness = context["readiness"]
+    errors, watchlist_detail, opportunity_detail = _stock_profile_source_details(
+        normalized_code,
+        trade_date_hint,
+        include_learning_memories=False,
+    )
+    primary_source = "watchlist" if watchlist_detail else ("opportunity" if opportunity_detail else None)
+    primary_detail = watchlist_detail or opportunity_detail
+    profile_name = _stock_profile_name(
+        normalized_code,
+        primary_detail=primary_detail,
+    )
+    if not profile_name:
+        context = _stock_profile_enrich_identity(context, normalized_code, trade_date_hint)
+        profile_name = _stock_profile_name(
+            normalized_code,
+            primary_detail=primary_detail,
+            catalog_entry=context.get("catalog_entry") if isinstance(context.get("catalog_entry"), dict) else None,
+            recent_entry=context.get("recent_entry") if isinstance(context.get("recent_entry"), dict) else None,
+            ask_case=context.get("ask_case") if isinstance(context.get("ask_case"), dict) else None,
+        )
+    available_sources = [
+        key
+        for key, detail in (
+            ("watchlist", watchlist_detail),
+            ("opportunity", opportunity_detail),
+        )
+        if detail
+    ]
+    secondary_detail = {
+        key: deepcopy(primary_detail[key])
+        for key in (
+            "generated_at",
+            "trade_date",
+            "code",
+            "name",
+            "tone",
+            "metric_cards",
+            "meta_cards",
+            "level_cards",
+            "capital_cards",
+            "plan_rows",
+            "plan_levels",
+            "insight_groups",
+            "triggers",
+        )
+        if isinstance(primary_detail, dict) and key in primary_detail
+    } if primary_detail else None
+
+    return {
+        "generated_at": str(context["generated_at"]),
+        "code": normalized_code,
+        "name": profile_name,
+        "trade_date": (primary_detail or {}).get("trade_date"),
+        "expected_trade_date": readiness.get("expected_trade_date"),
+        "data_trade_date": readiness.get("data_trade_date"),
+        "primary_source": primary_source,
+        "primary_source_label": {
+            "watchlist": "自选股链路",
+            "opportunity": "观察池链路",
+        }.get(str(primary_source or ""), "未命中详情"),
+        "available_sources": available_sources,
+        "secondary_detail": secondary_detail,
+        "errors": errors,
+        "links": {
+            "self": f"/stock/{normalized_code}",
+            "api_self": f"/api/stock/{normalized_code}/secondary",
+            "api_detail": f"/api/stock/{normalized_code}/detail",
+            "watchlist_detail": today_watchlist_detail_url(normalized_code) if watchlist_detail else None,
+            "opportunity_detail": today_candidate_detail_url(normalized_code) if opportunity_detail else None,
+        },
+    }
+
+
+def build_stock_profile_secondary_view(code: str, trade_date: str | None = None) -> dict[str, Any]:
+    return _cached_stock_profile_payload("secondary", code, trade_date, _stock_profile_secondary_payload)
+
+
+def _stock_profile_summary_payload(normalized_code: str, trade_date_hint: str) -> dict[str, Any]:
+    context = _stock_profile_base_context(normalized_code, trade_date_hint, include_identity=False)
+    readiness = context["readiness"]
+    watchlist = context["watchlist"]
+    screening_batch = context["screening_batch"]
+    confirmation = context["confirmation"]
+    decision_brief = context["decision_brief"]
+    watchlist_stock = find_watchlist_stock(watchlist, normalized_code)
+    screening_candidate = find_screening_candidate(screening_batch, normalized_code)
+    confirmation_match = find_confirmation_match(confirmation, normalized_code)
+    opportunity_stock = screening_candidate or ((confirmation_match or {}).get("item") if confirmation_match else None)
+    primary_source = "watchlist" if watchlist_stock else ("opportunity" if opportunity_stock else None)
+    profile_name = _stock_profile_name(
+        normalized_code,
+        primary_detail=None,
+        watchlist_stock=watchlist_stock,
+        opportunity_stock=opportunity_stock,
+    )
+    if not profile_name:
+        context = _stock_profile_enrich_identity(context, normalized_code, trade_date_hint)
+        profile_name = _stock_profile_name(
+            normalized_code,
+            primary_detail=None,
+            watchlist_stock=watchlist_stock,
+            opportunity_stock=opportunity_stock,
+            catalog_entry=context.get("catalog_entry") if isinstance(context.get("catalog_entry"), dict) else None,
+            recent_entry=context.get("recent_entry") if isinstance(context.get("recent_entry"), dict) else None,
+            ask_case=context.get("ask_case") if isinstance(context.get("ask_case"), dict) else None,
+        )
+    available_sources = [
+        key
+        for key, detail in (
+            ("watchlist", watchlist_stock),
+            ("opportunity", opportunity_stock),
+        )
+        if detail
+    ]
+    profile_trade_date = readiness.get("data_trade_date") or current_trade_date(watchlist, screening_batch, decision_brief)
+
+    return {
+        "generated_at": context["generated_at"],
+        "summary_only": True,
+        "code": normalized_code,
+        "name": profile_name,
+        "trade_date": (watchlist if watchlist_stock else screening_batch or {}).get("trade_date"),
+        "expected_trade_date": readiness.get("expected_trade_date"),
+        "data_trade_date": readiness.get("data_trade_date"),
+        "readiness": public_stock_profile_readiness(readiness),
+        "primary_source": primary_source,
+        "primary_source_label": {
+            "watchlist": "自选股链路",
+            "opportunity": "观察池链路",
+        }.get(str(primary_source or ""), "未命中详情"),
+        "available_sources": available_sources,
+        "links": {
+            "self": f"/stock/{normalized_code}",
+            "api_self": f"/api/stock/{normalized_code}/summary",
+            "api_summary": f"/api/stock/{normalized_code}/summary",
+            "api_detail": f"/api/stock/{normalized_code}/detail",
+            "api_evidence": f"/api/stock/{normalized_code}/evidence",
+            "api_secondary": f"/api/stock/{normalized_code}/secondary",
+            "api_formal_data_summary": f"/api/stock/{normalized_code}/formal-data/summary",
+            "api_formal_data_full": f"/api/stock/{normalized_code}/formal-data/full",
+            "api_today_action": f"/api/stock/{normalized_code}/today-action",
+            "api_learning_scorecard": f"/api/stock/{normalized_code}/learning-scorecard",
+            "watchlist_detail": today_watchlist_detail_url(normalized_code) if watchlist_stock else None,
+            "opportunity_detail": today_candidate_detail_url(normalized_code) if opportunity_stock else None,
             "ask": ask_page_url(normalized_code),
         },
     }
 
 
-def build_screening_batch_view() -> dict[str, Any]:
+def build_stock_profile_summary_view(code: str, trade_date: str | None = None) -> dict[str, Any]:
+    return _cached_stock_profile_payload("summary", code, trade_date, _stock_profile_summary_payload)
+
+
+def _stock_profile_formal_data_payload(normalized_code: str, trade_date_hint: str) -> dict[str, Any]:
+    context = _stock_profile_base_context(normalized_code, trade_date_hint, include_identity=False)
+    readiness = context["readiness"]
+    return {
+        "generated_at": context["generated_at"],
+        "code": normalized_code,
+        "trade_date": context["profile_trade_date"],
+        "expected_trade_date": readiness.get("expected_trade_date"),
+        "data_trade_date": readiness.get("data_trade_date"),
+        "formal_data": build_stock_formal_data(
+            normalized_code,
+            trade_date=str(readiness.get("expected_trade_date") or context["profile_trade_date"] or ""),
+        ),
+        "links": {
+            "self": f"/stock/{normalized_code}",
+            "api_self": f"/api/stock/{normalized_code}/formal-data",
+        },
+    }
+
+
+def build_stock_profile_formal_data_view(code: str, trade_date: str | None = None) -> dict[str, Any]:
+    return _cached_stock_profile_payload("formal-data", code, trade_date, _stock_profile_formal_data_payload)
+
+
+def _formal_data_section_payload(normalized_code: str, trade_date_hint: str, section: str) -> dict[str, Any]:
+    normalized_section = str(section or "summary").strip().lower()
+    context = _stock_profile_base_context(normalized_code, trade_date_hint, include_identity=False)
+    readiness = context["readiness"]
+    if normalized_section == "summary":
+        formal_data = build_stock_formal_data_summary(
+            normalized_code,
+            trade_date=str(readiness.get("expected_trade_date") or context["profile_trade_date"] or ""),
+        )
+    elif normalized_section == "profile":
+        formal_data = build_stock_formal_data_profile(
+            normalized_code,
+            trade_date=str(readiness.get("expected_trade_date") or context["profile_trade_date"] or ""),
+        )
+    elif normalized_section == "risk":
+        formal_data = build_stock_formal_data_risk(
+            normalized_code,
+            trade_date=str(readiness.get("expected_trade_date") or context["profile_trade_date"] or ""),
+        )
+    elif normalized_section == "sources":
+        formal_data = build_stock_formal_data_sources(
+            normalized_code,
+            trade_date=str(readiness.get("expected_trade_date") or context["profile_trade_date"] or ""),
+        )
+    else:
+        formal_data = build_stock_profile_formal_data_view(normalized_code, trade_date=trade_date_hint).get("formal_data") or {}
+        if normalized_section != "full":
+            raise KeyError(f"unknown formal-data section: {section}")
+
+    return {
+        "generated_at": context["generated_at"],
+        "code": normalized_code,
+        "section": normalized_section,
+        "trade_date": context["profile_trade_date"],
+        "expected_trade_date": readiness.get("expected_trade_date"),
+        "data_trade_date": readiness.get("data_trade_date"),
+        "formal_data": formal_data,
+        "links": {
+            "self": f"/stock/{normalized_code}",
+            "api_self": f"/api/stock/{normalized_code}/formal-data/{normalized_section}",
+            "api_summary": f"/api/stock/{normalized_code}/formal-data/summary",
+            "api_full": f"/api/stock/{normalized_code}/formal-data/full",
+        },
+    }
+
+
+def build_stock_profile_formal_data_section_view(
+    code: str,
+    section: str,
+    trade_date: str | None = None,
+) -> dict[str, Any]:
+    normalized_section = str(section or "summary").strip().lower()
+    if normalized_section not in {"summary", "profile", "risk", "sources", "full"}:
+        raise KeyError(f"unknown formal-data section: {section}")
+    return _cached_stock_profile_payload(
+        f"formal-data:{normalized_section}",
+        code,
+        trade_date,
+        lambda normalized_code, trade_date_hint: _formal_data_section_payload(normalized_code, trade_date_hint, normalized_section),
+    )
+
+
+def _ledger_outcome_tone(record: dict[str, Any]) -> str:
+    outcomes = record.get("outcome_events") or []
+    if not outcomes:
+        return "pending"
+    latest = max(
+        [event for event in outcomes if isinstance(event, dict)],
+        key=lambda event: str(event.get("evaluated_at") or event.get("as_of_trade_date") or ""),
+        default={},
+    )
+    classification = latest.get("classification") if isinstance(latest.get("classification"), dict) else {}
+    return str(classification.get("tone") or classification.get("label") or "evaluated")
+
+
+def build_stock_profile_learning_scorecard(code: str, trade_date: str | None = None) -> dict[str, Any]:
+    normalized_code = str(code or "").strip()
+    canonical = ledger_normalize_stock_code(normalized_code)
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if not canonical:
+        return {
+            "generated_at": generated_at,
+            "code": normalized_code,
+            "canonical_code": "",
+            "stage": "research",
+            "feeds_execution": False,
+            "confidence_label": "代码不可识别",
+            "headline": "历史可信度暂不可用",
+            "reason": "Decision Ledger 无法识别该股票代码。",
+            "sample_count": 0,
+            "evaluated_count": 0,
+            "validated_count": 0,
+            "missed_opportunity_count": 0,
+            "execution_gap_count": 0,
+            "pending_count": 0,
+            "scorecards": [],
+            "failure_patterns": [],
+            "learning_memories": [],
+            "similar_edge": None,
+        }
+
+    trade_date_hint = str(trade_date or "").strip() or expected_trade_date()
+    learning_index = build_review_learning_memory_index()
+    learning_memories: list[dict[str, Any]] = []
+    try:
+        watchlist = load_watchlist_snapshot(code=normalized_code, trade_date=trade_date_hint)
+        stocks = watchlist.get("stocks") or []
+        if stocks:
+            learning_memories = candidate_learning_memories(
+                stocks[0],
+                lane="watchlist",
+                learning_index=learning_index,
+                limit=3,
+            )
+    except Exception:
+        learning_memories = []
+    if not learning_memories:
+        try:
+            candidate = find_candidate_detail(code=normalized_code, trade_date=trade_date_hint)
+            confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
+            confirmation_match = find_confirmation_match(confirmation, normalized_code)
+            learning_memories = candidate_learning_memories(
+                (confirmation_match or {}).get("item") or candidate,
+                lane="midday_confirmation" if confirmation_match else "aggressive",
+                learning_index=learning_index,
+                limit=3,
+            )
+        except Exception:
+            learning_memories = []
+
+    records = ledger_list_decisions_for_stock(canonical)
+    records.sort(
+        key=lambda item: (
+            str(item.get("trade_date") or ""),
+            str(item.get("decision_id") or ""),
+        ),
+        reverse=True,
+    )
+    evaluated = [item for item in records if item.get("outcome_events")]
+    executed = [item for item in records if item.get("execution_events")]
+    pending = [item for item in records if not item.get("outcome_events")]
+
+    def _classification_text(item: dict[str, Any]) -> str:
+        latest = max(
+            [event for event in (item.get("outcome_events") or []) if isinstance(event, dict)],
+            key=lambda event: str(event.get("evaluated_at") or event.get("as_of_trade_date") or ""),
+            default={},
+        )
+        classification = latest.get("classification") if isinstance(latest.get("classification"), dict) else {}
+        return " ".join(str(classification.get(key) or "") for key in ("label", "tone", "reason")).lower()
+
+    validated = [
+        item for item in evaluated
+        if any(token in _classification_text(item) for token in ("valid", "positive", "命中", "有效", "成功", "good"))
+    ]
+    missed = [
+        item for item in evaluated
+        if any(token in _classification_text(item) for token in ("miss", "错过", "missed_opportunity", "missed"))
+    ]
+    execution_gap = [
+        item for item in records
+        if not item.get("execution_events") and str(((item.get("recommendation") or {}).get("action") or "")) not in {"observe", "skip", "forbid"}
+    ]
+    if len(evaluated) >= 8:
+        confidence_label = "样本初步可读"
+    elif len(evaluated) >= 3:
+        confidence_label = "样本偏少"
+    elif records:
+        confidence_label = "只有跟踪痕迹"
+    else:
+        confidence_label = "暂无样本"
+
+    scorecards = [
+        {"label": "Ledger 样本", "value": len(records), "detail": "同票历史建议", "tone": "info"},
+        {"label": "已评估", "value": len(evaluated), "detail": "已有 T+N outcome", "tone": "positive" if evaluated else "watch"},
+        {"label": "已执行/记录", "value": len(executed), "detail": "已有执行事件", "tone": "info" if executed else "watch"},
+        {"label": "执行缺口", "value": len(execution_gap), "detail": "建议后未见执行记录", "tone": "risk" if execution_gap else "positive"},
+    ]
+    failure_patterns = []
+    if execution_gap:
+        failure_patterns.append({
+            "label": "执行闭环缺口",
+            "detail": f"{len(execution_gap)} 条非观察建议没有执行事件，先别把系统建议当成已验证能力。",
+            "tone": "risk",
+        })
+    if missed:
+        failure_patterns.append({
+            "label": "错过机会样本",
+            "detail": f"{len(missed)} 条 outcome 标记为错过/疑似错过，需要回 Review 做归因。",
+            "tone": "warning",
+        })
+    if len(evaluated) < 5:
+        failure_patterns.append({
+            "label": "样本不足",
+            "detail": "同票成熟样本少，不能把当前 scorecard 当作胜率证明。",
+            "tone": "watch",
+        })
+
+    try:
+        from screener.historical_edge import build_historical_edge_snapshot  # type: ignore
+
+        similar_edge = build_historical_edge_snapshot(
+            normalized_code,
+            trade_date or expected_trade_date(),
+            sample_pool=None,
+        )
+    except Exception as exc:
+        similar_edge = {
+            "stage": "research",
+            "feeds_execution": False,
+            "similar_count": 0,
+            "coverage_quality": "unavailable",
+            "reason": str(exc),
+        }
+
+    return {
+        "generated_at": generated_at,
+        "code": normalized_code,
+        "canonical_code": canonical,
+        "trade_date": trade_date or expected_trade_date(),
+        "stage": "research",
+        "feeds_execution": False,
+        "confidence_label": confidence_label,
+        "headline": "历史可信度只作学习参考",
+        "reason": "这里统计的是 Prism 自己的同票历史建议、执行记录和 outcome，不能作为买卖胜率承诺。",
+        "sample_count": len(records),
+        "evaluated_count": len(evaluated),
+        "validated_count": len(validated),
+        "missed_opportunity_count": len(missed),
+        "execution_gap_count": len(execution_gap),
+        "pending_count": len(pending),
+        "scorecards": scorecards,
+        "failure_patterns": failure_patterns,
+        "learning_memories": learning_memories,
+        "recent_decisions": [
+            {
+                "decision_id": item.get("decision_id"),
+                "trade_date": item.get("trade_date"),
+                "action": (item.get("recommendation") or {}).get("action"),
+                "action_label": (item.get("recommendation") or {}).get("action_label"),
+                "main_conclusion": (item.get("recommendation") or {}).get("main_conclusion"),
+                "outcome_tone": _ledger_outcome_tone(item),
+                "execution_events_count": len(item.get("execution_events") or []),
+                "outcome_events_count": len(item.get("outcome_events") or []),
+            }
+            for item in records[:5]
+        ],
+        "similar_edge": similar_edge,
+    }
+
+
+def _stock_profile_today_action_payload(normalized_code: str, trade_date_hint: str) -> dict[str, Any]:
+    context = _stock_profile_base_context(normalized_code, trade_date_hint, include_identity=False)
+    readiness = context["readiness"]
+    return {
+        "generated_at": context["generated_at"],
+        "code": normalized_code,
+        "trade_date": context["profile_trade_date"],
+        "expected_trade_date": readiness.get("expected_trade_date"),
+        "data_trade_date": readiness.get("data_trade_date"),
+        "today_action": build_today_action_context(
+            normalized_code,
+            today=_stock_profile_today_context(context),
+            account_book=context.get("account_book") if isinstance(context.get("account_book"), dict) else None,
+            today_action_decisions=(
+                context.get("today_action_decisions")
+                if isinstance(context.get("today_action_decisions"), dict)
+                else None
+            ),
+        ),
+        "links": {
+            "self": f"/stock/{normalized_code}",
+            "api_self": f"/api/stock/{normalized_code}/today-action",
+        },
+    }
+
+
+def build_stock_profile_today_action_view(code: str, trade_date: str | None = None) -> dict[str, Any]:
+    return _cached_stock_profile_payload("today-action", code, trade_date, _stock_profile_today_action_payload)
+
+
+def _public_batch_candidate_card(card: Any) -> dict[str, Any]:
+    if not isinstance(card, Mapping):
+        return {}
+    return {
+        key: card.get(key)
+        for key in (
+            "code",
+            "name",
+            "tone",
+            "status",
+            "score",
+            "setup_label",
+            "suggested_action_label",
+            "priority_label",
+            "detail",
+            "detail_url",
+        )
+        if card.get(key) not in (None, "", [], {})
+    }
+
+
+def _public_screening_batch_candidate(item: Any) -> dict[str, Any]:
+    if not isinstance(item, Mapping):
+        return {}
+    v2_payload = opportunity_v2_payload(item)
+    return _public_batch_candidate_card(
+        {
+            "code": item.get("code"),
+            "name": item.get("name"),
+            "tone": candidate_tone(item),
+            "status": v2_payload.get("suggested_action_label")
+            or candidate_status_label(item.get("screening_status") or "unknown"),
+            "score": item.get("priority_score"),
+            "setup_label": item.get("setup_label") or item.get("setup_type") or "待确认",
+            "suggested_action_label": v2_payload.get("suggested_action_label"),
+            "priority_label": detail_value(item.get("tier"), "观察"),
+            "detail": (
+                v2_payload.get("thesis")
+                or item.get("entry_reason")
+                or item.get("screening_note")
+                or item.get("main_risk")
+                or "等待更多确认"
+            ),
+            "detail_url": today_candidate_detail_url(item.get("code")),
+        }
+    )
+
+
+def build_screening_batch_summary_view() -> dict[str, Any]:
     screening_batch = load_screening_batch(trade_date=expected_trade_date())
     quality = safe_canonical_load(load_quality_status, lane="aggressive")
     gate = ((screening_batch.get("market_regime") or {}).get("execution_gate") or {})
     themes = ((screening_batch.get("market_themes") or {}).get("themes") or [])[:5]
     candidates = screening_batch.get("candidates") or []
+    cards = [_public_screening_batch_candidate(item) for item in candidates[:5]]
+    cards = [card for card in cards if card]
 
     artifacts = [
         artifact_from_path("早盘批次 JSON", screening_batch.get("path"), key="screening_batch"),
@@ -9182,6 +11032,7 @@ def build_screening_batch_view() -> dict[str, Any]:
     return {
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "kind": "screener",
+        "compact": True,
         "hero": {
             "eyebrow": "早盘候选",
             "title": "早盘批次详情",
@@ -9223,7 +11074,9 @@ def build_screening_batch_view() -> dict[str, Any]:
             {
                 "title": "候选列表",
                 "count": len(candidates),
-                "cards": [build_screening_candidate_card(item) for item in candidates],
+                "cards": cards,
+                "cards_deferred": True,
+                "cards_loaded": len(cards),
                 "footer_link": {"title": "进入午盘确认批次", "url": today_batch_detail_url("confirmation")},
             }
         ],
@@ -9231,7 +11084,10 @@ def build_screening_batch_view() -> dict[str, Any]:
         "links": {
             **today_nav_links(),
             "self": today_batch_detail_url("screener"),
-            "api_self": api_today_batch_detail_url("screener"),
+        },
+        "links_lazy": {
+            "opportunities": "/api/opportunities",
+            "opportunities_context": "/api/opportunities/context",
         },
         "quality": {
             "status": detail_value((quality or {}).get("validation_status"), "unknown"),
@@ -9257,7 +11113,7 @@ def build_confirmation_view() -> dict[str, Any]:
             "eyebrow": "午盘确认",
             "title": "午盘确认详情",
             "summary": "以早盘基线为锚，检查承接、降级和新增观察。",
-            "status_label": detail_value(confirmation.get("validation_status"), "unknown"),
+            "status_label": midday_validation_status_label(confirmation.get("validation_status")),
         },
         "meta_cards": [
             {
@@ -9306,7 +11162,6 @@ def build_confirmation_view() -> dict[str, Any]:
         "links": {
             **today_nav_links(),
             "self": today_batch_detail_url("confirmation"),
-            "api_self": api_today_batch_detail_url("confirmation"),
         },
         "quality": {
             "status": detail_value((quality or {}).get("validation_status"), "unknown"),
@@ -9316,18 +11171,31 @@ def build_confirmation_view() -> dict[str, Any]:
     }
 
 
-def build_today_view() -> dict[str, Any]:
+def _today_base_inputs() -> dict[str, Any]:
+    global _TODAY_BASE_INPUTS_CACHE
+
     ensure_runtime_dirs()
     trade_date_hint = expected_trade_date()
+    account_book = load_account_book()
+    today_action_decisions = load_today_action_decision_store()
+    account_revision = (
+        str(account_book.get("updated_at") or "")
+        or str(account_book.get("mode_updated_at") or "")
+        or str(len(account_book.get("fills") or []))
+    )
+    action_revision = str(today_action_decisions.get("updated_at") or "")
+    cache_key = (trade_date_hint, account_revision, action_revision)
+    if TODAY_BASE_INPUTS_CACHE_TTL_SECONDS > 0 and _TODAY_BASE_INPUTS_CACHE:
+        cached_at, cached_key, cached_payload = _TODAY_BASE_INPUTS_CACHE
+        if cached_key == cache_key and time.monotonic() - cached_at <= TODAY_BASE_INPUTS_CACHE_TTL_SECONDS:
+            return dict(cached_payload)
+
+    now = datetime.now()
     decision_brief = safe_canonical_load(load_decision_brief, trade_date=trade_date_hint)
     watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
     screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint)
     confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
     quality_status = safe_canonical_load(load_quality_status, lane="all")
-    lifecycle_context = resolve_lifecycle_context()
-    account_book = load_account_book()
-    today_action_decisions = load_today_action_decision_store()
-
     readiness = compute_readiness(
         watchlist=watchlist,
         screening_batch=screening_batch,
@@ -9338,19 +11206,53 @@ def build_today_view() -> dict[str, Any]:
         today_action_decisions=today_action_decisions,
         dataset_freshness=build_dataset_freshness_rows(
             expected_date=trade_date_hint,
-            now=datetime.now(),
+            now=now,
+        ),
+        formal_freshness=build_formal_freshness_rows(
+            expected_date=trade_date_hint,
+            now=now,
         ),
     )
-
     expected_date = readiness["expected_trade_date"]
     data_trade_date = readiness["data_trade_date"]
     trade_date = data_trade_date or current_trade_date(watchlist, screening_batch, decision_brief)
-    brief_trade_date = (decision_brief or {}).get("trade_date")
-    # Fail-closed: brief is only ``live`` when readiness is fully green AND
-    # the brief itself is aligned with the expected trade date.
     brief_is_live = bool(readiness["brief_is_live"])
-
     gate = (((screening_batch or {}).get("market_regime") or {}).get("execution_gate") or {})
+    payload = {
+        "now": now,
+        "generated_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "trade_date_hint": trade_date_hint,
+        "expected_date": expected_date,
+        "data_trade_date": data_trade_date,
+        "trade_date": trade_date,
+        "brief_is_live": brief_is_live,
+        "gate": gate,
+        "decision_brief": decision_brief,
+        "watchlist": watchlist,
+        "screening_batch": screening_batch,
+        "confirmation": confirmation,
+        "quality_status": quality_status,
+        "account_book": account_book,
+        "today_action_decisions": today_action_decisions,
+        "readiness": readiness,
+    }
+    if TODAY_BASE_INPUTS_CACHE_TTL_SECONDS > 0:
+        # These canonical snapshots are treated as read-only by today builders.
+        # Keep cache hits cheap: callers get their own top-level dict while the
+        # heavy nested inputs are shared for this short-lived window.
+        _TODAY_BASE_INPUTS_CACHE = (time.monotonic(), cache_key, payload)
+    return dict(payload)
+
+
+def _today_hero_projection(
+    *,
+    decision_brief: dict[str, Any] | None,
+    screening_batch: dict[str, Any] | None,
+    watchlist: dict[str, Any] | None,
+    readiness: dict[str, Any],
+    gate: dict[str, Any],
+    brief_is_live: bool,
+) -> dict[str, Any]:
     brief_summary = (decision_brief or {}).get("summary") or {}
     main_theme = (
         brief_summary.get("main_theme")
@@ -9358,6 +11260,8 @@ def build_today_view() -> dict[str, Any]:
         or (screening_batch or {}).get("top_theme")
         or "暂无主线"
     )
+    brief_trade_date = (decision_brief or {}).get("trade_date")
+    expected_date = readiness["expected_trade_date"]
 
     if brief_is_live:
         hero_title = normalize_stock_ui_copy(brief_summary.get("open_new_positions")) or (
@@ -9390,32 +11294,31 @@ def build_today_view() -> dict[str, Any]:
         else:
             context_note = "尚未生成总控简报，当前页面完全基于实时链路数据。"
 
-    watchlist_priority = len((watchlist or {}).get("priority_codes") or [])
-    screening_summary = (screening_batch or {}).get("screening_summary") or {}
-    quality_lanes = (quality_status or {}).get("lanes") or {}
-    quality_ok = sum(1 for lane in quality_lanes.values() if lane.get("validation_status") == "ok")
-    quality_timely = sum(1 for item in readiness["quality_freshness"] if item.get("timely"))
-    quality_total = len(readiness["quality_freshness"]) or 3
-    confirmation_counts = (confirmation or {}).get("counts") or {}
-    action_groups = build_today_action_groups(
-        watchlist,
-        screening_batch,
-        confirmation,
-        decision_brief,
-        quality_status,
-        brief_is_live=brief_is_live,
-        gate=gate,
-    )
-    action_queue = build_today_action_queue(
-        action_groups,
-        trade_date,
-        account_book=account_book,
-        expected_trade_date=expected_date,
-        readiness_mode=str(readiness.get("readiness_mode") or "blocked"),
-        readiness_ready=bool(readiness.get("ready")),
-    )
+    return {
+        "hero": {
+            "title": hero_title,
+            "summary": hero_summary,
+            "gate_label": hero_gate_label,
+            "position_cap": position_cap,
+            "main_theme": main_theme,
+            "context_note": context_note,
+        },
+        "position_cap": position_cap,
+        "main_theme": main_theme,
+    }
 
+
+def _today_source_cards(
+    *,
+    watchlist: dict[str, Any] | None,
+    screening_batch: dict[str, Any] | None,
+    confirmation: dict[str, Any] | None,
+    decision_brief: dict[str, Any] | None,
+    readiness: dict[str, Any],
+    brief_is_live: bool,
+) -> list[dict[str, Any]]:
     source_freshness_map = {item["key"]: item for item in readiness["source_freshness"]}
+    midday_due_label = f"{MIDDAY_CONFIRMATION_DUE_MINUTES // 60:02d}:{MIDDAY_CONFIRMATION_DUE_MINUTES % 60:02d}"
 
     def _augment_source(card: dict[str, Any], freshness_key: str) -> dict[str, Any]:
         freshness = source_freshness_map.get(freshness_key) or {}
@@ -9428,9 +11331,13 @@ def build_today_view() -> dict[str, Any]:
         merged["stale_after_seconds"] = freshness.get("stale_after_seconds")
         merged["trade_date"] = freshness.get("trade_date")
         merged["stale_reasons"] = freshness.get("stale_reasons", [])
+        merged["deferred"] = bool(freshness.get("deferred"))
+        merged["deferred_reason"] = freshness.get("deferred_reason")
+        if merged["deferred"] and freshness.get("deferred_reason") == MIDDAY_CONFIRMATION_DEFER_REASON:
+            merged["detail"] = f"等待 {midday_due_label} 午盘确认"
         return merged
 
-    source_cards = [
+    return [
         _augment_source(
             {
                 "label": "自选股",
@@ -9451,7 +11358,7 @@ def build_today_view() -> dict[str, Any]:
             {
                 "label": "午盘确认",
                 "value": (confirmation or {}).get("generated_at") or "-",
-                "detail": (confirmation or {}).get("validation_status") or "暂无确认",
+                "detail": midday_validation_status_label((confirmation or {}).get("validation_status") or "missing"),
             },
             "confirmation",
         ),
@@ -9465,7 +11372,46 @@ def build_today_view() -> dict[str, Any]:
         ),
     ]
 
-    summary_cards = [
+
+def build_today_source_cards_view() -> dict[str, Any]:
+    """Lightweight source-card payload for Today refresh status."""
+
+    base = _today_base_inputs()
+    source_cards = _today_source_cards(
+        watchlist=base["watchlist"],
+        screening_batch=base["screening_batch"],
+        confirmation=base["confirmation"],
+        decision_brief=base["decision_brief"],
+        readiness=base["readiness"],
+        brief_is_live=bool(base["brief_is_live"]),
+    )
+    return {
+        "generated_at": base["generated_at"],
+        "trade_date": base["trade_date"],
+        "expected_trade_date": base["expected_date"],
+        "data_trade_date": base["data_trade_date"],
+        "readiness_mode": base["readiness"].get("readiness_mode"),
+        "source_cards": source_cards,
+    }
+
+
+def _today_summary_cards(
+    *,
+    watchlist: dict[str, Any] | None,
+    screening_batch: dict[str, Any] | None,
+    confirmation: dict[str, Any] | None,
+    quality_status: dict[str, Any] | None,
+    readiness: dict[str, Any],
+    gate: dict[str, Any],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    watchlist_priority = len((watchlist or {}).get("priority_codes") or [])
+    screening_summary = (screening_batch or {}).get("screening_summary") or {}
+    quality_lanes = (quality_status or {}).get("lanes") or {}
+    quality_ok = sum(1 for lane in quality_lanes.values() if lane.get("validation_status") == "ok")
+    quality_timely = sum(1 for item in readiness["quality_freshness"] if item.get("timely"))
+    quality_total = len(readiness["quality_freshness"]) or 3
+    confirmation_counts = (confirmation or {}).get("counts") or {}
+    cards = [
         {
             "label": "持仓先处理",
             "value": str(watchlist_priority),
@@ -9488,8 +11434,318 @@ def build_today_view() -> dict[str, Any]:
             "tone": "positive" if quality_timely == quality_total else "warning",
         },
     ]
+    return cards, {
+        "watchlist_priority": watchlist_priority,
+        "quality_ok": quality_ok,
+        "quality_timely": quality_timely,
+        "quality_total": quality_total,
+        "confirmation_counts": confirmation_counts,
+    }
 
-    artifacts = {
+
+def _today_quality_cards(quality_status: dict[str, Any] | None, readiness: dict[str, Any]) -> list[dict[str, Any]]:
+    quality_freshness_map = {item["key"]: item for item in readiness["quality_freshness"]}
+    quality_cards = []
+    for card in quality_lane_cards(quality_status):
+        title = card.get("title") or ""
+        match_key = next(
+            (k for k, t in (("watchlist", "自选股"), ("aggressive", "进攻型早盘"), ("midday_confirmation", "午盘确认")) if t == title),
+            "",
+        )
+        merged = dict(card)
+        meta = quality_freshness_map.get(match_key) or {}
+        merged["key"] = match_key or card.get("key") or title
+        merged["timely"] = bool(meta.get("timely", card.get("status") == "ok"))
+        merged["stale_reasons"] = meta.get("stale_reasons", [])
+        merged["age_label"] = meta.get("age_label", "-")
+        if not merged["timely"] and card.get("tone") == "positive":
+            merged["tone"] = "watch"
+        quality_cards.append(merged)
+    return quality_cards
+
+
+def _summary_issue_payload(issue: Any) -> dict[str, Any]:
+    if not isinstance(issue, Mapping):
+        return {}
+    return {
+        key: issue.get(key)
+        for key in ("code", "label", "message", "recommended_task")
+        if issue.get(key) not in (None, "", [], {})
+    }
+
+
+def _compact_string_list(value: Any, *, limit: int = 3) -> list[str]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        return []
+    return [str(item) for item in value if item not in (None, "")][:limit]
+
+
+def _summary_source_freshness_payload(item: Any) -> dict[str, Any]:
+    if not isinstance(item, Mapping):
+        return {}
+    payload = {
+        key: item.get(key)
+        for key in (
+            "key",
+            "dataset",
+            "label",
+            "trade_date",
+            "available",
+            "age_label",
+            "stale",
+            "stale_reasons",
+            "deferred",
+            "deferred_reason",
+            "formal_decision_allowed",
+        )
+        if item.get(key) not in (None, "", [], {})
+    }
+    if item.get("manifest_path"):
+        payload["has_manifest"] = True
+    authority_flags = [
+        flag
+        for flag in dict.fromkeys(str(flag) for flag in (item.get("authority_flags") or []) if flag)
+        if flag.startswith("target_authority_not_in_use:")
+    ]
+    if authority_flags:
+        payload["authority_flags"] = authority_flags[:3]
+    return payload
+
+
+def _brief_text(value: Any, limit: int = 96) -> Any:
+    if not isinstance(value, str):
+        return value
+    text = " ".join(value.split())
+    if len(text) <= limit:
+        return text
+    return f"{text[: max(0, limit - 1)].rstrip()}..."
+
+
+def _summary_account_state_payload(account_state: Any) -> dict[str, Any] | None:
+    if not isinstance(account_state, Mapping):
+        return None
+    reconciliation = account_state.get("reconciliation") if isinstance(account_state.get("reconciliation"), Mapping) else {}
+    payload = {
+        key: account_state.get(key)
+        for key in (
+            "mode",
+            "mode_label",
+            "mode_tone",
+            "mode_updated_at",
+            "ready_for_live_small",
+            "cash_balance",
+            "equity_at_cost",
+            "positions_count",
+            "fills_count",
+            "recommended_tasks",
+        )
+        if account_state.get(key) not in (None, "", [], {})
+    }
+    payload["reconciliation"] = {
+        key: reconciliation.get(key)
+        for key in ("count", "age_seconds", "age_label", "fresh_within_seconds", "fresh")
+        if reconciliation.get(key) not in (None, "", [], {})
+    }
+    blockers = [_summary_issue_payload(item) for item in (account_state.get("blockers") or [])[:3]]
+    warnings = [_summary_issue_payload(item) for item in (account_state.get("warnings") or [])[:3]]
+    payload["blockers"] = [item for item in blockers if item]
+    payload["warnings"] = [item for item in warnings if item]
+    return payload
+
+
+def _summary_formal_data_status_payload(status: Any) -> dict[str, Any] | None:
+    if not isinstance(status, Mapping):
+        return None
+    provider = status.get("provider") if isinstance(status.get("provider"), Mapping) else {}
+    recommended_task = status.get("recommended_task") if isinstance(status.get("recommended_task"), Mapping) else {}
+    blockers = []
+    for blocker in (status.get("blockers") or [])[:3]:
+        if not isinstance(blocker, Mapping):
+            continue
+        payload = {
+            key: blocker.get(key)
+            for key in (
+                "dataset",
+                "label",
+                "state",
+                "next_action",
+                "error",
+            )
+            if blocker.get(key) not in (None, "", [], {})
+        }
+        missing_keys = _compact_string_list(blocker.get("missing_request_keys"))
+        blocked_keys = _compact_string_list(blocker.get("blocked_request_keys"))
+        if missing_keys:
+            payload["missing_request_keys"] = missing_keys
+        if blocked_keys:
+            payload["blocked_request_keys"] = blocked_keys
+        blockers.append(payload)
+    payload = {
+        "generated_at": status.get("generated_at"),
+        "expected_trade_date": status.get("expected_trade_date"),
+        "ready": status.get("ready", False),
+        "ready_count": status.get("ready_count", 0),
+        "total_count": status.get("total_count", 0),
+        "blocked_count": status.get("blocked_count", 0),
+        "provider": {
+            key: provider.get(key)
+            for key in ("name", "token_configured")
+            if provider.get(key) not in (None, "", [], {})
+        },
+        "blockers": [item for item in blockers if item],
+        "running": status.get("running", False),
+    }
+    if recommended_task:
+        payload["recommended_task"] = {
+            key: recommended_task.get(key)
+            for key in ("task_name", "title")
+            if recommended_task.get(key) not in (None, "", [], {})
+        }
+    return {key: value for key, value in payload.items() if value not in (None, "", [], {})}
+
+
+def public_today_summary_readiness(readiness: dict[str, Any], formal_data_status: dict[str, Any] | None = None) -> dict[str, Any]:
+    payload = {
+        "expected_trade_date": readiness.get("expected_trade_date"),
+        "data_trade_date": readiness.get("data_trade_date"),
+        "display_date": readiness.get("display_date"),
+        "checked_at": readiness.get("checked_at"),
+        "session": readiness.get("session"),
+        "readiness_mode": readiness.get("readiness_mode"),
+        "ready": readiness.get("ready", False),
+        "brief_is_live": readiness.get("brief_is_live", False),
+        "stale_count": readiness.get("stale_count", 0),
+        "formal_ready": readiness.get("formal_ready", False),
+        "formal_base_ready": readiness.get("formal_base_ready", False),
+        "pipeline_formal_ready": readiness.get("pipeline_formal_ready", False),
+        "recommended_tasks": readiness.get("recommended_tasks") or [],
+        "trust_level": readiness.get("trust_level"),
+        "blockers": [_summary_issue_payload(item) for item in (readiness.get("blockers") or [])[:3]],
+        "warnings": [_summary_issue_payload(item) for item in (readiness.get("warnings") or [])[:3]],
+        "formal_blockers": [_summary_issue_payload(item) for item in (readiness.get("formal_blockers") or [])[:3]],
+        "source_freshness": [
+            _summary_source_freshness_payload(item)
+            for item in (readiness.get("source_freshness") or [])
+        ],
+        "account_state": _summary_account_state_payload(readiness.get("account_state")),
+    }
+    if formal_data_status:
+        payload["formal_data_status"] = _summary_formal_data_status_payload(formal_data_status)
+    return {
+        key: value
+        for key, value in payload.items()
+        if value not in (None, "", [], {})
+    }
+
+
+_STOCK_PROFILE_READINESS_DEFERRED_KEYS = {
+    "blockers",
+    "warnings",
+    "formal_blockers",
+    "source_freshness",
+}
+
+
+def public_stock_profile_readiness(readiness: dict[str, Any]) -> dict[str, Any]:
+    """Compact readiness for stock first-screen and detail payloads.
+
+    Stock pages only need the trade-availability facts and trust banner.  The
+    long diagnostic lists stay available from Settings/refresh status instead
+    of being repeated on every stock summary/detail response.
+    """
+
+    payload = public_today_summary_readiness(readiness)
+    return {
+        key: value
+        for key, value in payload.items()
+        if key not in _STOCK_PROFILE_READINESS_DEFERRED_KEYS
+    }
+
+
+_OPPORTUNITIES_READINESS_DEFERRED_KEYS = {
+    "blockers",
+    "warnings",
+    "formal_blockers",
+    "source_freshness",
+    "account_state",
+}
+
+
+def public_opportunities_readiness(readiness: dict[str, Any]) -> dict[str, Any]:
+    payload = public_today_summary_readiness(readiness)
+    return {
+        key: value
+        for key, value in payload.items()
+        if key not in _OPPORTUNITIES_READINESS_DEFERRED_KEYS
+    }
+
+
+def _summary_issues_with_priority(
+    issues: Any,
+    *,
+    priority_codes: set[str],
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    if not isinstance(issues, Sequence) or isinstance(issues, (str, bytes, bytearray)):
+        return []
+
+    prioritized: list[Any] = []
+    regular: list[Any] = []
+    for issue in issues:
+        code = str(issue.get("code") or "") if isinstance(issue, Mapping) else ""
+        if code in priority_codes:
+            prioritized.append(issue)
+        else:
+            regular.append(issue)
+
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for issue in [*prioritized, *regular]:
+        payload = _summary_issue_payload(issue)
+        if not payload:
+            continue
+        key = str(payload.get("code") or payload.get("label") or payload.get("message") or "")
+        if key and key in seen:
+            continue
+        if key:
+            seen.add(key)
+        result.append(payload)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def public_portfolio_readiness(readiness: dict[str, Any], formal_data_status: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Compact readiness for the account console first screen."""
+
+    payload = public_today_summary_readiness(readiness, formal_data_status)
+    payload.pop("formal_blockers", None)
+    payload.pop("source_freshness", None)
+    account_risk_codes = {
+        "account_unsafe_bypass_active",
+        "account_cash_negative",
+        "account_cash_zero",
+        "account_reconciliation_stale",
+        "account_unreconciled_intents",
+    }
+    warnings = _summary_issues_with_priority(
+        readiness.get("warnings") or [],
+        priority_codes=account_risk_codes,
+        limit=3,
+    )
+    if warnings:
+        payload["warnings"] = warnings
+    return payload
+
+
+def _today_artifacts(
+    *,
+    decision_brief: dict[str, Any] | None,
+    watchlist: dict[str, Any] | None,
+    screening_batch: dict[str, Any] | None,
+    confirmation: dict[str, Any] | None,
+) -> dict[str, dict[str, Any]]:
+    return {
         "decision_brief": {
             "path": ((decision_brief or {}).get("paths") or {}).get("source_json"),
             "url": artifact_url(((decision_brief or {}).get("paths") or {}).get("source_json")),
@@ -9510,7 +11766,823 @@ def build_today_view() -> dict[str, Any]:
             "url": artifact_url(((decision_brief or {}).get("paths") or {}).get("confirmation") or (confirmation or {}).get("path")),
             "label": "午盘确认",
         },
+        "opportunity_v2_tracking": {
+            "path": ((screening_batch or {}).get("opportunity_v2_tracking") or {}).get("path"),
+            "url": artifact_url(((screening_batch or {}).get("opportunity_v2_tracking") or {}).get("path")),
+            "label": "V2 机会跟踪",
+        },
     }
+
+
+def _action_register_code(item: dict[str, Any]) -> str:
+    code = str(item.get("code") or "").strip()
+    if code:
+        return code
+    key = str(item.get("key") or "").strip()
+    match = re.search(r"(\d{6})", key)
+    return match.group(1) if match else ""
+
+
+def _action_register_entry(
+    item: dict[str, Any],
+    *,
+    lane: str,
+    source: str,
+    writeback_status: str,
+    writeback_reason: str,
+) -> dict[str, Any]:
+    code = _action_register_code(item)
+    title = str(item.get("title") or item.get("name") or code or "动作线索").strip()
+    action_label = str(
+        item.get("action_type")
+        or item.get("status")
+        or ((item.get("decision") or {}).get("label") if isinstance(item.get("decision"), dict) else "")
+        or "观察"
+    ).strip()
+    intent_key = str(item.get("key") or "").strip() or f"{source}:{lane}:{title}"
+    return {
+        "intent_key": intent_key,
+        "title": title,
+        "code": code,
+        "name": str(item.get("name") or "").strip(),
+        "lane": lane,
+        "source": source,
+        "action_label": action_label,
+        "writeback_status": writeback_status,
+        "writeback_reason": writeback_reason,
+        "url": str(item.get("url") or (f"/stock/{code}" if code else "")).strip(),
+        "tone": str(item.get("tone") or "watch"),
+        "detail": str(item.get("reason") or item.get("detail") or item.get("trigger") or "").strip(),
+    }
+
+
+def build_today_action_register(
+    *,
+    command_brief: dict[str, Any] | None,
+    action_queue: dict[str, Any] | None,
+    readiness: dict[str, Any],
+) -> dict[str, Any]:
+    entries: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(entry: dict[str, Any]) -> None:
+        key = (str(entry.get("intent_key") or ""), str(entry.get("source") or ""))
+        if key in seen:
+            return
+        seen.add(key)
+        entries.append(entry)
+
+    queue_items = (action_queue or {}).get("items") or []
+    stale_items = (action_queue or {}).get("stale_items") or []
+    queue_key_status: dict[str, str] = {}
+    for item in queue_items:
+        queue_key_status[str(item.get("key") or "")] = "writable"
+        add(_action_register_entry(
+            item,
+            lane=str(item.get("group_key") or "queue"),
+            source="action_queue",
+            writeback_status="writable",
+            writeback_reason="readiness 与交易日均通过，可记录处理结果。",
+        ))
+    for item in stale_items:
+        queue_key_status[str(item.get("key") or "")] = "stale"
+        reason = ((item.get("confidence") or {}).get("note") if isinstance(item.get("confidence"), dict) else "") or "旧线索不可作为今天写回动作。"
+        add(_action_register_entry(
+            item,
+            lane=str(item.get("group_key") or "stale"),
+            source="action_queue",
+            writeback_status="stale",
+            writeback_reason=str(reason),
+        ))
+
+    for lane in (command_brief or {}).get("action_lanes") or []:
+        lane_key = str(lane.get("key") or "").strip()
+        for item in lane.get("items") or []:
+            if not isinstance(item, dict):
+                continue
+            intent_key = str(item.get("key") or "").strip()
+            status = queue_key_status.get(intent_key)
+            if status == "writable":
+                writeback_status = "writable"
+                reason = "这条命令建议已进入今日可写回动作队列。"
+            elif status == "stale":
+                writeback_status = "stale"
+                reason = "命令建议对应旧线索，只能复核，不能作为今天写回动作。"
+            else:
+                writeback_status = "read_only"
+                reason = "这是命令建议或观察线索，不等于可写回动作。"
+                if readiness.get("readiness_mode") != "live_ready":
+                    reason = "readiness 未到 live_ready，只能观察复核。"
+            add(_action_register_entry(
+                item,
+                lane=lane_key,
+                source="command_brief",
+                writeback_status=writeback_status,
+                writeback_reason=reason,
+            ))
+
+    counts = {
+        "total": len(entries),
+        "writable": sum(1 for item in entries if item.get("writeback_status") == "writable"),
+        "read_only": sum(1 for item in entries if item.get("writeback_status") == "read_only"),
+        "stale": sum(1 for item in entries if item.get("writeback_status") == "stale"),
+    }
+    return {
+        "title": "今日动作语义表",
+        "subtitle": "命令建议、可写回队列、只读旧线索分开看，避免把建议误当成实盘动作。",
+        "items": entries[:12],
+        "counts": counts,
+        "readiness_mode": readiness.get("readiness_mode"),
+    }
+
+
+_PUBLIC_COMMAND_BRIEF_LANE_ITEM_KEEP_KEYS = (
+    "key",
+    "code",
+    "name",
+    "action_type",
+    "reason",
+    "trigger",
+    "invalidate_when",
+    "source",
+    "url",
+    "tone",
+    "decision_rank",
+    "decision_rank_label",
+)
+
+_PUBLIC_COMMAND_BRIEF_FORBID_ITEM_KEEP_KEYS = (
+    "title",
+    "reason",
+    "tone",
+    "source",
+)
+
+_PUBLIC_COMMAND_BRIEF_LANE_PREVIEW_LIMIT = 1
+
+
+def _public_command_brief_item(item: Any) -> Any:
+    if not isinstance(item, Mapping):
+        return item
+    keep_keys = (
+        _PUBLIC_COMMAND_BRIEF_LANE_ITEM_KEEP_KEYS
+        if "action_type" in item
+        else _PUBLIC_COMMAND_BRIEF_FORBID_ITEM_KEEP_KEYS
+    )
+    payload = {
+        key: item.get(key)
+        for key in keep_keys
+        if item.get(key) not in (None, "", [], {})
+    }
+    for key, limit in (("reason", 96), ("trigger", 72), ("invalidate_when", 72)):
+        if key in payload:
+            payload[key] = _brief_text(payload[key], limit)
+    return payload
+
+
+def _public_midday_card(item: Any) -> dict[str, Any]:
+    if not isinstance(item, Mapping):
+        return {}
+    return {
+        key: value
+        for key, value in {
+            "name": item.get("name"),
+            "code": item.get("code"),
+            "reason": _brief_text(item.get("reason"), 72),
+            "url": item.get("url"),
+            "tone": item.get("tone"),
+        }.items()
+        if value not in (None, "", [], {})
+    }
+
+
+def _public_command_brief_lane(lane: Any) -> Any:
+    if not isinstance(lane, Mapping):
+        return lane
+    raw_items = list(lane.get("items") or [])
+    payload = {
+        key: lane.get(key)
+        for key in ("key", "title", "tone")
+        if lane.get(key) not in (None, "", [], {})
+    }
+    payload["total_count"] = len(raw_items)
+    payload["items"] = [
+        _public_command_brief_item(item)
+        for item in raw_items[:_PUBLIC_COMMAND_BRIEF_LANE_PREVIEW_LIMIT]
+    ]
+    return payload
+
+
+def _public_today_command_brief(
+    command_brief: dict[str, Any] | None,
+    *,
+    include_details: bool = True,
+) -> dict[str, Any] | None:
+    if not isinstance(command_brief, dict):
+        return None
+    mode = command_brief.get("mode") if isinstance(command_brief.get("mode"), Mapping) else {}
+    permits = command_brief.get("permits") if isinstance(command_brief.get("permits"), Mapping) else {}
+    position_cap = command_brief.get("position_cap") if isinstance(command_brief.get("position_cap"), Mapping) else {}
+    first_action = command_brief.get("first_action") if isinstance(command_brief.get("first_action"), Mapping) else {}
+    midday_verify = command_brief.get("midday_verify") if isinstance(command_brief.get("midday_verify"), Mapping) else {}
+
+    payload = {
+        key: command_brief.get(key)
+        for key in ("trade_date", "generated_at", "trust", "errors")
+        if command_brief.get(key) not in (None, "", [], {})
+    }
+    if mode:
+        payload["mode"] = {
+            key: value
+            for key, value in {
+                "value": mode.get("value"),
+                "label": mode.get("label"),
+                "tone": mode.get("tone"),
+                "summary": _brief_text(mode.get("summary"), 150),
+            }.items()
+            if value not in (None, "", [], {})
+        }
+    if permits:
+        payload["permits"] = {
+            name: {
+                key: value
+                for key, value in {
+                    "value": permit.get("value"),
+                    "label": permit.get("label"),
+                    "tone": permit.get("tone"),
+                    "why": _brief_text(permit.get("why"), 96),
+                }.items()
+                if value not in (None, "", [], {})
+            }
+            for name, permit in permits.items()
+            if isinstance(permit, Mapping)
+        }
+    if position_cap:
+        payload["position_cap"] = {
+            key: value
+            for key, value in {
+                "value": position_cap.get("value"),
+                "tone": position_cap.get("tone"),
+                "note": _brief_text(position_cap.get("note"), 96),
+            }.items()
+            if value not in (None, "", [], {})
+        }
+    if first_action:
+        payload["first_action"] = {
+            key: value
+            for key, value in {
+                "title": first_action.get("title"),
+                "reason": _brief_text(first_action.get("reason"), 135),
+                "url": first_action.get("url"),
+                "tone": first_action.get("tone"),
+            }.items()
+            if value not in (None, "", [], {})
+        }
+    if include_details:
+        payload.update(_public_today_command_brief_detail(command_brief))
+    else:
+        payload["details_deferred"] = True
+        payload["links_lazy"] = {"details": "/api/today/command-brief-detail"}
+    payload["action_lanes"] = [
+        _public_command_brief_lane(lane)
+        for lane in (command_brief.get("action_lanes") or [])
+    ]
+    return payload
+
+
+def _public_today_command_brief_detail(command_brief: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(command_brief, dict):
+        return {
+            "forbid_today": [],
+            "reclassify_when": [],
+            "judgement_chain": [],
+            "midday_verify": {"available": False},
+        }
+    midday_verify = command_brief.get("midday_verify") if isinstance(command_brief.get("midday_verify"), Mapping) else {}
+    payload: dict[str, Any] = {
+        "forbid_today": [
+            _public_command_brief_item(item)
+            for item in (command_brief.get("forbid_today") or [])[:3]
+        ],
+        "reclassify_when": [
+            {
+                key: value
+                for key, value in {
+                    "label": item.get("label"),
+                    "condition": _brief_text(item.get("condition"), 120),
+                    "evidence": _brief_text(item.get("evidence"), 72),
+                    "url": item.get("url"),
+                }.items()
+                if value not in (None, "", [], {})
+            }
+            for item in (command_brief.get("reclassify_when") or [])
+            if isinstance(item, Mapping)
+        ],
+        "judgement_chain": [
+            {
+                key: value
+                for key, value in {
+                    "dim": item.get("dim"),
+                    "title": item.get("title"),
+                    "verdict": item.get("verdict"),
+                    "tone": item.get("tone"),
+                    "evidence": [_brief_text(line, 90) for line in (item.get("evidence") or [])[:3]],
+                    "impact": _brief_text(item.get("impact"), 110),
+                }.items()
+                if value not in (None, "", [], {})
+            }
+            for item in (command_brief.get("judgement_chain") or [])
+            if isinstance(item, Mapping)
+        ],
+    }
+    payload["midday_verify"] = {
+        key: value
+        for key, value in {
+            "available": midday_verify.get("available", False),
+            "morning_takeaway": _brief_text(midday_verify.get("morning_takeaway"), 120),
+            "midday_status": _brief_text(midday_verify.get("midday_status"), 96),
+            "fresh_candidates": [
+                _public_midday_card(card)
+                for card in (midday_verify.get("fresh_candidates") or [])[:3]
+            ],
+            "downgraded": [
+                _public_midday_card(card)
+                for card in (midday_verify.get("downgraded") or [])[:3]
+            ],
+            "next_day_condition": _brief_text(midday_verify.get("next_day_condition"), 120),
+            "verified_at": midday_verify.get("verified_at"),
+        }.items()
+        if value not in (None, "")
+    }
+    return payload
+
+
+def build_today_summary_view() -> dict[str, Any]:
+    base = _today_base_inputs()
+    decision_brief = base["decision_brief"]
+    watchlist = base["watchlist"]
+    screening_batch = base["screening_batch"]
+    confirmation = base["confirmation"]
+    quality_status = base["quality_status"]
+    readiness = base["readiness"]
+    gate = base["gate"]
+    brief_is_live = bool(base["brief_is_live"])
+    action_groups = build_today_action_groups(
+        watchlist,
+        screening_batch,
+        confirmation,
+        decision_brief,
+        quality_status,
+        brief_is_live=brief_is_live,
+        gate=gate,
+    )
+    action_queue_stub = {
+        "title": "今日动作队列",
+        "items": [],
+        "stale_items": [],
+        "counts": {"total": 0, "pending": 0, "done": 0, "watch": 0, "skip": 0, "no_fill": 0, "stale": 0},
+    }
+    command_brief_error: str | None = None
+    try:
+        command_brief = build_today_command_brief(
+            trade_date=base["trade_date"],
+            readiness=readiness,
+            gate=gate,
+            decision_brief=decision_brief,
+            watchlist=watchlist,
+            screening_batch=screening_batch,
+            confirmation=confirmation,
+            action_groups=action_groups,
+            action_queue=action_queue_stub,
+            refresh_status=None,
+        )
+    except Exception as exc:
+        command_brief = None
+        command_brief_error = str(exc)
+
+    return {
+        "generated_at": base["generated_at"],
+        "trade_date": base["trade_date"],
+        "expected_trade_date": base["expected_date"],
+        "data_trade_date": base["data_trade_date"],
+        "brief_is_live": brief_is_live,
+        "summary_only": True,
+        "readiness": readiness,
+        "command_brief": _public_today_command_brief(command_brief, include_details=False),
+        "command_brief_error": command_brief_error,
+        "links_lazy": {
+            "actions": "/api/today/actions",
+            "action_contracts": "/api/today/action-contracts",
+            "command_brief_detail": "/api/today/command-brief-detail",
+        },
+    }
+
+
+def build_today_command_brief_detail_view() -> dict[str, Any]:
+    base = _today_base_inputs()
+    decision_brief = base["decision_brief"]
+    watchlist = base["watchlist"]
+    screening_batch = base["screening_batch"]
+    confirmation = base["confirmation"]
+    quality_status = base["quality_status"]
+    readiness = base["readiness"]
+    gate = base["gate"]
+    brief_is_live = bool(base["brief_is_live"])
+    action_groups = build_today_action_groups(
+        watchlist,
+        screening_batch,
+        confirmation,
+        decision_brief,
+        quality_status,
+        brief_is_live=brief_is_live,
+        gate=gate,
+    )
+    action_queue_stub = {
+        "title": "今日动作队列",
+        "items": [],
+        "stale_items": [],
+        "counts": {"total": 0, "pending": 0, "done": 0, "watch": 0, "skip": 0, "no_fill": 0, "stale": 0},
+    }
+    command_brief_error: str | None = None
+    try:
+        command_brief = build_today_command_brief(
+            trade_date=base["trade_date"],
+            readiness=readiness,
+            gate=gate,
+            decision_brief=decision_brief,
+            watchlist=watchlist,
+            screening_batch=screening_batch,
+            confirmation=confirmation,
+            action_groups=action_groups,
+            action_queue=action_queue_stub,
+            refresh_status=None,
+        )
+    except Exception as exc:
+        command_brief = None
+        command_brief_error = str(exc)
+
+    return {
+        "generated_at": base["generated_at"],
+        "trade_date": base["trade_date"],
+        "expected_trade_date": base["expected_date"],
+        "data_trade_date": base["data_trade_date"],
+        "brief_is_live": brief_is_live,
+        "command_brief_detail": _public_today_command_brief_detail(command_brief),
+        "command_brief_error": command_brief_error,
+        "details_deferred": False,
+    }
+
+
+_PUBLIC_TODAY_ACTION_ITEM_KEEP_KEYS = {
+    "key",
+    "title",
+    "decision",
+}
+
+
+def _public_today_action_item(item: Any) -> Any:
+    if not isinstance(item, dict):
+        return item
+    payload = {
+        key: value
+        for key, value in item.items()
+        if key in _PUBLIC_TODAY_ACTION_ITEM_KEEP_KEYS and value not in (None, "", [], {})
+    }
+    decision = payload.get("decision")
+    if isinstance(decision, Mapping):
+        payload["decision"] = {
+            key: decision.get(key)
+            for key in ("value", "label", "tone")
+            if decision.get(key) not in (None, "", [], {})
+        }
+    return payload
+
+
+def _public_today_action_queue(action_queue: dict[str, Any]) -> dict[str, Any]:
+    payload = {
+        key: action_queue.get(key)
+        for key in ("title", "items", "stale_items", "counts")
+        if action_queue.get(key) not in (None, "", [], {})
+    }
+    payload["items"] = [_public_today_action_item(item) for item in payload.get("items") or []]
+    payload["stale_items"] = [_public_today_action_item(item) for item in payload.get("stale_items") or []]
+    return payload
+
+
+def _public_today_contract_requirement(row: Any) -> dict[str, Any]:
+    if not isinstance(row, Mapping):
+        return {}
+    return {
+        key: row.get(key)
+        for key in ("dataset", "label", "relationship", "state")
+        if row.get(key) not in (None, "", [], {})
+    }
+
+
+def _public_today_contract_constraint(row: Any) -> dict[str, Any]:
+    if not isinstance(row, Mapping):
+        return {}
+    return {
+        key: row.get(key)
+        for key in ("code", "label", "message")
+        if row.get(key) not in (None, "", [], {})
+    }
+
+
+def _public_today_decision_contract(contract: Any) -> dict[str, Any]:
+    if not isinstance(contract, Mapping):
+        return {}
+
+    requirements = [
+        _public_today_contract_requirement(row)
+        for row in (contract.get("data_requirements") or [])
+        if isinstance(row, Mapping)
+    ]
+    requirements = [row for row in requirements if row]
+    critical_requirements = [row for row in requirements if row.get("relationship") == "critical"]
+    visible_requirements = (critical_requirements or requirements)[:4]
+
+    constraints = [
+        _public_today_contract_constraint(row)
+        for row in (contract.get("execution_constraints") or [])
+        if isinstance(row, Mapping)
+    ]
+    constraints = [row for row in constraints if row]
+
+    payload = {
+        key: contract.get(key)
+        for key in (
+            "contract_id",
+            "action_key",
+            "decision_scope",
+            "required_capabilities",
+            "allowed_for_real_money",
+            "allowed_for_formal_action",
+            "ledger_capture_key",
+        )
+        if contract.get(key) not in (None, "", [], {})
+    }
+    payload["data_requirements"] = visible_requirements
+    payload["data_requirements_count"] = len(requirements)
+    payload["execution_constraints"] = constraints[:3]
+    payload["execution_constraints_count"] = len(constraints)
+    return {key: value for key, value in payload.items() if value not in (None, "", [], {})}
+
+
+def _public_today_decision_contracts(decision_contracts: dict[str, Any]) -> dict[str, Any]:
+    payload = {
+        key: value
+        for key, value in decision_contracts.items()
+        if key not in {"items", "by_action_key"}
+    }
+    payload["by_action_key"] = {
+        key: compact
+        for key, contract in (decision_contracts.get("by_action_key") or {}).items()
+        if (compact := _public_today_decision_contract(contract))
+    }
+    return payload
+
+
+def _public_today_action_register(action_register: dict[str, Any]) -> dict[str, Any]:
+    items = []
+    for item in (action_register.get("items") or [])[:6]:
+        if not isinstance(item, Mapping):
+            continue
+        items.append(
+            {
+                key: item.get(key)
+                for key in (
+                    "intent_key",
+                    "title",
+                    "source",
+                    "action_label",
+                    "writeback_status",
+                    "writeback_reason",
+                    "url",
+                    "detail",
+                )
+                if item.get(key) not in (None, "", [], {})
+            }
+        )
+    return {
+        key: value
+        for key, value in {
+            "items": items,
+            "counts": action_register.get("counts") or {},
+            "readiness_mode": action_register.get("readiness_mode"),
+        }.items()
+        if value not in (None, "", [], {})
+    }
+
+
+
+def build_today_actions_view(*, include_decision_contracts: bool = False) -> dict[str, Any]:
+    base = _today_base_inputs()
+    decision_brief = base["decision_brief"]
+    watchlist = base["watchlist"]
+    screening_batch = base["screening_batch"]
+    confirmation = base["confirmation"]
+    quality_status = base["quality_status"]
+    readiness = base["readiness"]
+    gate = base["gate"]
+    brief_is_live = bool(base["brief_is_live"])
+    action_groups = build_today_action_groups(
+        watchlist,
+        screening_batch,
+        confirmation,
+        decision_brief,
+        quality_status,
+        brief_is_live=brief_is_live,
+        gate=gate,
+    )
+    action_queue = build_today_action_queue(
+        action_groups,
+        base["trade_date"],
+        account_book=base["account_book"],
+        today_action_decisions=base.get("today_action_decisions"),
+        expected_trade_date=base["expected_date"],
+        readiness_mode=str(readiness.get("readiness_mode") or "blocked"),
+        readiness_ready=bool(readiness.get("ready")),
+    )
+    decision_contracts: dict[str, Any] | None = None
+    if include_decision_contracts:
+        source_cards = _today_source_cards(
+            watchlist=watchlist,
+            screening_batch=screening_batch,
+            confirmation=confirmation,
+            decision_brief=decision_brief,
+            readiness=readiness,
+            brief_is_live=brief_is_live,
+        )
+        artifacts = _today_artifacts(
+            decision_brief=decision_brief,
+            watchlist=watchlist,
+            screening_batch=screening_batch,
+            confirmation=confirmation,
+        )
+        action_queue, decision_contracts = attach_decision_contracts(
+            action_queue,
+            trade_date=base["trade_date"],
+            expected_trade_date=base["expected_date"],
+            data_trade_date=base["data_trade_date"],
+            readiness=readiness,
+            source_cards=source_cards,
+            artifacts=artifacts,
+        )
+    try:
+        command_brief = build_today_command_brief(
+            trade_date=base["trade_date"],
+            readiness=readiness,
+            gate=gate,
+            decision_brief=decision_brief,
+            watchlist=watchlist,
+            screening_batch=screening_batch,
+            confirmation=confirmation,
+            action_groups=action_groups,
+            action_queue=action_queue,
+            refresh_status=None,
+        )
+    except Exception:
+        command_brief = None
+    action_register = build_today_action_register(
+        command_brief=command_brief,
+        action_queue=action_queue,
+        readiness=readiness,
+    )
+    payload = {
+        "generated_at": base["generated_at"],
+        "trade_date": base["trade_date"],
+        "expected_trade_date": base["expected_date"],
+        "data_trade_date": base["data_trade_date"],
+        "readiness_mode": readiness.get("readiness_mode"),
+        "action_queue": _public_today_action_queue(action_queue),
+        "decision_contracts_deferred": not include_decision_contracts,
+        "action_register": _public_today_action_register(action_register),
+    }
+    if decision_contracts:
+        payload["decision_contracts"] = _public_today_decision_contracts(decision_contracts)
+    return payload
+
+
+def build_today_action_contracts_view() -> dict[str, Any]:
+    payload = build_today_actions_view(include_decision_contracts=True)
+    return {
+        key: payload.get(key)
+        for key in (
+            "generated_at",
+            "trade_date",
+            "expected_trade_date",
+            "data_trade_date",
+            "readiness_mode",
+            "decision_contracts",
+        )
+        if payload.get(key) not in (None, "", [], {})
+    }
+
+
+def build_today_view() -> dict[str, Any]:
+    ensure_runtime_dirs()
+    trade_date_hint = expected_trade_date()
+    decision_brief = safe_canonical_load(load_decision_brief, trade_date=trade_date_hint)
+    watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
+    screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint)
+    confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
+    quality_status = safe_canonical_load(load_quality_status, lane="all")
+    lifecycle_context = resolve_lifecycle_context()
+    account_book = load_account_book()
+    today_action_decisions = load_today_action_decision_store()
+
+    readiness = compute_readiness(
+        watchlist=watchlist,
+        screening_batch=screening_batch,
+        confirmation=confirmation,
+        decision_brief=decision_brief,
+        quality_status=quality_status,
+        account_book=account_book,
+        today_action_decisions=today_action_decisions,
+        dataset_freshness=build_dataset_freshness_rows(
+            expected_date=trade_date_hint,
+            now=datetime.now(),
+        ),
+        formal_freshness=build_formal_freshness_rows(
+            expected_date=trade_date_hint,
+            now=datetime.now(),
+        ),
+    )
+
+    expected_date = readiness["expected_trade_date"]
+    data_trade_date = readiness["data_trade_date"]
+    trade_date = data_trade_date or current_trade_date(watchlist, screening_batch, decision_brief)
+    # Fail-closed: brief is only ``live`` when readiness is fully green AND
+    # the brief itself is aligned with the expected trade date.
+    brief_is_live = bool(readiness["brief_is_live"])
+
+    gate = (((screening_batch or {}).get("market_regime") or {}).get("execution_gate") or {})
+    hero_projection = _today_hero_projection(
+        decision_brief=decision_brief,
+        screening_batch=screening_batch,
+        watchlist=watchlist,
+        readiness=readiness,
+        gate=gate,
+        brief_is_live=brief_is_live,
+    )
+    hero = hero_projection["hero"]
+    position_cap = hero_projection["position_cap"]
+    main_theme = hero_projection["main_theme"]
+    summary_cards, summary_counts = _today_summary_cards(
+        watchlist=watchlist,
+        screening_batch=screening_batch,
+        confirmation=confirmation,
+        quality_status=quality_status,
+        readiness=readiness,
+        gate=gate,
+    )
+    watchlist_priority = int(summary_counts.get("watchlist_priority") or 0)
+    quality_timely = int(summary_counts.get("quality_timely") or 0)
+    confirmation_counts = summary_counts.get("confirmation_counts") or {}
+    action_groups = build_today_action_groups(
+        watchlist,
+        screening_batch,
+        confirmation,
+        decision_brief,
+        quality_status,
+        brief_is_live=brief_is_live,
+        gate=gate,
+    )
+    action_queue = build_today_action_queue(
+        action_groups,
+        trade_date,
+        account_book=account_book,
+        today_action_decisions=today_action_decisions,
+        expected_trade_date=expected_date,
+        readiness_mode=str(readiness.get("readiness_mode") or "blocked"),
+        readiness_ready=bool(readiness.get("ready")),
+    )
+
+    source_cards = _today_source_cards(
+        watchlist=watchlist,
+        screening_batch=screening_batch,
+        confirmation=confirmation,
+        decision_brief=decision_brief,
+        readiness=readiness,
+        brief_is_live=brief_is_live,
+    )
+
+    artifacts = _today_artifacts(
+        decision_brief=decision_brief,
+        watchlist=watchlist,
+        screening_batch=screening_batch,
+        confirmation=confirmation,
+    )
+    action_queue, decision_contracts = attach_decision_contracts(
+        action_queue,
+        trade_date=trade_date,
+        expected_trade_date=expected_date,
+        data_trade_date=data_trade_date,
+        readiness=readiness,
+        source_cards=source_cards,
+        artifacts=artifacts,
+    )
     links = today_nav_links()
     next_steps = build_today_next_steps(action_groups, links=links)
     top_rows = compress_today_actions(action_queue)
@@ -9527,9 +12599,9 @@ def build_today_view() -> dict[str, Any]:
     command_hero = build_today_command_hero(
         trade_date=trade_date,
         hero={
-            "title": hero_title,
-            "summary": hero_summary,
-            "context_note": context_note,
+            "title": hero.get("title"),
+            "summary": hero.get("summary"),
+            "context_note": hero.get("context_note"),
         },
         top_rows=top_rows,
         brief_is_live=brief_is_live,
@@ -9546,27 +12618,7 @@ def build_today_view() -> dict[str, Any]:
         brief_is_live=brief_is_live,
         source_cards=source_cards,
     )
-
-    quality_freshness_map = {item["key"]: item for item in readiness["quality_freshness"]}
-    quality_cards = []
-    for card in quality_lane_cards(quality_status):
-        # quality_lane_cards uses Chinese titles; map back via the (key, title)
-        # pairs to enrich each card with timely / stale_reasons metadata.
-        title = card.get("title") or ""
-        match_key = next(
-            (k for k, t in (("watchlist", "自选股"), ("aggressive", "进攻型早盘"), ("midday_confirmation", "午盘确认")) if t == title),
-            "",
-        )
-        merged = dict(card)
-        meta = quality_freshness_map.get(match_key) or {}
-        merged["key"] = match_key or card.get("key") or title
-        merged["timely"] = bool(meta.get("timely", card.get("status") == "ok"))
-        merged["stale_reasons"] = meta.get("stale_reasons", [])
-        merged["age_label"] = meta.get("age_label", "-")
-        if not merged["timely"] and card.get("tone") == "positive":
-            # downgrade misleading positive tone when readiness disagrees
-            merged["tone"] = "watch"
-        quality_cards.append(merged)
+    quality_cards = _today_quality_cards(quality_status, readiness)
 
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -9596,14 +12648,7 @@ def build_today_view() -> dict[str, Any]:
         "data_trade_date": data_trade_date,
         "brief_is_live": brief_is_live,
         "readiness": readiness,
-        "hero": {
-            "title": hero_title,
-            "summary": hero_summary,
-            "gate_label": hero_gate_label,
-            "position_cap": position_cap,
-            "main_theme": main_theme,
-            "context_note": context_note,
-        },
+        "hero": hero,
         "command_hero": command_hero,
         "command_brief": command_brief,
         "command_brief_error": command_brief_error,
@@ -9611,6 +12656,8 @@ def build_today_view() -> dict[str, Any]:
         "evidence_hint": evidence_hint,
         "action_groups": action_groups,
         "action_queue": action_queue,
+        "opportunity_v2_tracking": (screening_batch or {}).get("opportunity_v2_tracking") or {},
+        "decision_contracts": decision_contracts,
         "next_steps": next_steps,
         "top_rows": top_rows,
         "primary_actions": primary_actions,
@@ -9831,7 +12878,7 @@ def _portfolio_latest_execution(events: list[dict[str, Any]]) -> dict[str, Any] 
 def _portfolio_latest_outcome(events: list[dict[str, Any]]) -> dict[str, Any] | None:
     if not events:
         return None
-    rank = {"T+5": 3, "T+3": 2, "T+1": 1}
+    rank = {"T+10": 4, "T+5": 3, "T+3": 2, "T+1": 1}
     event = max(
         events,
         key=lambda item: (
@@ -11351,7 +14398,14 @@ def _attach_holding_ai_reviews(
     return attached
 
 
-def build_portfolio_account_view(*, refresh_quotes: bool = False) -> dict[str, Any]:
+def build_portfolio_account_view(
+    *,
+    refresh_quotes: bool = False,
+    formal_data_status: dict[str, Any] | None = None,
+    include_holding_reviews: bool = True,
+    include_account_history: bool = True,
+    base_inputs: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Build the canonical account-state view for the Portfolio page.
 
     Combines:
@@ -11362,29 +14416,39 @@ def build_portfolio_account_view(*, refresh_quotes: bool = False) -> dict[str, A
       the same fail-closed gate it shows on the Today page.
     """
 
-    ensure_runtime_dirs()
-    trade_date_hint = expected_trade_date()
-    decision_brief = safe_canonical_load(load_decision_brief, trade_date=trade_date_hint)
-    watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
-    screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint)
-    confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
-    quality_status = safe_canonical_load(load_quality_status, lane="all")
-    account_book = load_account_book()
-    today_action_decisions = load_today_action_decision_store()
-
-    readiness = compute_readiness(
-        watchlist=watchlist,
-        screening_batch=screening_batch,
-        confirmation=confirmation,
-        decision_brief=decision_brief,
-        quality_status=quality_status,
-        account_book=account_book,
-        today_action_decisions=today_action_decisions,
-        dataset_freshness=build_dataset_freshness_rows(
-            expected_date=trade_date_hint,
-            now=datetime.now(),
-        ),
+    base = dict(base_inputs) if isinstance(base_inputs, dict) else _today_base_inputs()
+    trade_date_hint = str(base.get("trade_date_hint") or expected_trade_date())
+    decision_brief = base.get("decision_brief") if isinstance(base.get("decision_brief"), dict) else None
+    watchlist = base.get("watchlist") if isinstance(base.get("watchlist"), dict) else None
+    screening_batch = base.get("screening_batch") if isinstance(base.get("screening_batch"), dict) else None
+    confirmation = base.get("confirmation") if isinstance(base.get("confirmation"), dict) else None
+    quality_status = base.get("quality_status") if isinstance(base.get("quality_status"), dict) else None
+    account_book = base.get("account_book") if isinstance(base.get("account_book"), dict) else load_account_book()
+    today_action_decisions = (
+        base.get("today_action_decisions")
+        if isinstance(base.get("today_action_decisions"), dict)
+        else load_today_action_decision_store()
     )
+    readiness = base.get("readiness") if isinstance(base.get("readiness"), dict) else None
+    if readiness is None:
+        now = datetime.now()
+        readiness = compute_readiness(
+            watchlist=watchlist,
+            screening_batch=screening_batch,
+            confirmation=confirmation,
+            decision_brief=decision_brief,
+            quality_status=quality_status,
+            account_book=account_book,
+            today_action_decisions=today_action_decisions,
+            dataset_freshness=build_dataset_freshness_rows(
+                expected_date=trade_date_hint,
+                now=now,
+            ),
+            formal_freshness=build_formal_freshness_rows(
+                expected_date=trade_date_hint,
+                now=now,
+            ),
+        )
     account_view = compute_account_view(account_book)
     cash_balance = float(account_view.get("cash_balance") or 0.0)
 
@@ -11438,18 +14502,21 @@ def build_portfolio_account_view(*, refresh_quotes: bool = False) -> dict[str, A
     )
     open_positions = _attach_portfolio_market_values(open_positions, quote_index)
     review_trade_date = str(readiness.get("expected_trade_date") or expected_trade_date())
-    holding_reviews, holding_action_summary = _build_holding_reviews(
-        open_positions,
-        watchlist=watchlist,
-        position_plans=account_view.get("position_plans") or [],
-        expected_date=review_trade_date,
-        readiness=readiness,
-        screening_batch=screening_batch,
-    )
-    holding_reviews = _attach_holding_ai_reviews(
-        holding_reviews,
-        expected_date=review_trade_date,
-    )
+    holding_reviews: list[dict[str, Any]] = []
+    holding_action_summary: dict[str, Any] | None = None
+    if include_holding_reviews:
+        holding_reviews, holding_action_summary = _build_holding_reviews(
+            open_positions,
+            watchlist=watchlist,
+            position_plans=account_view.get("position_plans") or [],
+            expected_date=review_trade_date,
+            readiness=readiness,
+            screening_batch=screening_batch,
+        )
+        holding_reviews = _attach_holding_ai_reviews(
+            holding_reviews,
+            expected_date=review_trade_date,
+        )
     market_value = round_money(sum(float(p.get("market_value") or 0.0) for p in open_positions if p.get("market_value") is not None))
     unrealized_pnl = round_money(sum(float(p.get("unrealized_pnl") or 0.0) for p in open_positions if p.get("unrealized_pnl") is not None))
     total_pnl = round_money(float(account_view["realized_pnl"]) + unrealized_pnl)
@@ -11489,25 +14556,38 @@ def build_portfolio_account_view(*, refresh_quotes: bool = False) -> dict[str, A
     ]
 
     account_state = readiness.get("account_state") or {}
-    return {
+    account_payload = {
+        **account_view,
+        "book_value": book_value,
+        "market_value": market_value if market_status["status"] in {"ok", "partial"} else None,
+        "unrealized_pnl": unrealized_pnl if market_status["status"] in {"ok", "partial"} else None,
+        "total_pnl": total_pnl,
+        "open_positions": open_positions,
+        "closed_positions": closed_positions,
+        "available_modes": list(ACCOUNT_MODES),
+    }
+    if not include_account_history:
+        for key in (
+            "fills",
+            "closed_positions",
+            "reconciliations",
+            "position_plans",
+            "identity_corrections",
+            "mode_history",
+            "available_modes",
+        ):
+            account_payload.pop(key, None)
+
+    payload = {
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "trade_date": readiness.get("expected_trade_date"),
         "expected_trade_date": readiness.get("expected_trade_date"),
         "data_trade_date": readiness.get("data_trade_date"),
-        "readiness": readiness,
-        "account": {
-            **account_view,
-            "book_value": book_value,
-            "market_value": market_value if market_status["status"] in {"ok", "partial"} else None,
-            "unrealized_pnl": unrealized_pnl if market_status["status"] in {"ok", "partial"} else None,
-            "total_pnl": total_pnl,
-            "open_positions": open_positions,
-            "closed_positions": closed_positions,
-            "available_modes": list(ACCOUNT_MODES),
-        },
+        "readiness": public_portfolio_readiness(readiness, formal_data_status),
+        "account": account_payload,
         "market_quotes": market_status,
-        "holding_reviews": holding_reviews,
-        "holding_action_summary": holding_action_summary,
+        "holding_reviews_deferred": not include_holding_reviews,
+        "account_history_deferred": not include_account_history,
         "summary_cards": summary_cards,
         "recent_fills": recent_fills,
         "unreconciled_intents": account_state.get("unreconciled_intents", []),
@@ -11519,3 +14599,7 @@ def build_portfolio_account_view(*, refresh_quotes: bool = False) -> dict[str, A
             "portfolio": "/portfolio",
         },
     }
+    if include_holding_reviews:
+        payload["holding_reviews"] = holding_reviews
+        payload["holding_action_summary"] = holding_action_summary or {}
+    return payload

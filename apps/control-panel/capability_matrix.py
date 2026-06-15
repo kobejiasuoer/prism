@@ -234,6 +234,7 @@ def _evaluate_one(
 
     has_critical_block = False
     has_degraded = False
+    has_policy_block = False
     seen_codes: set[str] = set()
 
     for dataset, state in all_states.items():
@@ -274,6 +275,7 @@ def _evaluate_one(
 
     # Capability-specific non-dataset gates.
     if capability in (Capability.APPROVE, Capability.TRADE) and not readiness_ready:
+        has_policy_block = True
         why_not.append({
             "code": "system_not_ready",
             "label": "系统就绪状态",
@@ -281,20 +283,23 @@ def _evaluate_one(
         })
 
     if capability is Capability.APPROVE and readiness_ready and not formal_ready:
+        has_policy_block = True
         why_not.append({
             "code": "formal_authority_pending",
-            "label": "权威数据源",
-            "message": "当前数据可用于观察与复核，正式放行需要权威数据源就位后再确认。",
+            "label": "正式数据口径",
+            "message": "当前快源可用于观察与复核；正式放行需要正式数据口径通过后再确认。",
         })
 
     if capability is Capability.TRADE:
         if account_mode not in {"shadow", "live_small"}:
+            has_policy_block = True
             why_not.append({
                 "code": "account_not_live",
                 "label": "账户模式",
-                "message": "当前为研究态账户，不参与真钱交易。切换到影子盘或小额实盘后再下单。",
+                "message": "账户处于研究态，不参与真钱交易；需要你手动切换到影子盘或小额实盘。",
             })
         elif not account_ready:
+            has_policy_block = True
             why_not.append({
                 "code": "account_not_reconciled",
                 "label": "账户对账",
@@ -303,12 +308,14 @@ def _evaluate_one(
 
     if capability is Capability.LEDGER_CAPTURE:
         if account_mode == "research":
+            has_policy_block = True
             why_not.append({
                 "code": "ledger_capture_research",
                 "label": "账本写入",
                 "message": "当前为研究态，不写真实账本。",
             })
         elif not recon_fresh and account_mode == "live_small":
+            has_policy_block = True
             why_not.append({
                 "code": "ledger_capture_stale_recon",
                 "label": "对账新鲜度",
@@ -332,9 +339,12 @@ def _evaluate_one(
     if has_critical_block or _capability_hard_blocked(why_not):
         status = "blocked"
         granted = False
-    elif has_degraded or why_not:
+    elif has_policy_block:
         status = "degraded"
         granted = False
+    elif has_degraded or why_not:
+        status = "degraded"
+        granted = True
     else:
         status = "ok"
         granted = True
@@ -413,9 +423,9 @@ def _humanize_state_for_capability(
             return f"{label}偏旧，先刷新后再做正式放行或交易。"
         return f"{label}偏旧，建议尽快刷新。"
     if state is FreshnessState.DEGRADED:
-        return f"{label}走的是次级数据源，正式放行需要等待权威数据回归。"
+        return f"{label}可用于观察和复盘；正式放行或真钱执行需要等待更高权限口径通过。"
     if state is FreshnessState.USABLE:
-        return f"{label}接近过期阈值，建议尽快刷新。"
+        return f"{label}尚未到产出窗口；可以先观察和复核，正式放行等确认补齐后再做。"
     return f"{label}状态需要确认。"
 
 
@@ -475,6 +485,198 @@ def _task_label(task_name: str | None) -> str | None:
     return _TASK_LABELS.get(task_name, task_name)
 
 
+def _account_mode(readiness_payload: Mapping[str, Any]) -> str:
+    account_state = readiness_payload.get("account_state") or {}
+    return str(account_state.get("mode") or "research").strip().lower()
+
+
+_PROVIDER_LABELS: dict[str, str] = {
+    "tushare": "Tushare",
+    "official_exchange": "交易所/官方公告源",
+    "official_index": "指数官方源",
+    "ricequant": "RiceQuant",
+    "joinquant": "JoinQuant",
+    "eastmoney": "东方财富",
+    "sina": "新浪",
+    "akshare": "AKShare",
+    "baostock": "BaoStock",
+    "pipeline": "Prism 快源管线",
+}
+
+
+def _provider_label(provider: str) -> str:
+    provider = provider.strip()
+    return _PROVIDER_LABELS.get(provider, provider)
+
+
+def _formal_target_labels(readiness_payload: Mapping[str, Any]) -> list[str]:
+    labels: list[str] = []
+    for source in readiness_payload.get("source_freshness") or []:
+        flags = [str(flag or "").strip() for flag in (source.get("authority_flags") or [])]
+        for flag in flags:
+            if not flag.startswith("target_authority_not_in_use:"):
+                continue
+            provider = flag.split(":", 1)[1].strip()
+            label = _provider_label(provider)
+            if label and label not in labels:
+                labels.append(label)
+    return labels
+
+
+def _has_pipeline_authority_gap(readiness_payload: Mapping[str, Any]) -> bool:
+    for source in readiness_payload.get("source_freshness") or []:
+        flags = {
+            str(flag or "").strip()
+            for flag in (source.get("authority_flags") or [])
+        }
+        if (
+            not bool(source.get("formal_decision_allowed"))
+            or not bool(source.get("source_authority_ready"))
+            or any(
+                flag.startswith("target_authority_not_in_use:")
+                or flag in {"upstream_authority_not_ready", "upstream_formal_not_allowed"}
+                for flag in flags
+            )
+        ):
+            return True
+    return False
+
+
+def _has_formal_base_gap(readiness_payload: Mapping[str, Any]) -> bool:
+    if "formal_base_ready" in readiness_payload:
+        return not bool(readiness_payload.get("formal_base_ready"))
+    rows = list(readiness_payload.get("formal_freshness") or [])
+    if not rows:
+        return not bool(readiness_payload.get("formal_ready"))
+    for row in rows:
+        if not bool(row.get("formal_decision_allowed")) or bool(row.get("stale")):
+            return True
+    return False
+
+
+def _observe_only_headline(
+    *,
+    readiness_mode: str,
+    readiness_payload: Mapping[str, Any],
+    can_trade_live: bool,
+) -> str:
+    account_mode = _account_mode(readiness_payload)
+    formal_base_gap = _has_formal_base_gap(readiness_payload)
+    pipeline_gap = _has_pipeline_authority_gap(readiness_payload) or not bool(
+        readiness_payload.get("pipeline_formal_ready", True)
+    )
+    account_gap = account_mode == "research" and not can_trade_live
+
+    if readiness_mode == "blocked":
+        return "关键数据被阻断，今日只看不动；先按恢复指引修复再考虑放行。"
+    if formal_base_gap and account_gap:
+        return "当前适合观察与复核；正式数据底座未完全通过，且账户处于研究态，所以不会进入真钱执行。"
+    if formal_base_gap:
+        return "当前适合观察与复核；正式数据底座未完全通过，先不做正式放行或真钱执行。"
+    if pipeline_gap and account_gap:
+        return "正式数据底座已接入；当前业务链路仍有观察级降级项，且账户处于研究态，所以不会进入真钱执行。"
+    if pipeline_gap:
+        return "正式数据底座已接入；当前业务链路仍有观察级降级项，先不做真钱执行。"
+    if account_gap:
+        return "当前数据可以复核；账户处于研究态，页面不会给真钱执行放行。"
+    return "当前可观察、可复核；但正式放行或真钱执行仍有闸门未通过。"
+
+
+def _reason_message(entry: Mapping[str, Any]) -> str:
+    return str(entry.get("message") or entry.get("label") or "").strip()
+
+
+def _summarize_formal_base_gap(readiness_payload: Mapping[str, Any]) -> str:
+    blockers = list(readiness_payload.get("formal_base_blockers") or [])
+    labels = []
+    for blocker in blockers:
+        label = str(blocker.get("label") or "").strip()
+        if label and label not in labels:
+            labels.append(label)
+    if labels:
+        visible = "、".join(labels[:3])
+        suffix = "等" if len(labels) > 3 else ""
+        return f"正式数据底座未完全通过：{visible}{suffix}仍需刷新或校验。"
+    return "正式数据底座未完全通过，正式放行需要等待目标数据源通过。"
+
+
+def _summarize_pipeline_gap(readiness_payload: Mapping[str, Any]) -> str:
+    labels: list[str] = []
+    for source in readiness_payload.get("source_freshness") or []:
+        if not bool(source.get("degraded")):
+            continue
+        label = str(source.get("label") or "").strip()
+        if label and label not in labels:
+            labels.append(label)
+    if labels:
+        visible = "、".join(labels[:3])
+        suffix = "等" if len(labels) > 3 else ""
+        targets = _formal_target_labels(readiness_payload)
+        if targets:
+            return f"正式数据底座已接入；{visible}{suffix}仍有观察级降级项，目标源包括{'、'.join(targets[:3])}。"
+        return f"正式数据底座已接入；{visible}{suffix}仍有观察级降级项。"
+    return "正式数据底座已接入；业务链路仍未达到真钱执行放行。"
+
+
+def _trust_blocking_reasons(
+    *,
+    level: str,
+    source_cap: Mapping[str, Any],
+    capabilities: Mapping[str, Mapping[str, Any]],
+    readiness_payload: Mapping[str, Any],
+    can_trade_live: bool,
+) -> list[str]:
+    if level != "observe_only":
+        reasons: list[str] = []
+        seen: set[str] = set()
+        for entry in source_cap.get("why_not") or []:
+            message = _reason_message(entry)
+            if not message or message in seen:
+                continue
+            seen.add(message)
+            reasons.append(message)
+            if len(reasons) >= 3:
+                break
+        return reasons
+
+    reasons: list[str] = []
+    seen: set[str] = set()
+
+    def add(message: str) -> None:
+        message = message.strip()
+        if not message or message in seen or len(reasons) >= 3:
+            return
+        seen.add(message)
+        reasons.append(message)
+
+    formal_base_gap = _has_formal_base_gap(readiness_payload)
+    pipeline_gap = _has_pipeline_authority_gap(readiness_payload) or not bool(
+        readiness_payload.get("pipeline_formal_ready", True)
+    )
+    if formal_base_gap:
+        add(_summarize_formal_base_gap(readiness_payload))
+    elif pipeline_gap:
+        add(_summarize_pipeline_gap(readiness_payload))
+
+    account_mode = _account_mode(readiness_payload)
+    if account_mode == "research" and not can_trade_live:
+        add("账户处于研究态，不参与真钱交易。")
+
+    for cap_name in ("approve", "trade"):
+        cap = capabilities.get(cap_name) or {}
+        for entry in cap.get("why_not") or []:
+            code = str(entry.get("code") or "").strip()
+            if (
+                code.endswith("_degraded")
+                or code == "formal_authority_pending"
+                or code == "account_not_live"
+            ):
+                continue
+            add(_reason_message(entry))
+
+    return reasons
+
+
 def evaluate_trust_level(
     *,
     readiness_payload: Mapping[str, Any],
@@ -484,9 +686,11 @@ def evaluate_trust_level(
     """Collapse the capability matrix into a single trust verdict.
 
     Rules:
-    * ``unreliable`` — observe is blocked. Data is too broken to look at.
-    * ``observe_only`` — observe is granted but approve is not. The page is
-      readable but today's decisions cannot be promoted to real money.
+    * ``unreliable`` — neither observe nor review is granted. Data is too
+      broken to inspect or review.
+    * ``observe_only`` — observe or review is granted but approve is not.
+      The page is readable but today's decisions cannot be promoted to real
+      money.
     * ``trusted`` — approve is granted. Real-money execution is gated only
       by account mode, which is reported separately via ``can_trade_live``.
     """
@@ -508,8 +712,9 @@ def evaluate_trust_level(
     can_approve = _granted("approve")
     can_trade_live = _granted("trade")
 
-    # "Unreliable" only when observe is fully blocked. A degraded observe still
-    # supports look-only usage, which belongs to "observe_only", not "unreliable".
+    # A degraded observe can still be "observe_only" only when either observe
+    # or review is actually granted. The label must not promise observation
+    # when both lower-risk capabilities are unavailable.
     observe_blocked = _status("observe") == "blocked"
 
     checked_at = str(readiness_payload.get("checked_at") or "")
@@ -520,8 +725,8 @@ def evaluate_trust_level(
 
     # readiness_mode is the upstream truth: blocked / shadow_only / live_ready.
     # Trust verdict respects it so the sidebar never disagrees with the home page.
-    if observe_blocked:
-        source_cap = capabilities.get("observe") or {}
+    if observe_blocked or not (can_observe or can_review):
+        source_cap = capabilities.get("observe") or capabilities.get("review") or {}
         level = "unreliable"
         label = "数据失信"
         tone = "negative"
@@ -531,10 +736,11 @@ def evaluate_trust_level(
         level = "observe_only"
         label = "仅可观察"
         tone = "warning"
-        if readiness_mode == "blocked":
-            headline = "关键数据被阻断，今日只看不动；先按恢复指引修复再考虑放行。"
-        else:
-            headline = "数据可观察可复核，但今日不可作为真钱执行依据。先补齐缺口再考虑放行。"
+        headline = _observe_only_headline(
+            readiness_mode=readiness_mode,
+            readiness_payload=readiness_payload,
+            can_trade_live=can_trade_live,
+        )
     else:
         source_cap = capabilities.get("trade") or capabilities.get("approve") or {}
         level = "trusted"
@@ -545,16 +751,13 @@ def evaluate_trust_level(
         else:
             headline = "数据完备，可作为正式判断依据；真钱执行还受账户模式约束，按需切换。"
 
-    blocking_reasons: list[str] = []
-    seen: set[str] = set()
-    for entry in source_cap.get("why_not") or []:
-        message = str(entry.get("message") or entry.get("label") or "").strip()
-        if not message or message in seen:
-            continue
-        seen.add(message)
-        blocking_reasons.append(message)
-        if len(blocking_reasons) >= 3:
-            break
+    blocking_reasons = _trust_blocking_reasons(
+        level=level,
+        source_cap=source_cap,
+        capabilities=capabilities,
+        readiness_payload=readiness_payload,
+        can_trade_live=can_trade_live,
+    )
 
     # Prefer top-level readiness recommendation; fall back to the source capability's first action.
     next_step: str | None = None

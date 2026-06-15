@@ -7,9 +7,11 @@ fail-closed status to the operator.
 
 Design notes:
 
-* `expected_trade_date` defaults to the current calendar weekday. On weekends
-  / holidays the expected trade date falls back to the most recent weekday,
-  but readiness is at most ``shadow_only`` because real markets are closed.
+* `expected_trade_date` defaults to the current exchange session. During the
+  overnight / premarket window it stays on the previous confirmed trading day
+  until the new-day producers are actually due. On weekends / holidays the
+  expected trade date also falls back to the most recent trading day, but
+  readiness is at most ``shadow_only`` because real markets are closed.
 * `data_trade_date` reflects what the loaded artifacts actually contain.
 * Old data (where data_trade_date != expected_trade_date) can NEVER be
   ``live_ready`` even if all sources agree with each other.
@@ -17,9 +19,9 @@ Design notes:
   strings.
 * Quality lanes are downgraded when ``checked_at`` does not align with the
   expected trade date, even if validation_status == ``ok``.
-* Sessions: morning / midday / afternoon / post-close / weekend.  In the
-  morning a missing midday-confirmation is a *warning*; from midday onwards
-  it becomes a blocker.
+* Sessions: morning / midday / afternoon / post-close / weekend.  Missing
+  midday-confirmation is deferred until its scheduled producer window, then
+  becomes a blocker if it still has not landed.
 
 The helper purposely returns plain JSON-friendly structures so it can be
 embedded in the ``/api/today`` payload directly.
@@ -72,6 +74,17 @@ DEFAULT_QUALITY_THRESHOLDS: dict[str, int] = {
     "aggressive": 18 * 3600,
     "midday_confirmation": 12 * 3600,
 }
+
+MIDDAY_CONFIRMATION_DUE_MINUTES = 13 * 60 + 45
+MIDDAY_CONFIRMATION_DEFER_REASON = "awaiting_midday_confirmation_window"
+MIDDAY_CONFIRMATION_FAILURE_STATUSES = frozenset({
+    "failed",
+    "invalid",
+    "quality_blocked",
+    "scan_failed",
+    "verify_failed",
+    "workflow_failed",
+})
 
 
 PIPELINE_AGGREGATE_DATASETS = {
@@ -173,7 +186,14 @@ def _same_day_pipeline_age_is_soft(
         provider == "pipeline"
         and dataset in SESSION_FINALIZED_DATASETS
         and data_trade_date == expected_date
-        and session_key == "post_close"
+        and session_key in {"post_close", "premarket", "weekend", "holiday", "unknown"}
+    )
+
+
+def _same_day_quality_age_is_soft(*, checked_trade_date: str | None, expected_date: str, session_key: str) -> bool:
+    return (
+        checked_trade_date == expected_date
+        and session_key in {"post_close", "premarket", "weekend", "holiday", "unknown"}
     )
 
 
@@ -210,6 +230,13 @@ def expected_trade_date(now: datetime | None = None) -> str:
 
     current = now or datetime.now()
     if is_trading_day(current):
+        # Before the new trading-day jobs are due, the most useful and
+        # internally consistent command state is still yesterday's finalized
+        # post-close bundle.  Flipping the expected date at midnight makes
+        # Prism ask for data that cannot exist yet and produces a misleading
+        # "source not ready" screen.
+        if current.hour < 9:
+            return most_recent_trading_day(current.date() - timedelta(days=1)).strftime("%Y-%m-%d")
         return current.strftime("%Y-%m-%d")
     return most_recent_trading_day(current).strftime("%Y-%m-%d")
 
@@ -257,6 +284,18 @@ def current_session(now: datetime | None = None) -> dict[str, Any]:
     if minutes < 15 * 60:
         return {"key": "afternoon", "label": "午后", "is_trading_day": True, "calendar_status": cal["status"]}
     return {"key": "post_close", "label": "盘后", "is_trading_day": True, "calendar_status": cal["status"]}
+
+
+def _minutes_since_midnight(value: datetime) -> int:
+    return value.hour * 60 + value.minute
+
+
+def _midday_confirmation_not_due(current: datetime, session: Mapping[str, Any]) -> bool:
+    if not bool(session.get("is_trading_day")):
+        return False
+    if session.get("key") not in {"premarket", "morning", "midday", "afternoon"}:
+        return False
+    return _minutes_since_midnight(current) < MIDDAY_CONFIRMATION_DUE_MINUTES
 
 
 # ---------------------------------------------------------------------------
@@ -417,6 +456,7 @@ def _build_quality(
     expected_date: str,
     now: datetime,
     threshold_seconds: int,
+    session_key: str,
 ) -> dict[str, Any]:
     lane = lanes.get(key) or {}
     validation_status = str(lane.get("validation_status") or "unknown").strip().lower()
@@ -425,8 +465,16 @@ def _build_quality(
 
     parsed = _parse_dt(checked_at)
     age = _age_seconds(now, parsed)
-    checked_trade_date = _date_str(checked_at)
-    lane_expected_trade_date = _date_str(expected_timestamp)
+    checked_trade_date = _date_str(
+        lane.get("checked_trade_date")
+        or lane.get("trade_date")
+        or checked_at
+    )
+    lane_expected_trade_date = _date_str(
+        lane.get("expected_trade_date")
+        or lane.get("trade_date")
+        or expected_timestamp
+    )
     # Display the lane-supplied expected trade date when available, otherwise
     # fall back to the global readiness expected date.  Operators read this
     # value, so we prefer the most specific signal.
@@ -434,6 +482,7 @@ def _build_quality(
 
     timely = True
     stale_reasons: list[str] = []
+    age_softened = False
 
     if validation_status not in {"ok"}:
         timely = False
@@ -457,8 +506,15 @@ def _build_quality(
         stale_reasons.append("trade_date_unknown")
 
     if age is not None and age > threshold_seconds:
-        timely = False
-        stale_reasons.append("age_exceeded")
+        if _same_day_quality_age_is_soft(
+            checked_trade_date=checked_trade_date,
+            expected_date=expected_date,
+            session_key=session_key,
+        ):
+            age_softened = True
+        else:
+            timely = False
+            stale_reasons.append("age_exceeded")
 
     return {
         "key": key,
@@ -473,6 +529,7 @@ def _build_quality(
         "age_label": _age_label(age),
         "timely": timely,
         "stale_reasons": stale_reasons,
+        "age_softened": age_softened,
     }
 
 
@@ -492,6 +549,61 @@ def _defer_quality_until_session(quality: dict[str, Any], *, reason: str) -> Non
     quality["stale_reasons"] = []
 
 
+def _soften_quality_with_current_source(quality: dict[str, Any], *, reason: str) -> None:
+    quality["timely"] = True
+    quality["source_softened"] = True
+    quality["source_softened_reason"] = reason
+    quality["stale_reasons"] = []
+
+
+def _confirmation_validation_status(confirmation: Mapping[str, Any] | None) -> str:
+    return str((confirmation or {}).get("validation_status") or "").strip().lower()
+
+
+def _confirmation_validation_errors(confirmation: Mapping[str, Any] | None) -> list[str]:
+    raw = (confirmation or {}).get("validation_errors")
+    if not isinstance(raw, Sequence) or isinstance(raw, (str, bytes)):
+        return []
+    return [str(item).strip() for item in raw if str(item).strip()]
+
+
+def _confirmation_failure_reason(confirmation: Mapping[str, Any] | None) -> str:
+    errors = _confirmation_validation_errors(confirmation)
+    if errors:
+        return errors[0]
+    status = _confirmation_validation_status(confirmation)
+    if status == "quality_blocked":
+        return "本轮午盘确认报告未通过发送前质检"
+    if status == "invalid":
+        return "晨间基线与当前午盘扫描不匹配"
+    if status == "scan_failed":
+        return "午盘实时扫描未成功"
+    if status in {"verify_failed", "failed", "workflow_failed"}:
+        return "午盘确认脚本执行失败"
+    runner_status = str((confirmation or {}).get("runner_status") or "").strip().lower()
+    if runner_status == "failed":
+        return "午盘确认任务执行失败"
+    return "午盘确认结果不是成功状态"
+
+
+def _confirmation_is_failed(confirmation: Mapping[str, Any] | None) -> bool:
+    if not confirmation:
+        return False
+    status = _confirmation_validation_status(confirmation)
+    runner_status = str(confirmation.get("runner_status") or "").strip().lower()
+    return bool(
+        status in MIDDAY_CONFIRMATION_FAILURE_STATUSES
+        or runner_status == "failed"
+        or _confirmation_validation_errors(confirmation)
+    )
+
+
+def _confirmation_is_successful(confirmation: Mapping[str, Any] | None) -> bool:
+    if not confirmation:
+        return False
+    return _confirmation_validation_status(confirmation) == "ok" and not _confirmation_is_failed(confirmation)
+
+
 # ---------------------------------------------------------------------------
 # compute_readiness — the main entry point
 # ---------------------------------------------------------------------------
@@ -507,6 +619,7 @@ def compute_readiness(
     account_book: Mapping[str, Any] | None = None,
     today_action_decisions: Mapping[str, Any] | None = None,
     dataset_freshness: list[dict[str, Any]] | None = None,
+    formal_freshness: list[dict[str, Any]] | None = None,
     now: datetime | None = None,
     expected_date: str | None = None,
     source_thresholds: Mapping[str, int] | None = None,
@@ -583,6 +696,7 @@ def compute_readiness(
             expected_date=expected,
             now=current,
             threshold_seconds=quality_thr["watchlist"],
+            session_key=str(session.get("key") or ""),
         ),
         _build_quality(
             key="aggressive",
@@ -591,6 +705,7 @@ def compute_readiness(
             expected_date=expected,
             now=current,
             threshold_seconds=quality_thr["aggressive"],
+            session_key=str(session.get("key") or ""),
         ),
         _build_quality(
             key="midday_confirmation",
@@ -599,17 +714,33 @@ def compute_readiness(
             expected_date=expected,
             now=current,
             threshold_seconds=quality_thr["midday_confirmation"],
+            session_key=str(session.get("key") or ""),
         ),
     ]
     quality_map = {item["key"]: item for item in quality_items}
+    confirmation_source = source_map["confirmation"]
+    confirmation_failed = _confirmation_is_failed(confirmation)
+    confirmation_current_and_available = bool(
+        confirmation_source["available"]
+        and not confirmation_source["stale"]
+        and confirmation_source.get("trade_date") == expected
+        and _confirmation_is_successful(confirmation)
+    )
 
-    # Morning sessions happen before the midday confirmation producer is due.
-    # Treat that artifact as future work, not missing data, so the command
-    # center does not ask the operator to manually refresh something that the
-    # scheduler is intentionally waiting to run at 13:45.
-    if session.get("key") in {"premarket", "morning"}:
-        _defer_source_until_session(source_map["confirmation"], reason="awaiting_midday_confirmation_window")
-        _defer_quality_until_session(quality_map["midday_confirmation"], reason="awaiting_midday_confirmation_window")
+    # The midday confirmation producer is scheduled for 13:45.  Before that
+    # window, missing confirmation is future work rather than broken data.
+    # If a same-day confirmation has already landed early, keep it visible as
+    # available instead of labeling it as waiting.
+    if _midday_confirmation_not_due(current, session):
+        confirmation_missing_or_stale = confirmation_source["stale"] or not confirmation_source["available"]
+        if confirmation_missing_or_stale:
+            _defer_source_until_session(confirmation_source, reason=MIDDAY_CONFIRMATION_DEFER_REASON)
+        _defer_quality_until_session(quality_map["midday_confirmation"], reason=MIDDAY_CONFIRMATION_DEFER_REASON)
+    elif confirmation_current_and_available and not quality_map["midday_confirmation"]["timely"]:
+        _soften_quality_with_current_source(
+            quality_map["midday_confirmation"],
+            reason="current_confirmation_available",
+        )
 
     blockers: list[dict[str, str]] = []
     warnings: list[dict[str, str]] = []
@@ -620,8 +751,7 @@ def compute_readiness(
             recommended_tasks.append(task)
 
     # Core source rules ---------------------------------------------------
-    is_pre_midday = session["key"] in {"premarket", "morning"}
-    is_post_midday = session["key"] in {"midday", "afternoon", "post_close"}
+    is_pre_confirmation_due = _midday_confirmation_not_due(current, session)
     is_trading_day = bool(session.get("is_trading_day"))
 
     # watchlist must be live in every weekday session
@@ -648,7 +778,21 @@ def compute_readiness(
 
     # confirmation: warning in the morning, blocker after midday
     cf = source_map["confirmation"]
-    if not cf.get("deferred") and (cf["stale"] or not cf["available"]):
+    if not cf.get("deferred") and cf["available"] and confirmation_failed:
+        status = _confirmation_validation_status(confirmation) or "unknown"
+        reason = _confirmation_failure_reason(confirmation)
+        details = {
+            "code": "confirmation_failed",
+            "label": cf["label"],
+            "message": f"午盘确认执行失败（{status}）：{reason}。请重跑午盘确认。",
+            "recommended_task": "midday_confirmation",
+        }
+        if is_pre_confirmation_due:
+            warnings.append(details)
+        else:
+            blockers.append(details)
+            add_recommendation("midday_confirmation")
+    elif not cf.get("deferred") and (cf["stale"] or not cf["available"]):
         # The canonical confirmation artifact (midday_verification_result.json)
         # is produced by ``run_midday_confirmation.sh`` — i.e. the
         # ``midday_confirmation`` task.  ``midday_refresh`` writes a different
@@ -660,7 +804,7 @@ def compute_readiness(
             "message": _stale_message(cf, expected),
             "recommended_task": "midday_confirmation",
         }
-        if is_pre_midday:
+        if is_pre_confirmation_due:
             warnings.append(details)
         else:
             blockers.append(details)
@@ -679,6 +823,8 @@ def compute_readiness(
 
     for item in sources:
         if not item.get("degraded") or item.get("stale") or not item.get("available"):
+            continue
+        if item.get("key") == "confirmation" and confirmation_failed:
             continue
         task = {
             "watchlist": "watchlist_refresh",
@@ -712,7 +858,11 @@ def compute_readiness(
         })
         add_recommendation("aggressive")
 
-    if not quality_map["midday_confirmation"].get("deferred") and not quality_map["midday_confirmation"]["timely"]:
+    if (
+        not confirmation_failed
+        and not quality_map["midday_confirmation"].get("deferred")
+        and not quality_map["midday_confirmation"]["timely"]
+    ):
         # The midday_confirmation lane is regenerated by run_midday_confirmation.sh.
         # midday_refresh produces a different lane (midday_refresh_result.json)
         # and would not refresh this quality artifact, so we must recommend
@@ -723,7 +873,7 @@ def compute_readiness(
             "message": _quality_message(quality_map["midday_confirmation"], expected),
             "recommended_task": "midday_confirmation",
         }
-        if is_pre_midday:
+        if is_pre_confirmation_due:
             warnings.append(details)
         else:
             blockers.append(details)
@@ -755,7 +905,7 @@ def compute_readiness(
         "confirmation": "midday_confirmation",
         "decision_brief": "command_brief",
     }
-    formal_blockers = [
+    source_formal_blockers = [
         {
             "code": f"{item['key']}_formal_not_allowed",
             "label": item["label"],
@@ -765,6 +915,23 @@ def compute_readiness(
         for item in sources
         if item.get("manifest_path") and not bool(item.get("formal_decision_allowed"))
     ]
+    formal_dataset_rows = list(formal_freshness or [])
+    formal_dataset_blockers: list[dict[str, Any]] = []
+    for item in formal_dataset_rows:
+        dataset_key = str(item.get("dataset") or item.get("key") or "").strip()
+        if not dataset_key:
+            continue
+        if bool(item.get("formal_decision_allowed")) and not bool(item.get("stale")):
+            continue
+        formal_dataset_blockers.append({
+            "code": f"{dataset_key.replace('.', '_')}_formal_not_allowed",
+            "label": str(item.get("label") or dataset_key),
+            "message": _formal_authority_message(item),
+            "recommended_task": "formal_data_refresh",
+        })
+    formal_blockers = [*source_formal_blockers, *formal_dataset_blockers]
+    formal_base_ready = bool(formal_dataset_rows) and not formal_dataset_blockers
+    pipeline_formal_ready = not source_formal_blockers
 
     # Account-state evaluation (does NOT alter data-side blockers; only
     # tightens the live-ready gate when the operator has opted into a real-
@@ -845,9 +1012,12 @@ def compute_readiness(
         "ready": ready,
         "readiness_mode": readiness_mode,
         "formal_ready": not formal_blockers,
+        "formal_base_ready": formal_base_ready,
+        "pipeline_formal_ready": pipeline_formal_ready,
         "session": session,
         "source_freshness": sources,
         "dataset_freshness": dataset_rows,
+        "formal_freshness": formal_dataset_rows,
         "blockers": blockers,
         "warnings": warnings,
         "stale_count": stale_count,
@@ -881,7 +1051,11 @@ def compute_readiness(
         "blockers": blockers,
         "warnings": warnings,
         "formal_ready": not formal_blockers,
+        "formal_base_ready": formal_base_ready,
+        "pipeline_formal_ready": pipeline_formal_ready,
         "formal_blockers": formal_blockers,
+        "formal_base_blockers": formal_dataset_blockers,
+        "pipeline_formal_blockers": source_formal_blockers,
         "source_freshness": sources,
         "quality_freshness": quality_items,
         "recommended_tasks": recommended_tasks,
@@ -889,6 +1063,7 @@ def compute_readiness(
         "source_states": source_state_map,
         "dataset_freshness": dataset_rows,
         "dataset_states": dataset_state_map,
+        "formal_freshness": formal_dataset_rows,
         "capabilities": capabilities_payload,
         "trust_level": trust_level_payload,
     }
@@ -934,6 +1109,7 @@ def _build_account_state(
             "mode": "research",
             "mode_label": "研究态",
             "mode_tone": "info",
+            "mode_updated_at": "",
             "cash_balance": 0.0,
             "equity_at_cost": 0.0,
             "positions_count": 0,
@@ -947,6 +1123,7 @@ def _build_account_state(
         }
 
     mode = str(account_book.get("mode") or "research").strip().lower()
+    mode_updated_at = str(account_book.get("mode_updated_at") or "").strip()
     cash_balance = _to_money(account_book.get("cash_balance"))
     unsafe_bypass_active = bool(account_book.get("unsafe_bypass_active"))
     unsafe_bypass_note = str(account_book.get("unsafe_bypass_note") or "").strip()
@@ -1103,6 +1280,7 @@ def _build_account_state(
         "mode_tone": {"research": "info", "shadow": "watch", "live_small": "risk"}.get(
             mode, "info"
         ),
+        "mode_updated_at": mode_updated_at,
         "cash_balance": cash_balance,
         "equity_at_cost": equity_at_cost,
         "positions_count": len(open_positions),
@@ -1266,12 +1444,14 @@ def _degraded_message(source: Mapping[str, Any]) -> str:
     label = str(source.get("label") or "数据源")
     reasons = [str(item) for item in source.get("degradation_reasons") or []]
     if any("fallback" in item for item in reasons):
-        return f"{label} 已刷新；部分上游使用降级/回退来源，已在 Formal 闸门中标记。"
+        return f"{label} 已刷新；部分上游使用回退来源，真钱执行不放行。"
     if any("live_small" in item for item in reasons):
-        return f"{label} 已刷新；上游 live/formal 权限未完全通过，已在 Formal 闸门中标记。"
+        return f"{label} 已刷新；上游仍有观察级降级项，真钱执行不放行。"
     if any("freshness" in item for item in reasons):
-        return f"{label} 已刷新；部分上游 freshness 未完全通过，已在 Formal 闸门中标记。"
-    return f"{label} 已刷新；仍存在上游降级信号，已在 Formal 闸门中标记。"
+        return f"{label} 已刷新；部分上游新鲜度未完全通过，已在状态面板中标记。"
+    if any("same_day" in item or "age_exceeded" in item for item in reasons):
+        return f"{label} 使用上一交易日已对齐产物；当前为非实盘窗口，仅作观察和复盘。"
+    return f"{label} 已刷新；仍存在上游降级信号，已在状态面板中标记。"
 
 
 def _readiness_blocking_warnings(warnings: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
@@ -1296,10 +1476,10 @@ def _formal_authority_message(source: Mapping[str, Any]) -> str:
     target = str(source.get("target_authority_provider") or source.get("authority_provider") or "-")
     flags = [str(flag) for flag in source.get("authority_flags") or []]
     if "fallback_provider" in flags or "fallback_display_only" in flags:
-        return f"{label} 当前使用回退源 {provider}，只能观察，不能进入 formal 决策。"
+        return f"{label} 当前使用回退源 {provider}，只能观察，不能进入正式放行。"
     if any(flag.startswith("target_authority_not_in_use:") for flag in flags):
-        return f"{label} 当前源为 {provider}，目标权威源是 {target}；可用于 {lane} 观察，尚不能进入 formal 决策。"
-    return f"{label} 尚未满足 formal 数据源闸门；当前源 {provider}，目标权威源 {target}。"
+        return f"{label} 当前源为 {provider}，目标源是 {target}；可用于 {lane} 观察，尚不能进入正式放行。"
+    return f"{label} 尚未满足正式数据口径；当前源 {provider}，目标源 {target}。"
 
 
 def _pick_trade_date(values: Iterable[str]) -> str | None:

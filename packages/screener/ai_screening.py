@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -23,6 +24,7 @@ try:
         AI_SCREENING_EVALUATION_RULES,
         ENTRY_OUTPUT_DEFAULTS,
         EXECUTION_QUALITY_RULES,
+        OPPORTUNITY_V2_RULES,
         SETUP_PLAN_RULES,
         SETUP_THRESHOLDS,
         build_execution_gate,
@@ -40,15 +42,80 @@ except ModuleNotFoundError:
         AI_SCREENING_EVALUATION_RULES,
         ENTRY_OUTPUT_DEFAULTS,
         EXECUTION_QUALITY_RULES,
+        OPPORTUNITY_V2_RULES,
         SETUP_PLAN_RULES,
         SETUP_THRESHOLDS,
         build_execution_gate,
     )
 
+try:
+    from screener.opportunity_v2 import (
+        ACTION_ORDER as V2_ACTION_ORDER,
+        ACTION_LABELS as V2_ACTION_LABELS,
+        apply_v2_to_shortlist,
+        resolve_mode as resolve_v2_mode,
+        tracking_records as build_v2_tracking_records,
+    )
+except ModuleNotFoundError:
+    from opportunity_v2 import (
+        ACTION_ORDER as V2_ACTION_ORDER,
+        ACTION_LABELS as V2_ACTION_LABELS,
+        apply_v2_to_shortlist,
+        resolve_mode as resolve_v2_mode,
+        tracking_records as build_v2_tracking_records,
+    )
+
+try:
+    from screener.tushare_factors import (
+        MIN_COMPLETENESS_FOR_POSITIVE_ADJUSTMENT,
+        PRIORITY_ADJUSTMENT_CAP,
+        PRIORITY_ADJUSTMENT_K,
+        RISK_FLAG_PENALTY,
+        risk_priority_penalty,
+    )
+except ModuleNotFoundError:
+    from tushare_factors import (
+        MIN_COMPLETENESS_FOR_POSITIVE_ADJUSTMENT,
+        PRIORITY_ADJUSTMENT_CAP,
+        PRIORITY_ADJUSTMENT_K,
+        RISK_FLAG_PENALTY,
+        risk_priority_penalty,
+    )
+
+
+def _tushare_priority_adjustment(item) -> float:
+    return _tushare_priority_adjustment_parts(item)["tushare_priority_adjustment"]
+
+
+def _tushare_priority_adjustment_parts(item) -> dict[str, float]:
+    fb = item.get("tushare_factors") or {}
+    score = fb.get("tushare_score")
+    completeness = fb.get("data_completeness")
+    score_adj = 0.0
+    if isinstance(score, (int, float)):
+        score_adj = max(-PRIORITY_ADJUSTMENT_CAP, min(PRIORITY_ADJUSTMENT_CAP, (score - 50.0) * PRIORITY_ADJUSTMENT_K))
+    if (
+        score_adj > 0
+        and isinstance(completeness, (int, float))
+        and completeness < MIN_COMPLETENESS_FOR_POSITIVE_ADJUSTMENT
+    ):
+        score_adj = 0.0
+    positive = max(0.0, score_adj)
+    risk_penalty = max(0.0, -score_adj) + risk_priority_penalty(fb)
+    priority = max(-PRIORITY_ADJUSTMENT_CAP, min(PRIORITY_ADJUSTMENT_CAP, positive - risk_penalty))
+    return {
+        "tushare_positive_adjustment": round(positive, 2),
+        "tushare_risk_penalty": round(risk_penalty, 2),
+        "tushare_priority_adjustment": round(priority, 2),
+    }
+
+
 BASE = Path(__file__).resolve().parents[1]
 DEFAULT_SCAN_PATH = BASE / "data" / "scan_result.json"
 DEFAULT_OUTPUT_PATH = BASE / "data" / "ai_screening_result.json"
 AI_HISTORY_DIR = BASE / "data" / "ai_history"
+V2_TRACKING_DIR = BASE / "data" / "opportunity_v2_history"
+V2_TRACKING_LATEST = BASE / "data" / "opportunity_v2_tracking.json"
 
 STRATEGY_LABELS = {
     "combined": "综合",
@@ -64,6 +131,97 @@ STATUS_RANK = {
     "excluded": 0,
 }
 
+V2_ACTION_RANK = V2_ACTION_ORDER
+
+
+def v2_action_rank(item: dict) -> int:
+    return V2_ACTION_RANK.get(str(item.get("suggested_action") or ""), 0)
+
+
+def v2_priority_adjustment(item: dict) -> float:
+    judgment = item.get("opportunity_v2") if isinstance(item.get("opportunity_v2"), dict) else {}
+    confidence = safe_float(judgment.get("confidence"), default=0.0)
+    return round(v2_action_rank(item) * 18 + confidence * 20, 2)
+
+
+def apply_v2_candidate_policy(item: dict) -> dict:
+    judgment = item.get("opportunity_v2") if isinstance(item.get("opportunity_v2"), dict) else {}
+    suggested_action = str(judgment.get("suggested_action") or item.get("suggested_action") or "observe")
+    action_label = V2_ACTION_LABELS.get(suggested_action, suggested_action)
+    item["suggested_action"] = suggested_action
+    item["suggested_action_label"] = action_label
+    item["confidence"] = judgment.get("confidence")
+    item["thesis"] = judgment.get("thesis") or item.get("thesis")
+    item["why_now"] = judgment.get("why_now") or item.get("why_now")
+    item["invalidation"] = judgment.get("invalidation") or item.get("invalidation")
+    item["missing_confirmation"] = judgment.get("missing_confirmation") or item.get("missing_confirmation") or []
+    hard_gate = judgment.get("hard_gate") if isinstance(judgment.get("hard_gate"), dict) else {}
+    item["hard_gate_max_action"] = hard_gate.get("maximum_allowed_action") or item.get("hard_gate_max_action")
+    item["hard_gate_block_reason"] = "; ".join(hard_gate.get("block_reasons") or []) or item.get("hard_gate_block_reason") or ""
+    item["judge_source"] = judgment.get("judge_source") or item.get("judge_source")
+    item["ai_status"] = judgment.get("ai_status") or item.get("ai_status")
+    item["ai_summary"] = judgment.get("ai_summary") if isinstance(judgment.get("ai_summary"), dict) else item.get("ai_summary") or {}
+    item["ai_delta"] = judgment.get("ai_delta") if isinstance(judgment.get("ai_delta"), dict) else item.get("ai_delta") or {}
+    item["ai_status_label"] = (item.get("ai_summary") or {}).get("label") or item.get("ai_status_label") or ""
+    item["ai_provider"] = judgment.get("ai_provider") or item.get("ai_provider")
+    item["ai_model"] = judgment.get("ai_model") or item.get("ai_model")
+    calibration = judgment.get("calibration") if isinstance(judgment.get("calibration"), dict) else {}
+    mode_guard = judgment.get("mode_guard") if isinstance(judgment.get("mode_guard"), dict) else {}
+    item["v2_mode_requested"] = judgment.get("mode_requested") or mode_guard.get("requested_mode") or ""
+    item["v2_mode_effective"] = judgment.get("mode_effective") or mode_guard.get("effective_mode") or judgment.get("mode") or ""
+    item["v2_active_allowed"] = mode_guard.get("active_allowed") if "active_allowed" in mode_guard else calibration.get("active_allowed")
+    item["v2_calibration_stage"] = calibration.get("sample_stage") or mode_guard.get("sample_stage") or ""
+    item["v2_calibration_guard_reason"] = calibration.get("guard_reason") or mode_guard.get("guard_reason") or ""
+    item["v2_calibration_mature_samples"] = calibration.get("mature_samples") or mode_guard.get("mature_samples")
+    item["v2_calibration_threshold_adjustments"] = calibration.get("threshold_adjustments") if isinstance(calibration.get("threshold_adjustments"), dict) else {}
+    item["v2_playbook_adjustment"] = calibration.get("playbook_adjustment") if isinstance(calibration.get("playbook_adjustment"), dict) else {}
+
+    entry_plan = dict(item.get("entry_plan") or {})
+    if suggested_action == "actionable":
+        item["screening_status"] = "approved"
+        item["tier"] = "A"
+        item["tier_note"] = "V2 可执行待复核"
+        entry_plan["sizing"] = entry_plan.get("sizing") or "0.5成以内，触发后分批"
+        entry_plan["action"] = entry_plan.get("action") or "满足触发与承接后可进入买入复核。"
+    elif suggested_action == "trial":
+        item["screening_status"] = "approved"
+        item["tier"] = "B"
+        item["tier_note"] = "V2 试错待触发"
+        entry_plan["sizing"] = entry_plan.get("sizing") or "0.3-0.5成以内"
+        entry_plan["action"] = entry_plan.get("action") or "只在触发、承接和资金同步后轻仓试错。"
+    elif suggested_action == "shadow":
+        item["screening_status"] = "caution"
+        item["tier"] = "B" if item.get("tier") == "A" else "C"
+        item["tier_note"] = "V2 影子跟踪，暂不买"
+        entry_plan["sizing"] = "先不开新仓"
+        entry_plan["action"] = "只做影子跟踪，验证 thesis 是否成立。"
+    elif suggested_action == "review":
+        item["screening_status"] = "caution"
+        item["tier"] = "C"
+        item["tier_note"] = "V2 人工复核"
+        entry_plan["sizing"] = "先不开新仓"
+        entry_plan["action"] = "先人工复核结构与缺口。"
+    else:
+        item["screening_status"] = "caution"
+        item["tier"] = "C"
+        item["tier_note"] = "V2 只观察"
+        entry_plan["sizing"] = "先不开新仓"
+        entry_plan["action"] = "结构假设还不完整，只观察。"
+
+    missing = item.get("missing_confirmation") or []
+    if missing:
+        item["screening_note"] = f"{action_label}；还差：" + "、".join(str(value) for value in missing[:2])
+    else:
+        item["screening_note"] = str(judgment.get("upgrade_reason") or item.get("screening_note") or action_label)
+    if item.get("invalidation"):
+        item["main_risk"] = item.get("invalidation")
+    if item.get("why_now"):
+        item["entry_reason"] = item.get("why_now")
+    item["entry_plan"] = entry_plan
+    item["tier_rank"] = {"A": 3, "B": 2, "C": 1}.get(item["tier"], 1)
+    item["priority_score"] = round(safe_float(item.get("priority_score"), default=0.0) + v2_priority_adjustment(item), 2)
+    return item
+
 SCREENING_RULES = [
     "保留 scan.py 已筛出的进攻型候选，按策略分别做二次过滤",
     "成交额不足或底层 attack_profile 已淘汰的股票，直接排除",
@@ -72,6 +230,7 @@ SCREENING_RULES = [
     "根据 market_regime 做攻守切换：弱势日压制进攻型通过率，中性日避免满仓追高",
     "追涨型 setup 必须额外满足执行质量、一致性和多策略共振，不再因单一策略高分直接放行",
     "跨策略去重后生成 shortlist，并给出建议送 analyzer 的前 3",
+    "V2 新增结构假设 + 市场行为验证层：公共指标只作为 evidence，最终机会语义由 playbook/thesis/确认缺口/硬闸门封顶决定",
 ]
 
 
@@ -95,6 +254,30 @@ def ingress_summary(manifest: dict | None, manifest_path: Path | None) -> dict[s
         "freshness_status": manifest.get("freshness_status"),
         "live_small_allowed": bool(manifest.get("live_small_allowed")),
     }
+
+
+def date_prefix(value) -> str:
+    text = str(value or "").strip()
+    if len(text) >= 10 and text[4:5] == "-" and text[7:8] == "-":
+        return text[:10]
+    digits = "".join(ch for ch in text if ch.isdigit())
+    if len(digits) >= 8:
+        return f"{digits[:4]}-{digits[4:6]}-{digits[6:8]}"
+    return ""
+
+
+def resolve_trade_date(scan_data: dict) -> str:
+    for value in (
+        scan_data.get("trade_date"),
+        os.environ.get("PRISM_EXPECTED_TRADE_DATE"),
+        os.environ.get("TRADE_DATE"),
+        os.environ.get("RUN_DATE"),
+        scan_data.get("timestamp"),
+    ):
+        resolved = date_prefix(value)
+        if resolved:
+            return resolved
+    return datetime.now().strftime("%Y-%m-%d")
 
 
 def safe_float(value, default=0.0):
@@ -136,6 +319,33 @@ def unique_keep_order(values):
         seen.add(value)
         result.append(value)
     return result
+
+
+def tushare_risk_fields(item) -> dict:
+    factors = item.get("tushare_factors") if isinstance(item.get("tushare_factors"), dict) else {}
+    risk_flags = unique_keep_order([
+        *(item.get("risk_flags") or []),
+        *(item.get("factor_risk_flags") or []),
+        *(factors.get("risk_flags") or []),
+    ])
+    return {
+        "risk_level": item.get("risk_level") or factors.get("risk_level") or ("warn" if risk_flags else "info"),
+        "risk_flags": risk_flags,
+        "risk_items": item.get("risk_items") or factors.get("risk_items") or [],
+        "degrade_reason": item.get("degrade_reason") or factors.get("degrade_reason") or "",
+        "block_reason": item.get("block_reason") or factors.get("block_reason") or "",
+        "risk_evidence_refs": item.get("risk_evidence_refs") or factors.get("risk_evidence_refs") or [],
+        "risk_source_cards": item.get("risk_source_cards") or factors.get("risk_source_cards") or [],
+    }
+
+
+def _risk_primary_reason(risk_fields: dict) -> str:
+    return (
+        risk_fields.get("block_reason")
+        or risk_fields.get("degrade_reason")
+        or ((risk_fields.get("risk_flags") or [None])[0])
+        or ""
+    )
 
 
 def execution_gate_of(market_regime=None):
@@ -525,6 +735,7 @@ def evaluate_stock(stock, market_regime=None, market_themes=None):
     change_pct = safe_float(stock.get("change_pct"))
     signals = stock.get("signals") or []
     notice_risk_tags = stock.get("notice_risk_tags") or []
+    factor_risk = tushare_risk_fields(stock)
 
     evaluation_rules = AI_SCREENING_EVALUATION_RULES
     amount_rules = evaluation_rules["amount_yi"]
@@ -658,6 +869,13 @@ def evaluate_stock(stock, market_regime=None, market_themes=None):
     if not trade_note.get("watch_condition"):
         caution_reasons.append("缺少明确的次日观察条件")
 
+    if factor_risk.get("block_reason"):
+        caution_reasons.append(factor_risk["block_reason"])
+        consistency -= 3
+    elif factor_risk.get("risk_level") == "degrade" and factor_risk.get("degrade_reason"):
+        caution_reasons.append(factor_risk["degrade_reason"])
+        consistency -= 2
+
     if hard_reasons:
         status = "excluded"
         reason = hard_reasons[0]
@@ -729,6 +947,7 @@ def build_stock_entry(stock, strategy_name, decision, market_regime=None, market
     trade_note = stock.get("trade_note") or {}
     attack_profile = stock.get("attack_profile") or {}
     capital_flow = stock.get("capital_flow") or {}
+    risk_fields = tushare_risk_fields(stock)
     normalized_capital_flow = normalize_capital_flow_payload(capital_flow, legacy_source_unit=UNIT_YUAN)
     today_wan = capital_flow_today_wan(capital_flow, legacy_source_unit=UNIT_YUAN)
     five_day_total_wan = capital_flow_five_day_total_wan(capital_flow, legacy_source_unit=UNIT_YUAN)
@@ -786,6 +1005,14 @@ def build_stock_entry(stock, strategy_name, decision, market_regime=None, market
             "net_profit": fundamentals.get("net_profit"),
         },
         "notice_risk_tags": stock.get("notice_risk_tags") or [],
+        "risk_level": risk_fields["risk_level"],
+        "risk_flags": risk_fields["risk_flags"],
+        "risk_items": risk_fields["risk_items"],
+        "degrade_reason": risk_fields["degrade_reason"],
+        "block_reason": risk_fields["block_reason"],
+        "risk_evidence_refs": risk_fields["risk_evidence_refs"],
+        "risk_source_cards": risk_fields["risk_source_cards"],
+        "tushare_factors": stock.get("tushare_factors"),
     }
 
 
@@ -875,6 +1102,40 @@ def sort_selected(entries):
     )
 
 
+def apply_candidate_risk_policy(item: dict) -> dict:
+    risk = tushare_risk_fields(item)
+    item.update(risk)
+    item["risk_flags"] = unique_keep_order(risk.get("risk_flags") or [])
+    risk_reason = _risk_primary_reason(risk)
+    entry_plan = dict(item.get("entry_plan") or {})
+
+    if risk.get("block_reason"):
+        item["screening_status"] = "caution"
+        item["screening_note"] = risk["block_reason"]
+        item["tier"] = "C"
+        item["tier_note"] = "硬执行约束，仅保留观察"
+        item["main_risk"] = risk["block_reason"]
+        entry_plan["sizing"] = "先不开新仓"
+        entry_plan["action"] = "不执行，等待停牌/ST/涨跌停等硬约束解除后再复核。"
+        entry_plan["trigger"] = "硬执行约束解除，且资金与承接重新确认后再看。"
+        entry_plan["avoid"] = risk["block_reason"]
+    elif risk.get("risk_level") == "degrade" and risk.get("degrade_reason"):
+        if item.get("screening_status") == "approved":
+            item["screening_status"] = "caution"
+            item["screening_note"] = risk["degrade_reason"]
+            item["tier"] = "C"
+            item["tier_note"] = "风险降级，仅观察"
+            entry_plan["sizing"] = "先不开新仓"
+            entry_plan["action"] = "先观察，不直接升级执行。"
+            entry_plan["avoid"] = risk["degrade_reason"]
+        item["main_risk"] = item.get("main_risk") or risk["degrade_reason"]
+    elif risk_reason:
+        item["main_risk"] = item.get("main_risk") or risk_reason
+
+    item["entry_plan"] = entry_plan
+    return item
+
+
 def summarize_strategy(strategy_name, stocks, market_regime=None, market_themes=None):
     selected = []
     excluded = []
@@ -919,7 +1180,7 @@ def summarize_strategy(strategy_name, stocks, market_regime=None, market_themes=
     }
 
 
-def aggregate_shortlist(strategy_views, raw_strategies, market_regime=None):
+def aggregate_shortlist(strategy_views, raw_strategies, market_regime=None, market_themes=None, v2_context=None):
     execution_gate = execution_gate_of(market_regime)
     gate_status = execution_gate.get("status")
     shortlisted = {}
@@ -965,13 +1226,21 @@ def aggregate_shortlist(strategy_views, raw_strategies, market_regime=None):
                     "fundamentals": item["fundamentals"],
                     "consistency": item.get("consistency") or {},
                     "execution_quality": item.get("execution_quality") or {},
+                    "risk_level": item.get("risk_level") or "info",
+                    "risk_flags": item.get("risk_flags") or [],
+                    "risk_items": item.get("risk_items") or [],
+                    "degrade_reason": item.get("degrade_reason") or "",
+                    "block_reason": item.get("block_reason") or "",
+                    "risk_evidence_refs": item.get("risk_evidence_refs") or [],
+                    "risk_source_cards": item.get("risk_source_cards") or [],
+                    "tushare_factors": item.get("tushare_factors"),
                     "variants": [],
                 }
 
             agg = shortlisted[code]
             agg["strategy_hits"].append(strategy_name)
             agg["strategy_labels"].append(item["strategy_label"])
-            agg["themes"].append(item["theme"])
+            agg["themes"].append(item.get("theme") or "其他")
             agg["statuses"].append(item["screening"]["status"])
             agg["screening_reasons"].append(item["screening"]["reason"])
             agg["variants"].append(
@@ -982,6 +1251,9 @@ def aggregate_shortlist(strategy_views, raw_strategies, market_regime=None):
                     "status": item["screening"]["status"],
                     "reason": item["screening"]["reason"],
                     "consistency": item.get("consistency") or {},
+                    "risk_level": item.get("risk_level") or "info",
+                    "block_reason": item.get("block_reason") or "",
+                    "degrade_reason": item.get("degrade_reason") or "",
                 }
             )
 
@@ -1007,6 +1279,14 @@ def aggregate_shortlist(strategy_views, raw_strategies, market_regime=None):
                 agg["fundamentals"] = item["fundamentals"]
                 agg["consistency"] = current_consistency
                 agg["execution_quality"] = item.get("execution_quality") or {}
+                agg["risk_level"] = item.get("risk_level") or "info"
+                agg["risk_flags"] = item.get("risk_flags") or []
+                agg["risk_items"] = item.get("risk_items") or []
+                agg["degrade_reason"] = item.get("degrade_reason") or ""
+                agg["block_reason"] = item.get("block_reason") or ""
+                agg["risk_evidence_refs"] = item.get("risk_evidence_refs") or []
+                agg["risk_source_cards"] = item.get("risk_source_cards") or []
+                agg["tushare_factors"] = item.get("tushare_factors")
             elif current_consistency_score > agg_consistency_score:
                 agg["consistency"] = current_consistency
 
@@ -1033,6 +1313,10 @@ def aggregate_shortlist(strategy_views, raw_strategies, market_regime=None):
             + safe_float((item.get("consistency") or {}).get("score"), default=0) * 1.5,
             2,
         )
+
+        adjustment_parts = _tushare_priority_adjustment_parts(item)
+        item.update(adjustment_parts)
+        item["priority_score"] = round(item["priority_score"] + adjustment_parts["tushare_priority_adjustment"], 2)
 
         if item["screening_status"] == "approved" and quality_score < 4:
             item["screening_status"] = "caution"
@@ -1061,7 +1345,6 @@ def aggregate_shortlist(strategy_views, raw_strategies, market_regime=None):
         else:
             item["tier"] = "C"
             item["tier_note"] = "仅观察，不建议直接执行"
-        item["tier_rank"] = {"A": 3, "B": 2, "C": 1}[item["tier"]]
         entry_plan = dict(item.get("entry_plan") or {})
         if gate_status == "off":
             item["screening_status"] = "caution"
@@ -1092,6 +1375,8 @@ def aggregate_shortlist(strategy_views, raw_strategies, market_regime=None):
         else:
             entry_plan["sizing"] = "先不开新仓"
         item["entry_plan"] = entry_plan
+        item = apply_candidate_risk_policy(item)
+        item["tier_rank"] = {"A": 3, "B": 2, "C": 1}.get(item["tier"], 1)
         item["execution_gate"] = {
             "status": gate_status,
             "label": execution_gate.get("label"),
@@ -1101,8 +1386,30 @@ def aggregate_shortlist(strategy_views, raw_strategies, market_regime=None):
         item.pop("statuses", None)
         shortlist.append(item)
 
+    v2_mode = resolve_v2_mode(OPPORTUNITY_V2_RULES)
+    if v2_mode == "off":
+        v2_summary = {
+            "schema_version": "opportunity_v2.1",
+            "mode": "off",
+            "counts": {},
+            "desired_counts": {},
+            "judge_sources": {},
+            "blocked_by_hard_gate": 0,
+            "ai_budget_remaining": 0,
+        }
+    else:
+        v2_summary = apply_v2_to_shortlist(
+            shortlist,
+            market_regime=market_regime,
+            market_themes=market_themes,
+            rules=OPPORTUNITY_V2_RULES,
+            context=v2_context,
+        )
+        shortlist = [apply_v2_candidate_policy(item) for item in shortlist]
+
     shortlist.sort(
         key=lambda item: (
+            v2_action_rank(item),
             STATUS_RANK.get(item["screening_status"], -1),
             item["tier_rank"],
             item["priority_score"],
@@ -1117,7 +1424,18 @@ def aggregate_shortlist(strategy_views, raw_strategies, market_regime=None):
 
     analyzer_candidates = []
     if execution_gate.get("allow_handoff"):
-        for item in [x for x in shortlist if x.get("tier") in ("A", "B") and safe_float((x.get("execution_quality") or {}).get("score"), default=0) >= 6][:3]:
+        for item in [
+            x
+            for x in shortlist
+            if (
+                (
+                    x.get("suggested_action") in {"trial", "actionable"}
+                    if v2_mode != "off"
+                    else x.get("tier") in ("A", "B")
+                )
+                and safe_float((x.get("execution_quality") or {}).get("score"), default=0) >= 5
+            )
+        ][:3]:
             analyzer_candidates.append(
                 {
                     "code": item["code"],
@@ -1130,7 +1448,27 @@ def aggregate_shortlist(strategy_views, raw_strategies, market_regime=None):
                     "consistency": item.get("consistency") or {},
                     "theme": (item.get("themes") or ["其他"])[0],
                     "main_risk": item.get("main_risk"),
+                    "risk_level": item.get("risk_level"),
+                    "risk_flags": item.get("risk_flags") or [],
+                    "degrade_reason": item.get("degrade_reason") or "",
+                    "block_reason": item.get("block_reason") or "",
                     "setup_label": item.get("setup_label"),
+                    "suggested_action": item.get("suggested_action"),
+                    "suggested_action_label": item.get("suggested_action_label"),
+                    "confidence": item.get("confidence"),
+                    "thesis": item.get("thesis"),
+                    "why_now": item.get("why_now"),
+                    "missing_confirmation": item.get("missing_confirmation") or [],
+                    "hard_gate_max_action": item.get("hard_gate_max_action"),
+                    "hard_gate_block_reason": item.get("hard_gate_block_reason") or "",
+                    "judge_source": item.get("judge_source"),
+                    "ai_status": item.get("ai_status"),
+                    "ai_status_label": item.get("ai_status_label"),
+                    "ai_summary": item.get("ai_summary") or {},
+                    "ai_delta": item.get("ai_delta") or {},
+                    "ai_provider": item.get("ai_provider"),
+                    "ai_model": item.get("ai_model"),
+                    "opportunity_v2": item.get("opportunity_v2") or {},
                     "execution_quality": item.get("execution_quality") or {},
                     "entry_plan": item.get("entry_plan") or {},
                 }
@@ -1150,6 +1488,12 @@ def aggregate_shortlist(strategy_views, raw_strategies, market_regime=None):
         "quality_mid_count": sum(1 for item in shortlist if 3 <= safe_float((item.get("execution_quality") or {}).get("score"), default=-999) < 6),
         "quality_low_count": sum(1 for item in shortlist if safe_float((item.get("execution_quality") or {}).get("score"), default=-999) < 3),
         "execution_gate_status": gate_status,
+        "opportunity_v2": v2_summary,
+        "suggested_action_counts": v2_summary.get("counts") or {},
+        "shadow_count": (v2_summary.get("counts") or {}).get("shadow", 0),
+        "trial_count": (v2_summary.get("counts") or {}).get("trial", 0),
+        "actionable_count": (v2_summary.get("counts") or {}).get("actionable", 0),
+        "hard_gate_blocked_v2_count": v2_summary.get("blocked_by_hard_gate", 0),
     }
 
     return shortlist, analyzer_candidates, summary
@@ -1175,10 +1519,12 @@ def run_screening(scan_data):
         strategy_views,
         raw_strategies,
         market_regime=market_regime,
+        market_themes=scan_data.get("market_themes"),
     )
 
     return {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "trade_date": resolve_trade_date(scan_data),
         "source_scan_timestamp": scan_data.get("timestamp"),
         "pool": scan_data.get("pool"),
         "pool_label": scan_data.get("pool_label"),
@@ -1189,6 +1535,7 @@ def run_screening(scan_data):
         "shortlist": shortlist,
         "analyzer_candidates": analyzer_candidates,
         "screening_summary": screening_summary,
+        "opportunity_v2": screening_summary.get("opportunity_v2") or {},
     }
 
 
@@ -1215,7 +1562,7 @@ def main():
         upstream_manifests.append(scan_manifest)
     ingress_manifest = build_pipeline_manifest(
         dataset="screening.batch",
-        trade_date=result["timestamp"][:10],
+        trade_date=result.get("trade_date") or result["timestamp"][:10],
         payload=result,
         upstream_manifests=upstream_manifests,
         ttl_seconds=900,
@@ -1227,11 +1574,33 @@ def main():
     archive_dt = datetime.strptime(result["timestamp"], "%Y-%m-%d %H:%M:%S")
     archive_stamp = archive_dt.strftime("%Y-%m-%d_%H-%M-%S")
     archive_path = AI_HISTORY_DIR / f"ai_screening_{archive_stamp}.json"
+    v2_tracking_path = V2_TRACKING_DIR / f"opportunity_v2_{archive_stamp}.json"
     AI_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+    V2_TRACKING_DIR.mkdir(parents=True, exist_ok=True)
+    v2_records = build_v2_tracking_records(
+        result.get("shortlist") or [],
+        trade_date=result.get("trade_date") or result["timestamp"][:10],
+        source_artifact=str(output_path.resolve()),
+    )
+    result["opportunity_v2_tracking"] = {
+        "path": str(v2_tracking_path.resolve()),
+        "latest_path": str(V2_TRACKING_LATEST.resolve()),
+        "record_count": len(v2_records),
+    }
     result["data_ingress"] = ingress_summary(ingress_manifest, None)
     output_text = json.dumps(result, ensure_ascii=False, indent=2)
     output_path.write_text(output_text, encoding="utf-8")
     archive_path.write_text(output_text, encoding="utf-8")
+    tracking_payload = {
+        "schema_version": "opportunity_v2_tracking.1",
+        "generated_at": result["timestamp"],
+        "trade_date": result.get("trade_date") or result["timestamp"][:10],
+        "source_artifact": str(output_path.resolve()),
+        "records": v2_records,
+    }
+    tracking_text = json.dumps(tracking_payload, ensure_ascii=False, indent=2)
+    v2_tracking_path.write_text(tracking_text, encoding="utf-8")
+    V2_TRACKING_LATEST.write_text(tracking_text, encoding="utf-8")
     output_manifest_path = write_sidecar_manifest(output_path, ingress_manifest)
     write_sidecar_manifest(archive_path, ingress_manifest)
     result["data_ingress"] = ingress_summary(ingress_manifest, output_manifest_path)

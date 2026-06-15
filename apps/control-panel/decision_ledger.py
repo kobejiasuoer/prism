@@ -8,7 +8,7 @@ The ledger captures three append-only things per recommendation:
    without rewriting the original recommendation.
 2. ``ExecutionEvent``: what the operator actually did (fill, no-fill,
    watch, skip).  Phase 3 wires Portfolio writebacks into this stream.
-3. ``OutcomeEvent``: what the market did at T+1 / T+3 / T+5.  Phase 4
+3. ``OutcomeEvent``: what the market did at T+1 / T+3 / T+5 / T+10.  Phase 4
    runs the evaluator that appends these.
 
 Storage is JSON-on-disk for the MVP -- one file per trade date under
@@ -50,6 +50,7 @@ from typing import Any, Iterable, Iterator, Mapping, Protocol
 # tmp+replace.  packages/prism_storage is appended onto prism_storage by
 # the top-level __init__ shim.
 from prism_storage.json_store import atomic_write_json  # type: ignore
+from prism_storage.paths import RUNTIME_ROOT  # type: ignore
 
 # Reuse the existing market-prefix inference so a "watchlist:600690" queue
 # key maps to the same canonical sh/sz code that account_book and the
@@ -73,13 +74,21 @@ __all__ = [
     "OUTCOME_WINDOWS",
     "ACTION_ENUM",
     "STATUS_KINDS",
+    "DECISION_RULESET_VERSION",
+    "LEARNING_LOOP_VERSION",
     "DecisionLedgerError",
     "default_ledger_root",
+    "legacy_ledger_root",
+    "ledger_storage_status",
     "make_decision_id",
     "normalize_today_action",
     "build_decision_record",
     "build_decision_record_from_today_item",
     "capture_today_action_queue",
+    "capture_opportunity_v2_tracking",
+    "build_opportunity_v2_calibration",
+    "write_opportunity_v2_calibration",
+    "opportunity_v2_calibration_path",
     "load_decisions",
     "load_decision",
     "list_decisions_for_stock",
@@ -104,6 +113,7 @@ __all__ = [
     "build_shadow_calibration_summary",
     "build_review_case_workbench",
     "build_attribution_draft",
+    "auto_review_case",
     "list_review_cases",
     "save_review_case",
     "build_review_case_patterns",
@@ -114,13 +124,17 @@ __all__ = [
     "write_status",
     "load_status",
     "build_ledger_health",
+    "build_rule_learning_loop",
+    "build_factor_learning_loop",
 ]
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+DECISION_RULESET_VERSION = "prism-decision-rules.v1"
+LEARNING_LOOP_VERSION = "decision-learning-loop.v1"
 
 EXECUTION_STATUSES = ("filled", "no_fill", "watch", "skip", "manual_note")
-OUTCOME_WINDOWS = ("T+1", "T+3", "T+5")
+OUTCOME_WINDOWS = ("T+1", "T+3", "T+5", "T+10")
 
 # Allowed ``kind`` values for the status helpers below.  The set is small
 # on purpose -- this is operator-visible health metadata, not a generic
@@ -162,7 +176,8 @@ _GROUP_KEY_FALLBACK = {
 CONTROL_PANEL_ROOT = Path(__file__).resolve().parent
 INVEST_FLOW_ROOT = CONTROL_PANEL_ROOT.parent
 WORKSPACE_ROOT = CONTROL_PANEL_ROOT.parents[1]
-DEFAULT_LEDGER_DIR = INVEST_FLOW_ROOT / "data" / "decision_ledger"
+LEGACY_LEDGER_DIR = INVEST_FLOW_ROOT / "data" / "decision_ledger"
+DEFAULT_LEDGER_DIR = RUNTIME_ROOT / "decision_ledger"
 SHADOW_REPLAY_ROOT = WORKSPACE_ROOT / "data" / "quant" / "shadow_replay"
 
 
@@ -279,10 +294,13 @@ _SAMPLE_STAGE_LABELS = {
 
 
 def default_ledger_root() -> Path:
-    """Resolve the on-disk ledger root, honoring the test override env var.
+    """Resolve the canonical on-disk ledger root.
 
     Production callers never need to set ``PRISM_DECISION_LEDGER_PATH``;
-    tests use it to redirect writes into a temporary directory.
+    tests use it to redirect writes into a temporary directory.  The
+    default has moved from ``apps/data/decision_ledger`` to
+    ``data/runtime/decision_ledger``; readers still consult the legacy
+    root so old audit files stay visible during migration.
     """
 
     override = os.environ.get("PRISM_DECISION_LEDGER_PATH", "").strip()
@@ -291,12 +309,62 @@ def default_ledger_root() -> Path:
     return DEFAULT_LEDGER_DIR
 
 
+def legacy_ledger_root() -> Path:
+    """Return the pre-storage-redesign ledger root."""
+
+    override = os.environ.get("PRISM_DECISION_LEDGER_LEGACY_PATH", "").strip()
+    if override:
+        return Path(override).expanduser()
+    return LEGACY_LEDGER_DIR
+
+
+def _ledger_read_roots() -> list[Path]:
+    roots = [default_ledger_root()]
+    if os.environ.get("PRISM_DECISION_LEDGER_PATH") and not os.environ.get("PRISM_DECISION_LEDGER_LEGACY_PATH"):
+        return roots
+    legacy = legacy_ledger_root()
+    if legacy != roots[0]:
+        roots.append(legacy)
+    return roots
+
+
 def _decisions_path(trade_date: str) -> Path:
     return default_ledger_root() / "decisions" / f"{_normalize_trade_date(trade_date)}.json"
 
 
+def _decision_read_paths(trade_date: str) -> list[Path]:
+    filename = f"{_normalize_trade_date(trade_date)}.json"
+    return [root / "decisions" / filename for root in _ledger_read_roots()]
+
+
 def _review_cases_path() -> Path:
     return default_ledger_root() / "review_cases.json"
+
+
+def _review_case_read_paths() -> list[Path]:
+    return [root / "review_cases.json" for root in _ledger_read_roots()]
+
+
+def ledger_storage_status() -> dict[str, Any]:
+    """Expose the ledger storage migration state to health surfaces."""
+
+    primary = default_ledger_root()
+    legacy = legacy_ledger_root()
+    primary_decisions = primary / "decisions"
+    legacy_decisions = legacy / "decisions"
+    primary_count = len(list(primary_decisions.glob("*.json"))) if primary_decisions.exists() else 0
+    legacy_count = len(list(legacy_decisions.glob("*.json"))) if legacy_decisions.exists() else 0
+    return {
+        "mode": "runtime_primary_legacy_read",
+        "primary_root": str(primary),
+        "legacy_root": str(legacy),
+        "primary_exists": primary.exists(),
+        "legacy_exists": legacy.exists(),
+        "primary_decision_files": primary_count,
+        "legacy_decision_files": legacy_count,
+        "writes_to": str(primary),
+        "reads_from": [str(root) for root in _ledger_read_roots()],
+    }
 
 
 # ----------------------------------------------------------------- normalization
@@ -463,6 +531,9 @@ def build_decision_record(
     parameter_path: str | None = None,
     parameter_sha256: str | None = None,
     parameter_summary: Mapping[str, Any] | None = None,
+    factor_snapshot: Mapping[str, Any] | None = None,
+    historical_edge: Mapping[str, Any] | None = None,
+    decision_contract: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble a DecisionRecord dict ready for :func:`upsert_decision`.
 
@@ -528,6 +599,15 @@ def build_decision_record(
             "sha256": parameter_sha256,
             "summary": dict(parameter_summary) if parameter_summary else None,
         },
+        "factor_snapshot": dict(factor_snapshot) if factor_snapshot else None,
+        "historical_edge": dict(historical_edge) if historical_edge else None,
+        "decision_contract": dict(decision_contract) if decision_contract else None,
+        "rule_snapshot": {
+            "ruleset_version": DECISION_RULESET_VERSION,
+            "learning_loop_version": LEARNING_LOOP_VERSION,
+            "contract_schema_version": str((decision_contract or {}).get("schema_version") or ""),
+            "outcome_windows": list(OUTCOME_WINDOWS),
+        },
         "status": {
             "state": "open",
             "superseded_by": None,
@@ -580,9 +660,26 @@ def _write_decisions_file(path: Path, records: list[dict[str, Any]]) -> None:
 
 
 def load_decisions(trade_date: str) -> list[dict[str, Any]]:
-    """Return all DecisionRecords for ``trade_date`` (empty when missing)."""
+    """Return all DecisionRecords for ``trade_date`` (empty when missing).
 
-    return _read_decisions_file(_decisions_path(trade_date))
+    During the storage migration, the canonical runtime root wins over the
+    legacy ``apps/data`` root when both contain the same ``decision_id``.
+    A write to the canonical root will naturally backfill the merged file.
+    """
+
+    records: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for path in _decision_read_paths(trade_date):
+        if not path.exists():
+            continue
+        for record in _read_decisions_file(path):
+            decision_id = str(record.get("decision_id") or "")
+            if decision_id and decision_id in seen:
+                continue
+            if decision_id:
+                seen.add(decision_id)
+            records.append(record)
+    return records
 
 
 def load_decision(decision_id: str) -> dict[str, Any] | None:
@@ -611,14 +708,11 @@ def list_decisions_for_stock(code: str) -> list[dict[str, Any]]:
     canonical = _canonical_code(code)
     if not canonical:
         return []
-    root = default_ledger_root() / "decisions"
-    if not root.exists():
-        return []
     out: list[dict[str, Any]] = []
-    for path in sorted(root.glob("*.json")):
-        for record in _read_decisions_file(path):
-            if (record.get("stock") or {}).get("code") == canonical:
-                out.append(record)
+    records, _errors = scan_all_decisions()
+    for record in records:
+        if (record.get("stock") or {}).get("code") == canonical:
+            out.append(record)
     return out
 
 
@@ -663,7 +757,7 @@ def upsert_decision(record: Mapping[str, Any]) -> dict[str, Any]:
         )
 
     path = _decisions_path(trade_date)
-    records = _read_decisions_file(path)
+    records = load_decisions(trade_date)
     for existing in records:
         if existing.get("decision_id") == decision_id:
             return existing
@@ -685,7 +779,7 @@ def _locate_decision(decision_id: str) -> tuple[Path, list[dict[str, Any]], dict
     except DecisionLedgerError as exc:
         raise DecisionLedgerError(f"no such decision: {decision_id!r}") from exc
     path = _decisions_path(trade_date)
-    records = _read_decisions_file(path)
+    records = load_decisions(trade_date)
     for record in records:
         if record.get("decision_id") == decision_id:
             return path, records, record
@@ -831,6 +925,17 @@ def mark_decision_superseded(decision_id: str, *, by: str) -> dict[str, Any]:
 
 
 _TODAY_ACTION_SURFACE = "today_action_queue"
+_OPPORTUNITY_V2_SURFACE = "opportunity_v2_tracking"
+_OPPORTUNITY_V2_ACTIONS = {"shadow", "trial", "actionable"}
+_OPPORTUNITY_V2_CALIBRATION_VERSION = "opportunity_v2_calibration.1"
+_OPPORTUNITY_V2_POSITIVE_LABELS = {"validated", "avoided_loss"}
+_OPPORTUNITY_V2_REVIEW_LABELS = {"invalidated", "execution_gap", "missed_opportunity"}
+_OPPORTUNITY_V2_USABLE_EXCLUDE_LABELS = {"data_issue", "inconclusive"}
+_OPPORTUNITY_V2_DEFAULT_COLD_BUMP = {"trial": 0.06, "actionable": 0.10}
+_OPPORTUNITY_V2_DEFAULT_CONSERVATIVE_BUMP = {"trial": 0.04, "actionable": 0.07}
+_OPPORTUNITY_V2_DEFAULT_STRICT_BUMP = {"trial": 0.06, "actionable": 0.12}
+_OPPORTUNITY_V2_DEFAULT_WEAK_PENALTY = -0.06
+_OPPORTUNITY_V2_DEFAULT_WEAK_CAP = "shadow"
 
 _TODAY_KEY_RE = re.compile(r"^(?P<lane>[a-z_]+):(?P<code>\d{6})$")
 
@@ -890,6 +995,7 @@ def build_decision_record_from_today_item(
     data_trade_date: str,
     readiness_mode: str,
     readiness_ready: bool,
+    factor_snapshot: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Convert a single Today action queue entry into a DecisionRecord.
 
@@ -961,7 +1067,584 @@ def build_decision_record_from_today_item(
         parameter_path=None,
         parameter_sha256=None,
         parameter_summary=None,
+        factor_snapshot=factor_snapshot,
+        decision_contract=item.get("decision_contract") if isinstance(item.get("decision_contract"), Mapping) else None,
     )
+
+
+def _normalize_factor_snapshot_payload(payload: Mapping[str, Any]) -> dict[str, Any] | None:
+    if not isinstance(payload, Mapping):
+        return None
+    raw_snapshot = payload.get("factor_snapshot")
+    if isinstance(raw_snapshot, Mapping) and raw_snapshot:
+        return {
+            "tushare_score": payload.get("tushare_score"),
+            "data_completeness": payload.get("data_completeness"),
+            "factor_tags": list(payload.get("factor_tags") or []),
+            "risk_flags": list(payload.get("risk_flags") or []),
+            "tushare_score_breakdown": dict(payload.get("tushare_score_breakdown") or {}),
+            "factor_snapshot": dict(raw_snapshot),
+            "trade_date_used": payload.get("trade_date_used"),
+            "risk_level": payload.get("risk_level"),
+            "degrade_reason": payload.get("degrade_reason"),
+            "block_reason": payload.get("block_reason"),
+            "risk_evidence_refs": list(payload.get("risk_evidence_refs") or []),
+        }
+    return None
+
+
+def _factor_snapshot_from_item_payload(item: Mapping[str, Any]) -> dict[str, Any] | None:
+    tushare_factors = item.get("tushare_factors")
+    if isinstance(tushare_factors, Mapping):
+        normalized = _normalize_factor_snapshot_payload(tushare_factors)
+        if normalized:
+            return normalized
+
+    snapshot = item.get("factor_snapshot")
+    if isinstance(snapshot, Mapping):
+        normalized = _normalize_factor_snapshot_payload(snapshot)
+        if normalized:
+            return normalized
+        if snapshot and any(
+            key in item
+            for key in (
+                "tushare_score",
+                "data_completeness",
+                "factor_tags",
+                "risk_flags",
+                "factor_risk_flags",
+                "tushare_score_breakdown",
+                "trade_date_used",
+                "risk_level",
+                "degrade_reason",
+                "block_reason",
+                "risk_evidence_refs",
+            )
+        ):
+            return {
+                "tushare_score": item.get("tushare_score"),
+                "data_completeness": item.get("data_completeness"),
+                "factor_tags": list(item.get("factor_tags") or []),
+                "risk_flags": list(item.get("risk_flags") or item.get("factor_risk_flags") or []),
+                "tushare_score_breakdown": dict(item.get("tushare_score_breakdown") or {}),
+                "factor_snapshot": dict(snapshot),
+                "trade_date_used": item.get("trade_date_used"),
+                "risk_level": item.get("risk_level"),
+                "degrade_reason": item.get("degrade_reason"),
+                "block_reason": item.get("block_reason"),
+                "risk_evidence_refs": list(item.get("risk_evidence_refs") or []),
+            }
+        if snapshot:
+            return {"factor_snapshot": dict(snapshot)}
+    return None
+
+
+def _factor_snapshot_for_item(item: Mapping[str, Any], data_trade_date: str) -> dict[str, Any] | None:
+    """Best-effort factor snapshot for a today-action item.
+
+    Research-only: never fatal, never feeds an execution/readiness gate.
+    Returns ``None`` on any failure (missing factor module, unparsable
+    key, bad data) so capture continues unaffected.
+    """
+
+    try:
+        captured = _factor_snapshot_from_item_payload(item)
+        if captured:
+            return captured
+
+        from screener.tushare_factors import build_factor_snapshot
+
+        _, plain_code = _parse_today_action_key(str(item.get("key") or ""))
+        if not plain_code:
+            return None
+        return build_factor_snapshot(plain_code, data_trade_date)
+    except Exception:
+        return None
+
+
+def _read_opportunity_v2_tracking_payload(source: Any) -> dict[str, Any] | None:
+    if not source:
+        return None
+    if isinstance(source, Mapping):
+        if isinstance(source.get("records"), list):
+            return dict(source)
+        nested = source.get("opportunity_v2_tracking")
+        if isinstance(nested, Mapping):
+            loaded = _read_opportunity_v2_tracking_payload(nested)
+            if loaded:
+                return loaded
+        for key in ("path", "latest_path"):
+            candidate = source.get(key)
+            loaded = _read_opportunity_v2_tracking_payload(candidate)
+            if loaded:
+                return loaded
+        return None
+
+    text = str(source or "").strip()
+    if not text:
+        return None
+    path = Path(text).expanduser()
+    if not path.is_absolute():
+        path = WORKSPACE_ROOT / path
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise DecisionLedgerError(f"invalid opportunity_v2 tracking payload: {path}") from exc
+    if not isinstance(payload, Mapping):
+        raise DecisionLedgerError(f"opportunity_v2 tracking payload must be an object: {path}")
+    out = dict(payload)
+    out.setdefault("path", str(path))
+    return out
+
+
+def _opportunity_v2_record_action(action: Any) -> str | None:
+    text = str(action or "").strip().lower()
+    if text not in _OPPORTUNITY_V2_ACTIONS:
+        return None
+    if text in {"trial", "actionable"}:
+        return "trial_buy"
+    return "observe"
+
+
+def build_decision_record_from_opportunity_v2_record(
+    record: Mapping[str, Any],
+    *,
+    fallback_trade_date: str = "",
+    fallback_source_artifact: str = "",
+) -> dict[str, Any]:
+    if not isinstance(record, Mapping):
+        raise DecisionLedgerError("opportunity_v2 record must be a mapping")
+
+    action_raw = str(record.get("suggested_action") or "").strip().lower()
+    action = _opportunity_v2_record_action(action_raw)
+    if not action:
+        raise DecisionLedgerError(f"unsupported opportunity_v2 action: {action_raw!r}")
+
+    trade_date = _normalize_trade_date(record.get("trade_date") or fallback_trade_date)
+    code = _canonical_code(record.get("code"))
+    if not code:
+        raise DecisionLedgerError(f"invalid opportunity_v2 code: {record.get('code')!r}")
+    plain_code = code[-6:]
+    source_artifact = str(record.get("source_artifact") or fallback_source_artifact or "").strip()
+    hard_gate_reason = str(record.get("hard_gate_block_reason") or "").strip()
+    hard_gate_max = str(record.get("hard_gate_max_action") or "").strip()
+    action_label = str(record.get("action_label") or action_raw).strip()
+    confidence = record.get("confidence")
+    thesis = str(record.get("thesis") or "").strip()
+    trigger = str(record.get("trigger") or "").strip()
+    invalidation = str(record.get("invalidation") or "").strip()
+    ai_summary = record.get("ai_summary") if isinstance(record.get("ai_summary"), Mapping) else {}
+    ai_delta = record.get("ai_delta") if isinstance(record.get("ai_delta"), Mapping) else {}
+    readiness_ready = action_raw == "actionable" and not hard_gate_reason and hard_gate_max in {"", "actionable"}
+
+    decision_contract = {
+        "schema_version": "opportunity_v2_tracking.1",
+        "suggested_action": action_raw,
+        "action_label": action_label,
+        "thesis": thesis,
+        "trigger": trigger,
+        "invalidation": invalidation,
+        "confidence": confidence,
+        "hard_gate_block_reason": hard_gate_reason,
+        "hard_gate_max_action": hard_gate_max,
+        "source_artifact": source_artifact,
+        "judge_source": record.get("judge_source"),
+        "ai_status": record.get("ai_status"),
+        "ai_summary": dict(ai_summary),
+        "ai_delta": dict(ai_delta),
+        "ai_provider": record.get("ai_provider"),
+        "ai_model": record.get("ai_model"),
+        "market_phase": record.get("market_phase"),
+        "theme_phase": record.get("theme_phase"),
+        "stock_role": record.get("stock_role"),
+        "opportunity_type": record.get("opportunity_type"),
+    }
+    metric_cards = [
+        {"label": "suggested_action", "value": action_raw},
+        {"label": "confidence", "value": confidence},
+        {"label": "hard_gate_max_action", "value": hard_gate_max},
+        {"label": "ai_status", "value": record.get("ai_status") or "-"},
+    ]
+    source_cards = [
+        {
+            "label": "opportunity_v2_tracking",
+            "path": source_artifact,
+        }
+    ] if source_artifact else []
+
+    return build_decision_record(
+        trade_date=trade_date,
+        code=code,
+        name=str(record.get("name") or ""),
+        lane="opportunity_v2",
+        surface=_OPPORTUNITY_V2_SURFACE,
+        action_key=f"opportunity_v2:{plain_code}",
+        source_label="V2 机会判断",
+        artifact_paths=[source_artifact] if source_artifact else [],
+        action=action,
+        action_label=action_label,
+        action_raw=action_raw,
+        main_conclusion=thesis,
+        position_guidance=f"V2 suggested_action={action_raw}; hard_gate_max={hard_gate_max or '-'}",
+        trigger_condition=trigger,
+        continue_condition=str(record.get("trigger") or ""),
+        stop_condition=invalidation,
+        risk_summary=hard_gate_reason,
+        expected_trade_date=trade_date,
+        data_trade_date=trade_date,
+        readiness_mode="opportunity_v2",
+        readiness_ready=readiness_ready,
+        blockers=[hard_gate_reason] if hard_gate_reason else [],
+        warnings=[] if readiness_ready else [f"V2 最大允许动作：{hard_gate_max or action_raw}"],
+        source_cards=source_cards,
+        metric_cards=metric_cards,
+        factor_snapshot=None,
+        decision_contract=decision_contract,
+    )
+
+
+def capture_opportunity_v2_tracking(
+    source: Any,
+    *,
+    fallback_trade_date: str = "",
+    fallback_source_artifact: str = "",
+) -> dict[str, Any]:
+    payload = _read_opportunity_v2_tracking_payload(source)
+    trade_date = _normalize_trade_date(
+        (payload or {}).get("trade_date") if payload else fallback_trade_date
+    )
+    records = list((payload or {}).get("records") or [])
+    source_artifact = str((payload or {}).get("source_artifact") or fallback_source_artifact or (payload or {}).get("path") or "")
+
+    captured = 0
+    already_present = 0
+    skipped = 0
+    superseded_count = 0
+    decision_ids: list[str] = []
+
+    for item in records:
+        try:
+            record = build_decision_record_from_opportunity_v2_record(
+                item,
+                fallback_trade_date=trade_date,
+                fallback_source_artifact=source_artifact,
+            )
+        except DecisionLedgerError:
+            skipped += 1
+            continue
+        decision_id = record["decision_id"]
+        if load_decision(decision_id) is None:
+            stale_ids = _find_supersede_candidates(record)
+            upsert_decision(record)
+            captured += 1
+            for old_id in stale_ids:
+                try:
+                    mark_decision_superseded(old_id, by=decision_id)
+                except DecisionLedgerError:
+                    continue
+                superseded_count += 1
+        else:
+            already_present += 1
+        decision_ids.append(decision_id)
+
+    return {
+        "trade_date": trade_date,
+        "captured": captured,
+        "already_present": already_present,
+        "skipped": skipped,
+        "superseded": superseded_count,
+        "decision_ids": decision_ids,
+        "record_count": len(records),
+        "source_artifact": source_artifact,
+    }
+
+
+def opportunity_v2_calibration_path(path: str | Path | None = None) -> Path:
+    """Return the runtime calibration snapshot path for V2 opportunity judge."""
+
+    if path is not None:
+        return Path(path).expanduser()
+    override = os.environ.get("PRISM_V2_CALIBRATION_PATH", "").strip()
+    if override:
+        return Path(override).expanduser()
+    return RUNTIME_ROOT / "opportunity_v2_calibration.json"
+
+
+def _is_opportunity_v2_decision(record: Mapping[str, Any]) -> bool:
+    source = record.get("source") if isinstance(record.get("source"), Mapping) else {}
+    contract = record.get("decision_contract") if isinstance(record.get("decision_contract"), Mapping) else {}
+    return (
+        str(source.get("lane") or "") == "opportunity_v2"
+        or str(source.get("surface") or "") == _OPPORTUNITY_V2_SURFACE
+        or str(contract.get("schema_version") or "") == "opportunity_v2_tracking.1"
+    )
+
+
+def _opportunity_v2_contract(record: Mapping[str, Any]) -> Mapping[str, Any]:
+    contract = record.get("decision_contract")
+    return contract if isinstance(contract, Mapping) else {}
+
+
+def _opportunity_v2_latest_usable_outcome(record: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    usable = [
+        event
+        for event in (record.get("outcome_events") or [])
+        if isinstance(event, Mapping)
+        and str(((event.get("classification") or {}) if isinstance(event.get("classification"), Mapping) else {}).get("label") or "")
+        not in _OPPORTUNITY_V2_USABLE_EXCLUDE_LABELS
+        and (
+            not isinstance(event.get("quality"), Mapping)
+            or event.get("quality", {}).get("usable_for_decision_quality") is not False
+        )
+    ]
+    return _latest_outcome_event(usable)
+
+
+def _opportunity_v2_label(event: Mapping[str, Any] | None) -> str:
+    if not event:
+        return ""
+    classification = event.get("classification")
+    if not isinstance(classification, Mapping):
+        return ""
+    return str(classification.get("label") or "")
+
+
+def _opportunity_v2_empty_bucket(key: str) -> dict[str, Any]:
+    return {
+        "key": key,
+        "sample_count": 0,
+        "mature_samples": 0,
+        "pending_outcome": 0,
+        "positive_count": 0,
+        "review_count": 0,
+        "outcomes": {},
+        "decision_ids": [],
+    }
+
+
+def _opportunity_v2_finalize_bucket(
+    bucket: dict[str, Any],
+    *,
+    min_playbook_samples: int,
+    max_review_rate_for_active: float,
+    min_positive_rate_for_active: float,
+    weak_playbook_penalty: float,
+    weak_playbook_cap: str,
+) -> dict[str, Any]:
+    mature = int(bucket.get("mature_samples") or 0)
+    positive = int(bucket.get("positive_count") or 0)
+    review = int(bucket.get("review_count") or 0)
+    positive_rate = round(positive / mature, 4) if mature else 0.0
+    review_rate = round(review / mature, 4) if mature else 0.0
+    stage = _learning_sample_stage(mature)
+    bucket["positive_rate"] = positive_rate
+    bucket["review_rate"] = review_rate
+    bucket["sample_stage"] = stage
+    bucket["decision_ids"] = list(bucket.get("decision_ids") or [])[:12]
+
+    needs_penalty = (
+        mature >= min_playbook_samples
+        and (
+            review_rate > max_review_rate_for_active
+            or positive_rate < min_positive_rate_for_active
+        )
+    )
+    if needs_penalty:
+        bucket["confidence_adjustment"] = round(weak_playbook_penalty, 4)
+        bucket["action_cap"] = weak_playbook_cap if weak_playbook_cap in {"observe", "review", "shadow", "trial", "actionable"} else "shadow"
+        bucket["reason"] = (
+            f"playbook 成熟样本 {mature}，positive_rate={positive_rate:.2f}，"
+            f"review_rate={review_rate:.2f}，先降权并封顶。"
+        )
+    elif mature < min_playbook_samples:
+        bucket["confidence_adjustment"] = 0.0
+        bucket["action_cap"] = ""
+        bucket["reason"] = f"playbook 成熟样本 {mature}，暂不单独调参。"
+    else:
+        bucket["confidence_adjustment"] = 0.0
+        bucket["action_cap"] = ""
+        bucket["reason"] = "playbook outcome 暂未触发降权。"
+    return bucket
+
+
+def build_opportunity_v2_calibration(
+    records: Iterable[Mapping[str, Any]] | None = None,
+    *,
+    errors: Iterable[Mapping[str, Any]] | None = None,
+    as_of: str | None = None,
+    min_mature_samples: int = 8,
+    min_playbook_samples: int = 3,
+    min_positive_rate_for_active: float = 0.52,
+    max_review_rate_for_active: float = 0.35,
+    cold_start_threshold_bump: Mapping[str, Any] | None = None,
+    conservative_threshold_bump: Mapping[str, Any] | None = None,
+    strict_threshold_bump: Mapping[str, Any] | None = None,
+    weak_playbook_penalty: float = _OPPORTUNITY_V2_DEFAULT_WEAK_PENALTY,
+    weak_playbook_action_cap: str = _OPPORTUNITY_V2_DEFAULT_WEAK_CAP,
+) -> dict[str, Any]:
+    """Build the runtime calibration snapshot consumed by ``opportunity_v2``.
+
+    The snapshot is intentionally conservative: it never loosens a rule.
+    It either keeps thresholds unchanged after enough good outcomes, or
+    raises trial/actionable thresholds and penalizes weak playbooks until
+    replay/ledger evidence improves.
+    """
+
+    if records is None:
+        loaded, loaded_errors = scan_all_decisions()
+        records = loaded
+        errors = loaded_errors if errors is None else errors
+
+    v2_records = [record for record in records if isinstance(record, Mapping) and _is_opportunity_v2_decision(record)]
+    overall = _opportunity_v2_empty_bucket("overall")
+    playbooks: dict[str, dict[str, Any]] = {}
+    action_buckets: dict[str, dict[str, Any]] = {}
+    judge_sources: dict[str, int] = {}
+
+    for record in v2_records:
+        contract = _opportunity_v2_contract(record)
+        recommendation = record.get("recommendation") if isinstance(record.get("recommendation"), Mapping) else {}
+        decision_id = str(record.get("decision_id") or "")
+        playbook_key = str(contract.get("opportunity_type") or "unknown").strip() or "unknown"
+        suggested_action = str(contract.get("suggested_action") or recommendation.get("action_raw") or recommendation.get("action") or "unknown").strip() or "unknown"
+        judge_source = str(contract.get("judge_source") or "unknown").strip() or "unknown"
+        judge_sources[judge_source] = judge_sources.get(judge_source, 0) + 1
+
+        buckets = [
+            overall,
+            playbooks.setdefault(playbook_key, _opportunity_v2_empty_bucket(playbook_key)),
+            action_buckets.setdefault(suggested_action, _opportunity_v2_empty_bucket(suggested_action)),
+        ]
+        for bucket in buckets:
+            bucket["sample_count"] += 1
+            if decision_id:
+                bucket["decision_ids"].append(decision_id)
+
+        latest = _opportunity_v2_latest_usable_outcome(record)
+        if latest is None:
+            for bucket in buckets:
+                bucket["pending_outcome"] += 1
+            continue
+
+        label = _opportunity_v2_label(latest) or "unknown"
+        for bucket in buckets:
+            bucket["mature_samples"] += 1
+            outcomes = bucket["outcomes"]
+            outcomes[label] = int(outcomes.get(label) or 0) + 1
+            if label in _OPPORTUNITY_V2_POSITIVE_LABELS:
+                bucket["positive_count"] += 1
+            if label in _OPPORTUNITY_V2_REVIEW_LABELS:
+                bucket["review_count"] += 1
+
+    overall = _opportunity_v2_finalize_bucket(
+        overall,
+        min_playbook_samples=1,
+        max_review_rate_for_active=max_review_rate_for_active,
+        min_positive_rate_for_active=min_positive_rate_for_active,
+        weak_playbook_penalty=weak_playbook_penalty,
+        weak_playbook_cap=weak_playbook_action_cap,
+    )
+    mature = int(overall.get("mature_samples") or 0)
+    positive_rate = float(overall.get("positive_rate") or 0.0)
+    review_rate = float(overall.get("review_rate") or 0.0)
+
+    if mature <= 0:
+        threshold_adjustments = dict(cold_start_threshold_bump or _OPPORTUNITY_V2_DEFAULT_COLD_BUMP)
+        active_allowed = False
+        guard_reason = "V2 尚无可用 outcome 样本，active 禁止，trial/actionable 阈值按冷启动收紧。"
+        sample_stage = "cold_start"
+    elif mature < min_mature_samples:
+        threshold_adjustments = dict(conservative_threshold_bump or _OPPORTUNITY_V2_DEFAULT_CONSERVATIVE_BUMP)
+        active_allowed = False
+        guard_reason = f"V2 成熟样本 {mature}/{min_mature_samples}，active 暂不放开。"
+        sample_stage = _learning_sample_stage(mature)
+    elif positive_rate < min_positive_rate_for_active or review_rate > max_review_rate_for_active:
+        threshold_adjustments = dict(strict_threshold_bump or _OPPORTUNITY_V2_DEFAULT_STRICT_BUMP)
+        active_allowed = False
+        guard_reason = (
+            f"V2 outcome 未达 active 准入：positive_rate={positive_rate:.2f} "
+            f"(要求 >= {min_positive_rate_for_active:.2f})，review_rate={review_rate:.2f} "
+            f"(要求 <= {max_review_rate_for_active:.2f})。"
+        )
+        sample_stage = "needs_recalibration"
+    else:
+        threshold_adjustments = {}
+        active_allowed = True
+        guard_reason = "V2 outcome 样本达到 active 准入，但硬风控仍最终裁决。"
+        sample_stage = "active_ready"
+
+    finalized_playbooks = {
+        key: _opportunity_v2_finalize_bucket(
+            bucket,
+            min_playbook_samples=min_playbook_samples,
+            max_review_rate_for_active=max_review_rate_for_active,
+            min_positive_rate_for_active=min_positive_rate_for_active,
+            weak_playbook_penalty=weak_playbook_penalty,
+            weak_playbook_cap=weak_playbook_action_cap,
+        )
+        for key, bucket in sorted(playbooks.items())
+    }
+    finalized_actions = {
+        key: _opportunity_v2_finalize_bucket(
+            bucket,
+            min_playbook_samples=1,
+            max_review_rate_for_active=max_review_rate_for_active,
+            min_positive_rate_for_active=min_positive_rate_for_active,
+            weak_playbook_penalty=weak_playbook_penalty,
+            weak_playbook_cap=weak_playbook_action_cap,
+        )
+        for key, bucket in sorted(action_buckets.items())
+    }
+
+    return {
+        "schema_version": _OPPORTUNITY_V2_CALIBRATION_VERSION,
+        "generated_at": _now(),
+        "as_of": _resolve_as_of(as_of),
+        "source": "decision_ledger",
+        "sample_stage": sample_stage,
+        "sample_count": int(overall.get("sample_count") or 0),
+        "mature_samples": mature,
+        "pending_outcome": int(overall.get("pending_outcome") or 0),
+        "min_mature_samples": min_mature_samples,
+        "min_playbook_samples": min_playbook_samples,
+        "min_positive_rate_for_active": min_positive_rate_for_active,
+        "max_review_rate_for_active": max_review_rate_for_active,
+        "active_allowed": active_allowed,
+        "guard_reason": guard_reason,
+        "threshold_adjustments": {
+            action: float(value)
+            for action, value in threshold_adjustments.items()
+            if action in {"review", "shadow", "trial", "actionable"}
+        },
+        "overall": overall,
+        "playbooks": finalized_playbooks,
+        "actions": finalized_actions,
+        "judge_sources": judge_sources,
+        "errors": [dict(error) for error in (errors or [])],
+    }
+
+
+def write_opportunity_v2_calibration(
+    payload: Mapping[str, Any] | None = None,
+    *,
+    path: str | Path | None = None,
+    records: Iterable[Mapping[str, Any]] | None = None,
+    as_of: str | None = None,
+    **build_kwargs: Any,
+) -> dict[str, Any]:
+    """Persist the latest V2 calibration snapshot atomically."""
+
+    body = dict(payload) if isinstance(payload, Mapping) else build_opportunity_v2_calibration(
+        records,
+        as_of=as_of,
+        **build_kwargs,
+    )
+    target = opportunity_v2_calibration_path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_json(target, body)
+    return {**body, "path": str(target)}
 
 
 def capture_today_action_queue(today_view: Mapping[str, Any]) -> dict[str, Any]:
@@ -1034,6 +1717,7 @@ def capture_today_action_queue(today_view: Mapping[str, Any]) -> dict[str, Any]:
                     readiness_mode if readiness_mode != "live_ready" else "shadow_only"
                 ),
                 readiness_ready=per_item_ready and queue_level_ready,
+                factor_snapshot=_factor_snapshot_for_item(item, data_trade_date),
             )
         except DecisionLedgerError:
             skipped += 1
@@ -1069,7 +1753,31 @@ def capture_today_action_queue(today_view: Mapping[str, Any]) -> dict[str, Any]:
         # readiness_ready=False even if the item dict somehow lies.
         _try_capture(item, ready_override=False)
 
-    return {
+    v2_summary: dict[str, Any] | None = None
+    v2_source = today_view.get("opportunity_v2_tracking")
+    if v2_source:
+        try:
+            v2_summary = capture_opportunity_v2_tracking(
+                v2_source,
+                fallback_trade_date=trade_date,
+            )
+        except DecisionLedgerError as exc:
+            v2_summary = {
+                "trade_date": trade_date,
+                "captured": 0,
+                "already_present": 0,
+                "skipped": 1,
+                "superseded": 0,
+                "decision_ids": [],
+                "error": str(exc),
+            }
+        captured += int(v2_summary.get("captured") or 0)
+        already_present += int(v2_summary.get("already_present") or 0)
+        skipped += int(v2_summary.get("skipped") or 0)
+        superseded_count += int(v2_summary.get("superseded") or 0)
+        decision_ids.extend(str(item) for item in (v2_summary.get("decision_ids") or []) if str(item))
+
+    summary = {
         "trade_date": trade_date,
         "captured": captured,
         "already_present": already_present,
@@ -1077,6 +1785,9 @@ def capture_today_action_queue(today_view: Mapping[str, Any]) -> dict[str, Any]:
         "superseded": superseded_count,
         "decision_ids": decision_ids,
     }
+    if v2_summary is not None:
+        summary["opportunity_v2"] = v2_summary
+    return summary
 
 
 def _find_supersede_candidates(record: Mapping[str, Any]) -> list[str]:
@@ -1348,7 +2059,7 @@ def append_execution_event_for_writeback(
 # ============================================================================
 # Phase 4 -- Outcome evaluator.
 #
-# Walk every captured DecisionRecord, decide whether its T+1 / T+3 / T+5
+# Walk every captured DecisionRecord, decide whether its T+1 / T+3 / T+5 / T+10
 # evaluation windows have closed, fetch post-decision price action via a
 # pluggable :class:`PriceProvider`, compute conservative market metrics,
 # classify the outcome with a small rule table, and append the result as
@@ -1365,7 +2076,7 @@ def append_execution_event_for_writeback(
 # ============================================================================
 
 
-_OUTCOME_WINDOW_STEPS: dict[str, int] = {"T+1": 1, "T+3": 3, "T+5": 5}
+_OUTCOME_WINDOW_STEPS: dict[str, int] = {"T+1": 1, "T+3": 3, "T+5": 5, "T+10": 10}
 
 
 @dataclass(frozen=True)
@@ -1850,7 +2561,7 @@ def _iter_decisions_files() -> Iterator[Path]:
 def find_due_outcomes(
     *,
     as_of_date: str,
-    windows: Iterable[str] = ("T+1", "T+3", "T+5"),
+    windows: Iterable[str] = OUTCOME_WINDOWS,
 ) -> Iterator[tuple[dict[str, Any], str]]:
     """Yield ``(decision, window)`` pairs that are ready to be evaluated.
 
@@ -1899,7 +2610,7 @@ def evaluate_due_outcomes(
     price_provider: PriceProvider | None,
     benchmark_code: str | None = "000300",
     thresholds: OutcomeThresholds | None = None,
-    windows: Iterable[str] = ("T+1", "T+3", "T+5"),
+    windows: Iterable[str] = OUTCOME_WINDOWS,
 ) -> dict[str, Any]:
     """Walk every due outcome, append events idempotently, return a summary.
 
@@ -2005,6 +2716,15 @@ def evaluate_due_outcomes(
                     "label": label,
                 })
 
+    try:
+        latest_records, _latest_errors = scan_all_decisions()
+        summary["learning_summary"] = build_factor_learning_loop(
+            latest_records,
+            as_of=as_of_norm,
+        ).get("learning_summary")
+    except Exception as exc:  # pragma: no cover - defensive status metadata
+        summary["learning_summary_error"] = str(exc)
+
     return summary
 
 
@@ -2032,14 +2752,22 @@ def scan_all_decisions() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
 
     records: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
-    root = default_ledger_root() / "decisions"
-    if not root.exists():
-        return records, errors
-    for path in sorted(root.glob("*.json")):
-        try:
-            records.extend(_read_decisions_file(path))
-        except DecisionLedgerError as exc:
-            errors.append({"file": str(path), "error": str(exc)})
+    seen: set[str] = set()
+    for root in _ledger_read_roots():
+        decisions_root = root / "decisions"
+        if not decisions_root.exists():
+            continue
+        for path in sorted(decisions_root.glob("*.json")):
+            try:
+                for record in _read_decisions_file(path):
+                    decision_id = str(record.get("decision_id") or "")
+                    if decision_id and decision_id in seen:
+                        continue
+                    if decision_id:
+                        seen.add(decision_id)
+                    records.append(record)
+            except DecisionLedgerError as exc:
+                errors.append({"file": str(path), "error": str(exc)})
     return records, errors
 
 
@@ -2062,7 +2790,7 @@ def _latest_outcome_event(
 ) -> Mapping[str, Any] | None:
     """Pick the most informative OutcomeEvent (longest closed window).
 
-    T+5 wins over T+3, T+3 wins over T+1.  When windows tie we fall
+    T+10 wins over T+5, T+5 wins over T+3, T+3 wins over T+1.  When windows tie we fall
     back to ``evaluated_at`` so a re-evaluation comes through.  An
     event with an unknown window slot still beats no event at all.
     """
@@ -2070,7 +2798,7 @@ def _latest_outcome_event(
     events_list = list(events or [])
     if not events_list:
         return None
-    window_rank = {"T+5": 3, "T+3": 2, "T+1": 1}
+    window_rank = {"T+10": 4, "T+5": 3, "T+3": 2, "T+1": 1}
     return max(
         events_list,
         key=lambda e: (
@@ -2092,6 +2820,7 @@ def _decision_summary_card(record: Mapping[str, Any]) -> dict[str, Any]:
     source = record.get("source") or {}
     recommendation = record.get("recommendation") or {}
     status = record.get("status") or {}
+    rule_snapshot = record.get("rule_snapshot") or {}
 
     execution_events = list(record.get("execution_events") or [])
     outcome_events = list(record.get("outcome_events") or [])
@@ -2132,6 +2861,7 @@ def _decision_summary_card(record: Mapping[str, Any]) -> dict[str, Any]:
         "action_label": recommendation.get("action_label"),
         "lane": source.get("lane"),
         "surface": source.get("surface"),
+        "ruleset_version": rule_snapshot.get("ruleset_version") or "legacy_unversioned",
         "status": status.get("state"),
         "main_conclusion": recommendation.get("main_conclusion"),
         "execution_events_count": len(execution_events),
@@ -2225,6 +2955,921 @@ def summarize_window(
         "outcome_events_total": outcome_events_total,
         "errors": errors,
     }
+
+
+_LEARNING_REVIEW_LABELS = {
+    "invalidated",
+    "missed_opportunity",
+    "execution_gap",
+    "data_issue",
+}
+
+
+_FACTOR_BAD_OUTCOME_LABELS = {"invalidated", "execution_gap", "missed_opportunity"}
+_FACTOR_FALSE_POSITIVE_LABELS = {"missed_opportunity"}
+_FACTOR_USABLE_EXCLUDE_LABELS = {"data_issue"}
+
+
+def _raw_factor_bundle(record: Mapping[str, Any]) -> Mapping[str, Any]:
+    bundle = record.get("factor_snapshot") or {}
+    return bundle if isinstance(bundle, Mapping) else {}
+
+
+def _raw_factor_values(record: Mapping[str, Any]) -> Mapping[str, Any]:
+    bundle = _raw_factor_bundle(record)
+    raw = bundle.get("factor_snapshot") if isinstance(bundle, Mapping) else {}
+    if isinstance(raw, Mapping):
+        return raw
+    return {}
+
+
+def _factor_number(*values: Any) -> float | None:
+    for value in values:
+        if isinstance(value, (int, float)):
+            return float(value)
+        try:
+            if value not in (None, "", "-", "None"):
+                return float(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _factor_ge(value: Any, threshold: float) -> bool:
+    number = _factor_number(value)
+    return number is not None and number >= threshold
+
+
+def _factor_le(value: Any, threshold: float) -> bool:
+    number = _factor_number(value)
+    return number is not None and number <= threshold
+
+
+def _factor_return_metric(event: Mapping[str, Any]) -> float | None:
+    market_data = event.get("market_data") or {}
+    if not isinstance(market_data, Mapping):
+        return None
+    return _factor_number(market_data.get("relative_return_pct"), market_data.get("return_pct"))
+
+
+def _factor_label(event: Mapping[str, Any]) -> str:
+    classification = event.get("classification") or {}
+    if not isinstance(classification, Mapping):
+        return ""
+    return str(classification.get("label") or "")
+
+
+def _factor_outcome_usable(event: Mapping[str, Any]) -> bool:
+    label = _factor_label(event)
+    quality = event.get("quality") or {}
+    if isinstance(quality, Mapping) and quality.get("usable_for_decision_quality") is False:
+        return False
+    return label not in _FACTOR_USABLE_EXCLUDE_LABELS
+
+
+def _empty_window_stats() -> dict[str, Any]:
+    return {
+        "count": 0,
+        "avg_return": None,
+        "win_rate": None,
+        "false_positive_rate": None,
+        "review_rate": None,
+        "outcomes": {},
+    }
+
+
+def _factor_bucket_stats(
+    records: Iterable[Mapping[str, Any]],
+    predicate,
+    *,
+    label: str,
+) -> dict[str, Any]:
+    matched: list[Mapping[str, Any]] = []
+    window_returns: dict[str, list[float]] = {window: [] for window in OUTCOME_WINDOWS}
+    window_labels: dict[str, list[str]] = {window: [] for window in OUTCOME_WINDOWS}
+    mature_decision_ids: set[str] = set()
+    decision_ids: list[str] = []
+
+    for record in records:
+        if not isinstance(record, Mapping):
+            continue
+        if not predicate(_raw_factor_values(record), _raw_factor_bundle(record), record):
+            continue
+        matched.append(record)
+        decision_id = str(record.get("decision_id") or "")
+        if decision_id:
+            decision_ids.append(decision_id)
+        for event in (record.get("outcome_events") or []):
+            if not isinstance(event, Mapping) or not _factor_outcome_usable(event):
+                continue
+            window = str(event.get("window") or "")
+            if window not in OUTCOME_WINDOWS:
+                continue
+            metric = _factor_return_metric(event)
+            label_value = _factor_label(event) or "unknown"
+            if metric is not None:
+                window_returns[window].append(metric)
+            window_labels[window].append(label_value)
+            if decision_id:
+                mature_decision_ids.add(decision_id)
+
+    window_stats: dict[str, dict[str, Any]] = {}
+    avg_return_by_window: dict[str, float | None] = {}
+    win_rate_by_window: dict[str, float | None] = {}
+    false_positive_rate_by_window: dict[str, float | None] = {}
+    review_rate_by_window: dict[str, float | None] = {}
+    outcome_distribution_by_window: dict[str, dict[str, int]] = {}
+
+    for window in OUTCOME_WINDOWS:
+        returns = window_returns[window]
+        labels = window_labels[window]
+        distribution: dict[str, int] = {}
+        for item in labels:
+            distribution[item] = distribution.get(item, 0) + 1
+        count = len(labels)
+        avg = round(sum(returns) / len(returns), 3) if returns else None
+        win = round(sum(1 for item in returns if item > 0) / len(returns), 3) if returns else None
+        false_positive = round(
+            sum(1 for item in labels if item in _FACTOR_FALSE_POSITIVE_LABELS) / count,
+            3,
+        ) if count else None
+        review = round(
+            sum(1 for item in labels if item in _FACTOR_BAD_OUTCOME_LABELS) / count,
+            3,
+        ) if count else None
+        window_stats[window] = {
+            "count": count,
+            "avg_return": avg,
+            "win_rate": win,
+            "false_positive_rate": false_positive,
+            "review_rate": review,
+            "outcomes": distribution,
+        } if count else _empty_window_stats()
+        avg_return_by_window[window] = avg
+        win_rate_by_window[window] = win
+        false_positive_rate_by_window[window] = false_positive
+        review_rate_by_window[window] = review
+        outcome_distribution_by_window[window] = distribution
+
+    return {
+        "label": label,
+        "sample_count": len(matched),
+        "mature_count": len(mature_decision_ids),
+        "decision_ids": decision_ids[:12],
+        "avg_return_by_window": avg_return_by_window,
+        "win_rate_by_window": win_rate_by_window,
+        "false_positive_rate_by_window": false_positive_rate_by_window,
+        "review_rate_by_window": review_rate_by_window,
+        "outcome_distribution_by_window": outcome_distribution_by_window,
+        "window_stats": window_stats,
+    }
+
+
+def _has_theme(raw: Mapping[str, Any]) -> bool:
+    exposure = raw.get("theme_exposure") or {}
+    if not isinstance(exposure, Mapping):
+        return False
+    return bool(exposure.get("concepts") or exposure.get("industries") or exposure.get("ths") or exposure.get("dc"))
+
+
+def _theme_available(raw: Mapping[str, Any]) -> bool:
+    return isinstance(raw.get("theme_exposure"), Mapping)
+
+
+def _has_event_risk(raw: Mapping[str, Any], bundle: Mapping[str, Any]) -> bool:
+    event = raw.get("event_risks") or {}
+    flags = set(str(item) for item in (bundle.get("risk_flags") or []))
+    if not isinstance(event, Mapping):
+        event = {}
+    return bool(
+        _factor_ge(event.get("pledge_ratio"), 30)
+        or _factor_ge(event.get("share_float_total_mv"), 10)
+        or _factor_le(event.get("block_trade_average_discount_pct"), -5)
+        or event.get("audit_abnormal")
+        or event.get("report_downgrade")
+        or flags.intersection({"解禁压力", "股权质押风险", "审计异常", "大宗折价", "研报预期下修"})
+    )
+
+
+def _event_risk_available(raw: Mapping[str, Any], bundle: Mapping[str, Any]) -> bool:
+    return bool(
+        (isinstance(raw.get("event_risks"), Mapping) and raw.get("event_risks"))
+        or bundle.get("risk_flags")
+    )
+
+
+def _margin_change(raw: Mapping[str, Any]) -> float | None:
+    margin = raw.get("margin_activity") or {}
+    if not isinstance(margin, Mapping):
+        return None
+    return _factor_number(margin.get("balance_change"))
+
+
+def _chip_pressure(raw: Mapping[str, Any]) -> bool:
+    chips = raw.get("technical_chips") or {}
+    if not isinstance(chips, Mapping):
+        return False
+    winner = _factor_number(chips.get("winner_rate"))
+    pressure = _factor_number(chips.get("pressure_ratio"))
+    return bool(
+        (winner is not None and (winner >= 85 or winner <= 20))
+        or (pressure is not None and pressure >= 1.08)
+    )
+
+
+def _chip_available(raw: Mapping[str, Any]) -> bool:
+    chips = raw.get("technical_chips") or {}
+    if not isinstance(chips, Mapping):
+        return False
+    return bool(
+        chips.get("data_available")
+        or chips.get("winner_rate") is not None
+        or chips.get("pressure_ratio") is not None
+        or chips.get("cost_pressure") is not None
+        or chips.get("technical")
+    )
+
+
+FACTOR_LEARNING_MIN_SAMPLE_SIZE = 3
+_SCORE_BUCKETS: tuple[tuple[str, float | None, float | None], ...] = (
+    ("0-40", 0.0, 40.0),
+    ("40-60", 40.0, 60.0),
+    ("60-75", 60.0, 75.0),
+    ("75+", 75.0, None),
+)
+_POSITIVE_OUTCOME_LABELS = {"validated", "avoided_loss"}
+
+
+def _factor_string_list(value: Any) -> list[str]:
+    out: list[str] = []
+    if isinstance(value, str):
+        candidates: Iterable[Any] = [value]
+    elif isinstance(value, (list, tuple, set)):
+        candidates = value
+    else:
+        candidates = []
+    for raw in candidates:
+        text = str(raw or "").strip()
+        if text and text not in out:
+            out.append(text)
+    return out
+
+
+def _record_factor_tags(record: Mapping[str, Any]) -> list[str]:
+    bundle = _raw_factor_bundle(record)
+    return _factor_string_list(bundle.get("factor_tags"))
+
+
+def _record_risk_flags(record: Mapping[str, Any]) -> list[str]:
+    bundle = _raw_factor_bundle(record)
+    return _factor_string_list(bundle.get("risk_flags") or bundle.get("factor_risk_flags"))
+
+
+def _record_tushare_score(record: Mapping[str, Any]) -> float | None:
+    return _factor_number(_raw_factor_bundle(record).get("tushare_score"))
+
+
+def _score_bucket_key(score: float | None) -> str | None:
+    if score is None:
+        return None
+    for key, lower, upper in _SCORE_BUCKETS:
+        if lower is not None and score < lower:
+            continue
+        if upper is not None and score >= upper:
+            continue
+        return key
+    return None
+
+
+def _window_stats_from_events(events: Iterable[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+    by_window: dict[str, list[Mapping[str, Any]]] = {window: [] for window in OUTCOME_WINDOWS}
+    for event in events:
+        if not isinstance(event, Mapping) or not _factor_outcome_usable(event):
+            continue
+        window = str(event.get("window") or "").strip().upper()
+        if window not in by_window:
+            continue
+        by_window[window].append(event)
+
+    out: dict[str, dict[str, Any]] = {}
+    for window, window_events in by_window.items():
+        raw_returns: list[float] = []
+        excess_returns: list[float] = []
+        labels: list[str] = []
+        for event in window_events:
+            market_data = event.get("market_data") or {}
+            if not isinstance(market_data, Mapping):
+                market_data = {}
+            raw_return = _factor_number(market_data.get("return_pct"))
+            excess_return = _factor_number(market_data.get("relative_return_pct"))
+            if raw_return is not None:
+                raw_returns.append(raw_return)
+            if excess_return is not None:
+                excess_returns.append(excess_return)
+            label = _factor_label(event) or "unknown"
+            labels.append(label)
+
+        count = len(window_events)
+        outcome_distribution: dict[str, int] = {}
+        for label in labels:
+            outcome_distribution[label] = outcome_distribution.get(label, 0) + 1
+        win_basis = excess_returns if excess_returns else raw_returns
+        negative_basis = excess_returns if excess_returns else raw_returns
+        win_rate = round(sum(1 for item in win_basis if item > 0) / len(win_basis), 3) if win_basis else None
+        negative_rate = round(sum(1 for item in negative_basis if item < 0) / len(negative_basis), 3) if negative_basis else None
+        positive_label_rate = round(sum(1 for item in labels if item in _POSITIVE_OUTCOME_LABELS) / count, 3) if count else None
+        review_rate = round(sum(1 for item in labels if item in _FACTOR_BAD_OUTCOME_LABELS) / count, 3) if count else None
+        out[window] = {
+            "sample_count": count,
+            "win_rate": win_rate,
+            "positive_label_rate": positive_label_rate,
+            "avg_return_pct": round(sum(raw_returns) / len(raw_returns), 3) if raw_returns else None,
+            "avg_excess_return_pct": round(sum(excess_returns) / len(excess_returns), 3) if excess_returns else None,
+            "negative_rate": negative_rate,
+            "review_rate": review_rate,
+            "outcomes": outcome_distribution,
+            "sample_too_small": count < FACTOR_LEARNING_MIN_SAMPLE_SIZE,
+        }
+    return out
+
+
+def _empty_factor_learning_stats(key: str, label: str | None = None) -> dict[str, Any]:
+    return {
+        "key": key,
+        "label": label or key,
+        "sample_count": 0,
+        "mature_count": 0,
+        "decision_ids": [],
+        "window_stats": {
+            window: {
+                "sample_count": 0,
+                "win_rate": None,
+                "positive_label_rate": None,
+                "avg_return_pct": None,
+                "avg_excess_return_pct": None,
+                "negative_rate": None,
+                "review_rate": None,
+                "outcomes": {},
+                "sample_too_small": True,
+            }
+            for window in OUTCOME_WINDOWS
+        },
+        "sample_too_small": True,
+    }
+
+
+def _aggregate_factor_learning_axis(
+    records: Iterable[Mapping[str, Any]],
+    key_fn,
+    *,
+    labels: Mapping[str, str] | None = None,
+) -> list[dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = {}
+    grouped_events: dict[str, list[Mapping[str, Any]]] = {}
+    mature_ids: dict[str, set[str]] = {}
+
+    for record in records:
+        if not isinstance(record, Mapping):
+            continue
+        keys = _factor_string_list(key_fn(record))
+        if not keys:
+            continue
+        decision_id = str(record.get("decision_id") or "")
+        events = [
+            event
+            for event in (record.get("outcome_events") or [])
+            if isinstance(event, Mapping)
+            and _factor_outcome_usable(event)
+            and str(event.get("window") or "").strip().upper() in OUTCOME_WINDOWS
+        ]
+        for key in keys:
+            row = grouped.setdefault(
+                key,
+                _empty_factor_learning_stats(key, (labels or {}).get(key)),
+            )
+            row["sample_count"] += 1
+            if decision_id:
+                row["decision_ids"].append(decision_id)
+            grouped_events.setdefault(key, []).extend(events)
+            if events and decision_id:
+                mature_ids.setdefault(key, set()).add(decision_id)
+
+    rows: list[dict[str, Any]] = []
+    for key, row in grouped.items():
+        row["decision_ids"] = list(row.get("decision_ids") or [])[:12]
+        row["mature_count"] = len(mature_ids.get(key, set()))
+        row["window_stats"] = _window_stats_from_events(grouped_events.get(key, []))
+        row["sample_too_small"] = all(
+            bool(stats.get("sample_too_small"))
+            for stats in (row.get("window_stats") or {}).values()
+        )
+        rows.append(row)
+    return sorted(
+        rows,
+        key=lambda item: (
+            int(item.get("mature_count") or 0),
+            int(item.get("sample_count") or 0),
+            str(item.get("key") or ""),
+        ),
+        reverse=True,
+    )
+
+
+def _preferred_factor_window(row: Mapping[str, Any]) -> tuple[str | None, Mapping[str, Any] | None]:
+    stats_by_window = row.get("window_stats") or {}
+    if not isinstance(stats_by_window, Mapping):
+        return None, None
+    for window in ("T+10", "T+5", "T+3", "T+1"):
+        stats = stats_by_window.get(window)
+        if isinstance(stats, Mapping) and not stats.get("sample_too_small"):
+            return window, stats
+    for window in ("T+10", "T+5", "T+3", "T+1"):
+        stats = stats_by_window.get(window)
+        if isinstance(stats, Mapping) and int(stats.get("sample_count") or 0) > 0:
+            return window, stats
+    return None, None
+
+
+def _factor_signal_score(stats: Mapping[str, Any] | None) -> float:
+    if not isinstance(stats, Mapping):
+        return -999.0
+    excess = _factor_number(stats.get("avg_excess_return_pct"))
+    raw = _factor_number(stats.get("avg_return_pct"))
+    win_rate = _factor_number(stats.get("win_rate"))
+    metric = excess if excess is not None else (raw if raw is not None else 0.0)
+    return metric + ((win_rate or 0.0) - 0.5) * 2.0
+
+
+def _factor_negative_score(stats: Mapping[str, Any] | None) -> float:
+    if not isinstance(stats, Mapping):
+        return -999.0
+    excess = _factor_number(stats.get("avg_excess_return_pct"))
+    raw = _factor_number(stats.get("avg_return_pct"))
+    negative_rate = _factor_number(stats.get("negative_rate")) or 0.0
+    review_rate = _factor_number(stats.get("review_rate")) or 0.0
+    metric = excess if excess is not None else (raw if raw is not None else 0.0)
+    return -metric + negative_rate + review_rate
+
+
+def _factor_summary_item(row: Mapping[str, Any], window: str, stats: Mapping[str, Any], *, reason: str) -> dict[str, Any]:
+    return {
+        "key": row.get("key"),
+        "label": row.get("label") or row.get("key"),
+        "window": window,
+        "sample_count": stats.get("sample_count"),
+        "decision_sample_count": row.get("mature_count"),
+        "win_rate": stats.get("win_rate"),
+        "avg_return_pct": stats.get("avg_return_pct"),
+        "avg_excess_return_pct": stats.get("avg_excess_return_pct"),
+        "negative_rate": stats.get("negative_rate"),
+        "review_rate": stats.get("review_rate"),
+        "sample_too_small": bool(stats.get("sample_too_small")),
+        "reason": reason,
+    }
+
+
+def _build_factor_learning_summary(
+    *,
+    records: list[Mapping[str, Any]],
+    factor_tag_stats: list[dict[str, Any]],
+    risk_flag_stats: list[dict[str, Any]],
+    score_bucket_performance: list[dict[str, Any]],
+    as_of: str | None,
+) -> dict[str, Any]:
+    factor_records = [record for record in records if _raw_factor_bundle(record)]
+    mature_factor_records = [
+        record
+        for record in factor_records
+        if any(
+            isinstance(event, Mapping) and _factor_outcome_usable(event)
+            for event in (record.get("outcome_events") or [])
+        )
+    ]
+    trade_dates = sorted(
+        str(record.get("trade_date") or "")
+        for record in factor_records
+        if str(record.get("trade_date") or "")
+    )
+
+    positive_candidates: list[tuple[float, dict[str, Any]]] = []
+    noisy_factors: list[dict[str, Any]] = []
+    for row in factor_tag_stats:
+        window, stats = _preferred_factor_window(row)
+        if not window or not isinstance(stats, Mapping):
+            continue
+        if stats.get("sample_too_small"):
+            noisy_factors.append(_factor_summary_item(row, window, stats, reason="sample_too_small"))
+            continue
+        signal = _factor_signal_score(stats)
+        win_rate = _factor_number(stats.get("win_rate"))
+        avg_excess = _factor_number(stats.get("avg_excess_return_pct"))
+        avg_return = _factor_number(stats.get("avg_return_pct"))
+        if signal > 0 and (win_rate is None or win_rate >= 0.5) and ((avg_excess or avg_return or 0.0) > 0):
+            positive_candidates.append((signal, _factor_summary_item(row, window, stats, reason="positive_factor_observed")))
+        elif abs(signal) < 0.75:
+            noisy_factors.append(_factor_summary_item(row, window, stats, reason="signal_mixed"))
+
+    worst_candidates: list[tuple[float, dict[str, Any]]] = []
+    for row in risk_flag_stats:
+        window, stats = _preferred_factor_window(row)
+        if not window or not isinstance(stats, Mapping):
+            continue
+        if stats.get("sample_too_small"):
+            continue
+        score = _factor_negative_score(stats)
+        worst_candidates.append((score, _factor_summary_item(row, window, stats, reason="risk_flag_hurt_return")))
+
+    best_positive_factors = [
+        item for _score, item in sorted(positive_candidates, key=lambda pair: pair[0], reverse=True)[:5]
+    ]
+    worst_risk_flags = [
+        item for _score, item in sorted(worst_candidates, key=lambda pair: pair[0], reverse=True)[:5]
+    ]
+    noisy_factors = sorted(
+        noisy_factors,
+        key=lambda item: (bool(item.get("sample_too_small")), int(item.get("sample_count") or 0)),
+        reverse=True,
+    )[:8]
+
+    recommendations: list[dict[str, Any]] = []
+    for item in best_positive_factors[:3]:
+        if item.get("sample_too_small"):
+            continue
+        recommendations.append({
+            "kind": "factor_weight",
+            "target": item.get("key"),
+            "suggested_action": "consider_manual_weight_increase",
+            "reason": f"{item.get('window')} 样本正向，人工复核后可考虑小幅提高该因子权重。",
+            "sample_count": item.get("sample_count"),
+            "auto_apply": False,
+        })
+    for item in worst_risk_flags[:3]:
+        if item.get("sample_too_small"):
+            recommendations.append({
+                "kind": "risk_flag",
+                "target": item.get("key"),
+                "suggested_action": "wait_more_samples",
+                "reason": "风险标签样本不足，只能继续观察，不能据此调参。",
+                "sample_count": item.get("sample_count"),
+                "auto_apply": False,
+            })
+            continue
+        recommendations.append({
+            "kind": "risk_flag",
+            "target": item.get("key"),
+            "suggested_action": "consider_manual_risk_penalty_review",
+            "reason": f"{item.get('window')} 负向影响偏高，人工复核后可考虑提高 warn/degrade 权重。",
+            "sample_count": item.get("sample_count"),
+            "auto_apply": False,
+        })
+    for item in noisy_factors[:3]:
+        recommendations.append({
+            "kind": "factor_weight",
+            "target": item.get("key"),
+            "suggested_action": "hold_weight_wait_more_samples",
+            "reason": "信号混杂或样本不足，暂不建议改权重。",
+            "sample_count": item.get("sample_count"),
+            "auto_apply": False,
+        })
+
+    if not recommendations:
+        recommendations.append({
+            "kind": "guardrail",
+            "target": "all",
+            "suggested_action": "wait_more_samples",
+            "reason": "当前样本不足以支持权重调整，只形成观察问题。",
+            "sample_count": len(mature_factor_records),
+            "auto_apply": False,
+        })
+
+    return {
+        "version": "decision-factor-learning.v1",
+        "generated_at": _now(),
+        "sample_window": {
+            "from_date": trade_dates[0] if trade_dates else None,
+            "to_date": trade_dates[-1] if trade_dates else None,
+            "as_of": _resolve_as_of(as_of),
+            "outcome_windows": list(OUTCOME_WINDOWS),
+        },
+        "sample_count": len(mature_factor_records),
+        "factor_record_count": len(factor_records),
+        "min_sample_size": FACTOR_LEARNING_MIN_SAMPLE_SIZE,
+        "best_positive_factors": best_positive_factors,
+        "worst_risk_flags": worst_risk_flags,
+        "noisy_factors": noisy_factors,
+        "score_bucket_performance": score_bucket_performance,
+        "recommendations_for_weights": recommendations,
+        "guardrail": {
+            "auto_apply": False,
+            "message": "只生成给人工复核的调权建议，不自动修改生产参数。",
+        },
+    }
+
+
+def build_factor_learning_loop(
+    records: Iterable[Mapping[str, Any]] | None = None,
+    *,
+    as_of: str | None = None,
+) -> dict[str, Any]:
+    """Per-factor T+1/T+3/T+5/T+10 outcome bucketing for Decision Ledger.
+
+    This is a read-only review statistic.  It never feeds readiness,
+    execution permission, or future ranking directly; it tells the
+    operator which factor buckets are earning their keep and which risk
+    filters are over-firing.
+    """
+
+    if records is None:
+        records, _errors = scan_all_decisions()
+    records_list = [record for record in records if isinstance(record, Mapping)]
+
+    def fundamentals(raw): return raw.get("fundamentals") or {}
+    def valuation(raw): return raw.get("valuation") or {}
+    def capital(raw): return raw.get("capital_flow") or {}
+
+    score_bucket_labels = {key: key for key, _lower, _upper in _SCORE_BUCKETS}
+    factor_tag_stats = _aggregate_factor_learning_axis(
+        records_list,
+        _record_factor_tags,
+    )
+    risk_flag_stats = _aggregate_factor_learning_axis(
+        records_list,
+        _record_risk_flags,
+    )
+    score_bucket_performance = _aggregate_factor_learning_axis(
+        records_list,
+        lambda record: [_score_bucket_key(_record_tushare_score(record))] if _score_bucket_key(_record_tushare_score(record)) else [],
+        labels=score_bucket_labels,
+    )
+    present_score_buckets = {str(item.get("key") or "") for item in score_bucket_performance}
+    for key, _lower, _upper in _SCORE_BUCKETS:
+        if key not in present_score_buckets:
+            score_bucket_performance.append(_empty_factor_learning_stats(key, score_bucket_labels[key]))
+    score_bucket_performance.sort(key=lambda item: [key for key, _lower, _upper in _SCORE_BUCKETS].index(str(item.get("key"))))
+
+    result = {
+        "version": LEARNING_LOOP_VERSION,
+        "generated_at": _now(),
+        "as_of": _resolve_as_of(as_of),
+        "outcome_windows": list(OUTCOME_WINDOWS),
+        "samples_total": len(records_list),
+        "dimensions": ["quality", "valuation", "capital_flow", "theme", "event_risk", "margin", "chips"],
+        "metrics": {
+            "avg_return_by_window": "relative_return_pct 优先，缺失时使用 return_pct。",
+            "win_rate_by_window": "窗口收益指标大于 0 的比例。",
+            "false_positive_rate_by_window": "missed_opportunity 占可用 outcome 的比例，用作风险/过滤误伤率。",
+            "review_rate_by_window": "invalidated、execution_gap、missed_opportunity 占可用 outcome 的比例。",
+        },
+        "buckets": {
+            "quality": {
+                "label": "质量因子：高质量 vs 弱质量",
+                "strong": _factor_bucket_stats(
+                    records_list,
+                    lambda raw, _bundle, _record: (
+                        (_factor_number(fundamentals(raw).get("roe"), fundamentals(raw).get("roe_waa")) or -1) >= 12
+                        and ((_factor_number(fundamentals(raw).get("debt_to_assets")) or 0) < 70)
+                    ),
+                    label="高质量：ROE>=12 且负债率<70",
+                ),
+                "weak": _factor_bucket_stats(
+                    records_list,
+                    lambda raw, _bundle, _record: (
+                        (_factor_number(fundamentals(raw).get("roe"), fundamentals(raw).get("roe_waa")) is not None
+                         and (_factor_number(fundamentals(raw).get("roe"), fundamentals(raw).get("roe_waa")) or 0) < 8)
+                        or ((_factor_number(fundamentals(raw).get("debt_to_assets")) or 0) >= 70)
+                    ),
+                    label="弱质量：ROE<8 或负债率>=70",
+                ),
+            },
+            "valuation": {
+                "label": "估值因子：合理估值 vs 昂贵估值",
+                "reasonable": _factor_bucket_stats(
+                    records_list,
+                    lambda raw, _bundle, _record: (
+                        (_factor_number(valuation(raw).get("pe_ttm")) is not None and 0 < (_factor_number(valuation(raw).get("pe_ttm")) or 0) <= 30)
+                        or (_factor_number(valuation(raw).get("pb")) is not None and (_factor_number(valuation(raw).get("pb")) or 0) <= 3)
+                    ),
+                    label="合理估值：0<PE<=30 或 PB<=3",
+                ),
+                "expensive": _factor_bucket_stats(
+                    records_list,
+                    lambda raw, _bundle, _record: (
+                        (_factor_number(valuation(raw).get("pe_ttm")) is not None and ((_factor_number(valuation(raw).get("pe_ttm")) or 0) <= 0 or (_factor_number(valuation(raw).get("pe_ttm")) or 0) > 60))
+                        or (_factor_number(valuation(raw).get("pb")) is not None and (_factor_number(valuation(raw).get("pb")) or 0) > 8)
+                    ),
+                    label="昂贵估值：PE<=0/PE>60 或 PB>8",
+                ),
+            },
+            "capital_flow": {
+                "label": "资金面：净流入 vs 净流出",
+                "inflow": _factor_bucket_stats(
+                    records_list,
+                    lambda raw, _bundle, _record: (
+                        (_factor_number(capital(raw).get("main_net_yi")) or 0) > 0
+                        or (_factor_number(capital(raw).get("five_day_main_net_yi")) or 0) > 0
+                    ),
+                    label="资金净流入：当日或 5 日主力净流入为正",
+                ),
+                "outflow": _factor_bucket_stats(
+                    records_list,
+                    lambda raw, _bundle, _record: (
+                        (_factor_number(capital(raw).get("main_net_yi")) or 0) < 0
+                        and (_factor_number(capital(raw).get("five_day_main_net_yi")) or 0) < 0
+                    ),
+                    label="资金净流出：当日且 5 日主力净流入为负",
+                ),
+            },
+            "theme": {
+                "label": "主题因子：有主题/行业暴露 vs 无明确主题",
+                "exposed": _factor_bucket_stats(records_list, lambda raw, _bundle, _record: _has_theme(raw), label="有主题/行业标签"),
+                "unexposed": _factor_bucket_stats(records_list, lambda raw, _bundle, _record: _theme_available(raw) and not _has_theme(raw), label="无明确主题标签"),
+            },
+            "event_risk": {
+                "label": "事件风险：风险触发 vs 未触发",
+                "flagged": _factor_bucket_stats(records_list, lambda raw, bundle, _record: _has_event_risk(raw, bundle), label="事件风险触发"),
+                "clean": _factor_bucket_stats(records_list, lambda raw, bundle, _record: _event_risk_available(raw, bundle) and not _has_event_risk(raw, bundle), label="未触发事件风险"),
+            },
+            "margin": {
+                "label": "两融因子：温和增加 vs 过热/撤退",
+                "constructive": _factor_bucket_stats(
+                    records_list,
+                    lambda raw, _bundle, _record: (_margin_change(raw) is not None and 0 < (_margin_change(raw) or 0) < 3),
+                    label="融资温和增加",
+                ),
+                "overheated": _factor_bucket_stats(
+                    records_list,
+                    lambda raw, _bundle, _record: (_margin_change(raw) is not None and (_margin_change(raw) or 0) >= 3),
+                    label="融资过热",
+                ),
+                "retreat": _factor_bucket_stats(
+                    records_list,
+                    lambda raw, _bundle, _record: (_margin_change(raw) is not None and (_margin_change(raw) or 0) <= -3),
+                    label="融资撤退",
+                ),
+            },
+            "chips": {
+                "label": "筹码因子：支撑 vs 压力",
+                "supportive": _factor_bucket_stats(
+                    records_list,
+                    lambda raw, _bundle, _record: (
+                        not _chip_pressure(raw)
+                        and _chip_available(raw)
+                    ),
+                    label="筹码压力未触发",
+                ),
+                "pressure": _factor_bucket_stats(records_list, lambda raw, _bundle, _record: _chip_pressure(raw), label="筹码压力触发"),
+            },
+        },
+    }
+    result["factor_tag_stats"] = factor_tag_stats
+    result["risk_flag_stats"] = risk_flag_stats
+    result["score_bucket_performance"] = score_bucket_performance
+    result["learning_summary"] = _build_factor_learning_summary(
+        records=records_list,
+        factor_tag_stats=factor_tag_stats,
+        risk_flag_stats=risk_flag_stats,
+        score_bucket_performance=score_bucket_performance,
+        as_of=as_of,
+    )
+    return result
+
+
+def build_rule_learning_loop(
+    records: Iterable[Mapping[str, Any]] | None = None,
+    *,
+    errors: Iterable[Mapping[str, Any]] | None = None,
+    as_of: str | None = None,
+) -> dict[str, Any]:
+    """Aggregate outcome feedback by explicit decision-rule version.
+
+    This is deliberately not an optimizer.  It is the small closed loop the
+    operator needs before changing rules: every sample is tied to the
+    ruleset that produced it, then bucketed by lane/action/outcome so rule
+    changes can be reviewed with versioned evidence instead of anecdotes.
+    """
+
+    if records is None:
+        loaded, loaded_errors = scan_all_decisions()
+        records = loaded
+        errors = loaded_errors if errors is None else errors
+
+    buckets: dict[tuple[str, str, str], dict[str, Any]] = {}
+    suggestions: list[dict[str, Any]] = []
+    pending_review_count = 0
+    samples_total = 0
+    mature_samples = 0
+    ruleset_versions: set[str] = set()
+
+    for record in records:
+        if not isinstance(record, Mapping):
+            continue
+        samples_total += 1
+        rule_snapshot = record.get("rule_snapshot") or {}
+        ruleset_version = str(rule_snapshot.get("ruleset_version") or "legacy_unversioned")
+        ruleset_versions.add(ruleset_version)
+        source = record.get("source") or {}
+        recommendation = record.get("recommendation") or {}
+        lane = str(source.get("lane") or "unknown")
+        action = str(recommendation.get("action") or "unknown")
+        key = (ruleset_version, lane, action)
+        bucket = buckets.setdefault(
+            key,
+            {
+                "ruleset_version": ruleset_version,
+                "lane": lane,
+                "action": action,
+                "samples": 0,
+                "mature_samples": 0,
+                "outcomes": {},
+                "execution_events": 0,
+                "pending_outcome": 0,
+                "needs_review": 0,
+                "decision_ids": [],
+            },
+        )
+        bucket["samples"] += 1
+        bucket["execution_events"] += len(record.get("execution_events") or [])
+        decision_id = str(record.get("decision_id") or "")
+        if decision_id:
+            bucket["decision_ids"].append(decision_id)
+
+        latest_outcome = _latest_outcome_event(record.get("outcome_events") or [])
+        if latest_outcome is None:
+            bucket["pending_outcome"] += 1
+            continue
+        mature_samples += 1
+        bucket["mature_samples"] += 1
+        label = str((latest_outcome.get("classification") or {}).get("label") or "unknown")
+        outcomes = bucket["outcomes"]
+        outcomes[label] = int(outcomes.get(label) or 0) + 1
+        if label in _LEARNING_REVIEW_LABELS:
+            bucket["needs_review"] += 1
+            pending_review_count += 1
+
+    for bucket in buckets.values():
+        mature = int(bucket.get("mature_samples") or 0)
+        needs_review = int(bucket.get("needs_review") or 0)
+        outcomes = bucket.get("outcomes") or {}
+        review_rate = (needs_review / mature) if mature else 0.0
+        suggested_action = ""
+        reason = ""
+        if int(outcomes.get("data_issue") or 0) >= 2:
+            suggested_action = "fix_data_pipeline"
+            reason = "同一规则桶反复出现数据问题，先修数据再评价规则。"
+        elif int(outcomes.get("execution_gap") or 0) >= 2:
+            suggested_action = "fix_execution_pipeline"
+            reason = "同一规则桶反复出现执行落差，先检查动作到成交的链路。"
+        elif mature >= 3 and review_rate >= 0.4:
+            suggested_action = "review_rule_threshold"
+            reason = "成熟样本里需要复盘的比例偏高，建议检查该 lane/action 的阈值。"
+
+        bucket["review_rate"] = round(review_rate, 4)
+        bucket["sample_stage"] = _learning_sample_stage(mature)
+        if suggested_action:
+            suggestions.append({
+                "ruleset_version": bucket["ruleset_version"],
+                "lane": bucket["lane"],
+                "action": bucket["action"],
+                "suggested_action": suggested_action,
+                "reason": reason,
+                "mature_samples": mature,
+                "needs_review": needs_review,
+                "review_rate": bucket["review_rate"],
+            })
+
+    ordered_buckets = sorted(
+        buckets.values(),
+        key=lambda item: (
+            str(item.get("ruleset_version") or ""),
+            str(item.get("lane") or ""),
+            str(item.get("action") or ""),
+        ),
+    )
+    for bucket in ordered_buckets:
+        bucket["decision_ids"] = list(bucket.get("decision_ids") or [])[:12]
+
+    return {
+        "version": LEARNING_LOOP_VERSION,
+        "generated_at": _now(),
+        "as_of": _resolve_as_of(as_of),
+        "ruleset_versions": sorted(ruleset_versions),
+        "samples_total": samples_total,
+        "mature_samples": mature_samples,
+        "pending_review_count": pending_review_count,
+        "buckets": ordered_buckets,
+        "suggestions": suggestions,
+        "errors": [dict(error) for error in (errors or [])],
+    }
+
+
+def _learning_sample_stage(mature_samples: int) -> str:
+    if mature_samples >= 10:
+        return "pattern_formed"
+    if mature_samples >= 3:
+        return "validating_pattern"
+    if mature_samples > 0:
+        return "observation_hypothesis"
+    return "pending_outcome"
 
 
 _REVIEW_LABELS = {
@@ -2388,27 +4033,33 @@ def _latest_outcome_tone(latest_outcome: Mapping[str, Any] | None) -> str:
 
 
 def _read_review_cases_file() -> list[dict[str, Any]]:
-    path = _review_cases_path()
-    if not path.exists():
-        return []
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise DecisionLedgerError(
-            f"corrupt review case file {path}: {exc.msg}"
-        ) from exc
-    if not isinstance(raw, list):
-        raise DecisionLedgerError(
-            f"corrupt review case file {path}: expected list payload"
-        )
     cases: list[dict[str, Any]] = []
-    for index, item in enumerate(raw):
-        if not isinstance(item, Mapping):
+    seen: set[str] = set()
+    for path in _review_case_read_paths():
+        if not path.exists():
+            continue
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
             raise DecisionLedgerError(
-                f"corrupt review case file {path}: record at index {index} "
-                f"is not an object (got {type(item).__name__})"
+                f"corrupt review case file {path}: {exc.msg}"
+            ) from exc
+        if not isinstance(raw, list):
+            raise DecisionLedgerError(
+                f"corrupt review case file {path}: expected list payload"
             )
-        cases.append(dict(item))
+        for index, item in enumerate(raw):
+            if not isinstance(item, Mapping):
+                raise DecisionLedgerError(
+                    f"corrupt review case file {path}: record at index {index} "
+                    f"is not an object (got {type(item).__name__})"
+                )
+            review_case_id = str(item.get("review_case_id") or item.get("decision_id") or "")
+            if review_case_id and review_case_id in seen:
+                continue
+            if review_case_id:
+                seen.add(review_case_id)
+            cases.append(dict(item))
     return cases
 
 
@@ -2464,15 +4115,17 @@ def read_review_cases_revision() -> str:
     Returns the empty-revision sentinel when the file is missing,
     unreadable, or empty.
     """
-    path = _review_cases_path()
-    try:
-        raw = path.read_bytes()
-    except FileNotFoundError:
-        return _EMPTY_REVIEW_CASES_REVISION
-    except OSError:
-        # Mirror the silent-empty behaviour for missing files; a transient
-        # permission error should not poison a cache key.
-        return _EMPTY_REVIEW_CASES_REVISION
+    raw = b""
+    for path in _review_case_read_paths():
+        try:
+            raw = path.read_bytes()
+            break
+        except FileNotFoundError:
+            continue
+        except OSError:
+            # Mirror the silent-empty behaviour for missing files; a transient
+            # permission error should not poison a cache key.
+            return _EMPTY_REVIEW_CASES_REVISION
     if not raw:
         return _EMPTY_REVIEW_CASES_REVISION
     try:
@@ -3727,6 +5380,37 @@ def build_attribution_draft(decision_id: str) -> dict[str, Any]:
     )
 
 
+def _review_case_payload_from_draft(draft: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "primary_cause": draft.get("primary_cause"),
+        "secondary_causes": draft.get("secondary_causes") or [],
+        "review_note": draft.get("review_note") or "",
+        "conclusion_action": draft.get("conclusion_action"),
+        "rule_hypothesis": draft.get("rule_hypothesis") or "",
+        "follow_up_status": draft.get("follow_up_status") or "",
+        "ai_draft": dict(draft),
+        "attribution_confidence": draft.get("confidence"),
+        "evidence_refs": draft.get("evidence") or [],
+        "human_check_required": draft.get("human_check_required") or [],
+        "similar_case_refs": draft.get("similar_case_refs") or [],
+        "shadow_sample_refs": draft.get("shadow_sample_refs") or [],
+    }
+
+
+def auto_review_case(decision_id: str) -> dict[str, Any]:
+    """Generate an AI attribution draft and immediately save it as a Review Case."""
+
+    draft = build_attribution_draft(decision_id)
+    review_case = save_review_case(decision_id, _review_case_payload_from_draft(draft))
+    workbench = build_review_case_workbench(decision_id)
+    return {
+        "ok": True,
+        "draft": draft,
+        "review_case": review_case,
+        "workbench": workbench,
+    }
+
+
 def _review_case_status_for_sample(sample_count: int) -> str:
     stage = _sample_stage(sample_count)
     if stage in {"rule_adjustment_suggestion", "strategy_calibration_suggestion"}:
@@ -4281,6 +5965,10 @@ def build_review_case_patterns(
     }
 
 
+def _review_case_pattern_count(cases: Iterable[Mapping[str, Any]]) -> int:
+    return len({_review_pattern_key(case) for case in cases})
+
+
 def build_review_case_workbench(decision_id: str) -> dict[str, Any]:
     record = load_decision(decision_id)
     if record is None:
@@ -4397,11 +6085,11 @@ def _next_maturity(
 
     latest_outcome = _latest_outcome_event(outcome_events)
     due_at = str((latest_outcome or {}).get("as_of_trade_date") or trade_date or "")
-    latest_window = str((latest_outcome or {}).get("window") or "T+5")
+    latest_window = str((latest_outcome or {}).get("window") or OUTCOME_WINDOWS[-1])
     return {
         "maturity_due_at": due_at or None,
         "maturity_window": latest_window,
-        "maturity_label": "T+5 已完成，样本可纳入规则学习",
+        "maturity_label": f"{OUTCOME_WINDOWS[-1]} 已完成，样本可纳入规则学习",
         "is_overdue": False,
         "is_due": True,
         "missing_due_date": False,
@@ -4973,6 +6661,8 @@ def build_calibration_review(
     window_days: int = 20,
     as_of: str | None = None,
     limit: int = 12,
+    include_shadow_calibration: bool = True,
+    include_review_case_patterns: bool = True,
 ) -> dict[str, Any]:
     """Aggregate the ledger into a small review-and-calibration brief.
 
@@ -5108,12 +6798,31 @@ def build_calibration_review(
         or item.get("review_status") in _PENDING_REVIEW_STATUSES
     ][:review_limit]
     workbench = _build_review_workbench(learning_records, errors=errors)
-    shadow_calibration = build_shadow_calibration_summary()
+    shadow_calibration = (
+        build_shadow_calibration_summary()
+        if include_shadow_calibration
+        else None
+    )
     top_review_reasons: list[str] = []
     for item in review_items:
         reason = str(item.get("review_reason_key") or "")
         if reason and reason not in top_review_reasons:
             top_review_reasons.append(reason)
+    review_case_patterns_payload = (
+        build_review_case_patterns(cases=review_cases)
+        if include_review_case_patterns
+        else None
+    )
+    review_case_patterns = (
+        (review_case_patterns_payload or {}).get("patterns")
+        if isinstance(review_case_patterns_payload, Mapping)
+        else []
+    ) or []
+    review_case_pattern_count = (
+        int((review_case_patterns_payload or {}).get("count") or 0)
+        if isinstance(review_case_patterns_payload, Mapping)
+        else _review_case_pattern_count(review_cases)
+    )
 
     return {
         "as_of": as_of_norm,
@@ -5131,13 +6840,13 @@ def build_calibration_review(
         "needs_review": needs_review,
         "needs_review_count": len(review_items),
         "reviewed_case_count": len(review_cases_by_decision),
-        "review_case_patterns": build_review_case_patterns(cases=review_cases).get("patterns", []),
+        "review_case_patterns": review_case_patterns,
         "review_case_summary": {
             "total": len(review_cases),
             "attributed": len([case for case in review_cases if case.get("primary_cause")]),
-            "patterns": build_review_case_patterns(cases=review_cases).get("count", 0),
+            "patterns": review_case_pattern_count,
         },
-        "shadow_calibration": shadow_calibration,
+        **({"shadow_calibration": shadow_calibration} if shadow_calibration is not None else {}),
         "suggestion_cards": _calibration_suggestion_cards(
             by_lane=by_lane,
             by_action=by_action,
@@ -5151,7 +6860,21 @@ def build_calibration_review(
     }
 
 
-def list_recent_decisions(*, limit: int = 20) -> dict[str, Any]:
+def _canonical_code_set(codes: Iterable[Any] | None) -> set[str]:
+    out: set[str] = set()
+    for code in codes or []:
+        canonical = _canonical_code(code)
+        if canonical:
+            out.add(canonical)
+    return out
+
+
+def list_recent_decisions(
+    *,
+    limit: int = 20,
+    codes: Iterable[Any] | None = None,
+    latest_per_code: bool = False,
+) -> dict[str, Any]:
     """Return the most recent decisions plus their latest event summary.
 
     Sort order is ``(trade_date desc, decision_id desc)``.  The decision
@@ -5163,6 +6886,16 @@ def list_recent_decisions(*, limit: int = 20) -> dict[str, Any]:
         limit = 1
     limit = min(limit, 500)  # hard cap so /recent stays a thin API
     records, errors = scan_all_decisions()
+    requested_codes = [code for code in (codes or []) if str(code or "").strip()]
+    code_filter = _canonical_code_set(requested_codes)
+    if code_filter:
+        records = [
+            record
+            for record in records
+            if str((record.get("stock") or {}).get("code") or "") in code_filter
+        ]
+    elif requested_codes:
+        records = []
     records.sort(
         key=lambda r: (
             str(r.get("trade_date") or ""),
@@ -5170,11 +6903,23 @@ def list_recent_decisions(*, limit: int = 20) -> dict[str, Any]:
         ),
         reverse=True,
     )
+    if latest_per_code:
+        latest_records: list[dict[str, Any]] = []
+        seen_codes: set[str] = set()
+        for record in records:
+            code = str((record.get("stock") or {}).get("code") or "")
+            if not code or code in seen_codes:
+                continue
+            seen_codes.add(code)
+            latest_records.append(record)
+        records = latest_records
     items = [_decision_summary_card(r) for r in records[:limit]]
     return {
         "items": items,
         "count": len(items),
         "limit": limit,
+        "codes": sorted(code_filter),
+        "latest_per_code": bool(latest_per_code),
         "errors": errors,
     }
 
@@ -5197,7 +6942,8 @@ def status_path(kind: str) -> Path:
 
     The kind is whitelisted (see :data:`STATUS_KINDS`) so a typo at a
     write site cannot stash an unreachable status file in the ledger
-    root.  The directory is *not* created here -- writers call
+    root.  This path is the canonical runtime location.  The directory
+    is *not* created here -- writers call
     :func:`write_status`, readers handle missing files.
     """
 
@@ -5207,6 +6953,15 @@ def status_path(kind: str) -> Path:
             f"unknown status kind: {kind!r}; expected one of {STATUS_KINDS}"
         )
     return default_ledger_root() / "status" / f"{key}_latest.json"
+
+
+def _status_read_paths(kind: str) -> list[Path]:
+    key = str(kind or "").strip().lower()
+    if key not in STATUS_KINDS:
+        raise DecisionLedgerError(
+            f"unknown status kind: {kind!r}; expected one of {STATUS_KINDS}"
+        )
+    return [root / "status" / f"{key}_latest.json" for root in _ledger_read_roots()]
 
 
 def write_status(kind: str, payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -5238,16 +6993,17 @@ def load_status(kind: str) -> dict[str, Any] | None:
     Settings dashboard.
     """
 
-    path = status_path(kind)
-    if not path.exists():
-        return None
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    if not isinstance(raw, Mapping):
-        return None
-    return dict(raw)
+    for path in _status_read_paths(kind):
+        if not path.exists():
+            continue
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        if not isinstance(raw, Mapping):
+            return None
+        return dict(raw)
+    return None
 
 
 def build_ledger_health() -> dict[str, Any]:
@@ -5305,24 +7061,24 @@ def build_ledger_health() -> dict[str, Any]:
     # one is present, the operator deserves to know.
     status_errors: list[dict[str, Any]] = []
     for kind in STATUS_KINDS:
-        path = status_path(kind)
-        if not path.exists():
-            continue
-        try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            status_errors.append({
-                "kind": kind,
-                "file": str(path),
-                "error": str(exc),
-            })
-            continue
-        if not isinstance(raw, Mapping):
-            status_errors.append({
-                "kind": kind,
-                "file": str(path),
-                "error": "status payload is not an object",
-            })
+        for path in _status_read_paths(kind):
+            if not path.exists():
+                continue
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                status_errors.append({
+                    "kind": kind,
+                    "file": str(path),
+                    "error": str(exc),
+                })
+                continue
+            if not isinstance(raw, Mapping):
+                status_errors.append({
+                    "kind": kind,
+                    "file": str(path),
+                    "error": "status payload is not an object",
+                })
 
     return {
         "generated_at": _now(),
@@ -5336,6 +7092,8 @@ def build_ledger_health() -> dict[str, Any]:
         "last_outcome_evaluation": outcome,
         "corrupt_files": errors,
         "status_errors": status_errors,
+        "storage": ledger_storage_status(),
+        "learning_loop": build_rule_learning_loop(records, errors=errors, as_of=today_str),
     }
 
 

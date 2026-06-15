@@ -1,15 +1,25 @@
 "use client";
 
 import { CommandIcon, Search } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
-import { CommandBar } from "./command-bar";
 import { Sidebar, navItems } from "./sidebar";
+
+const CommandBar = dynamic(() => import("./command-bar").then((module) => module.CommandBar), {
+  ssr: false,
+  loading: () => null,
+});
+
+function warmCommandBar() {
+  void import("./command-bar");
+}
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [commandOpen, setCommandOpen] = useState(false);
+  const [sidebarStatusEnabled, setSidebarStatusEnabled] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => {
@@ -24,10 +34,33 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") {
+      return undefined;
+    }
+
+    const mediaQuery = window.matchMedia("(min-width: 768px)");
+    const syncSidebarStatus = () => setSidebarStatusEnabled(mediaQuery.matches);
+    syncSidebarStatus();
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", syncSidebarStatus);
+      return () => mediaQuery.removeEventListener("change", syncSidebarStatus);
+    }
+
+    mediaQuery.addListener(syncSidebarStatus);
+    return () => mediaQuery.removeListener(syncSidebarStatus);
+  }, []);
+
   return (
     <div className="prism-app-shell" data-od-id="app-shell">
       <div className="prism-layout">
-        <Sidebar onOpenCommand={() => setCommandOpen(true)} className="hidden md:flex" />
+        <Sidebar
+          onOpenCommand={() => setCommandOpen(true)}
+          onWarmCommand={warmCommandBar}
+          statusEnabled={sidebarStatusEnabled}
+          className="hidden md:flex"
+        />
         <div className="prism-content">
           <header className="prism-mobile-shell md:hidden">
             <div className="prism-mobile-top">
@@ -40,6 +73,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                 aria-label="打开命令栏"
                 className="focus-ring od-ghost-btn"
                 onClick={() => setCommandOpen(true)}
+                onFocus={warmCommandBar}
+                onMouseEnter={warmCommandBar}
               >
                 <Search size={15} />
                 <CommandIcon size={13} />
@@ -74,7 +109,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {children}
         </div>
       </div>
-      <CommandBar open={commandOpen} onOpenChange={setCommandOpen} />
+      {commandOpen ? <CommandBar open={commandOpen} onOpenChange={setCommandOpen} /> : null}
     </div>
   );
 }

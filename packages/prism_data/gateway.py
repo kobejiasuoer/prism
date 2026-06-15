@@ -81,7 +81,7 @@ class DataGateway:
                 request_key=key or code,
                 method_name="fetch_kline",
                 primary_args=(code,),
-                method_kwargs={"period": period, "count": count, **kwargs},
+                method_kwargs={"period": period, "count": count, "trade_date": trade_date, **kwargs},
             )
         return self._run(
             dataset=dataset,
@@ -90,7 +90,123 @@ class DataGateway:
             method_name="fetch_kline",
             primary_args=(code,),
             allow_fallback=allow_fallback,
-            method_kwargs={"period": period, "count": count, **kwargs},
+            method_kwargs={"period": period, "count": count, "trade_date": trade_date, **kwargs},
+        )
+
+    def fetch_trade_calendar(self, *, trade_date: str, exchange: str = "SSE", start_date: str | None = None, end_date: str | None = None, dataset: str = "trade_calendar", key: str | None = None, allow_fallback: bool = True, provider_name: str | None = None, **kwargs: Any) -> GatewayResult:
+        request_key = key or f"{exchange}-{start_date or trade_date}-{end_date or trade_date}"
+        method_kwargs = {"exchange": exchange, "start_date": start_date or trade_date, "end_date": end_date or trade_date, "trade_date": trade_date, **kwargs}
+        if provider_name:
+            return self._run_single_provider(
+                provider_name=provider_name,
+                dataset=dataset,
+                trade_date=trade_date,
+                request_key=request_key,
+                method_name="fetch_trade_calendar",
+                primary_args=(),
+                method_kwargs=method_kwargs,
+            )
+        return self._run(
+            dataset=dataset,
+            trade_date=trade_date,
+            request_key=request_key,
+            method_name="fetch_trade_calendar",
+            primary_args=(),
+            allow_fallback=allow_fallback,
+            method_kwargs=method_kwargs,
+        )
+
+    def fetch_index_daily(self, symbol: str, *, trade_date: str, start_date: str | None = None, end_date: str | None = None, dataset: str = "benchmark.index_daily", key: str | None = None, allow_fallback: bool = True, provider_name: str | None = None, **kwargs: Any) -> GatewayResult:
+        request_key = key or f"{symbol}-{start_date or ''}-{end_date or trade_date}"
+        method_kwargs = {"start_date": start_date, "end_date": end_date or trade_date, "trade_date": trade_date, **kwargs}
+        if provider_name:
+            return self._run_single_provider(
+                provider_name=provider_name,
+                dataset=dataset,
+                trade_date=trade_date,
+                request_key=request_key,
+                method_name="fetch_index_daily",
+                primary_args=(symbol,),
+                method_kwargs=method_kwargs,
+            )
+        return self._run(
+            dataset=dataset,
+            trade_date=trade_date,
+            request_key=request_key,
+            method_name="fetch_index_daily",
+            primary_args=(symbol,),
+            allow_fallback=allow_fallback,
+            method_kwargs=method_kwargs,
+        )
+
+    def fetch_adjustment_factor(self, code: str, *, trade_date: str, start_date: str | None = None, end_date: str | None = None, dataset: str = "adjustment.factor", key: str | None = None, allow_fallback: bool = False, provider_name: str | None = None, **kwargs: Any) -> GatewayResult:
+        request_key = key or f"{code}-{start_date or ''}-{end_date or trade_date}"
+        method_kwargs = {"start_date": start_date, "end_date": end_date or trade_date, "trade_date": trade_date, **kwargs}
+        if provider_name:
+            return self._run_single_provider(
+                provider_name=provider_name,
+                dataset=dataset,
+                trade_date=trade_date,
+                request_key=request_key,
+                method_name="fetch_adjustment_factor",
+                primary_args=(code,),
+                method_kwargs=method_kwargs,
+            )
+        return self._run(
+            dataset=dataset,
+            trade_date=trade_date,
+            request_key=request_key,
+            method_name="fetch_adjustment_factor",
+            primary_args=(code,),
+            allow_fallback=allow_fallback,
+            method_kwargs=method_kwargs,
+        )
+
+    def fetch_price_limit(self, *, trade_date: str, code: str | None = None, dataset: str = "price_limit.daily", key: str | None = None, allow_fallback: bool = False, provider_name: str | None = None, **kwargs: Any) -> GatewayResult:
+        request_key = key or (f"{trade_date}-{code}" if code else trade_date)
+        method_kwargs = {"code": code, **kwargs}
+        if provider_name:
+            return self._run_single_provider(
+                provider_name=provider_name,
+                dataset=dataset,
+                trade_date=trade_date,
+                request_key=request_key,
+                method_name="fetch_price_limit",
+                primary_args=(trade_date,),
+                method_kwargs=method_kwargs,
+            )
+        return self._run(
+            dataset=dataset,
+            trade_date=trade_date,
+            request_key=request_key,
+            method_name="fetch_price_limit",
+            primary_args=(trade_date,),
+            allow_fallback=allow_fallback,
+            method_kwargs=method_kwargs,
+        )
+
+    def fetch_execution_flags(self, *, trade_date: str, codes: list[str] | None = None, dataset: str = "execution.flags", key: str | None = None, allow_fallback: bool = False, provider_name: str | None = None, **kwargs: Any) -> GatewayResult:
+        normalized_codes = list(codes or [])
+        request_key = key or f"{trade_date}-execution-{hash_payload(sorted(normalized_codes))[:12] if normalized_codes else 'market'}"
+        method_kwargs = {"codes": normalized_codes, **kwargs}
+        if provider_name:
+            return self._run_single_provider(
+                provider_name=provider_name,
+                dataset=dataset,
+                trade_date=trade_date,
+                request_key=request_key,
+                method_name="fetch_execution_flags",
+                primary_args=(trade_date,),
+                method_kwargs=method_kwargs,
+            )
+        return self._run(
+            dataset=dataset,
+            trade_date=trade_date,
+            request_key=request_key,
+            method_name="fetch_execution_flags",
+            primary_args=(trade_date,),
+            allow_fallback=allow_fallback,
+            method_kwargs=method_kwargs,
         )
 
     def fetch_capital_flow(self, code: str, *, trade_date: str, dataset: str = "capital_flow.daily", key: str | None = None, allow_fallback: bool = True, provider_name: str | None = None, **kwargs: Any) -> GatewayResult:
@@ -124,7 +240,7 @@ class DataGateway:
                 request_key=request_key,
                 method_name="fetch_capital_flow_batch",
                 primary_args=(codes,),
-                method_kwargs=kwargs,
+                method_kwargs={"trade_date": trade_date, **kwargs},
             )
         return self._run(
             dataset=dataset,
@@ -133,7 +249,7 @@ class DataGateway:
             method_name="fetch_capital_flow_batch",
             primary_args=(codes,),
             allow_fallback=allow_fallback,
-            method_kwargs=kwargs,
+            method_kwargs={"trade_date": trade_date, **kwargs},
         )
 
     def fetch_fundamentals(self, code: str, *, trade_date: str, dataset: str = "fundamentals.snapshot", key: str | None = None, allow_fallback: bool = True, provider_name: str | None = None, **kwargs: Any) -> GatewayResult:
@@ -145,7 +261,7 @@ class DataGateway:
                 request_key=key or code,
                 method_name="fetch_fundamentals",
                 primary_args=(code,),
-                method_kwargs=kwargs,
+                method_kwargs={"trade_date": trade_date, **kwargs},
             )
         return self._run(
             dataset=dataset,
@@ -154,7 +270,7 @@ class DataGateway:
             method_name="fetch_fundamentals",
             primary_args=(code,),
             allow_fallback=allow_fallback,
-            method_kwargs=kwargs,
+            method_kwargs={"trade_date": trade_date, **kwargs},
         )
 
     def fetch_fundamentals_batch(self, codes: list[str], *, trade_date: str, dataset: str = "fundamentals.batch", key: str | None = None, allow_fallback: bool = False, provider_name: str | None = None, **kwargs: Any) -> GatewayResult:
@@ -167,7 +283,7 @@ class DataGateway:
                 request_key=request_key,
                 method_name="fetch_fundamentals_batch",
                 primary_args=(codes,),
-                method_kwargs=kwargs,
+                method_kwargs={"trade_date": trade_date, **kwargs},
             )
         return self._run(
             dataset=dataset,
@@ -176,7 +292,7 @@ class DataGateway:
             method_name="fetch_fundamentals_batch",
             primary_args=(codes,),
             allow_fallback=allow_fallback,
-            method_kwargs=kwargs,
+            method_kwargs={"trade_date": trade_date, **kwargs},
         )
 
     def fetch_announcements(self, code: str, *, trade_date: str, start_date: str | None = None, end_date: str | None = None, dataset: str = "announcements.latest", key: str | None = None, allow_fallback: bool = False, provider_name: str | None = None, **kwargs: Any) -> GatewayResult:
@@ -459,7 +575,51 @@ class DataGateway:
             live_small_allowed=live_small_allowed,
         )
         data_path: str | None = None
+        display_key = self._display_request_key_for_non_authority_result(
+            result=result,
+            manifest=manifest,
+            expected_trade_date=expected_trade_date,
+            request_key=request_key,
+        )
+        manifest_formal_ready = self._manifest_is_formal_ready(manifest, expected_trade_date)
+        existing_formal_ready = self._existing_manifest_is_formal_ready(
+            dataset=result.dataset,
+            trade_date=expected_trade_date,
+            request_key=request_key,
+        )
         if result.status == DatasetStatus.OK and result.data is not None:
+            if (display_key or existing_formal_ready) and not manifest_formal_ready:
+                display_key = display_key or f"{request_key}__{result.provider}__display"
+                display_manifest = dict(manifest)
+                display_manifest["request_key"] = display_key
+                if existing_formal_ready:
+                    display_manifest["preserved_existing_formal_manifest"] = True
+                    display_manifest["preserved_formal_request_key"] = request_key
+                else:
+                    display_manifest["isolated_non_authority_result"] = True
+                    display_manifest["formal_request_key"] = request_key
+                data_file, manifest_file = self.repository.save_dataset(
+                    result.dataset,
+                    expected_trade_date,
+                    display_key,
+                    result.data,
+                    display_manifest,
+                )
+                data_path = str(data_file.resolve())
+                manifest_path = str(manifest_file.resolve())
+                manifest = display_manifest
+                manifest["data_path"] = data_path
+                manifest["manifest_path"] = manifest_path
+                return GatewayResult(
+                    dataset=result.dataset,
+                    request_key=request_key,
+                    data=result.data,
+                    manifest=manifest,
+                    data_path=data_path,
+                    manifest_path=manifest_path,
+                    provider_result=result,
+                    attempt_manifests=attempt_manifest_paths,
+                )
             data_file, manifest_file = self.repository.save_dataset(
                 result.dataset,
                 expected_trade_date,
@@ -472,9 +632,30 @@ class DataGateway:
             manifest["data_path"] = data_path
             manifest["manifest_path"] = manifest_path
         else:
-            manifest_file = self.repository.save_manifest(result.dataset, expected_trade_date, request_key, manifest)
-            manifest_path = str(manifest_file.resolve())
-            manifest["manifest_path"] = manifest_path
+            if existing_formal_ready:
+                manifest_path = str(
+                    self.repository.dataset_paths(result.dataset, expected_trade_date, request_key)[1].resolve()
+                )
+                manifest["manifest_path"] = manifest_path
+                manifest["preserved_existing_formal_manifest"] = True
+            elif display_key:
+                display_manifest = dict(manifest)
+                display_manifest["request_key"] = display_key
+                display_manifest["isolated_non_authority_result"] = True
+                display_manifest["formal_request_key"] = request_key
+                manifest_file = self.repository.save_manifest(
+                    result.dataset,
+                    expected_trade_date,
+                    display_key,
+                    display_manifest,
+                )
+                manifest_path = str(manifest_file.resolve())
+                manifest = display_manifest
+                manifest["manifest_path"] = manifest_path
+            else:
+                manifest_file = self.repository.save_manifest(result.dataset, expected_trade_date, request_key, manifest)
+                manifest_path = str(manifest_file.resolve())
+                manifest["manifest_path"] = manifest_path
         return GatewayResult(
             dataset=result.dataset,
             request_key=request_key,
@@ -485,6 +666,51 @@ class DataGateway:
             provider_result=result,
             attempt_manifests=attempt_manifest_paths,
         )
+
+    def _existing_manifest_is_formal_ready(
+        self,
+        *,
+        dataset: str,
+        trade_date: str,
+        request_key: str,
+    ) -> bool:
+        existing = self.repository.load_manifest(dataset, trade_date, request_key)
+        if not existing:
+            return False
+        return self._manifest_is_formal_ready(existing, trade_date)
+
+    @staticmethod
+    def _manifest_is_formal_ready(manifest: dict[str, Any], trade_date: str) -> bool:
+        return (
+            str(manifest.get("status") or "").lower() == DatasetStatus.OK.value
+            and str(manifest.get("trade_date") or "") == trade_date
+            and bool(manifest.get("source_authority_ready"))
+            and bool(manifest.get("formal_decision_allowed"))
+            and bool(manifest.get("payload_hash"))
+        )
+
+    @staticmethod
+    def _display_request_key_for_non_authority_result(
+        *,
+        result: ProviderResult,
+        manifest: dict[str, Any],
+        expected_trade_date: str,
+        request_key: str,
+    ) -> str:
+        if DataGateway._manifest_is_formal_ready(manifest, expected_trade_date):
+            return ""
+        definition = get_dataset_definition(result.dataset)
+        if definition is None or definition.source_lane not in {"authoritative_daily", "execution"}:
+            return ""
+        target = (
+            definition.target_authority_provider
+            or definition.authority_provider
+            or definition.primary_provider
+            or ""
+        )
+        if not target or str(result.provider or "") == str(target):
+            return ""
+        return f"{request_key}__{result.provider}__display"
 
     def _effective_live_small_allowed(self, result: ProviderResult, expected_trade_date: str) -> bool:
         if result.provider_role == ProviderRole.FALLBACK and not bool(result.extra.get("allow_live_small_fallback")):

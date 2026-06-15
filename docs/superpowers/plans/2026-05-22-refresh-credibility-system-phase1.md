@@ -36,7 +36,7 @@
 
 **Test command:** 
 ```bash
-cd /Users/yangbishang/Projects/prism && python3.14 -m pytest apps/control-panel/tests/ -v
+cd <redacted-path> && python3.14 -m pytest apps/control-panel/tests/ -v
 ```
 
 ---
@@ -188,7 +188,7 @@ if __name__ == "__main__":
 ### - [ ] Step 1.2: 跑测试，确认 fail
 
 ```bash
-cd /Users/yangbishang/Projects/prism && python3.14 -m pytest apps/control-panel/tests/test_source_budget.py -v
+cd <redacted-path> && python3.14 -m pytest apps/control-panel/tests/test_source_budget.py -v
 ```
 
 **Expected:** `ModuleNotFoundError: No module named 'source_budget'`（因为还没创建模块）
@@ -538,7 +538,7 @@ def build_source_budget_payload() -> dict[str, Any]:
 ### - [ ] Step 1.4: 跑测试，确认 pass
 
 ```bash
-cd /Users/yangbishang/Projects/prism && python3.14 -m pytest apps/control-panel/tests/test_source_budget.py -v
+cd <redacted-path> && python3.14 -m pytest apps/control-panel/tests/test_source_budget.py -v
 ```
 
 **Expected:** 全部测试通过（应该有 8 个测试）。
@@ -707,7 +707,7 @@ if __name__ == "__main__":
 ### - [ ] Step 2.2: 跑测试，确认 fail
 
 ```bash
-cd /Users/yangbishang/Projects/prism && python3.14 -m pytest apps/control-panel/tests/test_freshness_state.py -v
+cd <redacted-path> && python3.14 -m pytest apps/control-panel/tests/test_freshness_state.py -v
 ```
 
 **Expected:** `ModuleNotFoundError: No module named 'freshness_state'`
@@ -823,7 +823,7 @@ def state_allows(state: FreshnessState, capability: str) -> bool:
 ### - [ ] Step 2.4: 跑测试，确认 pass
 
 ```bash
-cd /Users/yangbishang/Projects/prism && python3.14 -m pytest apps/control-panel/tests/test_freshness_state.py -v
+cd <redacted-path> && python3.14 -m pytest apps/control-panel/tests/test_freshness_state.py -v
 ```
 
 **Expected:** 全部通过。
@@ -1163,7 +1163,7 @@ if __name__ == "__main__":
 ### - [ ] Step 3.2: 跑测试，确认 fail
 
 ```bash
-cd /Users/yangbishang/Projects/prism && python3.14 -m pytest apps/control-panel/tests/test_capability_matrix.py -v
+cd <redacted-path> && python3.14 -m pytest apps/control-panel/tests/test_capability_matrix.py -v
 ```
 
 **Expected:** `ModuleNotFoundError: No module named 'capability_matrix'`
@@ -1544,7 +1544,7 @@ def _build_degraded_path(
 ### - [ ] Step 3.4: 跑测试，确认 pass
 
 ```bash
-cd /Users/yangbishang/Projects/prism && python3.14 -m pytest apps/control-panel/tests/test_capability_matrix.py -v
+cd <redacted-path> && python3.14 -m pytest apps/control-panel/tests/test_capability_matrix.py -v
 ```
 
 **Expected:** 全部通过。
@@ -1676,7 +1676,7 @@ class ReadinessCapabilityExtensionTests(unittest.TestCase):
 ### - [ ] Step 4.3: 跑测试看 fail
 
 ```bash
-cd /Users/yangbishang/Projects/prism && python3.14 -m pytest apps/control-panel/tests/test_readiness.py::ReadinessCapabilityExtensionTests -v
+cd <redacted-path> && python3.14 -m pytest apps/control-panel/tests/test_readiness.py::ReadinessCapabilityExtensionTests -v
 ```
 
 **Expected:** `test_source_states_field_present` 和 `test_capabilities_field_present` fail（缺字段）；`test_existing_payload_fields_unchanged` 应该 pass（现有字段都还在）。
@@ -1744,7 +1744,7 @@ from capability_matrix import evaluate_capabilities
 ### - [ ] Step 4.5: 跑新测试，确认 pass
 
 ```bash
-cd /Users/yangbishang/Projects/prism && python3.14 -m pytest apps/control-panel/tests/test_readiness.py::ReadinessCapabilityExtensionTests -v
+cd <redacted-path> && python3.14 -m pytest apps/control-panel/tests/test_readiness.py::ReadinessCapabilityExtensionTests -v
 ```
 
 **Expected:** 3 个新测试全部通过。
@@ -1752,7 +1752,7 @@ cd /Users/yangbishang/Projects/prism && python3.14 -m pytest apps/control-panel/
 ### - [ ] Step 4.6: 跑现有 readiness 测试全套，确认无回归
 
 ```bash
-cd /Users/yangbishang/Projects/prism && python3.14 -m pytest apps/control-panel/tests/test_readiness.py apps/control-panel/tests/test_readiness_account_state.py apps/control-panel/tests/test_readiness_reconciliation_delta.py -v
+cd <redacted-path> && python3.14 -m pytest apps/control-panel/tests/test_readiness.py apps/control-panel/tests/test_readiness_account_state.py apps/control-panel/tests/test_readiness_reconciliation_delta.py -v
 ```
 
 **Expected:** 全部通过，**没有 skip 或 fail**。
@@ -1837,7 +1837,7 @@ if __name__ == "__main__":
 ### - [ ] Step 5.2: 跑测试，确认 fail
 
 ```bash
-cd /Users/yangbishang/Projects/prism && python3.14 -m pytest apps/control-panel/tests/test_capabilities_endpoint.py::SourceBudgetEndpointTests -v
+cd <redacted-path> && python3.14 -m pytest apps/control-panel/tests/test_capabilities_endpoint.py::SourceBudgetEndpointTests -v
 ```
 
 **Expected:** `404 Not Found`（端点还没注册）。
@@ -1868,7 +1868,7 @@ async def api_source_budget() -> JSONResponse:
 ### - [ ] Step 5.4: 跑测试，确认 pass
 
 ```bash
-cd /Users/yangbishang/Projects/prism && python3.14 -m pytest apps/control-panel/tests/test_capabilities_endpoint.py::SourceBudgetEndpointTests -v
+cd <redacted-path> && python3.14 -m pytest apps/control-panel/tests/test_capabilities_endpoint.py::SourceBudgetEndpointTests -v
 ```
 
 **Expected:** 2 个测试全部通过。
@@ -1936,7 +1936,7 @@ class CapabilitiesEndpointTests(unittest.TestCase):
 ### - [ ] Step 6.2: 跑测试，确认 fail
 
 ```bash
-cd /Users/yangbishang/Projects/prism && python3.14 -m pytest apps/control-panel/tests/test_capabilities_endpoint.py::CapabilitiesEndpointTests -v
+cd <redacted-path> && python3.14 -m pytest apps/control-panel/tests/test_capabilities_endpoint.py::CapabilitiesEndpointTests -v
 ```
 
 **Expected:** `404 Not Found`。
@@ -1970,7 +1970,7 @@ async def api_capabilities() -> JSONResponse:
 ### - [ ] Step 6.4: 跑测试，确认 pass
 
 ```bash
-cd /Users/yangbishang/Projects/prism && python3.14 -m pytest apps/control-panel/tests/test_capabilities_endpoint.py -v
+cd <redacted-path> && python3.14 -m pytest apps/control-panel/tests/test_capabilities_endpoint.py -v
 ```
 
 **Expected:** 该文件下全部 6 个测试通过。
@@ -2028,7 +2028,7 @@ class ReadinessLiveExtensionTests(unittest.TestCase):
 ### - [ ] Step 7.2: 跑测试，确认 new_keys 测试 fail
 
 ```bash
-cd /Users/yangbishang/Projects/prism && python3.14 -m pytest apps/control-panel/tests/test_capabilities_endpoint.py::ReadinessLiveExtensionTests -v
+cd <redacted-path> && python3.14 -m pytest apps/control-panel/tests/test_capabilities_endpoint.py::ReadinessLiveExtensionTests -v
 ```
 
 **Expected:** `test_existing_keys_still_present` pass; `test_new_keys_added` fail (response 里没有这两个 key)。
@@ -2064,7 +2064,7 @@ cd /Users/yangbishang/Projects/prism && python3.14 -m pytest apps/control-panel/
 ### - [ ] Step 7.4: 跑测试，确认 pass
 
 ```bash
-cd /Users/yangbishang/Projects/prism && python3.14 -m pytest apps/control-panel/tests/test_capabilities_endpoint.py -v
+cd <redacted-path> && python3.14 -m pytest apps/control-panel/tests/test_capabilities_endpoint.py -v
 ```
 
 **Expected:** 该文件全部测试通过（含 ReadinessLiveExtensionTests 2 个）。
@@ -2072,7 +2072,7 @@ cd /Users/yangbishang/Projects/prism && python3.14 -m pytest apps/control-panel/
 ### - [ ] Step 7.5: 全量回归测试
 
 ```bash
-cd /Users/yangbishang/Projects/prism && python3.14 -m pytest apps/control-panel/tests/ -v
+cd <redacted-path> && python3.14 -m pytest apps/control-panel/tests/ -v
 ```
 
 **Expected:** 全部通过。如果有任何回归（特别是 `test_readiness.py`、`test_refresh_policy.py`、`test_app_smoke.py`、`test_portfolio_endpoints.py`、`test_account_book.py`），停下来定位修复；不要 commit broken 状态。

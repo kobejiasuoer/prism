@@ -1,6 +1,9 @@
 import type { ReadinessMode, ReadinessPayload, RefreshStatus, Tone } from "./types";
+import { normalizeTaskName } from "./task-utils";
 
-export const READINESS_MODE_COPY: Record<
+export { normalizeTaskName } from "./task-utils";
+
+const READINESS_MODE_COPY: Record<
   ReadinessMode,
   {
     badge: string;
@@ -45,7 +48,7 @@ export const READINESS_MODE_COPY: Record<
   },
 };
 
-export const REFRESH_TASK_COPY: Record<
+const REFRESH_TASK_COPY: Record<
   string,
   {
     title: string;
@@ -71,6 +74,12 @@ export const REFRESH_TASK_COPY: Record<
     category: "safe",
     summary: "顺序补轻量行情和资金流。",
     impact: "不写真实账本，不提交成交。",
+  },
+  formal_data_refresh: {
+    title: "正式口径数据刷新",
+    category: "safe",
+    summary: "刷新 Tushare 授权口径的交易日历、日线、复权因子、基准指数和涨跌停数据。",
+    impact: "只写数据集 manifest 和本地数据缓存，不写真实账本，不自动下单。",
   },
   watchlist: {
     title: "自选股全流程刷新",
@@ -152,7 +161,7 @@ export const REFRESH_TASK_COPY: Record<
   },
 };
 
-export const REFRESH_REASON_COPY: Record<string, { label: string; detail: string }> = {
+const REFRESH_REASON_COPY: Record<string, { label: string; detail: string }> = {
   cooldown: { label: "冷却未结束", detail: "刚运行过同类任务，稍后再试。" },
   running: { label: "同类任务运行中", detail: "后台已有任务在跑，避免重复触发。" },
   outside_auto_window: { label: "不在自动刷新窗口", detail: "当前时间不允许自动触发该任务。" },
@@ -162,13 +171,13 @@ export const REFRESH_REASON_COPY: Record<string, { label: string; detail: string
   fixed_cron_or_manual_only: { label: "仅固定排程或手动", detail: "该任务不会由页面自动触发。" },
   page_auto_disabled: { label: "页面未开启自动刷新", detail: "当前页面只展示状态，不会自动补刷。" },
   task_not_allowed_for_page: { label: "页面不支持该任务", detail: "请切到对应页面或使用安全刷新入口。" },
-  provider_failure: { label: "上游数据源失败", detail: "数据源返回失败，自动刷新不会强行放行真钱执行。" },
+  provider_failure: { label: "上游请求失败", detail: "本次上游请求失败；如果仍有最近成功数据，复盘可以继续降级使用。" },
   manifest_missing: { label: "manifest 缺失", detail: "缺少 freshness 证明，不能作为真钱依据。" },
   freshness_stale: { label: "数据偏旧", detail: "数据已超过新鲜度阈值，不可作为真钱依据。" },
   freshness_expired: { label: "数据过期", detail: "数据已过期，不可作为真钱依据。" },
   freshness_unknown: { label: "新鲜度未知", detail: "无法确认数据是否有效，先按不可用处理。" },
-  live_small_not_allowed: { label: "真钱执行未放行", detail: "该数据源明确不允许用于 live_small。" },
-  fallback_not_allowed: { label: "回退数据不可实盘", detail: "当前使用回退数据，只能观察。" },
+  live_small_not_allowed: { label: "仅限观察/复盘", detail: "该数据源不作为小额实盘依据，但可用于观察或复盘上下文。" },
+  fallback_not_allowed: { label: "回退源仅复盘", detail: "当前使用回退数据，不直接进入真钱审批或交易。" },
   trade_date_mismatch: { label: "交易日不匹配", detail: "数据交易日与预期交易日不同。" },
   trade_date_unknown: { label: "交易日未知", detail: "无法确认数据属于哪个交易日。" },
   missing: { label: "数据缺失", detail: "缺少必要数据。" },
@@ -198,11 +207,6 @@ export function refreshReasonCopy(reason?: string) {
 
 export function refreshReasonLabel(reason?: string) {
   return refreshReasonCopy(reason).label;
-}
-
-export function normalizeTaskName(taskName?: string) {
-  const key = String(taskName || "").trim();
-  return key === "watchlist" ? "watchlist_refresh" : key;
 }
 
 export function formatCooldown(seconds?: number) {

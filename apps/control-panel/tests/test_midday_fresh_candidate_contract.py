@@ -157,6 +157,93 @@ class MiddayFreshCandidateContractTest(unittest.TestCase):
         self.assertIsInstance(normalized["execution_quality"]["positives"], list)
         self.assertIsInstance(normalized["execution_quality"]["warnings"], list)
 
+    def test_canonical_confirmation_backfills_confirmed_snapshot_plan(self) -> None:
+        normalized = prism_canonical.normalize_confirmation_item(
+            {
+                "code": "000063",
+                "name": "中兴通讯",
+                "status": "confirmed",
+                "reason": "涨幅仍保持为正",
+                "details": ["短线反转结构仍在", "主题仍在主线内（AI硬件链）"],
+                "snapshot": {
+                    "setup_type": "low_reversal",
+                    "setup_label": "低位反转",
+                    "score": 73.75,
+                    "change_pct": 2.89,
+                    "amount_yi": 64.1,
+                    "capital_trend": "由负转正",
+                    "flow_today_yi": 22.64,
+                    "current_theme": "AI硬件链",
+                    "theme_in_play": True,
+                    "pullback_level": 36.25,
+                    "trigger_level": 40.2,
+                    "invalidate_level": 36.07,
+                    "ma5": 36.25,
+                    "ma10": 36.07,
+                    "confirmation_label": "承接良好",
+                },
+            },
+            status="confirmed",
+            morning_batch_id="screening_batch:morning",
+            midday_batch_id="screening_batch:midday",
+        )
+
+        self.assertEqual(normalized["theme"], "AI硬件链")
+        self.assertEqual(normalized["setup_type"], "low_reversal")
+        self.assertEqual(normalized["setup_label"], "低位反转")
+        self.assertEqual(normalized["score"], 73.75)
+        self.assertEqual(normalized["flow_today_yi"], 22.64)
+        self.assertEqual(normalized["capital_trend"], "由负转正")
+        self.assertIn("站回 36.25", normalized["entry_plan"]["trigger"])
+        self.assertEqual(normalized["entry_plan"]["sizing"], "触发后小仓位试错")
+        self.assertEqual(normalized["entry_plan"]["levels"]["pullback"], 36.25)
+        self.assertGreaterEqual(normalized["execution_quality"]["score"], 6)
+
+    def test_midday_verifies_caution_shortlist_when_no_ab_targets(self) -> None:
+        morning = {
+            "timestamp": "2026-05-28 09:40:57",
+            "source_scan_timestamp": "2026-05-28 09:40:57",
+            "shortlist": [
+                {
+                    "code": "123456",
+                    "name": "测试股份",
+                    "tier": "C",
+                    "screening_status": "caution",
+                    "best_score": 78,
+                    "change_pct": 2.1,
+                    "themes": ["机器人"],
+                    "setup_type": "breakout_follow",
+                    "entry_plan": {"levels": {"trigger": 10.2, "pullback": 9.8, "invalidate": 9.4}},
+                }
+            ],
+        }
+        current = {
+            "timestamp": "2026-05-28 13:46:28",
+            "market_themes": {"themes": [{"theme": "机器人"}]},
+            "verification_universe": [
+                {
+                    "code": "123456",
+                    "name": "测试股份",
+                    "theme": "机器人",
+                    "score": 82,
+                    "change_pct": 3.2,
+                    "amount_yi": 12,
+                    "price": 10.3,
+                    "capital_flow": {"trend": "持续流入", "today_yi": 1.1},
+                    "technical_state": {"ma5": 10.0, "ma10": 9.7},
+                }
+            ],
+            "strategies": {},
+        }
+
+        result = midday_verify.run_verification(morning, current)
+
+        self.assertEqual(result["validation_status"], "ok")
+        self.assertEqual(result["target_codes"], ["123456"])
+        self.assertEqual(len(result["confirmed"]), 1)
+        self.assertEqual(result["confirmed"][0]["code"], "123456")
+        self.assertEqual(result["tracking"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

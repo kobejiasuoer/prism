@@ -136,13 +136,27 @@ class TaskRunRepository:
         roots = [Path(path).expanduser() for path in legacy_dirs or []]
         try:
             with connection(self.db_path) as conn:
+                known_sources = {
+                    str(row["source_path"]): int(row["source_mtime_ns"] or 0)
+                    for row in conn.execute(
+                        """
+                        SELECT source_path, source_mtime_ns
+                        FROM task_runs
+                        WHERE source_path IS NOT NULL AND source_path != ''
+                        """
+                    ).fetchall()
+                }
                 for root in roots:
                     if not root.exists():
                         continue
                     for path in root.glob("*.json"):
+                        source_path = str(path)
+                        source_mtime = stat_mtime_ns(path)
+                        if known_sources.get(source_path) == source_mtime:
+                            continue
                         payload = load_json_or_default(path)
                         if isinstance(payload, dict):
-                            self._upsert(conn, payload, path, stat_mtime_ns(path))
+                            self._upsert(conn, payload, path, source_mtime)
         except sqlite3.Error:
             return
 
@@ -210,9 +224,9 @@ class TaskRunRepository:
             """
             INSERT INTO task_runs(
                 run_id, task_name, title, status, started_at, finished_at, exit_code, pid,
-                cwd, command_json, log_path, meta_path, payload_json, updated_at, source_mtime_ns
+                cwd, command_json, log_path, meta_path, source_path, payload_json, updated_at, source_mtime_ns
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(run_id) DO UPDATE SET
                 task_name = excluded.task_name,
                 title = excluded.title,
@@ -225,6 +239,7 @@ class TaskRunRepository:
                 command_json = excluded.command_json,
                 log_path = excluded.log_path,
                 meta_path = excluded.meta_path,
+                source_path = excluded.source_path,
                 payload_json = excluded.payload_json,
                 updated_at = excluded.updated_at,
                 source_mtime_ns = excluded.source_mtime_ns
@@ -242,6 +257,7 @@ class TaskRunRepository:
                 dump_json(command),
                 str(payload.get("log_path") or ""),
                 str(payload.get("meta_path") or legacy_path or ""),
+                str(legacy_path) if legacy_path else None,
                 dump_json(payload),
                 now_str(),
                 source_mtime_ns,

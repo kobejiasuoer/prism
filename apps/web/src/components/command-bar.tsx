@@ -1,8 +1,15 @@
 "use client";
 
-import { Command } from "cmdk";
-import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, BarChart3, Home, LoaderCircle, Search, Settings, Telescope, WalletCards } from "lucide-react";
+import {
+  ArrowRight,
+  BarChart3,
+  Home,
+  LoaderCircle,
+  Search,
+  Settings,
+  Telescope,
+  WalletCards,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
@@ -34,12 +41,46 @@ export function CommandBar({
     if (!text) {
       return pages;
     }
-    return pages.filter((item) => item.label.toLowerCase().includes(text) || item.href.includes(text));
+    return pages.filter(
+      (item) =>
+        item.label.toLowerCase().includes(text) || item.href.includes(text),
+    );
   }, [query]);
+  const directStockSuggestion = useMemo<AskSuggestion | null>(() => {
+    const code = query.trim().replace(/\D/g, "");
+    if (code.length !== 6) {
+      return null;
+    }
+    return {
+      code,
+      name: code,
+      tag: "直接打开",
+      detail: `${code} · 个股档案`,
+      url: `/stock/${code}`,
+    };
+  }, [query]);
+  const visibleSuggestions = useMemo(() => {
+    if (!directStockSuggestion) {
+      return suggestions;
+    }
+    return [
+      directStockSuggestion,
+      ...suggestions.filter((item) => item.code !== directStockSuggestion.code),
+    ];
+  }, [directStockSuggestion, suggestions]);
 
   useEffect(() => {
     if (!open) {
       setQuery("");
+      setSuggestions([]);
+      setLoading(false);
+      return;
+    }
+
+    const text = query.trim();
+    const digitText = text.replace(/\D/g, "");
+    const shouldFetchSuggestions = text.length >= 2 && digitText.length !== 6;
+    if (!shouldFetchSuggestions) {
       setSuggestions([]);
       setLoading(false);
       return;
@@ -53,10 +94,14 @@ export function CommandBar({
         controller.abort();
       }, 3_500);
       api
-        .askSuggest(query.trim(), { signal: controller.signal })
+        .askSuggest(text, { signal: controller.signal })
         .then((payload) => {
           if (!cancelled) {
-            setSuggestions(payload.items?.length ? payload.items : payload.recent_queries ?? []);
+            setSuggestions(
+              payload.items?.length
+                ? payload.items
+                : (payload.recent_queries ?? []),
+            );
           }
         })
         .catch(() => {
@@ -109,98 +154,102 @@ export function CommandBar({
     return `/stock/${encodeURIComponent(item.code)}${suffix ? `?${suffix}` : ""}`;
   }
 
+  if (!open) {
+    return null;
+  }
+
   return (
-    <AnimatePresence>
-      {open ? (
-        <motion.div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-black/55 px-3 pt-[12vh]"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onMouseDown={() => onOpenChange(false)}
-        >
-          <motion.div
-            className="w-full max-w-[640px] overflow-hidden rounded-lg border border-[var(--border-default)] bg-[var(--bg-elevated)]"
-            initial={{ y: -12, scale: 0.98 }}
-            animate={{ y: 0, scale: 1 }}
-            exit={{ y: -12, scale: 0.98 }}
-            transition={{ duration: 0.16 }}
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <Command shouldFilter={false} className="bg-transparent">
-              <div className="flex items-center gap-3 border-b border-[var(--border-subtle)] px-4">
-                <Search size={18} className="shrink-0 text-[var(--text-tertiary)]" />
-                <Command.Input
-                  value={query}
-                  onValueChange={setQuery}
-                  autoFocus
-                  placeholder="搜索股票、跳转页面"
-                  className="h-13 min-w-0 flex-1 bg-transparent text-[15px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
-                />
-                {loading ? (
-                  <LoaderCircle size={16} className="animate-spin text-[var(--text-tertiary)]" />
-                ) : null}
-              </div>
+    <div
+      className="prism-command-overlay fixed inset-0 z-50 flex items-start justify-center bg-black/55 px-3 pt-[12vh]"
+      onMouseDown={() => onOpenChange(false)}
+    >
+      <div
+        className="prism-command-panel w-full max-w-[640px] overflow-hidden rounded-lg border border-[var(--border-default)] bg-[var(--bg-elevated)]"
+        onMouseDown={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="命令栏"
+      >
+        <div className="flex items-center gap-3 border-b border-[var(--border-subtle)] px-4">
+          <Search size={18} className="shrink-0 text-[var(--text-tertiary)]" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            autoFocus
+            placeholder="搜索股票、跳转页面"
+            className="h-13 min-w-0 flex-1 bg-transparent text-[15px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
+          />
+          {loading ? (
+            <LoaderCircle
+              size={16}
+              className="animate-spin text-[var(--text-tertiary)]"
+            />
+          ) : null}
+        </div>
 
-              <Command.List className="max-h-[420px] overflow-y-auto p-2">
-                {filteredPages.length ? (
-                  <Command.Group heading="页面" className="command-group">
-                    {filteredPages.map((item) => {
-                      const Icon = item.icon;
-                      return (
-                        <Command.Item
-                          key={item.href}
-                          value={`page:${item.href}`}
-                          onSelect={() => goTo(item.href)}
-                          className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 text-[13px] text-[var(--text-secondary)] data-[selected=true]:bg-[var(--bg-tertiary)] data-[selected=true]:text-[var(--text-primary)]"
-                        >
-                          <Icon size={16} className="shrink-0" />
-                          <span className="flex-1">{item.label}</span>
-                          <ArrowRight size={14} className="text-[var(--text-tertiary)]" />
-                        </Command.Item>
-                      );
-                    })}
-                  </Command.Group>
-                ) : null}
+        <div className="max-h-[420px] overflow-y-auto p-2">
+          {filteredPages.length ? (
+            <section className="command-group">
+              <div className="command-group-heading">页面</div>
+              {filteredPages.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.href}
+                    type="button"
+                    onClick={() => goTo(item.href)}
+                    className="focus-ring flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 text-left text-[13px] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]"
+                  >
+                    <Icon size={16} className="shrink-0" />
+                    <span className="flex-1">{item.label}</span>
+                    <ArrowRight
+                      size={14}
+                      className="text-[var(--text-tertiary)]"
+                    />
+                  </button>
+                );
+              })}
+            </section>
+          ) : null}
 
-                {suggestions.length ? (
-                  <Command.Group heading="股票" className="command-group">
-                    {suggestions.map((item) => (
-                      <Command.Item
-                        key={`${item.code}-${item.name}`}
-                        value={`stock:${item.code}:${item.name}`}
-                        onSelect={() => goTo(stockPath(item))}
-                        className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 text-[13px] text-[var(--text-secondary)] data-[selected=true]:bg-[var(--bg-tertiary)] data-[selected=true]:text-[var(--text-primary)]"
-                      >
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] text-[11px] text-[var(--text-tertiary)]">
-                          股
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[var(--text-primary)]">{item.name || item.code}</div>
-                          <div className="mono truncate text-[11px] text-[var(--text-tertiary)]">
-                            {item.detail || item.code}
-                          </div>
-                        </div>
-                        {item.tag ? (
-                          <span className="rounded-full border border-[var(--border-subtle)] px-2 py-0.5 text-[11px] text-[var(--text-tertiary)]">
-                            {item.tag}
-                          </span>
-                        ) : null}
-                      </Command.Item>
-                    ))}
-                  </Command.Group>
-                ) : null}
+          {visibleSuggestions.length ? (
+            <section className="command-group">
+              <div className="command-group-heading">股票</div>
+              {visibleSuggestions.map((item) => (
+                <button
+                  key={`${item.code}-${item.name}`}
+                  type="button"
+                  onClick={() => goTo(stockPath(item))}
+                  className="focus-ring flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 text-left text-[13px] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]"
+                >
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] text-[11px] text-[var(--text-tertiary)]">
+                    股
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[var(--text-primary)]">
+                      {item.name || item.code}
+                    </div>
+                    <div className="mono truncate text-[11px] text-[var(--text-tertiary)]">
+                      {item.detail || item.code}
+                    </div>
+                  </div>
+                  {item.tag ? (
+                    <span className="rounded-full border border-[var(--border-subtle)] px-2 py-0.5 text-[11px] text-[var(--text-tertiary)]">
+                      {item.tag}
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </section>
+          ) : null}
 
-                {!loading && !filteredPages.length && !suggestions.length ? (
-                  <Command.Empty className="px-3 py-8 text-center text-[13px] text-[var(--text-tertiary)]">
-                    没有匹配项
-                  </Command.Empty>
-                ) : null}
-              </Command.List>
-            </Command>
-          </motion.div>
-        </motion.div>
-      ) : null}
-    </AnimatePresence>
+          {!loading && !filteredPages.length && !visibleSuggestions.length ? (
+            <div className="px-3 py-8 text-center text-[13px] text-[var(--text-tertiary)]">
+              没有匹配项
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
   );
 }

@@ -3,7 +3,7 @@
 日期：2026-04-27
 状态：冻结稿
 范围：只冻结新版前端最先落地的 1 条股票用户路径，不扩展长期统一接口
-测试契约：`apps/control-panel/tests/fixtures/stock_mvp_profile_contract.json`
+测试契约：`apps/control-panel/tests/test_stock_mvp_first_screen_contract.py`
 
 ## 1. 冻结路径
 
@@ -15,34 +15,36 @@
 4. 前端进入 `/stock/{code}`。
 5. 单股首屏优先展示一条主结论、仓位、风险边界和下一步动作。
 
-当前代码已新增统一单股接口，兼容旧 detail 接口：
+当前前端已经从统一整包接口拆成轻量切片，股票路径只保留分段接口：
 
-- `/` 调 `GET /api/today`
-- `/stock/{code}` 优先调 `GET /api/stock/{code}`
-- `GET /api/stock/{code}` 后端聚合 `GET /api/watchlist/{code}` 与 `GET /api/opportunities/{code}` 的 detail builder 输出
-- `/stock/{code}` 另外调 `GET /api/ask?q={code}` 作为 fallback / enrich
-- `/stock/{code}` 调 `GET /api/watchlist/manage` 判断加入、归档、恢复按钮状态
+- `/` 首屏调 `GET /api/today/summary`
+- `/` 动作明细和写回契约按需调 `GET /api/today/actions` / `GET /api/today/action-contracts`
+- `GET /api/today` 仅保留旧客户端兼容；返回轻量兼容包，action 明细和 contracts 继续按需读取
+- `/stock/{code}` 首屏先调 `GET /api/stock/{code}/summary`
+- `/stock/{code}` 当前工作区再调 `GET /api/stock/{code}/detail` 和 `GET /api/stock/{code}/today-action`
+- `/stock/{code}` 二级 Tab、证据、历史可信度和名单管理按需调用 `secondary`、`evidence`、`formal-data/*`、`learning-scorecard`、`watchlist/manage`
+- `GET /api/stock/{code}` / `GET /api/stock/{code}/full` 已移除；新客户端不得再接回聚合 stock JSON。
 
 冻结原则：
 
 - 首屏主结论优先级固定为 `watchlist > opportunity > ask.case`。
 - `Ask` 只做 fallback / enrich，不覆盖持仓或观察池详情的首屏主结论。
-- `/api/stock/{code}` 必须兼容本文的 `StockProfileData` shape，并继续保留 `watchlist` / `opportunity` 原始 detail 字段。
-- `apps/control-panel/tests/fixtures/stock_mvp_profile_contract.json` 是给开发和测试共用的最小契约快照；后端测试会用真实 `build_stock_profile_view()` 输出对照该 fixture。
+- `/api/stock/{code}/detail` 只内联当前主来源的 `primary_detail`；二级 Tab 字段移到 `/api/stock/{code}/secondary`；`source_cards` / `artifacts` 移到 `/api/stock/{code}/evidence`；`formal_data` / `today_action` 均从各自分段接口读取。
+- 后端测试直接约束 split endpoints 和旧聚合入口 404，不再维护聚合 profile fixture。
 
 ## 2. 页面 -> 接口 -> 字段
 
 ### 2.1 页面：`/` 指挥中心首屏
 
-#### 接口：`GET /api/today`
+#### 接口：`GET /api/today/summary`
 
 请求参数：无。
 
 前端缓存节奏：
 
-- `staleTime`: 30 秒
-- `refetchInterval`: 60 秒
-- `refetchOnWindowFocus`: true
+- `staleTime`: 45 秒
+- `refetchInterval`: false
+- `refetchOnWindowFocus`: false
 
 #### 字段：首屏必须保留
 
@@ -152,9 +154,14 @@ type TodayActionItem = {
 - `midday_cards`
 - `quality_cards`
 
+历史兼容：
+
+- `GET /api/today` 仍保留旧字段名和可渲染 action item，但不再内联完整 `decision_contracts`、重型 action item 证据包和完整 `action_groups`。
+- `GET /api/today/summary` 不暴露 `links_lazy.full`，避免新客户端误接回旧兼容响应。
+
 #### 空态和失败态
 
-- `GET /api/today` 失败：显示“后端数据暂不可用”，保留骨架屏和重试按钮。
+- `GET /api/today/summary` 失败：显示“后端数据暂不可用”，保留骨架屏和重试按钮。
 - `action_queue.items` 为空：显示“当前没有必须处理的动作”。
 - 没有股票项：首屏仍可跳 `/portfolio` 或 `/discovery`，不得生成 `/stock/undefined`。
 - `summary_cards` 为空：允许回退到 `radar_cards`；两者都空时展示 metric skeleton 或 `-`。
@@ -192,7 +199,7 @@ type UpdateTodayActionDecisionResponse = {
 
 ### 2.3 页面：`/stock/{code}` 单股首屏
 
-#### 接口：`GET /api/stock/{code}`
+#### 接口：`GET /api/stock/{code}/summary` + `GET /api/stock/{code}/detail` + `GET /api/stock/{code}/secondary` + `GET /api/stock/{code}/evidence`
 
 后端聚合来源：
 
@@ -203,29 +210,39 @@ type UpdateTodayActionDecisionResponse = {
 
 - `code`: path 参数，MVP 只承诺 6 位 A 股代码。
 
-聚合返回：
+轻量切片返回：
 
 ```ts
 type StockProfileData = {
   generated_at?: string;
+  summary_only?: boolean;
   code: string;
+  name?: string | null;
   trade_date?: string;
+  readiness?: ReadinessPayload;
   primary_source?: "watchlist" | "opportunity" | null;
   primary_source_label?: string;
   primary_detail?: StockDetailData;
   available_sources?: Array<"watchlist" | "opportunity">;
-  watchlist?: StockDetailData;
-  opportunity?: StockDetailData;
   errors?: Partial<Record<"watchlist" | "opportunity", string>>;
+  links?: LinkMap;
 };
 ```
+
+已移除旧入口：
+
+- `GET /api/stock/{code}` 已移除，避免新旧客户端混用聚合 stock JSON。
+- `GET /api/stock/{code}/full` 已移除，完整双来源详情不再作为 API surface 暴露。
+- `GET /api/stock/{code}/secondary` 是“持仓 / 发现”二级 Tab 的按需入口，只在进入对应 Tab 后读取指标、触发和标签字段。
+- `GET /api/stock/{code}/evidence` 是证据 Tab 的按需入口，只在进入“证据”工作区后读取 `source_cards` / `artifacts`。
+- `summary` / `detail` links 不暴露 `api_full`，避免新客户端误接回旧兼容响应。
 
 重要约束：
 
 - 内部两个 detail builder 允许其中一个失败。
 - 只要其中一个 detail 成功，单股首屏就不能显示全页失败。
 - `primary_source` 必须按 `watchlist > opportunity` 取值。
-- `primary_detail` 必须等于 `watchlist` 或 `opportunity` 中的主 detail。
+- `primary_detail` 必须是唯一可渲染 detail；`watchlist` / `opportunity` 不得作为聚合详情字段重复发布。
 - `available_sources` 只列出当前成功命中的来源。
 - `errors` 只给前端判断来源命中情况；页面只展示“自选股未命中 / 观察池未命中”这类归一化标签，不直出后端 raw error。
 
@@ -258,11 +275,6 @@ type StockDetailData = {
     detail?: string;
     tier?: string;
     tier_key?: string;
-  }>;
-  source_cards?: Array<{
-    label: string;
-    value: string;
-    detail?: string;
   }>;
 };
 
@@ -311,20 +323,19 @@ type CanonicalDecision = {
 - `先不要做什么`
 - `去哪看证据`
 
-#### 字段：后端实际还能返回，首屏可选
+#### 字段：按需或完整详情可选
 
-持仓详情实际可能返回：
+`GET /api/stock/{code}/detail` 的 compact `primary_detail` 默认只保留首屏和决策工作区会消费的 detail 字段。下面这些增强字段允许缺省；二级 Tab 字段从 `GET /api/stock/{code}/secondary` 读取，证据面板字段从 `GET /api/stock/{code}/evidence` 读取。
+
+持仓详情可能返回：
 
 - `topline`
 - `meta_cards`
 - `level_cards`
-- `related_status`
 - `insight_groups`
 - `triggers`
-- `artifacts`
-- `links`
 
-候选详情实际可能返回：
+候选详情可能返回：
 
 - `topline`
 - `metric_cards`
@@ -333,10 +344,84 @@ type CanonicalDecision = {
 - `plan_rows`
 - `plan_levels`
 - `insight_groups`
+
+默认 compact `primary_detail` 不发布以下旧详情页字段：
+
+- `action_tier_legend`
 - `artifacts`
+- `capital_cards`
+- `decision_explanation`
 - `links`
+- `meta_cards`
+- `metric_cards`
+- `plan_rows`
+- `related_status`
+- `source_cards`
+- `triggers`
 
 首屏不得因为这些字段缺失而失败。
+
+#### 字段：二级 Tab 按需保留
+
+```ts
+type StockProfileSecondaryResponse = {
+  generated_at?: string;
+  code: string;
+  name?: string | null;
+  trade_date?: string;
+  primary_source?: "watchlist" | "opportunity" | null;
+  primary_source_label?: string;
+  available_sources?: Array<"watchlist" | "opportunity">;
+  secondary_detail?: Pick<
+    StockDetailData,
+    | "generated_at"
+    | "trade_date"
+    | "code"
+    | "name"
+    | "tone"
+    | "metric_cards"
+    | "meta_cards"
+    | "level_cards"
+    | "capital_cards"
+    | "plan_rows"
+    | "plan_levels"
+    | "insight_groups"
+    | "triggers"
+  > | null;
+  errors?: Partial<Record<"watchlist" | "opportunity", string>>;
+  links?: LinkMap;
+};
+```
+
+前端约束：
+
+- 只有 `activeTab === "持仓"` 或 `activeTab === "发现"` 且已有 `primary_detail` 时才调用 secondary 切片。
+- `StockSecondaryTabs` 不再依赖 compact `detail.primary_detail` 中的 `meta_cards` / `metric_cards` / `capital_cards` / `plan_rows` / `triggers`。
+- secondary 切片失败只降级二级 Tab，不影响单股首屏决策区。
+
+#### 字段：证据 Tab 按需保留
+
+```ts
+type StockProfileEvidenceResponse = {
+  generated_at?: string;
+  code: string;
+  name?: string | null;
+  trade_date?: string;
+  primary_source?: "watchlist" | "opportunity" | null;
+  primary_source_label?: string;
+  available_sources?: Array<"watchlist" | "opportunity">;
+  source_cards?: SourceCard[];
+  artifacts?: BasicCard[];
+  errors?: Partial<Record<"watchlist" | "opportunity", string>>;
+  links?: LinkMap;
+};
+```
+
+前端约束：
+
+- 只有 `activeTab === "证据"` 且已有 `primary_detail` 时才调用 evidence 切片。
+- `StockEvidencePanel` 不再从 compact `detail.primary_detail` 读取 `source_cards` / `artifacts`。
+- evidence 切片失败只降级证据面板，不影响单股首屏决策区。
 
 #### 当前只能 mock 或降级
 
@@ -532,12 +617,12 @@ type WatchlistManageResponse = {
 
 开发本轮只按下面 8 条开工：
 
-1. `/` 只依赖 `GET /api/today` 渲染首屏和股票入口。
+1. `/` 首屏只依赖 `GET /api/today/summary`；动作队列和契约按需加载。
 2. 股票入口只认 `action_queue.items[].url=/stock/{code}`。
-3. `/stock/{code}` 拉 `/api/stock/{code}`、`/api/ask?q={code}`、`/api/watchlist/manage`。
+3. `/stock/{code}` 首屏拉 `/api/stock/{code}/summary`、`/api/stock/{code}/detail`、`/api/stock/{code}/today-action`；追问、二级 Tab、证据和名单管理按需加载。
 4. 单股首屏主结论优先级固定为 `watchlist > opportunity > ask.case`。
 5. `canonical_decision`、`decision_cards`、`execution_loop` 是单股首屏冻结核心字段。
-6. `topline`、`metric_cards`、`meta_cards`、`level_cards`、`capital_cards`、`plan_rows`、`source_cards`、`artifacts` 都是增强字段，允许缺省。
+6. `topline`、`level_cards`、`plan_levels`、`insight_groups` 是首屏增强字段，允许缺省；`metric_cards`、`meta_cards`、`capital_cards`、`plan_rows`、`triggers` 只从 secondary 切片读取；`source_cards`、`artifacts` 只从 evidence 切片读取。
 7. 任何缺失字段必须显示业务降级文案，不显示 `undefined`、`null` 或空对象。
 8. 任一子接口失败时只降级对应模块，不把整个股票页打成失败态。
 
@@ -545,7 +630,7 @@ type WatchlistManageResponse = {
 
 本冻结稿不掩盖现状缺口，后续实现需排期处理：
 
-- `build_stock_profile_view()` 已落地，但仍复用 watchlist / opportunity 两套 detail builder。
+- `build_stock_profile_detail_view()` 仍复用 watchlist / opportunity 两套 detail builder。
 - Ask 仍是独立 fallback / enrich 链路，尚未并入后端 stock profile。
 - 午盘新增观察已通过 `screener.parameters.build_intraday_observation_contract()` 补最小 `entry_plan`、`levels`、`execution_quality`；后续缺口是把这套午盘轻量规则继续和早盘 `ai_screening` 的 setup 规则合并到同一份参数配置。
 - 自选股资金时效字段没有完整穿透到统一 `canonical_decision`。
