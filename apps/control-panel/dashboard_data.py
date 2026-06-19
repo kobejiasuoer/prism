@@ -8,7 +8,7 @@ import sys
 import time
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -119,6 +119,7 @@ CONTROL_PANEL_STATE_DIR = INVEST_FLOW_ROOT / "data" / "control_panel_state"
 TODAY_ACTION_STATE_PATH = CONTROL_PANEL_STATE_DIR / "today_action_decisions.json"
 ASK_RECENT_STATE_PATH = CONTROL_PANEL_STATE_DIR / "ask_recent_queries.json"
 QUALITY_DASHBOARD_PATH = RUNTIME_ROOT / "reports" / "command_brief" / "feishu-quality-dashboard.md"
+EXIT_TRACKING_STORE = RUNTIME_ROOT / "exit_tracking.jsonl"
 LEGACY_QUALITY_DASHBOARD_PATHS = (
     INVEST_FLOW_ROOT / "reports" / "feishu-quality-dashboard.md",
     WORKSPACE_ROOT / "data" / "history" / "reports" / "command_brief" / "feishu-quality-dashboard.md",
@@ -8866,6 +8867,47 @@ def build_yesterday_trial_review(
     return review
 
 
+def load_recent_exit_tracking(*, days: int = 30, store: Path | None = None) -> list[dict[str, Any]]:
+    """Load recent exit-return-tracking records for the discovery continuity panel.
+
+    Reads the append-only JSONL written by exit_return_tracker.record_exit /
+    update_exits (Wave 1). Returns a flat, display-ready list sorted by
+    exit_date descending, filtered to the last ``days`` days. Gracefully
+    returns [] when the store is missing or corrupt — never raises.
+    """
+    path = store or EXIT_TRACKING_STORE
+    if not path.exists():
+        return []
+    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    records: list[dict[str, Any]] = []
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                exit_date = str(rec.get("exit_date", ""))
+                if exit_date < cutoff:
+                    continue
+                records.append({
+                    "code": rec.get("code"),
+                    "name": rec.get("name"),
+                    "exit_date": exit_date,
+                    "outcome": rec.get("outcome"),
+                    "net_return": rec.get("net_return"),
+                    "status": rec.get("status"),
+                    "theme": rec.get("theme"),
+                })
+    except OSError:
+        return []
+    records.sort(key=lambda r: str(r.get("exit_date", "")), reverse=True)
+    return records
+
+
 def build_opportunities_view(
     *,
     hydrate_all_groups: bool = True,
@@ -9169,6 +9211,7 @@ def build_opportunities_view(
                     },
                 ],
                 "theme_cards": build_theme_cards(screening_batch, limit=4),
+                "exit_tracking": load_recent_exit_tracking(days=30),
             }
         )
     # --- Stamp triage fields on every candidate card (Discovery Triage Funnel A5) ---
