@@ -16,6 +16,11 @@ import sys
 from datetime import datetime, timedelta
 from typing import Optional
 
+try:
+    from screener.exit_return_tracker import record_exit
+except ModuleNotFoundError:
+    from exit_return_tracker import record_exit
+
 # ── tier ordering (higher = better) ──
 TIER_ORDER = {"A": 3, "B": 2, "C": 1, "D": 0}
 STATUS_ORDER = {"approved": 3, "caution": 2, "excluded": 1}
@@ -527,6 +532,20 @@ def compute_lifecycle(
             **_opportunity_snapshot_for_event(s),
             **_factor_snapshot_for_event(s),
         })
+        # Best-effort exit-return tracking: log the exit so update_exits can
+        # classify it (true_exit / misjudged / inconclusive) once the holding
+        # window fills. Never let a tracker failure break lifecycle output.
+        try:
+            record_exit(
+                code=code,
+                name=s["name"],
+                exit_date=str(s.get("timestamp", "") or "")[:10],
+                exit_price=s.get("exit_price") or s.get("close") or s.get("price"),
+                reason=s.get("invalidation") or s.get("main_risk") or "已退出",
+                theme=s.get("theme", ""),
+            )
+        except Exception:
+            pass
 
     # Upgraded / Downgraded: in both, compare tier and screening_status
     # Note: only meaningful when both sides have tier/status data (ai_screening format)

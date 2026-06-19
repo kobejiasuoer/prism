@@ -613,6 +613,15 @@ CRON_POLICIES: tuple[CronJobPolicy, ...] = (
         delivery_default=False,
         catchup_enabled=False,
     ),
+    CronJobPolicy(
+        task_name="exit_return_update",
+        name="退出股收益跟踪",
+        cron_expr="30 15 * * 1-5",
+        command=("python3", "apps/scripts/run_exit_return_update.py"),
+        delivery_default=False,
+        catchup_enabled=True,
+        catchup_until="17:00",
+    ),
 )
 
 

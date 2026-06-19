@@ -510,6 +510,36 @@
         "to": ""
       },
       "state": {}
+    },
+    {
+      "id": "prism-exit_return_update",
+      "agentId": "invest",
+      "sessionKey": "agent:invest:main",
+      "name": "退出股收益跟踪",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "30 15 * * 1-5",
+        "tz": "Asia/Shanghai"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "执行 退出股收益跟踪。该任务只写本地状态文件；最终回复只允许写 `DONE` 或 `FAILED: ...`。\n\n直接执行：`python3 apps/scripts/run_exit_return_update.py`\n如果 runner 已在运行或返回 running 状态，禁止重复执行。",
+        "timeoutSeconds": 600,
+        "toolsAllow": [
+          "exec"
+        ],
+        "thinking": "off",
+        "lightContext": true
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "feishu",
+        "to": ""
+      },
+      "state": {}
     }
   ]
 }
