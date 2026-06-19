@@ -28,6 +28,7 @@ from dataset_manifests import build_dataset_freshness_rows  # noqa: E402
 from refresh_policy import CRON_POLICIES, TASK_POLICIES, active_auto_windows, task_family  # noqa: E402
 from scheduled_run_state import parse_timestamp, run_state_for_task  # noqa: E402
 from trading_calendar import calendar_status  # noqa: E402
+from prism_storage.json_store import atomic_write_json  # noqa: E402
 
 
 RUN_ROOT = REPO_ROOT / "data" / "scheduled_runs"
@@ -105,8 +106,7 @@ def load_json(path: Path) -> dict[str, Any]:
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_json(path, payload)
 
 
 def now_str() -> str:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -17,11 +18,32 @@ def load_json_or_default(path: str | Path, default: Any = None) -> Any:
 
 
 def atomic_write_json(path: str | Path, payload: Any) -> None:
+    """Atomically write ``payload`` as JSON to ``path``.
+
+    Writes go to a temp file in the same directory, fsync'd, then
+    ``os.replace``'d onto the target. ``os.replace`` is atomic on POSIX and
+    Windows, so a crash or ``kill -9`` during the write never leaves a
+    truncated/partial target — the previous complete content survives.
+
+    The temp file name embeds the current PID so concurrent *processes*
+    (for example the scheduler and a one-off script) do not clobber each
+    other's temp file. This does NOT make same-process concurrent calls
+    (threads) safe — callers that write the same path from multiple threads
+    must serialize themselves. On any failure the temp file is removed so
+    the directory does not accumulate clutter.
+    """
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = target.with_suffix(f"{target.suffix}.tmp")
-    tmp_path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    tmp_path.replace(target)
+    tmp_path = target.with_name(f".{target.name}.tmp.{os.getpid()}")
+    try:
+        with tmp_path.open("w", encoding="utf-8") as fh:
+            fh.write(json.dumps(payload, ensure_ascii=False, indent=2))
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp_path, target)
+    except Exception:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+        raise
