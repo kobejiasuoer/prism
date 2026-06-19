@@ -189,6 +189,18 @@ function formatMetric(value: unknown, suffix = "") {
   return `${String(value).trim()}${suffix}`;
 }
 
+/** Numeric priority for sorting the observation pool when the valve is off.
+ * Prefers priority_score (global composite), falls back to best_score. */
+function scoreForSort(stock: StockListCard): number {
+  const raw = stock.priority_score ?? stock.best_score;
+  if (typeof raw === "number") return raw;
+  if (typeof raw === "string") {
+    const n = parseFloat(raw);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+}
+
 function stockStageLabel(
   stock: StockListCard,
   group?: CardGroup<StockListCard>,
@@ -1173,9 +1185,22 @@ export function DiscoveryObservationWorkbench({
   const funnel = useMemo(() => bucketByFunnel(groups), [groups]);
   const [activeLayer, setActiveLayer] = useState<FunnelLayer>("focus");
   const activeBucket = funnel.find((b) => b.layer === activeLayer) ?? funnel[0];
-  const activeFunnelGroup: CardGroup<StockListCard> | undefined = activeBucket
-    ? { key: activeBucket.layer, title: FUNNEL_LAYER_LABELS[activeBucket.layer], cards: activeBucket.cards }
-    : undefined;
+  const activeFunnelGroup: CardGroup<StockListCard> | undefined = useMemo(() => {
+    const bucket = activeBucket;
+    if (!bucket) return undefined;
+    // When the offense valve is shut, sort the observation pool by real
+    // priority_score (a global composite), not the in-theme decision_rank that
+    // misled users into thinking rank=1 meant 'buy this first'.
+    const cards =
+      valveStatus === "off"
+        ? [...bucket.cards].sort((a, b) => scoreForSort(b) - scoreForSort(a))
+        : bucket.cards;
+    return {
+      key: bucket.layer,
+      title: FUNNEL_LAYER_LABELS[bucket.layer],
+      cards,
+    };
+  }, [activeBucket, valveStatus]);
 
   const activeForConcentration = useMemo(
     () =>
@@ -1243,11 +1268,15 @@ export function DiscoveryObservationWorkbench({
         <V2AiTelemetryGate onOpen={() => setAiTelemetryOpen(true)} />
       ) : null}
 
-      {groups.length ? (
+      {valveStatus === "off" ? (
+        <div className="mb-4 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-4 py-3 text-[12px] text-[var(--text-secondary)]">
+          今日进攻阀门关闭，以下为观察池，按综合得分排序（非买入优先级）。
+        </div>
+      ) : groups.length ? (
         <FunnelHeader funnel={funnel} activeLayer={activeLayer} onSelect={setActiveLayer} />
       ) : null}
 
-      {funnel[0].cards.length === 0 ? (
+      {valveStatus !== "off" && funnel[0].cards.length === 0 ? (
         <div className="mb-4 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-4 py-2 text-[12px] text-[var(--text-secondary)]">
           今天没有可执行候选（值得专注为空），整页进入观察模式。
         </div>
