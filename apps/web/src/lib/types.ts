@@ -886,10 +886,12 @@ export interface ExitTrackingRecord {
   code: string;
   name?: string;
   exit_date?: string;
+  exit_price?: number | null;
   outcome?: "true_exit" | "misjudged" | "inconclusive" | string | null;
   net_return?: number | null;
   status?: "open" | "settled" | string | null;
   theme?: string;
+  daily_prices?: Array<{ date?: string; close?: number }>;
 }
 
 export interface StockListCard {

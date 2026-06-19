@@ -6,6 +6,7 @@ import { Badge } from "@/components/badge";
 import { EmptyState, Panel } from "@/components/data-card";
 import { LearningMemoryPreview } from "@/components/learning-memory";
 import type { BasicCard, CardGroup, ExitTrackingRecord, OpportunitiesData, StockListCard } from "@/lib/types";
+import { PriceSparkline } from "./discovery-price-sparkline";
 import {
   cardHref,
   displayGroupTitle,
@@ -168,6 +169,7 @@ function ExitTrajectoryBlock({ records }: { records: ExitTrackingRecord[] }) {
                 {r.status === "open" ? <Badge tone="info">跟踪中</Badge> : null}
               </div>
               <div className="flex items-center gap-3">
+                <PriceSparkline prices={r.daily_prices} exitPrice={r.exit_price} />
                 {ret !== null ? (
                   <span className={`mono ${ret >= 0 ? "text-[var(--tone-positive)]" : "text-[var(--tone-risk)]"}`}>
                     {ret >= 0 ? "+" : ""}{(ret * 100).toFixed(1)}%

@@ -54,9 +54,28 @@ def test_returns_recent_records_with_flat_fields(tmp_path: Path, monkeypatch):
     assert rec["code"] == "000032"
     assert rec["outcome"] == "true_exit"
     assert rec["net_return"] == -0.05
-    # Flat fields only — no internal daily_prices leaked
-    assert "daily_prices" not in rec
+    # holding_window_days is internal and must not leak; daily_prices is exposed
+    # (for the sparkline) as a list of {date, close}.
     assert "holding_window_days" not in rec
+
+
+def test_daily_prices_exposed_for_sparkline(tmp_path: Path, monkeypatch):
+    """daily_prices must flow through (for the sparkline) as a list of {date, close}."""
+    store = tmp_path / "exit_tracking.jsonl"
+    today = date.today()
+    rec = _record("000032", (today - timedelta(days=2)).isoformat(), "true_exit")
+    rec["daily_prices"] = [
+        {"date": today.isoformat(), "close": 9.5},
+        {"date": (today - timedelta(days=1)).isoformat(), "close": 9.2},
+    ]
+    _write_jsonl(store, [rec])
+    monkeypatch.setattr(_dd, "EXIT_TRACKING_STORE", store)
+    result = load_recent_exit_tracking(days=30)
+    assert len(result) == 1
+    prices = result[0]["daily_prices"]
+    assert isinstance(prices, list)
+    assert len(prices) == 2
+    assert prices[0]["close"] == 9.5
 
 
 def test_missing_store_returns_empty_list(tmp_path: Path, monkeypatch):

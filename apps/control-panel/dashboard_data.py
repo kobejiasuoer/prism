@@ -8897,10 +8897,12 @@ def load_recent_exit_tracking(*, days: int = 30, store: Path | None = None) -> l
                     "code": rec.get("code"),
                     "name": rec.get("name"),
                     "exit_date": exit_date,
+                    "exit_price": rec.get("exit_price"),
                     "outcome": rec.get("outcome"),
                     "net_return": rec.get("net_return"),
                     "status": rec.get("status"),
                     "theme": rec.get("theme"),
+                    "daily_prices": rec.get("daily_prices") or [],
                 })
     except OSError:
         return []
