@@ -29,6 +29,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
+from prism_storage.json_store import atomic_write_text
+
 DEFAULT_STORE = Path(__file__).resolve().parents[2] / "data" / "runtime" / "exit_tracking.jsonl"
 DEFAULT_WINDOW_DAYS = 5
 DEFAULT_MISJUDGED_THRESHOLD = 0.05
@@ -82,12 +84,9 @@ def _load_records(store: Path) -> list[dict]:
 
 
 def _save_records(store: Path, records: list[dict]) -> None:
-    """Rewrite the store with all records (atomic via tmp-rename)."""
-    tmp = store.with_suffix(".jsonl.tmp")
-    with tmp.open("w", encoding="utf-8") as fh:
-        for r in records:
-            fh.write(json.dumps(r, ensure_ascii=False) + "\n")
-    tmp.replace(store)
+    """Rewrite the store with all records (atomic via the shared helper)."""
+    content = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records)
+    atomic_write_text(store, content)
 
 
 def _settle(record: dict, misjudged_threshold: float) -> dict:
