@@ -1,1 +1,0 @@
-../packages/screener/scan.py

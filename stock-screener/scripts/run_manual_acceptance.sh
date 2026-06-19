@@ -1,1 +1,0 @@
-../packages/screener/run_manual_acceptance.sh

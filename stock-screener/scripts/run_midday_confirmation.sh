@@ -1,1 +1,0 @@
-../packages/screener/run_midday_confirmation.sh
