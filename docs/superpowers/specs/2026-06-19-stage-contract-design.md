@@ -34,8 +34,9 @@
 ### scan 阶段输出（ai_screening 消费）
 承重字段（来自 `ai_screening.py` 的 `scan_data.get(...)` 调用）：
 ```
-candidates, market_regime, market_themes, pool, pool_label, strategies, timestamp, trade_date
+market_regime, market_themes, pool, pool_label, strategies, timestamp, trade_date
 ```
+（注：`candidates` 不是承重字段——scan 把股票存在 `strategies`/`verification_universe` 下，ai_screening 对 `candidates` 走 `or []` 回退。）
 
 ### ai_screening 阶段输出（midday_verify + candidate_lifecycle + dashboard_data 消费）
 承重字段：
@@ -44,8 +45,9 @@ shortlist（列表）, source_scan_timestamp, timestamp, trade_date
 ```
 shortlist 内每项的承重字段（midday/lifecycle 实际读取）：
 ```
-code, name, tier, best_score, suggested_action, timestamp
+code, name, tier, best_score, suggested_action
 ```
+（注：无 per-item `timestamp`——时间戳在 payload 顶层，不在每个 shortlist 项上。）
 
 ### midday_verify 阶段输出（candidate_lifecycle + dashboard_data 消费）
 承重字段：

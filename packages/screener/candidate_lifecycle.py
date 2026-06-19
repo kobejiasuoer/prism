@@ -21,6 +21,11 @@ try:
 except ModuleNotFoundError:
     from exit_return_tracker import record_exit
 
+try:
+    from screener.stage_contract import validate_stage_output
+except ModuleNotFoundError:
+    from stage_contract import validate_stage_output
+
 # ── tier ordering (higher = better) ──
 TIER_ORDER = {"A": 3, "B": 2, "C": 1, "D": 0}
 STATUS_ORDER = {"approved": 3, "caution": 2, "excluded": 1}
@@ -837,6 +842,8 @@ def main():
     report_md_path = args.report_output or os.path.join(reports_dir, f"lifecycle_{run_stamp}.md")
 
     os.makedirs(os.path.dirname(json_path), exist_ok=True)
+    # Stage-contract guard: fail fast if load-bearing fields are missing.
+    validate_stage_output(lifecycle, "candidate_lifecycle")
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(lifecycle, f, ensure_ascii=False, indent=2)
 

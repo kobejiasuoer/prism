@@ -767,6 +767,12 @@ def main():
     out_path = Path(args.output).expanduser()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     output["data_ingress"] = ingress_summary(ingress_manifest, None)
+    # Stage-contract guard: fail fast if load-bearing fields are missing.
+    try:
+        from screener.stage_contract import validate_stage_output
+    except ModuleNotFoundError:
+        from stage_contract import validate_stage_output
+    validate_stage_output(output, "midday_verify")
     out_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
     manifest_path = write_sidecar_manifest(out_path, ingress_manifest)
     output["data_ingress"] = ingress_summary(ingress_manifest, manifest_path)

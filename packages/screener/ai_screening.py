@@ -1588,6 +1588,12 @@ def main():
         "record_count": len(v2_records),
     }
     result["data_ingress"] = ingress_summary(ingress_manifest, None)
+    # Stage-contract guard: fail fast if load-bearing fields are missing.
+    try:
+        from screener.stage_contract import validate_stage_output
+    except ModuleNotFoundError:
+        from stage_contract import validate_stage_output
+    validate_stage_output(result, "ai_screening")
     output_text = json.dumps(result, ensure_ascii=False, indent=2)
     output_path.write_text(output_text, encoding="utf-8")
     archive_path.write_text(output_text, encoding="utf-8")

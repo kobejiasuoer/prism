@@ -2409,6 +2409,14 @@ def main():
         result['strategy'] = args.strategy
         result['candidates'] = format_output(filtered, args.strategy, args.top)
 
+    # Stage-contract guard: fail fast if load-bearing fields are missing,
+    # before writing a payload the next stage would silently degrade on.
+    try:
+        from screener.stage_contract import validate_stage_output
+    except ModuleNotFoundError:
+        from stage_contract import validate_stage_output
+    validate_stage_output(result, "scan")
+
     output = json.dumps(result, ensure_ascii=False, indent=2)
 
     # 自动归档：保留每次扫描结果，供后续回看/回测
