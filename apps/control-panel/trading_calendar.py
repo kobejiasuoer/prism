@@ -45,6 +45,7 @@ __all__ = [
     "next_trading_day",
     "calendar_status",
     "CALENDAR_HORIZON",
+    "EXPIRY_WARNING_DAYS",
     "STATIC_HOLIDAYS",
 ]
 
@@ -52,7 +53,12 @@ __all__ = [
 # Inclusive last date this calendar is considered authoritative.
 # Anything strictly past this date returns ``status="unknown"`` so readiness
 # can fail closed.  Bump this when refreshing the holiday list.
-CALENDAR_HORIZON: date = date(2026, 12, 31)
+CALENDAR_HORIZON: date = date(2027, 12, 31)
+
+# Days before the horizon at which calendar_status emits a ``horizon_warning``
+# flag, so operators get a visible nudge to refresh the holiday list before
+# the calendar silently degrades.
+EXPIRY_WARNING_DAYS: int = int(os.environ.get("PRISM_CALENDAR_WARNING_DAYS", "30"))
 
 
 def _d(text: str) -> date:
@@ -79,6 +85,11 @@ STATIC_HOLIDAYS: frozenset[date] = frozenset(
         "2026-06-19",                                                              # 端午
         "2026-09-25",                                                              # 中秋
         "2026-10-01", "2026-10-02", "2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08",  # 国庆
+        # 2027 — fixed-date holidays (certain). Movable-date holidays
+        # (Spring Festival / Labor Day / Dragon Boat / Mid-Autumn / National
+        # Day) pending the official CSRC 2027 notice; add them when published.
+        # Update CALENDAR_HORIZON above when refreshing this list.
+        "2027-01-01",                                                              # 元旦 (Friday)
     )
 )
 
@@ -127,22 +138,30 @@ def calendar_status(value: date | datetime | str) -> dict:
 
     Returns a dict suitable for embedding in readiness payloads:
     ``{"date": "YYYY-MM-DD", "status": "trading"|"weekend"|"holiday"|"unknown",
-       "reason": "..."}``.
+       "reason": "...", "horizon_warning": bool}``.
+
+    ``horizon_warning`` is True when ``target`` is within
+    ``EXPIRY_WARNING_DAYS`` of (or past) the horizon — a nudge to refresh
+    the static holiday list before coverage silently degrades.
     """
 
     target = _coerce_date(value)
     horizon = _override_horizon() or CALENDAR_HORIZON
+    days_to_horizon = (horizon - target).days
+    warning = days_to_horizon <= EXPIRY_WARNING_DAYS
     if target > horizon:
         return {
             "date": target.strftime("%Y-%m-%d"),
             "status": "unknown",
             "reason": f"calendar coverage ends {horizon.strftime('%Y-%m-%d')}",
+            "horizon_warning": True,
         }
     if target.weekday() >= 5:
         return {
             "date": target.strftime("%Y-%m-%d"),
             "status": "weekend",
             "reason": "weekend",
+            "horizon_warning": warning,
         }
     overrides = set(_override_holidays())
     if target in STATIC_HOLIDAYS or target in overrides:
@@ -150,11 +169,13 @@ def calendar_status(value: date | datetime | str) -> dict:
             "date": target.strftime("%Y-%m-%d"),
             "status": "holiday",
             "reason": "exchange holiday",
+            "horizon_warning": warning,
         }
     return {
         "date": target.strftime("%Y-%m-%d"),
         "status": "trading",
         "reason": "weekday and not on holiday list",
+        "horizon_warning": warning,
     }
 
 
