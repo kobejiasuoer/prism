@@ -5345,6 +5345,69 @@ def public_learning_memory_payload(value: Any) -> dict[str, Any]:
     return payload
 
 
+def build_action_directive(card: Mapping[str, Any], *, valve_open: bool = True) -> dict[str, Any]:
+    """Aggregate scattered entry_plan / gate / suggested_action fields into one
+    display-ready action directive for the discovery table's action column.
+
+    The headline is the single most important signal: when the offense valve is
+    shut, every candidate collapses to '只观察' regardless of its own gate, so the
+    page stops pretending there is a buyable gradient. Otherwise the headline
+    reflects the hard-gate ceiling and the suggested action.
+    """
+
+    gate = str(card.get("hard_gate_max_action") or "").lower()
+    block_reason = card.get("hard_gate_block_reason")
+    suggested = str(card.get("suggested_action") or "").lower()
+    entry_plan = card.get("entry_plan") or {}
+    levels = entry_plan.get("levels") if isinstance(entry_plan, dict) else None
+
+    if not valve_open:
+        headline = "只观察"
+        blocker = block_reason or "进攻阀门关闭，今日不开新仓"
+    elif gate in {"shadow", "blocked"} or block_reason:
+        headline = "不可开仓"
+        blocker = block_reason or "硬闸门阻断"
+    elif suggested == "trial":
+        headline = "等触发"
+        blocker = None
+    elif suggested == "add":
+        headline = "可加仓"
+        blocker = None
+    elif gate in {"actionable", "active"} or suggested in {"review", "open", "buy"}:
+        headline = "可开仓"
+        blocker = None
+    else:
+        headline = "等触发" if suggested else "只观察"
+        blocker = None
+
+    action_text = (
+        (entry_plan.get("action") if isinstance(entry_plan, dict) else None)
+        or card.get("suggested_action_label")
+        or headline
+    )
+    sizing = entry_plan.get("sizing") if isinstance(entry_plan, dict) else None
+
+    def _level(key: str):
+        if not isinstance(levels, dict):
+            return None
+        value = levels.get(key)
+        if value is None or value == "":
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    return {
+        "headline": headline,
+        "action_text": action_text,
+        "trigger_price": _level("trigger"),
+        "invalidate_price": _level("invalidate"),
+        "sizing": sizing,
+        "blocker": blocker,
+    }
+
+
 def public_opportunity_card_payload(card: Mapping[str, Any]) -> dict[str, Any]:
     """Keep Discovery list cards focused on display-ready decision summaries."""
 
@@ -5444,6 +5507,9 @@ def public_opportunity_card_payload(card: Mapping[str, Any]) -> dict[str, Any]:
         "block_reason",
     )
     payload = {key: card.get(key) for key in allowlist if _public_value_present(card.get(key))}
+    action_directive = build_action_directive(card, valve_open=True)
+    if action_directive and any(v is not None for v in action_directive.values()):
+        payload["action_directive"] = action_directive
     is_v2_like = bool(
         payload.get("suggested_action")
         or payload.get("thesis")
