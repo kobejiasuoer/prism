@@ -882,6 +882,16 @@ export interface ActionDirective {
   blocker?: string | null;
 }
 
+export interface ExitTrackingRecord {
+  code: string;
+  name?: string;
+  exit_date?: string;
+  outcome?: "true_exit" | "misjudged" | "inconclusive" | string | null;
+  net_return?: number | null;
+  status?: "open" | "settled" | string | null;
+  theme?: string;
+}
+
 export interface StockListCard {
   code: string;
   name: string;
@@ -1718,6 +1728,7 @@ export interface OpportunitiesData {
   lifecycle_cards?: MetricCardData[];
   lifecycle_note?: string;
   theme_cards?: BasicCard[];
+  exit_tracking?: ExitTrackingRecord[];
   source_cards?: SourceCardData[];
   learning_memories?: ReviewLearningMemory[];
   valve_status?: "on" | "limited" | "off";

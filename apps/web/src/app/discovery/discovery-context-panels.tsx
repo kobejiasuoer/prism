@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Badge } from "@/components/badge";
 import { EmptyState, Panel } from "@/components/data-card";
 import { LearningMemoryPreview } from "@/components/learning-memory";
-import type { BasicCard, CardGroup, OpportunitiesData, StockListCard } from "@/lib/types";
+import type { BasicCard, CardGroup, ExitTrackingRecord, OpportunitiesData, StockListCard } from "@/lib/types";
 import {
   cardHref,
   displayGroupTitle,
@@ -129,7 +129,57 @@ function LifecycleTracker({ data }: { data?: OpportunitiesData }) {
       ) : (
         <EmptyState>暂无跨天变化。今天没有出现，不等于历史观察被删除。</EmptyState>
       )}
+
+      <ExitTrajectoryBlock records={data?.exit_tracking || []} />
     </Panel>
+  );
+}
+
+const OUTCOME_META: Record<string, { label: string; tone: "positive" | "watch" | "neutral"; symbol: string }> = {
+  true_exit: { label: "真退出", tone: "positive", symbol: "✅" },
+  misjudged: { label: "错杀", tone: "watch", symbol: "⚠️" },
+  inconclusive: { label: "未定", tone: "neutral", symbol: "⏳" },
+};
+
+function ExitTrajectoryBlock({ records }: { records: ExitTrackingRecord[] }) {
+  if (!records || records.length === 0) {
+    return (
+      <div className="mt-3 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2 text-[12px] text-[var(--text-tertiary)]">
+        近期无退出记录
+      </div>
+    );
+  }
+  return (
+    <div className="mt-3 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)]">
+      <div className="border-b border-[var(--border-subtle)] px-3 py-2 text-[11px] uppercase text-[var(--text-tertiary)]">
+        近期退出表现（近 30 天）
+      </div>
+      <ul className="divide-y divide-[var(--border-subtle)]">
+        {records.map((r) => {
+          const meta = OUTCOME_META[r.outcome ?? ""] ?? { label: r.outcome ?? "—", tone: "neutral" as const, symbol: "" };
+          const ret = typeof r.net_return === "number" ? r.net_return : null;
+          return (
+            <li key={`${r.code}-${r.exit_date}`} className="flex items-center justify-between px-3 py-2 text-[12px]">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-[var(--text-primary)]">{r.name || r.code}</span>
+                <Badge tone={meta.tone}>
+                  {meta.symbol} {meta.label}
+                </Badge>
+                {r.status === "open" ? <Badge tone="info">跟踪中</Badge> : null}
+              </div>
+              <div className="flex items-center gap-3">
+                {ret !== null ? (
+                  <span className={`mono ${ret >= 0 ? "text-[var(--tone-positive)]" : "text-[var(--tone-risk)]"}`}>
+                    {ret >= 0 ? "+" : ""}{(ret * 100).toFixed(1)}%
+                  </span>
+                ) : null}
+                <span className="mono text-[11px] text-[var(--text-tertiary)]">{r.exit_date}</span>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
