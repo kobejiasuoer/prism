@@ -605,6 +605,14 @@ CRON_POLICIES: tuple[CronJobPolicy, ...] = (
         catchup_enabled=True,
         catchup_until="19:30",
     ),
+    CronJobPolicy(
+        task_name="retention_cleanup",
+        name="数据保留期清理",
+        cron_expr="0 18 * * 1-5",
+        command=("python3", "apps/scripts/prism_retention.py"),
+        delivery_default=False,
+        catchup_enabled=False,
+    ),
 )
 
 
