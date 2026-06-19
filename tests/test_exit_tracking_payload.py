@@ -11,6 +11,7 @@ if str(CONTROL_PANEL_ROOT) not in sys.path:
     sys.path.insert(0, str(CONTROL_PANEL_ROOT))
 
 from dashboard_data import load_recent_exit_tracking  # noqa: E402
+import dashboard_data as _dd  # noqa: E402
 
 
 def _write_jsonl(path: Path, records: list[dict]) -> None:
@@ -45,7 +46,7 @@ def test_returns_recent_records_with_flat_fields(tmp_path: Path, monkeypatch):
     old = _record("000100", (today - timedelta(days=40)).isoformat(), "misjudged")
     _write_jsonl(store, [recent, old])
 
-    monkeypatch.setattr("dashboard_data.EXIT_TRACKING_STORE", store)
+    monkeypatch.setattr(_dd, "EXIT_TRACKING_STORE", store)
     result = load_recent_exit_tracking(days=30)
 
     assert len(result) == 1
@@ -59,7 +60,7 @@ def test_returns_recent_records_with_flat_fields(tmp_path: Path, monkeypatch):
 
 
 def test_missing_store_returns_empty_list(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr("dashboard_data.EXIT_TRACKING_STORE", tmp_path / "nonexistent.jsonl")
+    monkeypatch.setattr(_dd, "EXIT_TRACKING_STORE", tmp_path / "nonexistent.jsonl")
     assert load_recent_exit_tracking(days=30) == []
 
 
@@ -67,7 +68,7 @@ def test_corrupt_jsonl_returns_empty_list(tmp_path: Path, monkeypatch):
     store = tmp_path / "exit_tracking.jsonl"
     store.parent.mkdir(parents=True, exist_ok=True)
     store.write_text("{not valid json\n", encoding="utf-8")
-    monkeypatch.setattr("dashboard_data.EXIT_TRACKING_STORE", store)
+    monkeypatch.setattr(_dd, "EXIT_TRACKING_STORE", store)
     assert load_recent_exit_tracking(days=30) == []
 
 
@@ -82,7 +83,7 @@ def test_bad_line_skipped_but_good_records_survive(tmp_path: Path, monkeypatch):
         fh.write(json.dumps(good, ensure_ascii=False) + "\n")
         fh.write("{broken\n")
         fh.write(json.dumps(_record("000100", today.isoformat(), "misjudged"), ensure_ascii=False) + "\n")
-    monkeypatch.setattr("dashboard_data.EXIT_TRACKING_STORE", store)
+    monkeypatch.setattr(_dd, "EXIT_TRACKING_STORE", store)
     result = load_recent_exit_tracking(days=30)
     assert len(result) == 2
     codes = {r["code"] for r in result}
@@ -95,7 +96,7 @@ def test_sorted_by_exit_date_desc(tmp_path: Path, monkeypatch):
     older = _record("000032", (today - timedelta(days=10)).isoformat(), "true_exit")
     newer = _record("000100", (today - timedelta(days=2)).isoformat(), "misjudged")
     _write_jsonl(store, [older, newer])
-    monkeypatch.setattr("dashboard_data.EXIT_TRACKING_STORE", store)
+    monkeypatch.setattr(_dd, "EXIT_TRACKING_STORE", store)
     result = load_recent_exit_tracking(days=30)
     assert result[0]["code"] == "000100"
     assert result[1]["code"] == "000032"
