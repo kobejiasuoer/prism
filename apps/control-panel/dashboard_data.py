@@ -10887,6 +10887,9 @@ def build_stock_profile_learning_scorecard(code: str, trade_date: str | None = N
     try:
         from screener.historical_edge import build_historical_edge_snapshot  # type: ignore
 
+        # NOTE: historical_edge is an unfinished research stub. sample_pool is
+        # hardcoded None, so this always returns coverage_quality="insufficient".
+        # See packages/screener/historical_edge/__init__.py for activation steps.
         similar_edge = build_historical_edge_snapshot(
             normalized_code,
             trade_date or expected_trade_date(),

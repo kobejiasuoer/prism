@@ -1,6 +1,22 @@
-"""Historical Edge Engine - Main API.
+"""Historical Edge Engine — UNFINISHED RESEARCH STUB.
 
-Public interface for computing historical edge snapshots.
+Status: NOT wired into production. The sole caller
+(``apps/control-panel/dashboard_data.py``, around the
+``build_historical_edge_snapshot`` call site) always invokes it with
+``sample_pool=None``, which makes ``build_historical_edge_snapshot``
+short-circuit to a stub dict with ``coverage_quality == "insufficient"``.
+Runtime output is therefore always a placeholder — no real edge statistics
+are ever computed.
+
+To activate this module you must:
+  1. Build the sample pool via
+     ``apps/scripts/build_historical_edge_sample_pool.py`` and wire its
+     output path into the dashboard call (currently hardcoded ``None``).
+  2. Add a scheduler job to refresh the pool on a cadence.
+Until then, treat all output from this module as a placeholder.
+
+Public interface for computing historical edge snapshots (original
+docstring below): the main entry point is ``build_historical_edge_snapshot``.
 """
 
 from __future__ import annotations
@@ -68,8 +84,11 @@ def build_historical_edge_snapshot(
         max_matches: Maximum number of matches to return (default 100)
 
     Returns:
-        Edge snapshot dict, or None if extraction fails or insufficient coverage.
-        On success, includes win_rate_5d, avg_return_5d, failure_cases, etc.
+        Edge snapshot dict, or None if feature extraction fails.
+        When ``sample_pool`` is None (the current production state — see
+        the module docstring), returns a stub dict with
+        ``coverage_quality == "insufficient"`` rather than None. On a real
+        success, includes win_rate_5d, avg_return_5d, failure_cases, etc.
     """
     # Extract candidate features
     try:
