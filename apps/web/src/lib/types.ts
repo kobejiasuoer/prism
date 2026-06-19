@@ -873,6 +873,15 @@ export interface ReviewLearningMemory {
   learning_hint?: string;
 }
 
+export interface ActionDirective {
+  headline: string;
+  action_text?: string;
+  trigger_price?: number | null;
+  invalidate_price?: number | null;
+  sizing?: string | null;
+  blocker?: string | null;
+}
+
 export interface StockListCard {
   code: string;
   name: string;
@@ -969,6 +978,7 @@ export interface StockListCard {
   persistence_label?: string;
   decision_rank?: number;
   decision_rank_label?: string;
+  action_directive?: ActionDirective;
   decision_summary?: string;
   action_key?: string;
   tushare_score?: number | null;

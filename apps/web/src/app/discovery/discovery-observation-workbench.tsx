@@ -50,6 +50,7 @@ import {
   valveTone,
   type ValveStatus,
 } from "./discovery-triage-utils";
+import { ActionCell } from "./discovery-action-cell";
 
 export type DiscoveryObservationWorkbenchProps = {
   groups: CardGroup<StockListCard>[];
@@ -836,12 +837,14 @@ function ObservationWorkbench({
   onLoadGroup,
   tradeDate,
   onFeedback,
+  valveStatus,
 }: {
   group?: CardGroup<StockListCard>;
   loading: boolean;
   onLoadGroup?: () => void;
   tradeDate?: string;
   onFeedback: (message: string) => void;
+  valveStatus?: ValveStatus;
 }) {
   const cards = group?.cards || [];
   const decision = groupDecisionMeta(group);
@@ -930,7 +933,7 @@ function ObservationWorkbench({
               </colgroup>
               <thead className="border-b border-[var(--border-subtle)] text-[11px] uppercase text-[var(--text-tertiary)]">
                 <tr>
-                  <th className="px-3 py-2 font-medium">选择顺序</th>
+                  <th className="px-3 py-2 font-medium">今日动作</th>
                   <th className="px-3 py-2 font-medium">股票 / 主题</th>
                   <th className="px-3 py-2 font-medium">观察阶段</th>
                   <th className="px-3 py-2 font-medium">买入闸门</th>
@@ -947,7 +950,7 @@ function ObservationWorkbench({
                     <Fragment key={rowKey}>
                       <tr className="align-top hover:bg-[var(--bg-secondary)]">
                         <td className="px-3 py-3">
-                          <DecisionRankBlock stock={stock} />
+                          <ActionCell stock={stock} valveOff={valveStatus === "off"} />
                         </td>
                         <td className="px-3 py-3">
                           <div className="truncate font-medium text-[var(--text-primary)]">
@@ -1055,6 +1058,11 @@ function ObservationWorkbench({
                             ? `主线RS #${stock.triage_rank_in_theme}`
                             : "主线走弱"}
                         </Badge>
+                      ) : null}
+                      {stock.action_directive ? (
+                        <div className="mt-2">
+                          <ActionCell stock={stock} valveOff={valveStatus === "off"} />
+                        </div>
                       ) : null}
                     </div>
                     <div className="flex flex-col items-end gap-1">
@@ -1257,6 +1265,7 @@ export function DiscoveryObservationWorkbench({
             onLoadGroup={onLoadGroup}
             tradeDate={tradeDate}
             onFeedback={onFeedback}
+            valveStatus={valveStatus}
           />
           {activeGroupLoadError ? (
             <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2 text-[12px] text-[var(--text-secondary)]">
