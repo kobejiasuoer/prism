@@ -403,8 +403,10 @@ class DiscoveryLifecyclePipelineTest(unittest.TestCase):
                 self.assertIn("valve_status", payload)
                 self.assertEqual(payload["valve_status"], gate_status)
 
-    def test_opportunities_valve_status_defaults_to_off_when_gate_missing(self) -> None:
-        """When execution gate is absent, valve_status defaults to 'off'."""
+    def test_opportunities_valve_status_defaults_to_unknown_when_gate_missing(self) -> None:
+        """When execution gate is absent (data missing), valve_status is 'unknown'
+        — distinct from a genuine 'off' regime, so a data failure isn't disguised
+        as a market decision."""
         dashboard_data = self.dashboard_data()
         lifecycle_context = {
             "latest_lifecycle": None,
@@ -469,7 +471,7 @@ class DiscoveryLifecyclePipelineTest(unittest.TestCase):
         ):
             payload = dashboard_data.build_opportunities_view()
 
-        self.assertEqual(payload["valve_status"], "off")
+        self.assertEqual(payload["valve_status"], "unknown")
 
 
     def test_opportunities_cards_carry_triage_fields(self) -> None:

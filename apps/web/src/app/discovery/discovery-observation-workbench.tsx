@@ -3,7 +3,7 @@
 import { ArrowRight, ChevronDown, FileText, RefreshCw } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { Fragment, type ReactNode, useMemo, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/badge";
 import { EmptyState, Panel, SkeletonBlock } from "@/components/data-card";
@@ -190,15 +190,17 @@ function formatMetric(value: unknown, suffix = "") {
 }
 
 /** Numeric priority for sorting the observation pool when the valve is off.
- * Prefers priority_score (global composite), falls back to best_score. */
+ * Prefers priority_score (global composite), falls back to best_score.
+ * Cards with no score return -Infinity so they sort to a clear "no score"
+ * tier at the bottom, distinct from genuinely-low-but-present scores. */
 function scoreForSort(stock: StockListCard): number {
   const raw = stock.priority_score ?? stock.best_score;
-  if (typeof raw === "number") return raw;
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
   if (typeof raw === "string") {
     const n = parseFloat(raw);
-    return Number.isFinite(n) ? n : 0;
+    if (Number.isFinite(n)) return n;
   }
-  return 0;
+  return -Infinity;
 }
 
 function stockStageLabel(
@@ -1078,13 +1080,6 @@ function ObservationWorkbench({
                       ) : null}
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      {stock.decision_rank_label ? (
-                        <Badge
-                          tone={stock.decision_rank === 1 ? "positive" : "info"}
-                        >
-                          {stock.decision_rank_label}
-                        </Badge>
-                      ) : null}
                       {hasV2(stock) ? (
                         <Badge tone={v2ActionTone(stock)}>
                           {v2ActionLabel(stock) || "只观察"}
@@ -1183,7 +1178,20 @@ export function DiscoveryObservationWorkbench({
 
   // Funnel state: bucket all cards by triage_action_state, manage active layer locally
   const funnel = useMemo(() => bucketByFunnel(groups), [groups]);
-  const [activeLayer, setActiveLayer] = useState<FunnelLayer>("focus");
+  // When the valve is off, every card's action_state collapses to "watch"
+  // (triage.py gate_state=closed → action_state=watch), so the "focus" bucket
+  // is always empty. Default to "watch" so the observation pool is visible on
+  // first paint instead of an empty table under the observation-mode banner.
+  const [activeLayer, setActiveLayer] = useState<FunnelLayer>(
+    valveStatus === "off" ? "watch" : "focus",
+  );
+  // valveStatus may arrive async (after the data query resolves). If it flips
+  // to "off" after mount, switch to the watch bucket so the pool is visible.
+  useEffect(() => {
+    if (valveStatus === "off" && activeLayer === "focus") {
+      setActiveLayer("watch");
+    }
+  }, [valveStatus, activeLayer]);
   const activeBucket = funnel.find((b) => b.layer === activeLayer) ?? funnel[0];
   const activeFunnelGroup: CardGroup<StockListCard> | undefined = useMemo(() => {
     const bucket = activeBucket;

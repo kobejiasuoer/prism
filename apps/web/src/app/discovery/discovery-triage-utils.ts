@@ -2,7 +2,7 @@ import type { CardGroup, StockListCard } from "@/lib/types";
 
 export type TriageActionState = "focus" | "on_trigger" | "watch" | "drop";
 export type TriageGateState = "open" | "capped" | "closed";
-export type ValveStatus = "on" | "limited" | "off";
+export type ValveStatus = "on" | "limited" | "off" | "unknown";
 
 // Funnel layers -- the primary grouping axis (spec S6).
 export type FunnelLayer = "focus" | "on_trigger" | "watch" | "drop";
@@ -59,11 +59,13 @@ export function bucketByFunnel(groups: CardGroup<StockListCard>[]): FunnelBucket
 export function valveLabel(status: ValveStatus | undefined): string {
   if (status === "on") return "开";
   if (status === "limited") return "半开";
+  if (status === "unknown") return "数据未就绪";
   return "关闭";
 }
 
 export function valveTone(status: ValveStatus | undefined): string {
   if (status === "on") return "positive";
   if (status === "limited") return "watch";
+  if (status === "unknown") return "neutral";
   return "risk";
 }

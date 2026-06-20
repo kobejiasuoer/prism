@@ -43,7 +43,10 @@ def compute_action_state(*, v2_action, gate_state, risk_level, eliminated):
     gate is the permission filter; action_state is the priority that survives it.
     A closed/capped gate degrades priority to watch (protocol §10.5).
     """
-    if eliminated:
+    if eliminated or risk_level == _RISK_BLOCK:
+        # A hard risk-block drops the stock outright, not just to watch —
+        # otherwise a "不可开仓" stock sits in the observation bucket and the
+        # funnel contradicts the action_directive headline.
         return ACTION_DROP
     if risk_level == _RISK_DEGRADE:
         # degrade demotes to watch even when actionable (resolves spec ambiguity).

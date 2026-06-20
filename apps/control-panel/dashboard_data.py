@@ -5449,7 +5449,9 @@ def build_action_directive(card: Mapping[str, Any], *, valve_open: bool = True) 
     }
 
 
-def public_opportunity_card_payload(card: Mapping[str, Any]) -> dict[str, Any]:
+def public_opportunity_card_payload(
+    card: Mapping[str, Any], *, valve_open: bool = True
+) -> dict[str, Any]:
     """Keep Discovery list cards focused on display-ready decision summaries."""
 
     text_limits = {
@@ -5487,6 +5489,7 @@ def public_opportunity_card_payload(card: Mapping[str, Any]) -> dict[str, Any]:
         "setup_label",
         "score",
         "priority_score",
+        "best_score",
         "change_pct",
         "amount_yi",
         "flow_today_yi",
@@ -5548,7 +5551,7 @@ def public_opportunity_card_payload(card: Mapping[str, Any]) -> dict[str, Any]:
         "block_reason",
     )
     payload = {key: card.get(key) for key in allowlist if _public_value_present(card.get(key))}
-    action_directive = build_action_directive(card, valve_open=True)
+    action_directive = build_action_directive(card, valve_open=valve_open)
     if action_directive and any(v is not None for v in action_directive.values()):
         payload["action_directive"] = action_directive
     is_v2_like = bool(
@@ -5642,6 +5645,7 @@ def public_opportunity_group_payload(
     *,
     card_limit: int | None = None,
     card_payload: str = "workbench",
+    valve_open: bool = True,
 ) -> dict[str, Any]:
     payload = dict(group)
     cards = [
@@ -5657,7 +5661,7 @@ def public_opportunity_group_payload(
         else public_opportunity_card_payload
     )
     payload["cards"] = [
-        card_builder(card)
+        card_builder(card, valve_open=valve_open) if card_payload != "lifecycle" else card_builder(card)
         for card in cards
     ]
     return payload
@@ -5668,12 +5672,14 @@ def public_opportunity_groups_payload(
     *,
     card_limit: int | None = None,
     card_payload: str = "workbench",
+    valve_open: bool = True,
 ) -> list[dict[str, Any]]:
     return [
         public_opportunity_group_payload(
             group,
             card_limit=card_limit,
             card_payload=card_payload,
+            valve_open=valve_open,
         )
         for group in groups
     ]
@@ -8809,6 +8815,7 @@ def build_opportunities_context_view() -> dict[str, Any]:
 def build_yesterday_trial_review(
     today_cards_by_code: dict[str, dict[str, Any]],
     display_lifecycle: dict[str, Any] | None,
+    exit_tracking_by_code: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Candidates that were trial-grade yesterday: are they still alive today?
 
@@ -8903,6 +8910,16 @@ def build_yesterday_trial_review(
             "still_listed": False,
         })
         seen_codes.add(code)
+
+    # Enrich with post-exit outcome from the exit_return_tracker (Wave 1), so
+    # the trial-review UI can show whether an exited trial was a true_exit or
+    # misjudged — bridging the two previously-disconnected data sources.
+    if exit_tracking_by_code:
+        for item in review:
+            tracked = exit_tracking_by_code.get(item.get("code", ""))
+            if tracked:
+                item["exit_outcome"] = tracked.get("outcome")
+                item["exit_net_return"] = tracked.get("net_return")
 
     return review
 
@@ -9192,7 +9209,7 @@ def build_opportunities_view(
         "generated_at": generated_at,
         "display_date": current_display_date(),
         "trade_date": trade_date,
-        "valve_status": gate.get("status") or "off",
+        "valve_status": (gate.get("status") or "unknown") if gate else "unknown",
         "expected_trade_date": readiness_for_opps.get("expected_trade_date"),
         "data_trade_date": readiness_for_opps.get("data_trade_date"),
         "readiness_mode": readiness_for_opps.get("readiness_mode"),
@@ -9224,7 +9241,7 @@ def build_opportunities_view(
                 {"label": "去看证据来源", "href": "#opportunities-support"},
             ],
         },
-        "groups": public_opportunity_groups_payload(groups),
+        "groups": public_opportunity_groups_payload(groups, valve_open=(gate.get("status") or "off") != "off"),
     }
     if include_context:
         response.update(
@@ -9258,7 +9275,7 @@ def build_opportunities_view(
         )
     # --- Stamp triage fields on every candidate card (Discovery Triage Funnel A5) ---
     from screener.triage import triage_fields_for_card  # type: ignore  # noqa: E402
-    _valve_status = gate.get("status") or "off"
+    _valve_status = (gate.get("status") or "unknown") if gate else "unknown"
     _trust_payload = readiness_for_opps.get("trust_level") or {}
     _can_trade_live = bool(_trust_payload.get("can_trade_live"))
     _trust_level = str(_trust_payload.get("level") or "unreliable")
@@ -9286,8 +9303,12 @@ def build_opportunities_view(
         _card["triage_theme_in_play"] = _theme_phase not in ("", "exited")
     # --- Yesterday trial-grade review (Discovery Triage Funnel P1 C2a) ---
     _today_by_code = {_card.get("code"): _card for _card in _all_cards if _card.get("code")}
+    # Build an exit_tracking lookup by code to enrich the trial review with
+    # post-exit outcomes (true_exit / misjudged), bridging the two sources.
+    _exit_tracking_records = load_recent_exit_tracking(days=30)
+    _exit_by_code = {r.get("code"): r for r in _exit_tracking_records if r.get("code")}
     response["yesterday_trial_review"] = build_yesterday_trial_review(
-        _today_by_code, display_lifecycle
+        _today_by_code, display_lifecycle, exit_tracking_by_code=_exit_by_code,
     )
     return response
 
