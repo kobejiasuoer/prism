@@ -412,6 +412,39 @@ def load_log_tail(path: Path, max_bytes: int = 16_000) -> str:
         return ""
 
 
+def resolve_readiness(
+    *,
+    base: Mapping[str, Any] | None = None,
+    force_recompute: bool = False,
+    **compute_kwargs: Any,
+) -> dict[str, Any]:
+    """Single entry point for obtaining a readiness dict.
+
+    Consolidates the two access patterns that previously coexisted in this
+    file (read the shared ``_today_base_inputs`` cache's ``readiness``, vs.
+    call ``compute_readiness`` directly). Converging them onto one function
+    makes the readiness source-of-truth explicit, which is the prerequisite
+    for safely extracting clusters from this file (see
+    ``docs/dashboard-data-split-blocker-2026-06-20.md``).
+
+    Resolution order:
+      1. ``force_recompute=True``  -> always call ``compute_readiness(**compute_kwargs)``.
+      2. ``base`` carries a non-empty ``readiness`` dict -> return it verbatim (cache hit).
+      3. otherwise -> call ``compute_readiness(**compute_kwargs)``.
+
+    Views that only need the shared readiness should pass ``base`` and omit
+    ``compute_kwargs``. Views that need a fresh computation should pass
+    ``force_recompute=True`` plus the ``compute_kwargs`` they would have
+    passed to ``compute_readiness``.
+    """
+
+    if not force_recompute and base is not None:
+        cached = base.get("readiness")
+        if isinstance(cached, dict) and cached:
+            return cached
+    return compute_readiness(**compute_kwargs)
+
+
 def ensure_runtime_dirs() -> None:
     ensure_data_dirs()
     CONTROL_PANEL_RUNS_DIR.mkdir(parents=True, exist_ok=True)
@@ -8629,7 +8662,7 @@ def build_opportunities_source_cards_view() -> dict[str, Any]:
     watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
     screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint) or {}
     confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
-    readiness = compute_readiness(
+    readiness = resolve_readiness(force_recompute=True, 
         watchlist=watchlist,
         screening_batch=screening_batch,
         confirmation=confirmation,
@@ -8700,7 +8733,7 @@ def build_opportunities_context_view() -> dict[str, Any]:
     watchlist = safe_canonical_load(load_watchlist_snapshot, trade_date=trade_date_hint)
     screening_batch = safe_canonical_load(load_screening_batch, trade_date=trade_date_hint) or {}
     confirmation = safe_canonical_load(load_confirmation, trade_date=trade_date_hint)
-    readiness = compute_readiness(
+    readiness = resolve_readiness(force_recompute=True, 
         watchlist=watchlist,
         screening_batch=screening_batch,
         confirmation=confirmation,
@@ -8932,7 +8965,7 @@ def build_opportunities_view(
     display_lifecycle = lifecycle_context.get("display_lifecycle")
     lifecycle_note = lifecycle_context.get("lifecycle_note") or ""
 
-    readiness_for_opps = compute_readiness(
+    readiness_for_opps = resolve_readiness(force_recompute=True, 
         watchlist=watchlist,
         screening_batch=screening_batch,
         confirmation=confirmation,
@@ -10273,7 +10306,8 @@ def _stock_profile_base_context(
         quality_status = safe_canonical_load(load_quality_status, lane="all")
         account_book = load_account_book()
         today_action_decisions = load_today_action_decision_store()
-        readiness = compute_readiness(
+        readiness = resolve_readiness(
+            force_recompute=True,
             watchlist=watchlist,
             screening_batch=screening_batch,
             confirmation=confirmation,
@@ -12606,7 +12640,7 @@ def build_today_view() -> dict[str, Any]:
     account_book = load_account_book()
     today_action_decisions = load_today_action_decision_store()
 
-    readiness = compute_readiness(
+    readiness = resolve_readiness(force_recompute=True, 
         watchlist=watchlist,
         screening_batch=screening_batch,
         confirmation=confirmation,
@@ -14546,7 +14580,8 @@ def build_portfolio_account_view(
     readiness = base.get("readiness") if isinstance(base.get("readiness"), dict) else None
     if readiness is None:
         now = datetime.now()
-        readiness = compute_readiness(
+        readiness = resolve_readiness(
+            base=base,
             watchlist=watchlist,
             screening_batch=screening_batch,
             confirmation=confirmation,
