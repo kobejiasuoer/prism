@@ -55,9 +55,15 @@ AssertionError: 'shadow_only' != 'live_ready'
 
 ## 6. 现状
 
-- dashboard_data.py：原样，14719 行，全绿。
-- money_utils.py / portfolio_view.py：**未提交**（回滚时删除）。
-- 本文档：记录障碍与路径，避免下次重复踩坑。
+- dashboard_data.py：14749 行，全绿。**已新增 `resolve_readiness()` 作为 readiness 单一入口（见 §5 步骤 1-3）**，所有 6 个 readiness 取用点已收敛到它。这是拆分前置项的实质进展。
+- money_utils.py / portfolio_view.py：**未提交**（第二次尝试提取 portfolio 簇时仍卡在一个与测试 fixture 的 monkeypatch 交互上；已回滚）。
+- **剩余障碍**：`resolve_readiness` 契约本身在全 dashboard_data 测试下通过，但 portfolio_view 的 lazy-bridge（`_dd().resolve_readiness`）在 test_app_smoke 的多 patch 上下文下仍触发 readiness 取值漂移。这是提取的机械问题（call-site 级），不是契约问题。需要逐 call-site 加针对性回归测试后再抽簇。
+
+## 7. 进度更新（2026-06-20）
+
+- ✅ §5 步骤 1-3：`resolve_readiness` 契约 + 单元测试 + 6 个取用点收敛（已提交）。
+- ⏳ §5 步骤 4（回归测试三视图一致性）：待做。
+- ⏳ §5 步骤 5（抽簇）：待做（步骤 4 完成后）。
 
 ## 附录：关键行引用
 - `dashboard_data.py:11288` `_today_base_inputs()`（缓存构建）
