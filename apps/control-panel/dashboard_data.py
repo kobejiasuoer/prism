@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 import importlib.util
 import json
 import os
@@ -399,6 +403,7 @@ def load_json(path: Path) -> dict[str, Any] | None:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
+        logger.debug('silent exception suppressed', exc_info=True)
         return None
 
 
@@ -462,6 +467,7 @@ def artifact_from_path(title: str, path_like: str | Path | None, key: str | None
     try:
         path = path.resolve()
     except Exception:
+        logger.debug('silent exception suppressed', exc_info=True)
         return None
     workspace_root = Path(WORKSPACE_ROOT).resolve()
     if workspace_root not in path.parents and path != workspace_root:
@@ -527,6 +533,7 @@ def sync_artifact_group(group_key: str, candidates: list[dict[str, Any]] | None 
                 },
             )
         except Exception:
+            logger.debug('silent exception suppressed', exc_info=True)
             continue
 
 
@@ -537,6 +544,7 @@ def artifact_item_from_index(group_key: str, item: dict[str, Any]) -> dict[str, 
     try:
         path = resolve_workspace_path(path_value)
     except Exception:
+        logger.debug('silent exception suppressed', exc_info=True)
         return None
     if not path.exists():
         return None
@@ -596,6 +604,7 @@ def artifact_candidates(group_key: str) -> list[dict[str, Any]]:
             if indexed:
                 return indexed
     except Exception:
+        logger.debug('silent exception suppressed', exc_info=True)
         pass
     return scanned
 
@@ -1054,6 +1063,7 @@ def safe_canonical_load(loader, **kwargs) -> dict[str, Any] | None:
     except (FileNotFoundError, KeyError):
         return None
     except Exception:
+        logger.debug('silent exception suppressed', exc_info=True)
         return None
 
 
@@ -2428,6 +2438,7 @@ def find_today_action_match(code: str) -> dict[str, Any] | None:
     try:
         today = build_today_view()
     except Exception:
+        logger.debug('silent exception suppressed', exc_info=True)
         return None
     action_queue = today.get("action_queue") or {}
     for collection in (action_queue.get("items") or [], action_queue.get("stale_items") or []):
@@ -2451,6 +2462,7 @@ def build_today_action_context(
         try:
             today = build_today_view()
         except Exception:
+            logger.debug('silent exception suppressed', exc_info=True)
             return None
 
     trade_date = str(today.get("trade_date") or today.get("expected_trade_date") or "").strip()

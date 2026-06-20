@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 import hashlib
 import json
 import os
@@ -250,6 +254,7 @@ def _prewarm_control_panel_caches() -> None:
     try:
         build_refresh_status_payload("today", auto=False, skip_auto=True, compact=True)
     except Exception:
+        logger.debug('silent exception suppressed', exc_info=True)
         pass
 
 
@@ -260,6 +265,7 @@ async def _prism_lifespan(_app: FastAPI):
     try:
         _start_stock_name_backfill_worker()
     except Exception:
+        logger.debug('silent exception suppressed', exc_info=True)
         pass
     _prewarm_control_panel_caches()
     try:
@@ -268,6 +274,7 @@ async def _prism_lifespan(_app: FastAPI):
         try:
             _stop_stock_name_backfill_worker()
         except Exception:
+            logger.debug('silent exception suppressed', exc_info=True)
             pass
 
 
@@ -530,6 +537,7 @@ def load_preview_text(target: Path, kind: str) -> tuple[str, bool]:
         try:
             text = json.dumps(json.loads(text), ensure_ascii=False, indent=2)
         except Exception:
+            logger.debug('silent exception suppressed', exc_info=True)
             pass
     return text, truncated
 
@@ -824,6 +832,7 @@ def resolve_stock_display_name(code: Any, name: Any = None) -> str:
         try:
             _request_stock_name_backfill(bare_code)
         except Exception:
+            logger.debug('silent exception suppressed', exc_info=True)
             pass
 
     return provided_name or bare_code or raw_code
@@ -851,6 +860,7 @@ def _cron_daily_minute(expr: str) -> int | None:
             return None
         return int(hour_s) * 60 + int(minute_s)
     except Exception:
+        logger.debug('silent exception suppressed', exc_info=True)
         return None
 
 
@@ -1957,6 +1967,7 @@ def build_refresh_status_payload(
                 )
             )
         except Exception:
+            logger.debug('silent exception suppressed', exc_info=True)
             pass
 
     allowed_tasks = list(cfg.allowed_tasks if cfg else ())

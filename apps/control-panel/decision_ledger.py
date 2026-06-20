@@ -37,6 +37,10 @@ live in later phases; this module is only the repository.
 
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 import hashlib
 import json
 import os
@@ -1159,6 +1163,7 @@ def _factor_snapshot_for_item(item: Mapping[str, Any], data_trade_date: str) -> 
             return None
         return build_factor_snapshot(plain_code, data_trade_date)
     except Exception:
+        logger.debug('silent exception suppressed', exc_info=True)
         return None
 
 
@@ -1885,6 +1890,7 @@ def _canonical_code(code: Any) -> str | None:
         try:
             market = infer_market_from_code(text)
         except Exception:  # pragma: no cover - defensive
+            logger.debug('silent exception suppressed', exc_info=True)
             return None
         return f"{market}{text}"
     return None
@@ -4306,6 +4312,7 @@ def _load_shadow_json(path: Path) -> dict[str, Any] | None:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
+        logger.debug('silent exception suppressed', exc_info=True)
         return None
     return dict(payload) if isinstance(payload, Mapping) else None
 
@@ -4318,6 +4325,7 @@ def _latest_shadow_signal_manifest() -> Path | None:
             reverse=True,
         )
     except Exception:
+        logger.debug('silent exception suppressed', exc_info=True)
         return None
     return manifests[0] if manifests else None
 

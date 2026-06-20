@@ -8,6 +8,10 @@ each call so test monkeypatches on dashboard_data attributes propagate).
 
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 import json
 import sys
 import re
