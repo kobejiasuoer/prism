@@ -2098,7 +2098,9 @@ def filter_strategy(stocks, strategy):
         aggressive_blocklist = ['银行', '保险', '高速', '港口', '机场', '电力', '燃气', '铁路', '运营']
         if any(k in s.get('name', '') for k in aggressive_blocklist):
             continue
-        if s.get('change_pct', 0) < 0:
+        # 允许温和回调（>-3%），保留 pullback_continuation / 回踩接力策略的候选。
+        # 旧阈值 < 0 会把"昨天涨停今天回调 1%"的好票全部滤掉。
+        if s.get('change_pct', 0) < -3:
             continue
         if s.get('amount', 0) < 4e8:
             continue
@@ -2108,19 +2110,22 @@ def filter_strategy(stocks, strategy):
             continue
 
         if strategy == 'conservative':
-            if not roe or roe < 12:
+            # 放宽：A 股成长股 PE 常在 30-40，ROE 8% 已可接受。
+            if not roe or roe < 8:
                 continue
-            if not (8 <= pe <= 25):
+            if not (5 <= pe <= 40):
                 continue
             if _consecutive_inflows(flows) < 3:
                 continue
 
         elif strategy == 'growth':
-            if s['change_pct'] <= 2:
+            # 放宽：change_pct > 0 即可（旧 <=2% 滤掉大量温和上涨好票）。
+            if s['change_pct'] <= 0:
                 continue
             if s['amount'] <= 5e8:
                 continue
-            if turnover < 2.5:
+            # 放宽：与公共阈值对齐（旧 2.5/3.5 太严，滤掉了中小盘活跃票）。
+            if turnover < 1.8:
                 continue
             if not (10 <= pe <= 80):
                 continue
@@ -2131,8 +2136,6 @@ def filter_strategy(stocks, strategy):
             if attack_profile.get('consecutive_inflows', 0) < 1 and (flows[-1]['main_net'] if flows else 0) <= 0:
                 continue
             if attack_profile.get('is_cyclical_soft') and not attack_profile.get('is_preferred'):
-                continue
-            if 'zz500' not in pool and turnover < 3.5:
                 continue
 
         elif strategy == 'rebound':
