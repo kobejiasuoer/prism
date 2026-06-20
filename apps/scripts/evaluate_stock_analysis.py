@@ -22,7 +22,8 @@ DIMENSION_MAX = {
     "analysis_rule_quality": 20,
     "execution_risk_control": 20,
     "output_usability": 15,
-    "historical_validation": 15,
+    "historical_validation": 10,
+    "prediction_accuracy": 5,  # real exit-outcome quality (Wave-1 data), not field-presence
     "stability_productization": 10,
 }
 
@@ -252,6 +253,77 @@ def collect_hard_gate_failures(artifacts: dict[str, dict[str, Any]]) -> list[str
             failures.append("decision_brief: missing_position_cap")
 
     return failures
+
+
+def score_prediction_accuracy(
+    *,
+    store: Path | None = None,
+    days: int = 30,
+    min_samples: int = 5,
+    max_points: int = 10,
+) -> dict[str, Any]:
+    """Score prediction quality from real exit-return outcomes.
+
+    Unlike the presence-based checks in ``score_dimensions``, this reads
+    Wave-1's ``exit_tracking.jsonl`` and measures how often an "exited" stock
+    actually kept falling (``true_exit`` = prediction right) vs rebounded
+    (``misjudged`` = prediction wrong). ``inconclusive`` outcomes are ignored.
+
+    Returns ``{earned, max, samples, true_exit_ratio, detail}``:
+      - samples < min_samples → earned 0 (no reward for tiny samples).
+      - ratio = true_exit / (true_exit + misjudged).
+      - ratio >= 0.7 → full points; 0.5..0.7 → proportional; < 0.5 → low.
+
+    Never raises — a missing/corrupt store scores 0 (no penalty, no reward).
+    """
+
+    from datetime import date, timedelta
+
+    store_path = store or (Path(__file__).resolve().parents[2] / "data" / "runtime" / "exit_tracking.jsonl")
+    if not store_path.exists():
+        return {"earned": 0, "max": max_points, "samples": 0, "true_exit_ratio": None, "detail": "store missing"}
+    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    true_exit = misjudged = 0
+    try:
+        with store_path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if rec.get("status") != "settled":
+                    continue
+                if str(rec.get("exit_date", "")) < cutoff:
+                    continue
+                outcome = rec.get("outcome")
+                if outcome == "true_exit":
+                    true_exit += 1
+                elif outcome == "misjudged":
+                    misjudged += 1
+    except OSError:
+        return {"earned": 0, "max": max_points, "samples": 0, "true_exit_ratio": None, "detail": "store unreadable"}
+
+    samples = true_exit + misjudged
+    if samples < min_samples:
+        return {"earned": 0, "max": max_points, "samples": samples, "true_exit_ratio": None, "detail": f"only {samples} samples (< {min_samples})"}
+
+    ratio = true_exit / samples if samples else 0.0
+    if ratio >= 0.7:
+        earned = max_points
+    elif ratio >= 0.5:
+        earned = round(max_points * (ratio - 0.5) / 0.2)  # 0.5→0, 0.7→full
+    else:
+        earned = max(0, round(max_points * ratio * 0.3))  # below coin-flip: steeply discounted
+    return {
+        "earned": earned,
+        "max": max_points,
+        "samples": samples,
+        "true_exit_ratio": round(ratio, 3),
+        "detail": f"{true_exit} true_exit / {misjudged} misjudged",
+    }
 
 
 def score_dimensions(artifacts: dict[str, dict[str, Any]]) -> dict[str, int]:
@@ -635,6 +707,12 @@ def build_scorecard(
         + sum(result.get("score", 0) for result in historical_comparisons if result.get("status") == "loaded"),
     )
     dimension_scores["historical_validation"]["earned"] = historical_score
+    # Prediction accuracy: scored from real exit-outcome data (Wave-1 tracker),
+    # not field presence. finalize_dimension_scores already created the entry
+    # (it includes every DIMENSION_MAX key); we just set earned + detail.
+    prediction = score_prediction_accuracy(max_points=DIMENSION_MAX["prediction_accuracy"])
+    dimension_scores["prediction_accuracy"]["earned"] = prediction["earned"]
+    dimension_scores["prediction_accuracy"]["detail"] = prediction
     hard_gate_failures = []
     for suite_result in suite_results:
         for case_result in suite_result["cases"]:

@@ -249,10 +249,13 @@ def test_evaluator_reports_next_tier_requirements_for_current_baseline(tmp_path:
     payload = json.loads(output_json.read_text(encoding="utf-8"))
 
     assert payload["summary"]["next_tier"] == "product_ready"
+    # prediction_accuracy is now the binding dimension for product_ready
+    # (scores 0 until real exit-tracking data accumulates). historical_validation
+    # previously held this role but now passes the threshold.
     assert any(
         item["type"] == "dimension_threshold"
-        and item["dimension"] == "historical_validation"
-        and item["required"] == 13
+        and item["dimension"] == "prediction_accuracy"
+        and item["required"] == 5  # ceil(5 * 0.85) for product_ready
         for item in payload["summary"]["next_tier_requirements"]
     )
 
@@ -347,7 +350,8 @@ def test_tier_thresholds_use_ceil_for_dimension_requirements() -> None:
         "analysis_rule_quality": {"earned": 17, "max": 20},
         "execution_risk_control": {"earned": 17, "max": 20},
         "output_usability": {"earned": 13, "max": 15},
-        "historical_validation": {"earned": 12, "max": 15},
+        "historical_validation": {"earned": 8, "max": 10},
+        "prediction_accuracy": {"earned": 4, "max": 5},
         "stability_productization": {"earned": 9, "max": 10},
     }
 
