@@ -95,20 +95,93 @@ def compute_final_score(
     )
 
 
-def build_execution_gate(broad_regime, candidate_regime):
-    broad_metrics = (broad_regime or {}).get("metrics") or {}
-    candidate_metrics = (candidate_regime or {}).get("metrics") or {}
+def _compute_env_score(metrics: dict, thresholds: dict) -> int:
+    """Score a regime environment 0-3 from its metrics.
 
-    broad_score = float((broad_regime or {}).get("score") or 0)
-    candidate_score = float((candidate_regime or {}).get("score") or 0)
+    Each dimension contributes 0 or 1 point; the sum (capped at 3) is a
+    coarse 'how favorable is this environment' signal used by the gate
+    arbitration. Thresholds come from the execution_gate config.
+    """
+    score = 0
+    if float(metrics.get("positive_ratio") or 0) >= thresholds["positive_ratio"]:
+        score += 1
+    if float(metrics.get("avg_change_pct") or 0) >= thresholds["avg_change_pct"]:
+        score += 1
+    if float(metrics.get("strong_ratio") or 0) >= thresholds["strong_ratio"]:
+        score += 1
+    return min(score, 3)
+
+
+def build_execution_gate(broad_regime, candidate_regime):
+    """Decide the offense valve (off/limited/on) from broad + candidate regimes.
+
+    Rewritten from the original 6-condition OR (which gated on broad-market
+    alone and almost never opened in A-share structural rallies) to a weighted
+    arbitration: the broad environment and the candidate-pool environment each
+    get a 0-3 score, and the gate opens when *either* side is strong enough.
+
+    Key change: candidate-strong / broad-weak (the defining structural-rally
+    scenario) now yields 'limited' instead of 'off', so the user can act on
+    selected names even when the broad index is soft.
+    """
+    broad = broad_regime or {}
+    candidate = candidate_regime or {}
+    broad_metrics = broad.get("metrics") or {}
+    candidate_metrics = candidate.get("metrics") or {}
+
+    broad_score_regime = float(broad.get("score") or 0)
+    candidate_score_regime = float(candidate.get("score") or 0)
+
+    arbitration = EXECUTION_GATE_THRESHOLDS.get("arbitration", {})
+    broad_dim = arbitration.get("broad_dimensions", {
+        "positive_ratio": 0.4,
+        "avg_change_pct": -0.5,
+        "strong_ratio": 0.08,
+    })
+    cand_dim = arbitration.get("candidate_dimensions", {
+        "positive_ratio": 0.6,
+        "avg_change_pct": 1.0,
+        "strong_ratio": 0.15,
+    })
+
+    broad_env = _compute_env_score(broad_metrics, broad_dim)
+    cand_metric_env = _compute_env_score(candidate_metrics, cand_dim)
+    candidate_env = cand_metric_env + (1 if candidate_score_regime > float(arbitration.get("candidate_score_strong", 5)) else 0)
+    candidate_env = min(candidate_env, 3)
+
+    off_rules = EXECUTION_GATE_THRESHOLDS["off"]
+    limited_rules = EXECUTION_GATE_THRESHOLDS["limited"]
+    on_rules = EXECUTION_GATE_THRESHOLDS["on"]
+
+    # Weighted arbitration (replaces the old OR chain).
+    if candidate_env >= 2 and broad_env >= 2:
+        selected = on_rules
+        status = "on"
+    elif candidate_env >= 2:
+        # Candidate strong, broad weak/mediocre → structural rally, allow
+        # restricted light-position selection rather than a blanket close.
+        selected = limited_rules
+        status = "limited"
+    elif broad_env >= 2 and candidate_env >= 1:
+        selected = limited_rules
+        status = "limited"
+    elif broad_env <= 1 and candidate_env <= 1:
+        # Both weak → genuine close.
+        selected = off_rules
+        status = "off"
+    else:
+        # Mixed/ambiguous → default to limited (conservative but not closed).
+        selected = limited_rules
+        status = "limited"
+
+    # Risk flags (informational, computed the same way as before).
+    risk_rules = EXECUTION_GATE_THRESHOLDS["risk_flags"]
+    risk_flags = []
     positive_ratio = float(broad_metrics.get("positive_ratio") or 0)
     avg_change = float(broad_metrics.get("avg_change_pct") or 0)
     strong_ratio = float(broad_metrics.get("strong_ratio") or 0)
     avg_turnover = float(broad_metrics.get("avg_turnover") or 0)
     candidate_strong_ratio = float(candidate_metrics.get("strong_ratio") or 0)
-
-    risk_rules = EXECUTION_GATE_THRESHOLDS["risk_flags"]
-    risk_flags = []
     if positive_ratio < risk_rules["positive_ratio"]:
         risk_flags.append("赚钱效应不足")
     if avg_change < risk_rules["avg_change_pct"]:
@@ -117,38 +190,10 @@ def build_execution_gate(broad_regime, candidate_regime):
         risk_flags.append("强势股占比过低")
     if avg_turnover < risk_rules["avg_turnover"]:
         risk_flags.append("流动性一般")
-    if candidate_score <= risk_rules["candidate_score"]:
+    if candidate_score_regime <= risk_rules["candidate_score"]:
         risk_flags.append("候选强度不足")
     if candidate_strong_ratio < risk_rules["candidate_strong_ratio"]:
         risk_flags.append("候选强势扩散不足")
-
-    off_rules = EXECUTION_GATE_THRESHOLDS["off"]
-    limited_rules = EXECUTION_GATE_THRESHOLDS["limited"]
-    on_rules = EXECUTION_GATE_THRESHOLDS["on"]
-
-    if (
-        broad_score <= off_rules["broad_score_max"]
-        or positive_ratio < off_rules["positive_ratio_max"]
-        or avg_change < off_rules["avg_change_pct_max"]
-        or strong_ratio < off_rules["strong_ratio_max"]
-        or candidate_score <= off_rules["candidate_score_max"]
-        or candidate_strong_ratio < off_rules["candidate_strong_ratio_max"]
-    ):
-        selected = off_rules
-        status = "off"
-    elif (
-        broad_score <= limited_rules["broad_score_max"]
-        or positive_ratio < limited_rules["positive_ratio_max"]
-        or avg_change < limited_rules["avg_change_pct_max"]
-        or strong_ratio < limited_rules["strong_ratio_max"]
-        or candidate_score <= limited_rules["candidate_score_max"]
-        or candidate_strong_ratio < limited_rules["candidate_strong_ratio_max"]
-    ):
-        selected = limited_rules
-        status = "limited"
-    else:
-        selected = on_rules
-        status = "on"
 
     return {
         "status": status,

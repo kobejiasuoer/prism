@@ -10,6 +10,20 @@
         "candidate_score": 4.0,
         "candidate_strong_ratio": 0.18
       },
+      "arbitration": {
+        "_doc": "Weighted-arbitration thresholds (calibrated for A-share reality). broad_dimensions score the broad market 0-3; candidate_dimensions score the candidate pool 0-3. The gate opens based on both, not broad alone.",
+        "broad_dimensions": {
+          "positive_ratio": 0.4,
+          "avg_change_pct": -0.5,
+          "strong_ratio": 0.08
+        },
+        "candidate_dimensions": {
+          "positive_ratio": 0.6,
+          "avg_change_pct": 1.0,
+          "strong_ratio": 0.15
+        },
+        "candidate_score_strong": 5
+      },
       "off": {
         "broad_score_max": 3.0,
         "positive_ratio_max": 0.48,
