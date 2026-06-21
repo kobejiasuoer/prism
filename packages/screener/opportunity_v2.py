@@ -807,7 +807,7 @@ def _confirmation_fields(item: Mapping[str, Any]) -> tuple[list[str], list[str]]
     warnings = [str(v or "") for v in (quality.get("warnings") or [])]
     if len(warnings) >= 2:
         missing.append("执行质量仍有多项警告")
-    if item.get("setup_type") in {"leader_continuation", "breakout_follow"} and item.get("approved_hits", 0) < 2:
+    if item.get("setup_type") in {"leader_continuation", "breakout_follow"} and item.get("strategy_count", 0) < 2:
         missing.append("趋势/突破类缺少跨策略共振")
     return unique_keep_order(missing)[:5], unique_keep_order(positives)[:5]
 

@@ -852,11 +852,15 @@ def evaluate_stock(stock, market_regime=None, market_themes=None):
     regime_score = safe_float((market_regime or {}).get("score"), default=0.0)
     execution_gate = execution_gate_of(market_regime)
     gate_status = execution_gate.get("status")
+    # Valve state is an ENVIRONMENT signal, not a per-stock defect. Only "off"
+    # (genuinely unbuyable) taints the stock's caution_reasons; "limited" does
+    # not — it only affects entry_plan/sizing later in apply_execution_gate.
+    # This prevents the valve from force-capping screening_status to caution on
+    # every limited day, which deadlocked approved_hits and actionable actions.
     if gate_status == "off":
         caution_reasons.append(regime_rules["off"]["reason"])
         consistency += regime_rules["off"]["consistency_delta"]
     elif gate_status == "limited":
-        caution_reasons.append(regime_rules["limited"]["reason"])
         consistency += regime_rules["limited"]["consistency_delta"]
         limited_guard = regime_rules["limited"]["extra_guard"]
         if change_pct >= limited_guard["change_pct_at_least"] or overheat_penalty >= limited_guard["overheat_penalty_at_least"]:
@@ -876,9 +880,18 @@ def evaluate_stock(stock, market_regime=None, market_themes=None):
         caution_reasons.append(factor_risk["degrade_reason"])
         consistency -= 2
 
+    # Status decision: "approved" tolerates up to 1 minor caution_reason when
+    # consistency is at least medium. The old "zero caution_reasons" bar was
+    # unreachable in real A-share data (almost every stock has ≥1 minor flag),
+    # which deadlocked approved_hits at 0 and prevented actionable actions.
+    label_rules = evaluation_rules["consistency_labels"]
+    consistency_threshold = label_rules["medium"]["at_least"]
     if hard_reasons:
         status = "excluded"
         reason = hard_reasons[0]
+    elif len(caution_reasons) <= 1 and consistency >= consistency_threshold:
+        status = "approved"
+        reason = positives[0] if positives else "通过二次筛选（含少量次要 caution）"
     elif caution_reasons:
         status = "caution"
         reason = caution_reasons[0]
@@ -886,7 +899,6 @@ def evaluate_stock(stock, market_regime=None, market_themes=None):
         status = "approved"
         reason = positives[0] if positives else "通过二次筛选"
 
-    label_rules = evaluation_rules["consistency_labels"]
     consistency_label = (
         label_rules["high"]["label"]
         if consistency >= label_rules["high"]["at_least"]
