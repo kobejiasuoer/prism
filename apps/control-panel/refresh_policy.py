@@ -622,6 +622,14 @@ CRON_POLICIES: tuple[CronJobPolicy, ...] = (
         catchup_enabled=True,
         catchup_until="17:00",
     ),
+    CronJobPolicy(
+        task_name="intraday_refresh",
+        name="盘中增量刷新",
+        cron_expr="*/30 10-14 * * 1-5",
+        command=("python3", "apps/scripts/run_intraday_refresh.py"),
+        delivery_default=False,
+        catchup_enabled=False,
+    ),
 )
 
 
